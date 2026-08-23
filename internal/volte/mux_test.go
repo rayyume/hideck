@@ -32,6 +32,16 @@ func (s *stubBackend) DeviceStatus(string) map[string]interface{} {
 	return map[string]interface{}{"backend": s.name}
 }
 
+func TestMuxKeepsCellularOnSoftwareIMS(t *testing.T) {
+	ims := &stubBackend{name: "ims"}
+	native := &stubBackend{name: "native"}
+	mux := &Mux{IMS: ims, Native: native, IsNative: func(id string) bool { return id == "volte-dev" }}
+	got, err := mux.BeginCall(context.Background(), voicehost.BeginCallRequest{DeviceID: "cellular-dev"})
+	if err != nil || got.CallID != "ims-cellular-dev" {
+		t.Fatalf("cellular must stay on software IMS: %+v err=%v", got, err)
+	}
+}
+
 func TestMuxRoutesByMode(t *testing.T) {
 	ims := &stubBackend{name: "ims"}
 	native := &stubBackend{name: "native"}

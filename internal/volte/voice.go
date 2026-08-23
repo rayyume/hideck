@@ -239,11 +239,19 @@ func (c *Controller) StartCallCapture(string, string, string) error {
 func (c *Controller) DeviceStatus(deviceID string) map[string]interface{} {
 	st := c.Status(deviceID)
 	return map[string]interface{}{
-		"device_id":  deviceID,
-		"ready":      st.Ready(),
-		"registered": st.IMSRegistered,
-		"phase":      st.Phase,
-		"backend":    "native_volte",
+		"device_id":           deviceID,
+		"ready":               st.Ready(),
+		"registered":          st.IMSRegistered,
+		"phase":               st.Phase,
+		"backend":             "native_volte",
+		"ims_enabled":         st.IMSEnabled,
+		"volte_enabled":       st.VoLTEEnabled,
+		"voice_available":     st.VoiceAvailable,
+		"uac_enabled":         st.UACEnabled,
+		"reboot_required":     st.RebootRequired,
+		"provision_stage":     st.ProvisionStage,
+		"qmi_ims_unavailable": st.QMIIMSUnavailable,
+		"last_error":          st.LastError,
 	}
 }
 
@@ -286,6 +294,14 @@ func (c *Controller) handleVoiceInfo(deviceID string, vs *voiceSession, info *qm
 			Type: eventType, DeviceID: deviceID, CallID: id, Caller: peer, Callee: peer,
 			Direction: dir, State: state, Time: now, RecordingError: audioError(c.Status(deviceID)),
 		})
+		if eventType == "CallAnswered" && c.audio != nil {
+			if err := c.audio.Start(deviceID, id); err != nil {
+				c.setError(deviceID, err)
+			}
+		}
+		if eventType == "CallEnded" && c.audio != nil {
+			_ = c.audio.Stop(id)
+		}
 	}
 	for _, call := range vs.list() {
 		if seen[call.ID] || stateRank(call.State) == rankTerminal {
@@ -298,6 +314,9 @@ func (c *Controller) handleVoiceInfo(deviceID string, vs *voiceSession, info *qm
 				Type: "CallEnded", DeviceID: deviceID, CallID: call.ID, Caller: call.Peer, Callee: call.Peer,
 				Direction: call.Direction, State: "completed", Time: now, RecordingError: audioError(c.Status(deviceID)),
 			})
+			if c.audio != nil {
+				_ = c.audio.Stop(call.ID)
+			}
 		}
 	}
 }

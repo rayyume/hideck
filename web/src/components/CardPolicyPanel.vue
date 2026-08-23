@@ -120,7 +120,7 @@ const policyStatus = computed(() => {
 const policyProjection = computed(() => [
   `飞行 ${radioMode.value === 'airplane' ? '开启' : '关闭'}`,
   `网络 ${local.value.network_enabled ? '开启' : '关闭'}`,
-  `通话 ${local.value.phone_mode === 'cellular' ? '蜂窝数据' : 'WiFi calling'}${local.value.vowifi_enabled ? '开启' : '关闭'}`,
+  `通话 ${local.value.phone_mode === 'volte' ? 'VoLTE' : local.value.phone_mode === 'cellular' ? '蜂窝数据' : 'WiFi calling'}${local.value.vowifi_enabled ? '开启' : '关闭'}`,
   `IP ${ipVersion.value.toUpperCase()}`
 ].join(' · '))
 

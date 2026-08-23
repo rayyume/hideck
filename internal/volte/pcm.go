@@ -1,0 +1,197 @@
+package volte
+
+import (
+	"encoding/binary"
+	"net"
+	"sync"
+	"sync/atomic"
+	"time"
+)
+
+const (
+	pcmuPayloadType   = 0
+	pcmuClockRate     = 8000
+	pcmuFrameSamples  = 160
+	pcmuFrameDuration = 20 * time.Millisecond
+	pcmJitterDepth    = 5
+)
+
+type PCMPort interface {
+	ReadFrame() ([]int16, error)
+	WriteFrame([]int16) error
+	Close() error
+}
+
+type PCMBridge struct {
+	conn       net.PacketConn
+	remote     net.Addr
+	pcm        PCMPort
+	listenOnly bool
+	closed     chan struct{}
+	closeOnce  sync.Once
+	seq        uint16
+	ts         uint32
+	toPCM      atomic.Uint64
+	fromPCM    atomic.Uint64
+	silent     atomic.Uint64
+	lost       atomic.Uint64
+	overflow   atomic.Uint64
+}
+
+func NewPCMBridge(conn net.PacketConn, remote net.Addr, pcm PCMPort, listenOnly bool) *PCMBridge {
+	b := &PCMBridge{conn: conn, remote: remote, pcm: pcm, listenOnly: listenOnly, closed: make(chan struct{})}
+	go b.downlink()
+	go b.uplink()
+	return b
+}
+
+func (b *PCMBridge) Stats() (toPCM, fromPCM, silent, lost, overflow uint64) {
+	return b.toPCM.Load(), b.fromPCM.Load(), b.silent.Load(), b.lost.Load(), b.overflow.Load()
+}
+
+func (b *PCMBridge) Close() error {
+	var err error
+	b.closeOnce.Do(func() {
+		close(b.closed)
+		if b.conn != nil {
+			err = b.conn.Close()
+		}
+		if b.pcm != nil {
+			_ = b.pcm.Close()
+		}
+	})
+	return err
+}
+
+func (b *PCMBridge) downlink() {
+	buf := make([]byte, 2048)
+	for {
+		select {
+		case <-b.closed:
+			return
+		default:
+		}
+		if b.conn == nil {
+			return
+		}
+		_ = b.conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+		n, addr, err := b.conn.ReadFrom(buf)
+		if err != nil {
+			if ne, ok := err.(net.Error); ok && ne.Timeout() {
+				continue
+			}
+			return
+		}
+		if b.remote == nil {
+			b.remote = addr
+		}
+		payload, ok := rtpPCMUPayload(buf[:n])
+		if !ok {
+			b.lost.Add(1)
+			continue
+		}
+		pcm := make([]int16, len(payload))
+		for i, v := range payload {
+			pcm[i] = muLawToPCM(v)
+		}
+		if b.pcm == nil {
+			continue
+		}
+		if err := b.pcm.WriteFrame(pcm); err != nil {
+			b.overflow.Add(1)
+			continue
+		}
+		b.toPCM.Add(1)
+	}
+}
+
+func (b *PCMBridge) uplink() {
+	ticker := time.NewTicker(pcmuFrameDuration)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-b.closed:
+			return
+		case <-ticker.C:
+			if b.conn == nil || b.remote == nil {
+				continue
+			}
+			samples := make([]int16, pcmuFrameSamples)
+			if b.listenOnly || b.pcm == nil {
+				b.silent.Add(1)
+			} else {
+				frame, err := b.pcm.ReadFrame()
+				if err != nil {
+					b.lost.Add(1)
+				} else {
+					copy(samples, frame)
+					b.fromPCM.Add(1)
+				}
+			}
+			payload := make([]byte, pcmuFrameSamples)
+			for i, s := range samples {
+				payload[i] = pcmToMuLaw(s)
+			}
+			pkt := encodePCMURTP(b.seq, b.ts, payload)
+			b.seq++
+			b.ts += pcmuFrameSamples
+			if _, err := b.conn.WriteTo(pkt, b.remote); err != nil {
+				return
+			}
+		}
+	}
+}
+
+func rtpPCMUPayload(pkt []byte) ([]byte, bool) {
+	if len(pkt) < 12 {
+		return nil, false
+	}
+	cc := int(pkt[0] & 0x0f)
+	header := 12 + 4*cc
+	if len(pkt) < header {
+		return nil, false
+	}
+	if pkt[1]&0x7f != pcmuPayloadType {
+		return nil, false
+	}
+	return pkt[header:], true
+}
+
+func encodePCMURTP(seq uint16, ts uint32, payload []byte) []byte {
+	pkt := make([]byte, 12+len(payload))
+	pkt[0] = 0x80
+	pkt[1] = pcmuPayloadType
+	binary.BigEndian.PutUint16(pkt[2:], seq)
+	binary.BigEndian.PutUint32(pkt[4:], ts)
+	binary.BigEndian.PutUint32(pkt[8:], 0x48444543)
+	copy(pkt[12:], payload)
+	return pkt
+}
+
+func muLawToPCM(value byte) int16 {
+	value = ^value
+	magnitude := ((int(value&0x0f) << 3) + 0x84) << ((value & 0x70) >> 4)
+	if value&0x80 != 0 {
+		return int16(0x84 - magnitude)
+	}
+	return int16(magnitude - 0x84)
+}
+
+func pcmToMuLaw(sample int16) byte {
+	value := int(sample)
+	sign := byte(0)
+	if value < 0 {
+		sign = 0x80
+		value = -value
+	}
+	if value > 32635 {
+		value = 32635
+	}
+	value += 0x84
+	exponent := 7
+	for mask := 0x4000; exponent > 0 && value&mask == 0; mask >>= 1 {
+		exponent--
+	}
+	mantissa := (value >> (exponent + 3)) & 0x0f
+	return ^(sign | byte(exponent<<4) | byte(mantissa))
+}

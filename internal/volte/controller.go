@@ -15,6 +15,7 @@ import (
 type Controller struct {
 	host           Host
 	provision      *Provisioner
+	audio          *AudioRuntime
 	mu             sync.Mutex
 	sess           map[string]*session
 	globalIncoming []func(voicehost.IncomingCall)
@@ -34,6 +35,13 @@ func NewControllerWithBackup(host Host, backupDir string) *Controller {
 	c := &Controller{host: host, sess: make(map[string]*session)}
 	c.provision = NewProvisioner(host, &FileStore{Dir: backupDir})
 	return c
+}
+
+func (c *Controller) SetAudioRuntime(audio *AudioRuntime) {
+	if c == nil {
+		return
+	}
+	c.audio = audio
 }
 
 func (c *Controller) Enable(ctx context.Context, deviceID string) error {
