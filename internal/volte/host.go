@@ -18,6 +18,9 @@ type Host interface {
 	StopSoftwareIMS(deviceID string) error
 	SetNativeIMS(ctx context.Context, deviceID string, enabled bool) error
 	EnsureIMSClients(ctx context.Context, deviceID string) error
+	ReleaseIMSClients(deviceID string) error
+	OnIMSRegistration(deviceID string, handler func(*qmi.IMSARegistrationStatus)) error
+	OnIMSServices(deviceID string, handler func(*qmi.IMSAServicesStatus)) error
 	IMSAStatus(ctx context.Context, deviceID string) (Registration, error)
 	AudioDevice(deviceID string) string
 	VOICEDial(ctx context.Context, deviceID, number string) (uint8, error)

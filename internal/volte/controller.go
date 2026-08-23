@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/iniwex5/quectel-qmi-go/pkg/qmi"
 	"github.com/iniwex5/vowifi-go/runtimehost/voicehost"
 	"github.com/yibaiba/hideck/pkg/logger"
 )
@@ -59,6 +60,12 @@ func (c *Controller) Enable(ctx context.Context, deviceID string) error {
 	if err := c.provisionConfig(ctx, deviceID); err != nil {
 		return err
 	}
+	c.patch(deviceID, func(st *Status) {
+		if st.Phase == PhaseEnabling {
+			st.Phase = PhaseRegistering
+		}
+	})
+	c.attachIMS(deviceID)
 	c.attachVoice(deviceID)
 	c.refreshRegistration(ctx, deviceID)
 	return nil
@@ -86,6 +93,11 @@ func (c *Controller) Disable(deviceID string) {
 	if c == nil || deviceID == "" {
 		return
 	}
+	if c.host != nil {
+		if err := c.host.ReleaseIMSClients(deviceID); err != nil {
+			logger.Warn("释放原生 IMS 客户端失败", "device", deviceID, "err", err)
+		}
+	}
 	c.mu.Lock()
 	delete(c.sess, deviceID)
 	c.mu.Unlock()
@@ -106,7 +118,7 @@ func (c *Controller) Status(deviceID string) Status {
 
 func (c *Controller) Active(deviceID string) bool {
 	st := c.Status(deviceID)
-	return st.Phase == PhaseRegistered || st.Phase == PhaseUnverified || st.Phase == PhaseEnabling
+	return st.Phase == PhaseRegistered || st.Phase == PhaseUnverified || st.Phase == PhaseEnabling || st.Phase == PhaseRegistering
 }
 
 func (c *Controller) provisionConfig(ctx context.Context, deviceID string) error {
@@ -128,6 +140,7 @@ func (c *Controller) provisionConfig(ctx context.Context, deviceID string) error
 	if err := c.host.EnsureIMSClients(ctx, deviceID); err != nil {
 		logger.Warn("QMI IMS/IMSA 客户端不可用", "device", deviceID, "err", err)
 		c.patch(deviceID, func(st *Status) { st.QMIIMSUnavailable = true })
+		return c.fail(deviceID, err)
 	}
 	audio := strings.TrimSpace(c.host.AudioDevice(deviceID))
 	c.patch(deviceID, func(st *Status) { st.AudioDevice = audio })
@@ -146,6 +159,40 @@ func (c *Controller) applyProvision(deviceID string, res Result) {
 		st.ProvisionStage = res.Stage
 		st.IMEITail = res.IMEITail
 	})
+}
+
+func (c *Controller) attachIMS(deviceID string) {
+	if c == nil || c.host == nil {
+		return
+	}
+	_ = c.host.OnIMSRegistration(deviceID, func(info *qmi.IMSARegistrationStatus) {
+		c.patch(deviceID, func(st *Status) { applyIMSARegistration(st, info) })
+	})
+	_ = c.host.OnIMSServices(deviceID, func(info *qmi.IMSAServicesStatus) {
+		c.patch(deviceID, func(st *Status) {
+			if info != nil && info.HasVoiceServiceStatus {
+				st.VoiceAvailable = info.VoiceServiceStatus == qmi.IMSAServiceAvailabilityAvailable
+			}
+		})
+	})
+}
+
+func applyIMSARegistration(st *Status, info *qmi.IMSARegistrationStatus) {
+	if st == nil || info == nil || !info.HasStatus {
+		return
+	}
+	switch info.Status {
+	case qmi.IMSARegistrationStateRegistered, qmi.IMSARegistrationStateLimitedRegistered:
+		st.IMSRegistered = true
+		st.Phase = PhaseRegistered
+		st.LastError = ""
+	case qmi.IMSARegistrationStateRegistering:
+		st.IMSRegistered = false
+		st.Phase = PhaseRegistering
+	default:
+		st.IMSRegistered = false
+		st.Phase = PhaseFailed
+	}
 }
 
 func (c *Controller) refreshRegistration(ctx context.Context, deviceID string) {

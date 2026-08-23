@@ -296,6 +296,13 @@ type Manager struct {
 	newWDAService                     func(ctx context.Context, client *qmi.Client) (*qmi.WDAService, error)
 	newWMSService                     func(ctx context.Context, client *qmi.Client) (*qmi.WMSService, error)
 	newVOICEService                   func(ctx context.Context, client *qmi.Client) (*qmi.VOICEService, error)
+	newIMSService                     func(ctx context.Context, client *qmi.Client) (*qmi.IMSService, error)
+	newIMSAService                    func(ctx context.Context, client *qmi.Client) (*qmi.IMSAService, error)
+	newIMSPService                    func(ctx context.Context, client *qmi.Client) (*qmi.IMSPService, error)
+	registerIMSAIndications           func(ctx context.Context, cfg qmi.IMSAIndicationRegistration) error
+	hasServiceHook                    func(service uint8) bool
+	safeClose                         func(interface{ Close() error }) error
+	imsLifecycleMu                    sync.Mutex
 	enableRawIPHook                   func(ctx context.Context) error
 	onWMSRebindReplayHook             func(reason string)
 	openClientAndAllocateServicesHook func(context.Context) error
@@ -1244,8 +1251,8 @@ func (m *Manager) SetIMSServiceEnabled(ctx context.Context, enabled bool) error 
 	})
 }
 
-// EnsureIMSClients allocates IMS and IMSA on demand. Startup still skips these
-// services because some SKUs return CTL 0x001f; VoLTE can retry later.
+// EnsureIMSClients allocates IMS, IMSA, and IMSP on demand. Startup still skips
+// these services because some SKUs return CTL 0x001f; VoLTE can retry later.
 func (m *Manager) EnsureIMSClients(ctx context.Context) error {
 	if m == nil || m.client == nil {
 		return fmt.Errorf("manager not initialized")
@@ -1253,38 +1260,155 @@ func (m *Manager) EnsureIMSClients(ctx context.Context) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	m.imsLifecycleMu.Lock()
+	defer m.imsLifecycleMu.Unlock()
+
+	if !m.hasQMIService(qmi.ServiceIMS) {
+		return ErrServiceNotReady("IMS")
+	}
+	if !m.hasQMIService(qmi.ServiceIMSA) {
+		return ErrServiceNotReady("IMSA")
+	}
+
 	m.mu.Lock()
-	if m.ims == nil {
-		if m.hasQMIService(qmi.ServiceIMS) {
-			ims, err := qmi.NewIMSService(m.client)
-			if err != nil {
-				m.mu.Unlock()
-				return fmt.Errorf("allocate IMS: %w", err)
-			}
-			m.ims = ims
-		}
-	}
-	if m.imsa == nil {
-		if m.hasQMIService(qmi.ServiceIMSA) {
-			imsa, err := qmi.NewIMSAService(m.client)
-			if err != nil {
-				m.mu.Unlock()
-				return fmt.Errorf("allocate IMSA: %w", err)
-			}
-			m.imsa = imsa
-		}
-	}
-	imsa := m.imsa
+	needIMS := m.ims == nil
+	needIMSA := m.imsa == nil
+	needIMSP := m.imsp == nil && m.hasQMIService(qmi.ServiceIMSP)
 	m.mu.Unlock()
-	if imsa == nil {
+
+	var (
+		ims  *qmi.IMSService
+		imsa *qmi.IMSAService
+		imsp *qmi.IMSPService
+		err  error
+	)
+	rollback := func() {
+		if ims != nil {
+			_ = m.closeSvc(ims)
+		}
+		if imsa != nil {
+			_ = m.closeSvc(imsa)
+		}
+		if imsp != nil {
+			_ = m.closeSvc(imsp)
+		}
+	}
+
+	if needIMS {
+		ims, err = m.createIMSService(ctx)
+		if err != nil {
+			return fmt.Errorf("allocate IMS: %w", err)
+		}
+	}
+	if needIMSA {
+		imsa, err = m.createIMSAService(ctx)
+		if err != nil {
+			rollback()
+			return fmt.Errorf("allocate IMSA: %w", err)
+		}
+	}
+	if needIMSP {
+		imsp, err = m.createIMSPService(ctx)
+		if err != nil {
+			rollback()
+			return fmt.Errorf("allocate IMSP: %w", err)
+		}
+	}
+
+	m.mu.Lock()
+	if m.ims == nil && ims != nil {
+		m.ims = ims
+		ims = nil
+	}
+	if m.imsa == nil && imsa != nil {
+		m.imsa = imsa
+		imsa = nil
+	}
+	if m.imsp == nil && imsp != nil {
+		m.imsp = imsp
+		imsp = nil
+	}
+	ready := m.imsa
+	m.mu.Unlock()
+	rollback()
+	if ready == nil {
 		return ErrServiceNotReady("IMSA")
 	}
 	if cfg, ok := m.imsaIndicationRegistration(); ok {
-		if err := imsa.RegisterIndications(ctx, cfg); err != nil {
+		if err := m.registerIMSAIndicationsWithContext(ctx, ready, cfg); err != nil {
 			return fmt.Errorf("register IMSA indications: %w", err)
 		}
 	}
 	return nil
+}
+
+// ReleaseIMSClients drops on-demand IMS/IMSA/IMSP clients without tearing down
+// the rest of the QMI manager. Safe to call when none are allocated.
+func (m *Manager) ReleaseIMSClients() error {
+	if m == nil {
+		return nil
+	}
+	m.imsLifecycleMu.Lock()
+	defer m.imsLifecycleMu.Unlock()
+	m.mu.Lock()
+	ims, imsa, imsp := m.ims, m.imsa, m.imsp
+	m.ims, m.imsa, m.imsp = nil, nil, nil
+	m.mu.Unlock()
+	var first error
+	if ims != nil {
+		if err := m.closeSvc(ims); err != nil && first == nil {
+			first = err
+		}
+	}
+	if imsa != nil {
+		if err := m.closeSvc(imsa); err != nil && first == nil {
+			first = err
+		}
+	}
+	if imsp != nil {
+		if err := m.closeSvc(imsp); err != nil && first == nil {
+			first = err
+		}
+	}
+	return first
+}
+
+func (m *Manager) createIMSService(ctx context.Context) (*qmi.IMSService, error) {
+	if m.newIMSService != nil {
+		return m.newIMSService(ctx, m.client)
+	}
+	return qmi.NewIMSService(m.client)
+}
+
+func (m *Manager) createIMSAService(ctx context.Context) (*qmi.IMSAService, error) {
+	if m.newIMSAService != nil {
+		return m.newIMSAService(ctx, m.client)
+	}
+	return qmi.NewIMSAService(m.client)
+}
+
+func (m *Manager) createIMSPService(ctx context.Context) (*qmi.IMSPService, error) {
+	if m.newIMSPService != nil {
+		return m.newIMSPService(ctx, m.client)
+	}
+	return qmi.NewIMSPService(m.client)
+}
+
+func (m *Manager) registerIMSAIndicationsWithContext(ctx context.Context, imsa *qmi.IMSAService, cfg qmi.IMSAIndicationRegistration) error {
+	if m.registerIMSAIndications != nil {
+		return m.registerIMSAIndications(ctx, cfg)
+	}
+	return imsa.RegisterIndications(ctx, cfg)
+}
+
+func (m *Manager) closeSvc(c interface{ Close() error }) error {
+	if c == nil {
+		return nil
+	}
+	if m.safeClose != nil {
+		return m.safeClose(c)
+	}
+	return c.Close()
 }
 
 func (m *Manager) shouldAllocateWDA() bool {
@@ -2481,6 +2605,9 @@ func (m *Manager) runStartupServiceTasks(ctx context.Context, fatal bool, tasks 
 // hasQMIService 检查底层 Client 是否声明支持该服务。
 // 仅在 client 初始化完成后调用有效。
 func (m *Manager) hasQMIService(service uint8) bool {
+	if m.hasServiceHook != nil {
+		return m.hasServiceHook(service)
+	}
 	if m.client == nil {
 		return false
 	}

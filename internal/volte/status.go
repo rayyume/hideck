@@ -1,11 +1,12 @@
 package volte
 
 const (
-	PhaseIdle       = "idle"
-	PhaseEnabling   = "enabling"
-	PhaseRegistered = "registered"
-	PhaseUnverified = "ims_enabled_unverified"
-	PhaseFailed     = "failed"
+	PhaseIdle        = "idle"
+	PhaseEnabling    = "enabling"
+	PhaseRegistering = "registering"
+	PhaseRegistered  = "registered"
+	PhaseUnverified  = "ims_enabled_unverified"
+	PhaseFailed      = "failed"
 )
 
 type Status struct {

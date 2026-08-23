@@ -128,6 +128,30 @@ func (p *Pool) EnsureIMSClients(ctx context.Context, deviceID string) error {
 	return w.QMICore.EnsureIMSClients(ctx)
 }
 
+func (p *Pool) ReleaseIMSClients(deviceID string) error {
+	w := p.GetWorker(deviceID)
+	if w == nil || w.QMICore == nil {
+		return nil
+	}
+	return w.QMICore.ReleaseIMSClients()
+}
+
+func (p *Pool) OnIMSRegistration(deviceID string, handler func(*qmi.IMSARegistrationStatus)) error {
+	w := p.GetWorker(deviceID)
+	if w == nil || w.QMICore == nil {
+		return fmt.Errorf("设备 %s 没有 QMI", deviceID)
+	}
+	return w.QMICore.OnIMSRegistrationStatus(handler)
+}
+
+func (p *Pool) OnIMSServices(deviceID string, handler func(*qmi.IMSAServicesStatus)) error {
+	w := p.GetWorker(deviceID)
+	if w == nil || w.QMICore == nil {
+		return fmt.Errorf("设备 %s 没有 QMI", deviceID)
+	}
+	return w.QMICore.OnIMSServicesStatus(handler)
+}
+
 func (p *Pool) IMSAStatus(ctx context.Context, deviceID string) (volte.Registration, error) {
 	w := p.GetWorker(deviceID)
 	if w == nil || w.QMICore == nil {

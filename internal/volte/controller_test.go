@@ -2,7 +2,10 @@ package volte
 
 import (
 	"context"
+	"errors"
 	"testing"
+
+	"github.com/iniwex5/quectel-qmi-go/pkg/qmi"
 )
 
 func TestControllerEnablesIMSAndUACWithoutClaimingUACReady(t *testing.T) {
@@ -50,6 +53,50 @@ func TestControllerUnverifiedWhenIMSAMissing(t *testing.T) {
 	st := ctl.Status("wwan1")
 	if st.Phase != PhaseUnverified || !st.IMSEnabled {
 		t.Fatalf("want unverified, got %+v", st)
+	}
+}
+
+func TestControllerFailsWhenIMSClientsUnavailable(t *testing.T) {
+	host := newFakeModem()
+	host.IMS, host.VoLTE = 1, 1
+	host.USB[len(host.USB)-1] = "1"
+	host.EnsureErr = errors.New("QMI 服务未就绪: IMSA")
+	ctl := NewControllerWithBackup(host, t.TempDir())
+	if err := ctl.Enable(context.Background(), "wwan1"); err == nil {
+		t.Fatal("want typed IMSA unavailable")
+	}
+	st := ctl.Status("wwan1")
+	if !st.QMIIMSUnavailable || st.Phase != PhaseFailed {
+		t.Fatalf("status %+v", st)
+	}
+}
+
+func TestControllerReleasesIMSClientsAndFollowsIndications(t *testing.T) {
+	host := newFakeModem()
+	host.IMS, host.VoLTE = 1, 1
+	host.USB[len(host.USB)-1] = "1"
+	host.RegErr = context.DeadlineExceeded
+	ctl := NewControllerWithBackup(host, t.TempDir())
+	if err := ctl.Enable(context.Background(), "wwan1"); err != nil {
+		t.Fatal(err)
+	}
+	if host.EnsureCount != 1 {
+		t.Fatalf("ensure=%d", host.EnsureCount)
+	}
+	host.fireIMSRegistration(&qmi.IMSARegistrationStatus{
+		HasStatus: true,
+		Status:    qmi.IMSARegistrationStateRegistered,
+	})
+	st := ctl.Status("wwan1")
+	if st.Phase != PhaseRegistered || !st.IMSRegistered {
+		t.Fatalf("after indication %+v", st)
+	}
+	ctl.Disable("wwan1")
+	if host.ReleaseCount != 1 {
+		t.Fatalf("release=%d", host.ReleaseCount)
+	}
+	if ctl.Status("wwan1").Phase != PhaseIdle {
+		t.Fatalf("after disable %+v", ctl.Status("wwan1"))
 	}
 }
 

@@ -12,28 +12,32 @@ import (
 )
 
 type FakeModem struct {
-	mu           sync.Mutex
-	ID           string
-	Port         string
-	IMEI         string
-	IMS          int
-	VoLTE        int
-	USB          []string
-	AutoSel      int
-	MBN          []MBNEntry
-	FailIMS11    bool
-	Fail         map[string]error
-	Commands     []string
-	PendingUAC   *int
-	NextID       string
-	NextPort     string
-	UACImmediate bool
-	Audio        string
-	StopIMS      int
-	SetNative    int
-	EnsureErr    error
-	Reg          Registration
-	RegErr       error
+	mu            sync.Mutex
+	ID            string
+	Port          string
+	IMEI          string
+	IMS           int
+	VoLTE         int
+	USB           []string
+	AutoSel       int
+	MBN           []MBNEntry
+	FailIMS11     bool
+	Fail          map[string]error
+	Commands      []string
+	PendingUAC    *int
+	NextID        string
+	NextPort      string
+	UACImmediate  bool
+	Audio         string
+	StopIMS       int
+	SetNative     int
+	EnsureErr     error
+	EnsureCount   int
+	ReleaseCount  int
+	imsRegHandler func(*qmi.IMSARegistrationStatus)
+	imsSvcHandler func(*qmi.IMSAServicesStatus)
+	Reg           Registration
+	RegErr        error
 }
 
 func newFakeModem() *FakeModem {
@@ -184,7 +188,38 @@ func (f *FakeModem) SetNativeIMS(context.Context, string, bool) error {
 	f.SetNative++
 	return nil
 }
-func (f *FakeModem) EnsureIMSClients(context.Context, string) error { return f.EnsureErr }
+func (f *FakeModem) EnsureIMSClients(context.Context, string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.EnsureCount++
+	return f.EnsureErr
+}
+func (f *FakeModem) ReleaseIMSClients(string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.ReleaseCount++
+	return nil
+}
+func (f *FakeModem) OnIMSRegistration(_ string, handler func(*qmi.IMSARegistrationStatus)) error {
+	f.mu.Lock()
+	f.imsRegHandler = handler
+	f.mu.Unlock()
+	return nil
+}
+func (f *FakeModem) OnIMSServices(_ string, handler func(*qmi.IMSAServicesStatus)) error {
+	f.mu.Lock()
+	f.imsSvcHandler = handler
+	f.mu.Unlock()
+	return nil
+}
+func (f *FakeModem) fireIMSRegistration(info *qmi.IMSARegistrationStatus) {
+	f.mu.Lock()
+	h := f.imsRegHandler
+	f.mu.Unlock()
+	if h != nil {
+		h(info)
+	}
+}
 func (f *FakeModem) IMSAStatus(context.Context, string) (Registration, error) {
 	return f.Reg, f.RegErr
 }

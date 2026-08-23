@@ -2098,6 +2098,29 @@ func (m *Manager) EnsureIMSClients(ctx context.Context) error {
 	return m.qmiMgr.EnsureIMSClients(ctx)
 }
 
+func (m *Manager) ReleaseIMSClients() error {
+	if m == nil || m.qmiMgr == nil {
+		return nil
+	}
+	return m.qmiMgr.ReleaseIMSClients()
+}
+
+func (m *Manager) OnIMSRegistrationStatus(handler func(*qmi.IMSARegistrationStatus)) error {
+	if m == nil || m.qmiMgr == nil || handler == nil {
+		return qmimanager.ErrServiceNotReady("IMSA")
+	}
+	m.qmiMgr.OnIMSRegistrationStatus(handler)
+	return nil
+}
+
+func (m *Manager) OnIMSServicesStatus(handler func(*qmi.IMSAServicesStatus)) error {
+	if m == nil || m.qmiMgr == nil || handler == nil {
+		return qmimanager.ErrServiceNotReady("IMSA")
+	}
+	m.qmiMgr.OnIMSServicesStatus(handler)
+	return nil
+}
+
 func (m *Manager) IMSAGetIMSRegistrationStatus(ctx context.Context) (*qmi.IMSARegistrationStatus, error) {
 	if m == nil || m.qmiMgr == nil {
 		return nil, qmimanager.ErrServiceNotReady("IMSA")
