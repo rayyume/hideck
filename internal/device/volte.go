@@ -34,6 +34,13 @@ func (p *Pool) NativeVoLTEStatus(deviceID string) volte.Status {
 	return p.volteCtl.Status(deviceID)
 }
 
+func (p *Pool) RestoreNativeVoLTE(ctx context.Context, deviceID string) error {
+	if p == nil || p.volteCtl == nil {
+		return fmt.Errorf("VoLTE 控制器未初始化")
+	}
+	return p.volteCtl.Restore(ctx, strings.TrimSpace(deviceID))
+}
+
 func (p *Pool) EnableNativeVoLTE(deviceID string) error {
 	if p == nil || p.volteCtl == nil {
 		return fmt.Errorf("VoLTE 控制器未初始化")

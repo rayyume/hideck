@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/iniwex5/vowifi-go/runtimehost/voicehost"
 	"github.com/yibaiba/hideck/pkg/logger"
@@ -14,6 +13,7 @@ import (
 
 type Controller struct {
 	host           Host
+	provision      *Provisioner
 	mu             sync.Mutex
 	sess           map[string]*session
 	globalIncoming []func(voicehost.IncomingCall)
@@ -26,7 +26,13 @@ type session struct {
 }
 
 func NewController(host Host) *Controller {
-	return &Controller{host: host, sess: make(map[string]*session)}
+	return NewControllerWithBackup(host, DefaultBackupDir)
+}
+
+func NewControllerWithBackup(host Host, backupDir string) *Controller {
+	c := &Controller{host: host, sess: make(map[string]*session)}
+	c.provision = NewProvisioner(host, &FileStore{Dir: backupDir})
+	return c
 }
 
 func (c *Controller) Enable(ctx context.Context, deviceID string) error {
@@ -50,15 +56,28 @@ func (c *Controller) Enable(ctx context.Context, deviceID string) error {
 	if err := c.host.StopSoftwareIMS(deviceID); err != nil {
 		return c.fail(deviceID, fmt.Errorf("stop software IMS: %w", err))
 	}
-	if err := c.applyIMS(ctx, deviceID); err != nil {
-		return c.fail(deviceID, err)
-	}
-	if err := c.applyUAC(deviceID); err != nil {
-		logger.Warn("VoLTE UAC 查询失败", "device", deviceID, "err", err)
-		c.setError(deviceID, err)
+	if err := c.provisionConfig(ctx, deviceID); err != nil {
+		return err
 	}
 	c.attachVoice(deviceID)
 	c.refreshRegistration(ctx, deviceID)
+	return nil
+}
+
+func (c *Controller) Restore(ctx context.Context, deviceID string) error {
+	deviceID = strings.TrimSpace(deviceID)
+	if c == nil || c.provision == nil || deviceID == "" {
+		return errors.New("volte: controller is not configured")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	res, err := c.provision.Restore(ctx, deviceID)
+	c.applyProvision(deviceID, res)
+	if err != nil {
+		return c.fail(deviceID, err)
+	}
+	c.Disable(deviceID)
 	return nil
 }
 
@@ -90,35 +109,19 @@ func (c *Controller) Active(deviceID string) bool {
 	return st.Phase == PhaseRegistered || st.Phase == PhaseUnverified || st.Phase == PhaseEnabling
 }
 
-func (c *Controller) applyIMS(ctx context.Context, deviceID string) error {
-	resp, err := c.host.ExecuteAT(deviceID, IMSQueryCommand(), 8*time.Second)
-	if err != nil {
-		return fmt.Errorf("query IMS: %w", err)
-	}
-	cfg, err := ParseIMSConfig(resp)
-	if err != nil {
-		return err
-	}
-	if !cfg.IMSEnabled || !cfg.VoLTEEnabled {
-		if _, err := c.host.ExecuteAT(deviceID, IMSEnableCommand(), 8*time.Second); err != nil {
-			return fmt.Errorf("enable IMS: %w", err)
-		}
-		resp, err = c.host.ExecuteAT(deviceID, IMSQueryCommand(), 8*time.Second)
-		if err != nil {
-			return fmt.Errorf("re-query IMS: %w", err)
-		}
-		cfg, err = ParseIMSConfig(resp)
-		if err != nil {
-			return err
-		}
-	}
-	c.patch(deviceID, func(st *Status) {
-		st.IMSEnabled = cfg.IMSEnabled
-		st.VoLTEEnabled = cfg.VoLTEEnabled
-		if !cfg.IMSEnabled || !cfg.VoLTEEnabled {
-			st.RebootRequired = true
-		}
+func (c *Controller) provisionConfig(ctx context.Context, deviceID string) error {
+	res, err := c.provision.Ensure(ctx, deviceID, Desired{
+		IMSEnabled:   boolPtr(true),
+		VoLTEEnabled: boolPtr(true),
+		UACEnabled:   boolPtr(true),
 	})
+	c.applyProvision(deviceID, res)
+	if err != nil && !res.Current.IMSEnabled && !errors.Is(err, ErrRebootRequired) && !errors.Is(err, ErrFieldDrift) {
+		return c.fail(deviceID, err)
+	}
+	if err != nil {
+		c.setError(deviceID, err)
+	}
 	if err := c.host.SetNativeIMS(ctx, deviceID, true); err != nil {
 		logger.Warn("QMI 打开原生 IMS 失败，继续用 AT 结果", "device", deviceID, "err", err)
 	}
@@ -126,34 +129,23 @@ func (c *Controller) applyIMS(ctx context.Context, deviceID string) error {
 		logger.Warn("QMI IMS/IMSA 客户端不可用", "device", deviceID, "err", err)
 		c.patch(deviceID, func(st *Status) { st.QMIIMSUnavailable = true })
 	}
+	audio := strings.TrimSpace(c.host.AudioDevice(deviceID))
+	c.patch(deviceID, func(st *Status) { st.AudioDevice = audio })
+	if !res.Current.IMSEnabled {
+		return c.fail(deviceID, fmt.Errorf("native IMS did not enable"))
+	}
 	return nil
 }
 
-func (c *Controller) applyUAC(deviceID string) error {
-	resp, err := c.host.ExecuteAT(deviceID, USBConfigQueryCommand(), 8*time.Second)
-	if err != nil {
-		return err
-	}
-	cfg, err := ParseUSBConfig(resp)
-	if err != nil {
-		return err
-	}
-	reboot := false
-	if !cfg.UACEnabled && cfg.EnableCommand != "" {
-		if _, err := c.host.ExecuteAT(deviceID, cfg.EnableCommand, 8*time.Second); err != nil {
-			return fmt.Errorf("enable UAC: %w", err)
-		}
-		reboot = true
-	}
-	audio := strings.TrimSpace(c.host.AudioDevice(deviceID))
+func (c *Controller) applyProvision(deviceID string, res Result) {
 	c.patch(deviceID, func(st *Status) {
-		st.UACEnabled = cfg.UACEnabled || reboot
-		st.AudioDevice = audio
-		if reboot {
-			st.RebootRequired = true
-		}
+		st.IMSEnabled = res.Current.IMSEnabled
+		st.VoLTEEnabled = res.Current.VoLTEEnabled
+		st.UACEnabled = res.Current.UACEnabled && res.Verified
+		st.RebootRequired = res.RebootRequired
+		st.ProvisionStage = res.Stage
+		st.IMEITail = res.IMEITail
 	})
-	return nil
 }
 
 func (c *Controller) refreshRegistration(ctx context.Context, deviceID string) {

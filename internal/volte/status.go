@@ -19,6 +19,8 @@ type Status struct {
 	AudioDevice       string `json:"audio_device,omitempty"`
 	RebootRequired    bool   `json:"reboot_required"`
 	QMIIMSUnavailable bool   `json:"qmi_ims_unavailable"`
+	ProvisionStage    string `json:"provision_stage,omitempty"`
+	IMEITail          string `json:"imei_tail,omitempty"`
 	LastError         string `json:"last_error,omitempty"`
 }
 
