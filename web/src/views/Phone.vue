@@ -38,7 +38,7 @@ const incoming = computed(() => call.value?.direction === 'inbound'
 const selected = computed(() => phone.devices.find((device) => device.id === selectedDevice.value))
 const canPlaceCall = computed(() => CALLEE_PATTERN.test(callee.value)
   && !!selected.value
-  && (isDeviceReady(selected.value) || selected.value.phone_mode === 'cellular')
+  && (isDeviceReady(selected.value) || selected.value.phone_mode === 'cellular' || selected.value.phone_mode === 'volte')
   && !isDeviceBusy(selected.value))
 watch(() => phone.devices, (devices) => selectFirstAvailableDevice(devices), { immediate: true })
 watch(call, (current) => {
@@ -55,6 +55,10 @@ function selectFirstAvailableDevice(devices: PhoneDevice[]) {
 }
 
 function isDeviceReady(device: PhoneDevice) {
+  if (device.phone_mode === 'volte') {
+    return device.voice.ready === true || device.native_volte?.ims_registered === true
+      || device.native_volte?.phase === 'registered' || device.native_volte?.phase === 'ims_enabled_unverified'
+  }
   return device.voice.ready === true || device.voice.registered === true
 }
 
@@ -63,6 +67,7 @@ function isDeviceBusy(device: PhoneDevice) {
 }
 
 function deviceModeLabel(device?: PhoneDevice) {
+  if (device?.phone_mode === 'volte') return 'VoLTE'
   return device?.phone_mode === 'cellular' ? '蜂窝数据' : 'WiFi calling'
 }
 
@@ -71,6 +76,12 @@ function deviceStatus(device?: PhoneDevice) {
   if (isDeviceBusy(device)) return '通话占用'
   const mode = deviceModeLabel(device)
   if (isDeviceReady(device) || device.vowifi_active) return `${mode} · 就绪`
+  if (device.phone_mode === 'volte' && device.vowifi_enabled) {
+    if (device.native_volte?.ims_registered) return `${mode} · 已注册`
+    if (device.native_volte?.reboot_required) return `${mode} · 需重启模组`
+    if (device.native_volte?.last_error) return `${mode} · ${device.native_volte.last_error}`
+    return `${mode} · 连接中`
+  }
   if (device.phone_mode === 'cellular' && device.vowifi_enabled) {
     if (!device.network_enabled && device.data_strategy !== 'always') return `${mode} · 驻网（未开流量）`
     return device.data_strategy === 'always' ? `${mode} · 连接中` : `${mode} · 仅打电话时开`
@@ -79,14 +90,18 @@ function deviceStatus(device?: PhoneDevice) {
   return `${mode} · 未开启`
 }
 
-const selectedMode = computed(() => selected.value?.phone_mode === 'cellular' ? 'cellular' : 'wifi')
+const selectedMode = computed(() => {
+  const mode = selected.value?.phone_mode
+  if (mode === 'cellular' || mode === 'volte') return mode
+  return 'wifi'
+})
 const selectedStrategy = computed(() => selected.value?.data_strategy === 'always' ? 'always' : 'on_demand')
 const modePending = ref(false)
 
 async function changePhoneMode(mode: string) {
   if (!selectedDevice.value || !!call.value || modePending.value) return
-  if (mode === 'cellular' && selected.value?.rf_lock) {
-    ElMessage.warning('这张 Lebara UK 分享卡不能切蜂窝，驻国内网会切到 20404，WiFi calling 会废')
+  if ((mode === 'cellular' || mode === 'volte') && selected.value?.rf_lock) {
+    ElMessage.warning('这张 Lebara UK 分享卡不能切蜂窝或 VoLTE，驻国内网会切到 20404，WiFi calling 会废')
     return
   }
   if (
@@ -107,6 +122,8 @@ async function changePhoneMode(mode: string) {
     await phone.refresh()
     if (mode === 'cellular') {
       ElMessage.success('已切到蜂窝。会正常驻网；要走流量再到卡策略打开「网络」')
+    } else if (mode === 'volte') {
+      ElMessage.success('已切到 VoLTE。会驻网并由模组原生 IMS 打电话；打开「网络」才会走上网流量')
     } else {
       ElMessage.success('已切换到 WiFi calling')
     }
@@ -299,6 +316,7 @@ async function sendDTMF(digit: string) {
               >
                 <el-radio-button value="wifi" @click="void changePhoneMode('wifi')">WiFi calling</el-radio-button>
                 <el-radio-button value="cellular" :disabled="!!selected?.rf_lock" @click="void changePhoneMode('cellular')">蜂窝数据</el-radio-button>
+                <el-radio-button value="volte" :disabled="!!selected?.rf_lock" @click="void changePhoneMode('volte')">VoLTE</el-radio-button>
               </el-radio-group>
               <el-select
                 v-if="selectedMode === 'cellular'"
@@ -315,6 +333,11 @@ async function sendDTMF(digit: string) {
                 {{ selected?.network_enabled
                   ? (selectedStrategy === 'always' ? '网络已开，数据会保持连接。' : '网络已开，只有拨号时才连数据，挂断后关闭。')
                   : '会正常驻网，待机不走流量。打蜂窝电话会临时打开数据。' }}
+              </p>
+              <p v-else-if="selectedMode === 'volte'" class="phone-mode-hint">
+                {{ selected?.native_volte?.reboot_required
+                  ? '原生 IMS 已写入。UAC 声卡要重启模组后才出现，现在可以试信令，音频可能不可用。'
+                  : '会驻网并用模组原生 IMS 打电话，不走软件 WiFi calling。打开「网络」才会用上网流量。' }}
               </p>
               <p v-else-if="selected?.rf_lock" class="phone-mode-hint">
                 这张分享卡不能驻国内网，否则 IMSI 会切到 20404，WiFi calling 会废

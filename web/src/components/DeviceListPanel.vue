@@ -64,6 +64,7 @@ const registrationText = (d: DeviceMgmtListItem) => {
 
 const softwarePhoneText = (d: DeviceMgmtListItem) => {
   if (!d?.vowifi_enabled) return ''
+  if (d.phone_mode === 'volte') return 'VoLTE'
   return d.phone_mode === 'cellular' ? '蜂窝电话' : 'WiFi calling'
 }
 

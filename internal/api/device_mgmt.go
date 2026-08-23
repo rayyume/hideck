@@ -224,10 +224,14 @@ func registrationStateLabel(regStatus int) string {
 // 误判为“未探测到数据控制端”、流量按空接口名也统计不到。
 // cardPolicyVoWiFiEnabled 从卡策略读取用户意图，ICCID 为空或查不到时降级用 fallback。
 func overviewPhoneMode(mode string) string {
-	if strings.TrimSpace(mode) == "cellular" {
+	switch strings.TrimSpace(mode) {
+	case "cellular":
 		return "cellular"
+	case "volte":
+		return "volte"
+	default:
+		return "wifi"
 	}
-	return "wifi"
 }
 
 func cardPolicyVoWiFiEnabled(iccid string, fallback bool) bool {
@@ -396,6 +400,7 @@ type deviceMgmtOverviewLiteItem struct {
 	VoWiFiEnabled          bool               `json:"vowifi_enabled"`
 	VoWiFiActive           bool               `json:"vowifi_active"`
 	VoWiFiRuntime          *voWiFiRuntimeDTO  `json:"vowifi_runtime,omitempty"`
+	NativeVoLTE            any                `json:"native_volte,omitempty"`
 	RadioLiveOK            *bool              `json:"radio_live_ok,omitempty"`
 	Modem                  modem.DeviceStatus `json:"modem"`
 	Traffic                map[string]string  `json:"traffic,omitempty"`
@@ -631,6 +636,7 @@ func (s *Server) buildOverviewLiteItemFromWorkerWithModem(w *device.Worker, cfg 
 		VoWiFiEnabled:          cardPolicyVoWiFiEnabled(strings.TrimSpace(status.ICCID), cfg.VoWiFiEnabled),
 		VoWiFiActive:           s.pool.IsVoWiFiActive(w.ID),
 		VoWiFiRuntime:          s.getVoWiFiRuntimeDTO(w.ID),
+		NativeVoLTE:            s.pool.NativeVoLTEStatus(w.ID),
 		RadioLiveOK:            radioLiveOK,
 		Modem:                  modemStatus,
 		NetworkConnected:       w.NetworkConnected(),

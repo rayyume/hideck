@@ -26,6 +26,7 @@ import (
 	proxyserver "github.com/yibaiba/hideck/internal/proxy/server"
 	"github.com/yibaiba/hideck/internal/proxy/traffic"
 	"github.com/yibaiba/hideck/internal/upstreamproxy"
+	"github.com/yibaiba/hideck/internal/volte"
 
 	"github.com/yibaiba/hideck/internal/web"
 	"github.com/yibaiba/hideck/pkg/logger"
@@ -207,8 +208,13 @@ func main() {
 	if notifyMgr != nil {
 		callResultNotifier = notifyMgr
 	}
+	phoneGateway := &volte.Mux{
+		IMS:      voiceGW,
+		Native:   pool.NativeVoLTEController(),
+		IsNative: pool.IsNativeVoLTE,
+	}
 	phoneService, err := phone.NewService(phone.ServiceOptions{
-		Gateway: voiceGW, Store: db.NewVoiceCallStore(db.DB), Transcoder: audioTranscoder,
+		Gateway: phoneGateway, Store: db.NewVoiceCallStore(db.DB), Transcoder: audioTranscoder,
 		Notifier: callResultNotifier, RecordingDir: voiceRecordingDirectory,
 		WebRTCUDPAddress: cfg.Server.WebRTCUDPAddress, WebRTCPublicHost: cfg.Server.WebRTCPublicHost,
 		ICEServers:     cfg.Server.ICEServers,

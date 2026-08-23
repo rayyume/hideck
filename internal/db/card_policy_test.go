@@ -56,6 +56,24 @@ func TestNormalizeCardPolicyAirplaneIndependent(t *testing.T) {
 	}
 }
 
+func TestNormalizeCardPolicyAcceptsVoLTE(t *testing.T) {
+	p := CardPolicy{ICCID: "x", PhoneMode: "volte"}
+	NormalizeCardPolicy(&p)
+	if p.PhoneMode != "volte" {
+		t.Fatalf("volte 应保留，得 %q", p.PhoneMode)
+	}
+	p.PhoneMode = "VoLTE"
+	NormalizeCardPolicy(&p)
+	if p.PhoneMode != "wifi" {
+		t.Fatalf("大小写不匹配应回 wifi，得 %q", p.PhoneMode)
+	}
+	p.PhoneMode = "gsm"
+	NormalizeCardPolicy(&p)
+	if p.PhoneMode != "wifi" {
+		t.Fatalf("非法值应回 wifi，得 %q", p.PhoneMode)
+	}
+}
+
 func TestResolveCardPolicyAutoCreates(t *testing.T) {
 	openTestDB(t)
 	iccid := "8986009999999999999"

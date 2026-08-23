@@ -25,8 +25,12 @@ function isCellularMode(cur: PolicyMirror): boolean {
   return (cur.phone_mode ?? 'wifi') === 'cellular'
 }
 
+function isNativeVoLTE(cur: PolicyMirror): boolean {
+  return (cur.phone_mode ?? 'wifi') === 'volte'
+}
+
 function isWifiCalling(cur: PolicyMirror): boolean {
-  return !!cur.vowifi_enabled && !isCellularMode(cur)
+  return !!cur.vowifi_enabled && !isCellularMode(cur) && !isNativeVoLTE(cur)
 }
 
 // 互斥规则（开关联动，避免用户点出冲突组合）：
@@ -181,6 +185,8 @@ export function useCardPolicyToggles(
     }
     if (mode === 'cellular') {
       next.network_enabled = strategy === 'always' || next.network_enabled
+      next.airplane_enabled = false
+    } else if (mode === 'volte') {
       next.airplane_enabled = false
     } else {
       next.airplane_enabled = true

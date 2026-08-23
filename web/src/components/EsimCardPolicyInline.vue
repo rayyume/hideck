@@ -188,6 +188,7 @@ const {
           >
             <el-option label="WiFi calling" value="wifi" />
             <el-option label="蜂窝数据" value="cellular" />
+            <el-option label="VoLTE" value="volte" />
           </el-select>
         </div>
         <div

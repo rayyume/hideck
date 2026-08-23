@@ -6,7 +6,14 @@ export type PhoneDevice = {
   name: string
   iccid: string
   voice: { ready?: boolean; registered?: boolean; active_call?: boolean }
-  phone_mode?: string      // "wifi" | "cellular"
+  phone_mode?: string      // "wifi" | "cellular" | "volte"
+  native_volte?: {
+    phase?: string
+    ims_registered?: boolean
+    reboot_required?: boolean
+    last_error?: string
+    uac_enabled?: boolean
+  }
   data_strategy?: string   // "always" | "on_demand"
   network_enabled?: boolean
   vowifi_enabled?: boolean

@@ -2091,6 +2091,34 @@ func (m *Manager) SetIMSServiceEnabled(ctx context.Context, enabled bool) error 
 	return m.qmiMgr.SetIMSServiceEnabled(ctx, enabled)
 }
 
+func (m *Manager) EnsureIMSClients(ctx context.Context) error {
+	if m == nil || m.qmiMgr == nil {
+		return qmimanager.ErrServiceNotReady("IMS")
+	}
+	return m.qmiMgr.EnsureIMSClients(ctx)
+}
+
+func (m *Manager) IMSAGetIMSRegistrationStatus(ctx context.Context) (*qmi.IMSARegistrationStatus, error) {
+	if m == nil || m.qmiMgr == nil {
+		return nil, qmimanager.ErrServiceNotReady("IMSA")
+	}
+	return m.qmiMgr.IMSAGetIMSRegistrationStatus(ctx)
+}
+
+func (m *Manager) IMSAGetIMSServicesStatus(ctx context.Context) (*qmi.IMSAServicesStatus, error) {
+	if m == nil || m.qmiMgr == nil {
+		return nil, qmimanager.ErrServiceNotReady("IMSA")
+	}
+	return m.qmiMgr.IMSAGetIMSServicesStatus(ctx)
+}
+
+func (m *Manager) VOICEBurstDTMF(ctx context.Context, callID uint8, digits string) (uint8, error) {
+	if m == nil || m.qmiMgr == nil {
+		return 0, qmimanager.ErrServiceNotReady("VOICE")
+	}
+	return m.qmiMgr.VOICEBurstDTMF(ctx, callID, digits)
+}
+
 func (m *Manager) VOICEAnswerCall(ctx context.Context, callID uint8) (uint8, error) {
 	if m == nil || m.qmiMgr == nil {
 		return 0, qmimanager.ErrServiceNotReady("VOICE")

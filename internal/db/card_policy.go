@@ -17,9 +17,9 @@ type CardPolicy struct {
 	AirplaneEnabled bool      `gorm:"column:airplane_enabled" json:"airplane_enabled"`
 	IPVersion       string    `gorm:"column:ip_version" json:"ip_version"`
 	APN             string    `gorm:"column:apn" json:"apn"`
-	PhoneMode       string    `gorm:"column:phone_mode;default:wifi" json:"phone_mode"`         // wifi | cellular
+	PhoneMode       string    `gorm:"column:phone_mode;default:wifi" json:"phone_mode"`            // wifi | cellular | volte
 	DataStrategy    string    `gorm:"column:data_strategy;default:on_demand" json:"data_strategy"` // always | on_demand
-	Source          string    `gorm:"column:source" json:"source"`                              // auto | user
+	Source          string    `gorm:"column:source" json:"source"`                                 // auto | user
 	CreatedAt       time.Time `gorm:"column:created_at" json:"created_at"`
 	UpdatedAt       time.Time `gorm:"column:updated_at" json:"updated_at"`
 }
@@ -69,7 +69,7 @@ func NormalizeCardPolicy(p *CardPolicy) {
 		p.IPVersion = "v4"
 	}
 	switch strings.TrimSpace(p.PhoneMode) {
-	case "wifi", "cellular":
+	case "wifi", "cellular", "volte":
 		p.PhoneMode = strings.TrimSpace(p.PhoneMode)
 	default:
 		p.PhoneMode = "wifi"

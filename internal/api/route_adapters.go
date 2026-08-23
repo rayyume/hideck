@@ -6,12 +6,13 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/yibaiba/hideck/internal/db"
+	"github.com/yibaiba/hideck/internal/device"
 	"github.com/yibaiba/hideck/pkg/logger"
 )
 
 type enabledPatchRequest struct {
 	Enabled      *bool   `json:"enabled"`
-	Mode         *string `json:"mode"`          // "wifi" | "cellular"
+	Mode         *string `json:"mode"`          // "wifi" | "cellular" | "volte"
 	DataStrategy *string `json:"data_strategy"` // "always" | "on_demand"
 }
 
@@ -89,7 +90,7 @@ func (s *Server) handleDeviceVoWiFiPatch(c *gin.Context) {
 		// 落库：置 vowifi_enabled=true。若带 mode/data_strategy 则一并落库。
 		mode := normalizePhoneMode(req.Mode)
 		strategy := normalizeDataStrategy(req.DataStrategy)
-		if mode == "cellular" {
+		if device.PhoneModeCampsOnCell(mode) {
 			class, classifyErr := s.classifyLebaraUKForDevice(c.Request.Context(), deviceID)
 			if rejectLebaraUKRFUnlock(c, class, classifyErr) {
 				return
@@ -127,6 +128,22 @@ func (s *Server) handleDeviceVoWiFiPatch(c *gin.Context) {
 			}
 		}
 		s.pool.SetWorkerVoWiFiPolicy(deviceID, true)
+		if w := s.pool.GetWorker(deviceID); w != nil && device.IsNativeVoLTEMode(w.Config.PhoneMode) {
+			if err := s.pool.EnableNativeVoLTE(deviceID); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"status":  "error",
+					"message": "切换 VoLTE 失败: " + err.Error(),
+					"device":  deviceID,
+				})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{
+				"status":  "ok",
+				"message": "VoLTE 已设置，会驻网并由模组原生 IMS 打电话。打开「网络」才会走上网流量",
+				"device":  deviceID,
+			})
+			return
+		}
 		if w := s.pool.GetWorker(deviceID); w != nil && w.Config.PhoneMode == "cellular" && w.Config.DataStrategy != "always" {
 			if err := s.pool.StopVoWiFiRuntimeForCellularIdle(deviceID); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{
@@ -200,7 +217,7 @@ func applyAirplaneToCardPolicy(p *db.CardPolicy, enabled bool) {
 		return
 	}
 	p.NetworkEnabled = false
-	if p.PhoneMode != "cellular" {
+	if !device.PhoneModeCampsOnCell(p.PhoneMode) {
 		p.VoWiFiEnabled = false
 	}
 }
@@ -212,7 +229,7 @@ func applyNetworkEnableToCardPolicy(p *db.CardPolicy) {
 	}
 	p.NetworkEnabled = true
 	p.AirplaneEnabled = false
-	if p.PhoneMode != "cellular" {
+	if !device.PhoneModeCampsOnCell(p.PhoneMode) {
 		p.VoWiFiEnabled = false
 	}
 }
@@ -230,6 +247,10 @@ func applyVoWiFiEnableToCardPolicy(p *db.CardPolicy) {
 		}
 		return
 	}
+	if p.PhoneMode == "volte" {
+		p.AirplaneEnabled = false
+		return
+	}
 	p.AirplaneEnabled = true
 	p.NetworkEnabled = false
 }
@@ -241,6 +262,8 @@ func normalizePhoneMode(v *string) string {
 	switch strings.ToLower(strings.TrimSpace(*v)) {
 	case "cellular":
 		return "cellular"
+	case "volte":
+		return "volte"
 	default:
 		return "wifi"
 	}

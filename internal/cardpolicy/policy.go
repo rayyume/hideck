@@ -8,7 +8,7 @@ type Policy struct {
 	AirplaneEnabled bool
 	IPVersion       string
 	APN             string
-	PhoneMode       string // wifi | cellular
+	PhoneMode       string // wifi | cellular | volte
 	DataStrategy    string // always | on_demand
 }
 

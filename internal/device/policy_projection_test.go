@@ -26,6 +26,19 @@ func TestApplyPolicyCellularAirplaneKeepsSoftwarePhone(t *testing.T) {
 	}
 }
 
+func TestApplyPolicyVoLTECampsWithoutForcingData(t *testing.T) {
+	w := &Worker{ID: "wwan1"}
+	applyPolicyToWorker(w, cardpolicy.Policy{
+		ICCID: "x", VoWiFiEnabled: true, PhoneMode: "volte",
+	})
+	if w.Config.AirplaneEnabled || w.Config.NetworkEnabled || w.cellularRadioIsSuppressed() {
+		t.Fatalf("VoLTE 应驻网且不强制开流量: %+v suppressed=%v", w.Config, w.cellularRadioIsSuppressed())
+	}
+	if w.Config.PhoneMode != "volte" {
+		t.Fatalf("PhoneMode=%q", w.Config.PhoneMode)
+	}
+}
+
 func TestApplyPolicyCellularIdleKeepsCamped(t *testing.T) {
 	w := &Worker{ID: "wwan0"}
 	applyPolicyToWorker(w, cardpolicy.Policy{

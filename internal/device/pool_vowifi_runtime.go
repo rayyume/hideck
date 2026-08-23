@@ -159,6 +159,10 @@ func (p *Pool) EnableVoWiFi(deviceID string) error {
 	if p.IsESIMSwitching(deviceID) {
 		return fmt.Errorf("设备 %s 正在切卡，暂不允许启动 VoWiFi", deviceID)
 	}
+	if w := p.GetWorker(deviceID); w != nil && IsNativeVoLTEMode(w.Config.PhoneMode) {
+		return p.EnableNativeVoLTE(deviceID)
+	}
+	p.stopNativeVoLTE(deviceID, "enable_vowifi")
 	if w := p.GetWorker(deviceID); w != nil && w.Config.PhoneMode == "cellular" {
 		if w.Config.AirplaneEnabled {
 			logger.Info("蜂窝飞行：待机不建 SWu 隧道", "device", deviceID)

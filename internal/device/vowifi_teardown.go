@@ -139,6 +139,7 @@ func (p *Pool) DisableVoWiFi(deviceID ...string) error {
 			if p.IsESIMSwitching(target) {
 				return fmt.Errorf("设备 %s 正在切卡，暂不允许停用 VoWiFi", target)
 			}
+			p.stopNativeVoLTE(target, "disable_vowifi")
 			if err := p.voWiFiHost().Disable(p.ctx, target, "disable", false); err != nil {
 				return err
 			}

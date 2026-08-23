@@ -125,7 +125,7 @@ func (s *Server) handlePutCardPolicy(c *gin.Context) {
 		if req.AirplaneEnabled != nil && !*req.AirplaneEnabled {
 			unlocksRadio = true
 		}
-		if normalizePhoneMode(req.PhoneMode) == "cellular" {
+		if device.PhoneModeCampsOnCell(normalizePhoneMode(req.PhoneMode)) {
 			unlocksRadio = true
 		}
 		if unlocksRadio {

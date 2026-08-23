@@ -377,6 +377,17 @@ func TestApplyNetworkAndVoWiFiInterlock(t *testing.T) {
 	if !cellPhone.VoWiFiEnabled || cellPhone.AirplaneEnabled || cellPhone.NetworkEnabled {
 		t.Fatalf("开蜂窝软件电话应驻网且默认不开流量: %+v", cellPhone)
 	}
+
+	voltePhone := db.CardPolicy{PhoneMode: "volte", AirplaneEnabled: true, NetworkEnabled: false}
+	applyVoWiFiEnableToCardPolicy(&voltePhone)
+	if !voltePhone.VoWiFiEnabled || voltePhone.AirplaneEnabled || voltePhone.NetworkEnabled {
+		t.Fatalf("开 VoLTE 应驻网且不强制开上网流量: %+v", voltePhone)
+	}
+
+	applyAirplaneToCardPolicy(&voltePhone, true)
+	if !voltePhone.AirplaneEnabled || voltePhone.NetworkEnabled || !voltePhone.VoWiFiEnabled {
+		t.Fatalf("VoLTE 开飞行应保留电话并关流量: %+v", voltePhone)
+	}
 }
 
 func TestPatchCardPolicyAirplaneMutualExclusion(t *testing.T) {

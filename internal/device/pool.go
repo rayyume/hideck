@@ -24,6 +24,7 @@ import (
 	"github.com/yibaiba/hideck/internal/pcsc"
 	"github.com/yibaiba/hideck/internal/proxy/server"
 	qmicore "github.com/yibaiba/hideck/internal/qmi"
+	"github.com/yibaiba/hideck/internal/volte"
 	"github.com/yibaiba/hideck/internal/vowifihost"
 	"github.com/yibaiba/hideck/pkg/logger"
 	"github.com/yibaiba/hideck/pkg/smscodec"
@@ -196,6 +197,7 @@ type Pool struct {
 	rescanAndReconnectForTest func() error
 
 	voiceGateway *voicehost.Gateway
+	volteCtl     *volte.Controller
 
 	// VoWiFi host 侧整合（多实例）
 	vowifiHost         *vowifihost.Manager
@@ -265,6 +267,7 @@ func NewPoolWithDynamicInterfaceMapper(cfg *config.Config, mapper DynamicInterfa
 	p.voWiFiHost().ConfigureAdapter(p)
 	p.voWiFiHost().ConfigureRuntimeRecycleHandler(p.handleVoWiFiRuntimeRecycle)
 	p.voWiFiHost().ConfigureRuntimeDependencies(p.GetVoiceGateway(), vowifiDeliveryStore{}, poolVoWiFiRuntimeDispatcher{pool: p})
+	p.volteCtl = volte.NewController(p)
 
 	return p
 }
@@ -1956,7 +1959,7 @@ func (p *Pool) SetWorkerNetworkPolicy(deviceID string, networkEnabled bool, ipVe
 		w.Config.AirplaneEnabled = false
 		// 蜂窝软件电话本身就要走 SIM 数据，允许和网络同时开。
 		// WiFi calling 仍与数据互斥，避免射频/默认路由被两边抢。
-		if w.Config.PhoneMode != "cellular" {
+		if !PhoneModeCampsOnCell(w.Config.PhoneMode) {
 			w.Config.VoWiFiEnabled = false
 		}
 	}
@@ -1989,6 +1992,11 @@ func (p *Pool) SetWorkerVoWiFiPolicy(deviceID string, vowifiEnabled bool) *Worke
 			w.setCellularRadioSuppressed(shouldSuppressCellularRadio(w.Config))
 			return w
 		}
+		if IsNativeVoLTEMode(w.Config.PhoneMode) {
+			w.Config.AirplaneEnabled = false
+			w.setCellularRadioSuppressed(shouldSuppressCellularRadio(w.Config))
+			return w
+		}
 		w.Config.AirplaneEnabled = true
 		w.Config.NetworkEnabled = false
 	}
@@ -2008,7 +2016,7 @@ func (p *Pool) SetWorkerAirplanePolicy(deviceID string, airplaneEnabled bool) *W
 	w.Config.AirplaneEnabled = airplaneEnabled
 	if airplaneEnabled {
 		w.Config.NetworkEnabled = false
-		if w.Config.PhoneMode != "cellular" {
+		if !PhoneModeCampsOnCell(w.Config.PhoneMode) {
 			w.Config.VoWiFiEnabled = false
 		}
 	} else if w.Config.PhoneMode == "cellular" && w.Config.DataStrategy == "always" {

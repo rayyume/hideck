@@ -233,7 +233,7 @@ type DeviceConfig struct {
 	AirplaneEnabled bool   `mapstructure:"-"`
 	ConnectHoldRF   bool   `mapstructure:"-"` // USB 热插/控制口重建时暂扣射频，不落文件
 	SMSEnabled      bool   `mapstructure:"-"` // SMS 恒开，运行时强制 true
-	PhoneMode       string `mapstructure:"-"` // wifi | cellular
+	PhoneMode       string `mapstructure:"-"` // wifi | cellular | volte
 	DataStrategy    string `mapstructure:"-"` // always | on_demand
 
 	// USB Audio (自动发现，无需手动配置)

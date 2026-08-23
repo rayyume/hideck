@@ -1244,6 +1244,49 @@ func (m *Manager) SetIMSServiceEnabled(ctx context.Context, enabled bool) error 
 	})
 }
 
+// EnsureIMSClients allocates IMS and IMSA on demand. Startup still skips these
+// services because some SKUs return CTL 0x001f; VoLTE can retry later.
+func (m *Manager) EnsureIMSClients(ctx context.Context) error {
+	if m == nil || m.client == nil {
+		return fmt.Errorf("manager not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	m.mu.Lock()
+	if m.ims == nil {
+		if m.hasQMIService(qmi.ServiceIMS) {
+			ims, err := qmi.NewIMSService(m.client)
+			if err != nil {
+				m.mu.Unlock()
+				return fmt.Errorf("allocate IMS: %w", err)
+			}
+			m.ims = ims
+		}
+	}
+	if m.imsa == nil {
+		if m.hasQMIService(qmi.ServiceIMSA) {
+			imsa, err := qmi.NewIMSAService(m.client)
+			if err != nil {
+				m.mu.Unlock()
+				return fmt.Errorf("allocate IMSA: %w", err)
+			}
+			m.imsa = imsa
+		}
+	}
+	imsa := m.imsa
+	m.mu.Unlock()
+	if imsa == nil {
+		return ErrServiceNotReady("IMSA")
+	}
+	if cfg, ok := m.imsaIndicationRegistration(); ok {
+		if err := imsa.RegisterIndications(ctx, cfg); err != nil {
+			return fmt.Errorf("register IMSA indications: %w", err)
+		}
+	}
+	return nil
+}
+
 func (m *Manager) shouldAllocateWDA() bool {
 	dataCfg := m.dataConfig()
 	return strings.TrimSpace(m.cfg.Device.NetInterface) != "" && (dataCfg.EnableIPv4 || dataCfg.EnableIPv6)

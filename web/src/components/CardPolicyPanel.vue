@@ -263,8 +263,8 @@ const airplaneHint = computed(() => {
           </div>
         </div>
 
-        <div class="policy-setting-row" :class="{ 'is-active': local.phone_mode === 'cellular' }">
-          <span><strong>通话方式</strong><small>切换即开启软件电话。WiFi calling 会打开飞行；蜂窝会关掉飞行</small></span>
+        <div class="policy-setting-row" :class="{ 'is-active': local.phone_mode === 'cellular' || local.phone_mode === 'volte' }">
+          <span><strong>通话方式</strong><small>切换即开启电话。WiFi calling 开飞行；蜂窝走软件 IMS 数据；VoLTE 走模组原生 IMS</small></span>
           <div class="policy-field-control">
             <el-select
               :model-value="local.phone_mode ?? 'wifi'"
@@ -274,6 +274,7 @@ const airplaneHint = computed(() => {
             >
               <el-option label="WiFi calling" value="wifi" />
               <el-option label="蜂窝数据" value="cellular" :disabled="rfLocked" />
+              <el-option label="VoLTE" value="volte" :disabled="rfLocked" />
             </el-select>
             <small v-if="phoneModePending">正在切换...</small>
             <div v-if="phoneModeFailed" class="text-xs text-orange-500 dark:text-orange-400">切换未生效</div>

@@ -63,7 +63,13 @@ func (s *Server) handlePhoneDevices(c *gin.Context) {
 				logger.Warn("电话设备列表识别 Lebara UK 射频策略失败", "device", worker.ID, "err", err)
 			}
 			voice := map[string]interface{}{}
-			if s.voiceGW != nil {
+			if s.pool.IsNativeVoLTE(worker.ID) {
+				if ctl := s.pool.NativeVoLTEController(); ctl != nil {
+					for key, value := range ctl.DeviceStatus(worker.ID) {
+						voice[key] = value
+					}
+				}
+			} else if s.voiceGW != nil {
 				voice = s.voiceGW.DeviceStatus(worker.ID)
 				for key, value := range s.voiceGW.DeviceStatusCurrent(worker.ID) {
 					voice[key] = value
@@ -81,6 +87,7 @@ func (s *Server) handlePhoneDevices(c *gin.Context) {
 				"network_enabled": worker.Config.NetworkEnabled,
 				"vowifi_enabled":  worker.Config.VoWiFiEnabled,
 				"vowifi_active":   s.pool.IsVoWiFiActive(worker.ID),
+				"native_volte":    s.pool.NativeVoLTEStatus(worker.ID),
 				"rf_lock":         class.RFLock(),
 			})
 		}
