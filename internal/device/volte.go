@@ -219,3 +219,11 @@ func (p *Pool) OnVoiceStatus(deviceID string, handler func(*qmi.VoiceAllCallInfo
 	}
 	return w.QMICore.OnVoiceCallStatus(handler)
 }
+
+func (p *Pool) VOICEGetAllCallInfo(ctx context.Context, deviceID string) (*qmi.VoiceAllCallInfo, error) {
+	w := p.GetWorker(deviceID)
+	if w == nil || w.QMICore == nil {
+		return nil, fmt.Errorf("设备 %s 没有 QMI VOICE", deviceID)
+	}
+	return w.QMICore.VOICEGetAllCallInfo(ctx)
+}

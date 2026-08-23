@@ -36,6 +36,8 @@ type FakeModem struct {
 	ReleaseCount  int
 	imsRegHandler func(*qmi.IMSARegistrationStatus)
 	imsSvcHandler func(*qmi.IMSAServicesStatus)
+	voiceHandler  func(*qmi.VoiceAllCallInfo)
+	allCalls      *qmi.VoiceAllCallInfo
 	Reg           Registration
 	RegErr        error
 }
@@ -232,7 +234,28 @@ func (f *FakeModem) VOICEHangup(context.Context, string, uint8) error { return n
 func (f *FakeModem) VOICEBurstDTMF(context.Context, string, uint8, string) error {
 	return nil
 }
-func (f *FakeModem) OnVoiceStatus(string, func(*qmi.VoiceAllCallInfo)) error { return nil }
+func (f *FakeModem) OnVoiceStatus(_ string, handler func(*qmi.VoiceAllCallInfo)) error {
+	f.mu.Lock()
+	f.voiceHandler = handler
+	f.mu.Unlock()
+	return nil
+}
+func (f *FakeModem) VOICEGetAllCallInfo(context.Context, string) (*qmi.VoiceAllCallInfo, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.allCalls == nil {
+		return &qmi.VoiceAllCallInfo{}, nil
+	}
+	return f.allCalls, nil
+}
+func (f *FakeModem) fireVoice(info *qmi.VoiceAllCallInfo) {
+	f.mu.Lock()
+	h := f.voiceHandler
+	f.mu.Unlock()
+	if h != nil {
+		h(info)
+	}
+}
 
 type reenumWaiter struct {
 	modem   *FakeModem

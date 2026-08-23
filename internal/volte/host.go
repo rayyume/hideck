@@ -27,5 +27,6 @@ type Host interface {
 	VOICEAnswer(ctx context.Context, deviceID string, callID uint8) error
 	VOICEHangup(ctx context.Context, deviceID string, callID uint8) error
 	VOICEBurstDTMF(ctx context.Context, deviceID string, callID uint8, digits string) error // digits is a single DTMF key
+	VOICEGetAllCallInfo(ctx context.Context, deviceID string) (*qmi.VoiceAllCallInfo, error)
 	OnVoiceStatus(deviceID string, handler func(*qmi.VoiceAllCallInfo)) error
 }

@@ -57,7 +57,7 @@ func TestMapQMIState(t *testing.T) {
 		t.Fatalf("end -> %s %s", state, event)
 	}
 	state, event = mapQMIState(qmiCallOriginating)
-	if state != "ringing" || event != "CallRinging" {
+	if state != "calling" || event != "CallRinging" {
 		t.Fatalf("originating -> %s %s", state, event)
 	}
 }

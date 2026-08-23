@@ -23,10 +23,13 @@ const (
 )
 
 type voiceSession struct {
-	mu       sync.Mutex
-	active   map[string]nativeCall
-	incoming []func(voicehost.IncomingCall)
-	events   []func(voicehost.CallEvent)
+	mu           sync.Mutex
+	active       map[string]nativeCall
+	emitted      map[string]map[string]bool
+	incomingSeen map[string]bool
+	attached     bool
+	incoming     []func(voicehost.IncomingCall)
+	events       []func(voicehost.CallEvent)
 }
 
 type nativeCall struct {
@@ -38,6 +41,14 @@ type nativeCall struct {
 	Start     time.Time
 }
 
+func newVoiceSession() *voiceSession {
+	return &voiceSession{
+		active:       make(map[string]nativeCall),
+		emitted:      make(map[string]map[string]bool),
+		incomingSeen: make(map[string]bool),
+	}
+}
+
 func (c *Controller) attachVoice(deviceID string) {
 	c.mu.Lock()
 	s := c.sess[deviceID]
@@ -46,13 +57,45 @@ func (c *Controller) attachVoice(deviceID string) {
 		return
 	}
 	if s.voice == nil {
-		s.voice = &voiceSession{active: make(map[string]nativeCall)}
+		s.voice = newVoiceSession()
 	}
 	vs := s.voice
+	first := !vs.attached
+	vs.attached = true
 	c.mu.Unlock()
-	_ = c.host.OnVoiceStatus(deviceID, func(info *qmi.VoiceAllCallInfo) {
-		c.handleVoiceInfo(deviceID, vs, info)
-	})
+	if first {
+		_ = c.host.OnVoiceStatus(deviceID, func(info *qmi.VoiceAllCallInfo) {
+			c.handleVoiceInfo(deviceID, vs, info)
+		})
+	}
+	c.ReconcileCalls(context.Background(), deviceID)
+}
+
+func (c *Controller) ReconcileCalls(ctx context.Context, deviceID string) {
+	if c == nil || c.host == nil {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	info, err := c.host.VOICEGetAllCallInfo(ctx, deviceID)
+	if err != nil {
+		return
+	}
+	c.mu.Lock()
+	s := c.sess[deviceID]
+	var vs *voiceSession
+	if s != nil {
+		if s.voice == nil {
+			s.voice = newVoiceSession()
+		}
+		vs = s.voice
+	}
+	c.mu.Unlock()
+	if vs == nil {
+		return
+	}
+	c.handleVoiceInfo(deviceID, vs, info)
 }
 
 func (c *Controller) SubscribeIncomingCalls(handler func(voicehost.IncomingCall)) func() {
@@ -66,12 +109,6 @@ func (c *Controller) addIncoming(deviceID string, handler func(voicehost.Incomin
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if deviceID == "" {
-		for _, s := range c.sess {
-			if s.voice == nil {
-				s.voice = &voiceSession{active: make(map[string]nativeCall)}
-			}
-			s.voice.incoming = append(s.voice.incoming, handler)
-		}
 		c.globalIncoming = append(c.globalIncoming, handler)
 		return func() {}
 	}
@@ -87,12 +124,6 @@ func (c *Controller) SubscribeCallEvents(handler func(voicehost.CallEvent)) func
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.globalEvents = append(c.globalEvents, handler)
-	for _, s := range c.sess {
-		if s.voice == nil {
-			s.voice = &voiceSession{active: make(map[string]nativeCall)}
-		}
-		s.voice.events = append(s.voice.events, handler)
-	}
 	return func() {}
 }
 
@@ -103,7 +134,7 @@ func (c *Controller) ensureLocked(deviceID string) *session {
 		c.sess[deviceID] = s
 	}
 	if s.voice == nil {
-		s.voice = &voiceSession{active: make(map[string]nativeCall)}
+		s.voice = newVoiceSession()
 	}
 	return s
 }
@@ -128,6 +159,15 @@ func (c *Controller) BeginCall(ctx context.Context, request voicehost.BeginCallR
 	now := time.Now()
 	nc := nativeCall{ID: id, QMI: qmiID, Direction: "outbound", Peer: request.Callee, State: "calling", Start: now}
 	c.storeCall(deviceID, nc)
+	c.mu.Lock()
+	vs := (*voiceSession)(nil)
+	if s := c.sess[deviceID]; s != nil {
+		vs = s.voice
+	}
+	c.mu.Unlock()
+	if vs != nil {
+		vs.markEmitted(id, rankKey("calling"))
+	}
 	c.emitEvent(deviceID, voicehost.CallEvent{
 		Type: "CallRinging", DeviceID: deviceID, CallID: id, Callee: request.Callee,
 		Direction: "outbound", State: "calling", Time: now,
@@ -212,8 +252,10 @@ func (c *Controller) handleVoiceInfo(deviceID string, vs *voiceSession, info *qm
 		return
 	}
 	now := time.Now()
+	seen := make(map[string]bool, len(info.Calls))
 	for _, item := range info.Calls {
 		id := callID(deviceID, item.ID)
+		seen[id] = true
 		peer := remoteNumber(info, item.ID)
 		state, eventType := mapQMIState(item.State)
 		dir := "outbound"
@@ -221,24 +263,52 @@ func (c *Controller) handleVoiceInfo(deviceID string, vs *voiceSession, info *qm
 			dir = "inbound"
 		}
 		prev, existed := vs.get(id)
-		vs.put(nativeCall{ID: id, QMI: item.ID, Direction: dir, Peer: peer, State: state, Start: startedAt(prev, now)})
-		if item.Direction == qmiDirMT && item.State == qmiCallIncoming && !existed {
+		if existed && stateRank(state) < stateRank(prev.State) && stateRank(state) != rankTerminal {
+			continue
+		}
+		if peer == "" {
+			peer = prev.Peer
+		}
+		if dir == "outbound" && prev.Direction != "" {
+			dir = prev.Direction
+		}
+		next := nativeCall{ID: id, QMI: item.ID, Direction: dir, Peer: peer, State: state, Start: startedAt(prev, now)}
+		vs.put(next)
+		if dir == "inbound" && vs.markIncoming(id) {
 			c.emitIncoming(deviceID, voicehost.IncomingCall{
 				DeviceID: deviceID, CallID: id, Caller: peer, State: "ringing", ReceivedAt: now,
 			})
 		}
-		if eventType != "" {
+		if eventType == "" || !vs.markEmitted(id, rankKey(state)) {
+			continue
+		}
+		c.emitEvent(deviceID, voicehost.CallEvent{
+			Type: eventType, DeviceID: deviceID, CallID: id, Caller: peer, Callee: peer,
+			Direction: dir, State: state, Time: now, RecordingError: audioError(c.Status(deviceID)),
+		})
+	}
+	for _, call := range vs.list() {
+		if seen[call.ID] || stateRank(call.State) == rankTerminal {
+			continue
+		}
+		call.State = "completed"
+		vs.put(call)
+		if vs.markEmitted(call.ID, rankKey("completed")) {
 			c.emitEvent(deviceID, voicehost.CallEvent{
-				Type: eventType, DeviceID: deviceID, CallID: id, Caller: peer, Callee: peer,
-				Direction: dir, State: state, Time: now, RecordingError: audioError(c.Status(deviceID)),
+				Type: "CallEnded", DeviceID: deviceID, CallID: call.ID, Caller: call.Peer, Callee: call.Peer,
+				Direction: call.Direction, State: "completed", Time: now, RecordingError: audioError(c.Status(deviceID)),
 			})
 		}
 	}
 }
 
+const rankTerminal = 4
+
 func mapQMIState(state qmi.VoiceCallState) (string, string) {
 	switch state {
-	case qmiCallIncoming, qmiCallAlerting, qmiCallOriginating:
+	case qmiCallOriginating:
+		return "calling", "CallRinging"
+	case qmiCallIncoming, qmiCallAlerting:
 		return "ringing", "CallRinging"
 	case qmiCallConversation:
 		return "connected", "CallAnswered"
@@ -246,6 +316,25 @@ func mapQMIState(state qmi.VoiceCallState) (string, string) {
 		return "completed", "CallEnded"
 	default:
 		return "calling", ""
+	}
+}
+
+func rankKey(state string) string {
+	return fmt.Sprintf("%d", stateRank(state))
+}
+
+func stateRank(state string) int {
+	switch state {
+	case "calling":
+		return 1
+	case "ringing":
+		return 2
+	case "connected":
+		return 3
+	case "completed", "busy", "rejected", "failed":
+		return rankTerminal
+	default:
+		return 0
 	}
 }
 
@@ -337,6 +426,9 @@ func (c *Controller) emitIncoming(deviceID string, call voicehost.IncomingCall) 
 
 func (vs *voiceSession) put(call nativeCall) {
 	vs.mu.Lock()
+	if vs.active == nil {
+		vs.active = make(map[string]nativeCall)
+	}
 	vs.active[call.ID] = call
 	vs.mu.Unlock()
 }
@@ -346,4 +438,43 @@ func (vs *voiceSession) get(id string) (nativeCall, bool) {
 	defer vs.mu.Unlock()
 	call, ok := vs.active[id]
 	return call, ok
+}
+
+func (vs *voiceSession) list() []nativeCall {
+	vs.mu.Lock()
+	defer vs.mu.Unlock()
+	out := make([]nativeCall, 0, len(vs.active))
+	for _, call := range vs.active {
+		out = append(out, call)
+	}
+	return out
+}
+
+func (vs *voiceSession) markEmitted(id, eventType string) bool {
+	vs.mu.Lock()
+	defer vs.mu.Unlock()
+	if vs.emitted == nil {
+		vs.emitted = make(map[string]map[string]bool)
+	}
+	if vs.emitted[id] == nil {
+		vs.emitted[id] = make(map[string]bool)
+	}
+	if vs.emitted[id][eventType] {
+		return false
+	}
+	vs.emitted[id][eventType] = true
+	return true
+}
+
+func (vs *voiceSession) markIncoming(id string) bool {
+	vs.mu.Lock()
+	defer vs.mu.Unlock()
+	if vs.incomingSeen == nil {
+		vs.incomingSeen = make(map[string]bool)
+	}
+	if vs.incomingSeen[id] {
+		return false
+	}
+	vs.incomingSeen[id] = true
+	return true
 }
