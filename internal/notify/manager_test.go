@@ -438,8 +438,8 @@ func TestManagerNotifyIncomingCallUsesPlainTemplate(t *testing.T) {
 func TestManagerNotifyIncomingCallDeduplicatesRapidRepeats(t *testing.T) {
 	capture := &captureChannel{}
 	m := &Manager{channels: []Channel{capture}}
-	m.NotifyIncomingCall("wwan0", "14787483081", "")
-	m.NotifyIncomingCall("wwan0", "14787483081", "")
+	m.NotifyIncomingCall("wwan0", "+1555550100", "")
+	m.NotifyIncomingCall("wwan0", "+1555550100", "")
 	waitUntil(t, time.Second, func() bool { return capture.Last() != "" })
 	time.Sleep(20 * time.Millisecond)
 	capture.mu.Lock()

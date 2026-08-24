@@ -73,12 +73,12 @@ func TestIncomingCallNotifiesChannelsWhileRinging(t *testing.T) {
 	service := newPhoneTestService(t, gateway, store, time.Second)
 	service.notifier = captureNotifier{notifications: notifications}
 	gateway.emitIncoming(voicehost.IncomingCall{
-		DeviceID: "dev-1", CallID: "ring-1", Caller: "14787483081", Callee: "10010",
+		DeviceID: "dev-1", CallID: "ring-1", Caller: "+1555550100", Callee: "10010",
 		OfferSDP: testPlainSDP, ReceivedAt: time.Now(),
 	})
 	select {
 	case notification := <-notifications:
-		if !notification.incoming || notification.caller != "14787483081" || notification.callee != "10010" {
+		if !notification.incoming || notification.caller != "+1555550100" || notification.callee != "10010" {
 			t.Fatalf("incoming notification = %+v", notification)
 		}
 	case <-time.After(time.Second):
@@ -230,7 +230,7 @@ func TestNewServiceAbandonsIncompleteHistory(t *testing.T) {
 	started := time.Now().Add(-15 * time.Second)
 	store.records["ghost-ring"] = CallRecord{
 		CallID: "ghost-ring", DeviceID: "wwan0", Direction: "inbound",
-		Peer: "14787483081", Status: StatusRinging, StartedAt: started,
+		Peer: "+1555550100", Status: StatusRinging, StartedAt: started,
 	}
 	_ = newPhoneTestService(t, gateway, store, time.Second)
 	record := store.record("ghost-ring")

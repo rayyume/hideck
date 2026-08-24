@@ -69,7 +69,7 @@ func TestVoiceCallStoreAbandonsIncompleteRecords(t *testing.T) {
 	started := time.Now().Add(-20 * time.Second).UTC()
 	if err := store.Upsert(ctx, phone.CallRecord{
 		CallID: "ghost-ring", DeviceID: "wwan0", Direction: "inbound",
-		Peer: "14787483081", Status: phone.StatusRinging, StartedAt: started,
+		Peer: "+1555550100", Status: phone.StatusRinging, StartedAt: started,
 	}); err != nil {
 		t.Fatal(err)
 	}
