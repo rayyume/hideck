@@ -23,6 +23,7 @@
 | 460-00/02/04/07/08 | `Volte_OpenMkt-Commercial-CMCC` |
 | 460-03/05/11 | `VoLTE_OPNMKT_CT` |
 | 460-01/06/09 | `CU-VoLTE` |
+| 460-15 广电 | 清单里的广电画像（`CBN-VoLTE` 等）；没有则用移动 `Volte_OpenMkt-Commercial-CMCC`（共建共享） |
 
 234/xx 等没有唯一画像时启用失败，不会猜画像，也不会回退软件 IMS。
 

@@ -17,6 +17,7 @@ func TestUniqueMBNChinaCarriers(t *testing.T) {
 		{"460", "11", "VoLTE_OPNMKT_CT"},
 		{"460", "01", "CU-VoLTE"},
 		{"460", "7", "Volte_OpenMkt-Commercial-CMCC"},
+		{"460", "15", "Volte_OpenMkt-Commercial-CMCC"},
 	}
 	for _, tc := range cases {
 		got, err := UniqueMBN(tc.mcc, tc.mnc, list)
@@ -33,5 +34,17 @@ func TestUniqueMBNUnknownOrMissing(t *testing.T) {
 	}
 	if _, err := UniqueMBN("460", "00", list); !errors.Is(err, ErrNoUniqueProfile) {
 		t.Fatalf("missing CMCC name must fail: %v", err)
+	}
+}
+
+func TestUniqueMBNChinaBroadnetPrefersDedicatedProfile(t *testing.T) {
+	list := []MBNEntry{
+		{Name: "ROW_Generic_3GPP"},
+		{Name: "Volte_OpenMkt-Commercial-CMCC"},
+		{Name: "CBN-VoLTE"},
+	}
+	got, err := UniqueMBN("460", "15", list)
+	if err != nil || got != "CBN-VoLTE" {
+		t.Fatalf("want dedicated CBN profile, got %q err=%v", got, err)
 	}
 }
