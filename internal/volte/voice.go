@@ -225,12 +225,17 @@ func (c *Controller) ActiveCall(deviceID string) *voicehost.CallSnapshot {
 func (c *Controller) HangupCall(ctx context.Context, deviceID, id string) error {
 	call, ok := c.lookup(deviceID, id)
 	if !ok {
-		return fmt.Errorf("volte: call %s not found", id)
+		return nil
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	return c.host.VOICEHangup(ctx, deviceID, call.QMI)
+	err := c.host.VOICEHangup(ctx, deviceID, call.QMI)
+	if err != nil && !qmi.VoiceCallAlreadyGone(err) {
+		return err
+	}
+	c.finishLocalCall(deviceID, call, hangupReason(err))
+	return nil
 }
 
 func (c *Controller) AnswerIncomingCall(ctx context.Context, request voicehost.AnswerRequest) (voicehost.AnswerResult, error) {
@@ -250,9 +255,53 @@ func (c *Controller) AnswerIncomingCall(ctx context.Context, request voicehost.A
 func (c *Controller) RejectIncomingCall(request voicehost.RejectRequest) error {
 	call, ok := c.lookup(request.DeviceID, request.CallID)
 	if !ok {
-		return fmt.Errorf("volte: call %s not found", request.CallID)
+		return nil
 	}
-	return c.host.VOICEHangup(context.Background(), request.DeviceID, call.QMI)
+	err := c.host.VOICEHangup(context.Background(), request.DeviceID, call.QMI)
+	if err != nil && !qmi.VoiceCallAlreadyGone(err) {
+		return err
+	}
+	c.finishLocalCall(request.DeviceID, call, "rejected")
+	return nil
+}
+
+func hangupReason(err error) string {
+	if err == nil {
+		return "local_hangup"
+	}
+	return "already_ended"
+}
+
+func (c *Controller) finishLocalCall(deviceID string, call nativeCall, reason string) {
+	if strings.TrimSpace(reason) == "" {
+		reason = call.Reason
+	}
+	c.mu.Lock()
+	var vs *voiceSession
+	if s := c.sess[deviceID]; s != nil {
+		vs = s.voice
+	}
+	c.mu.Unlock()
+	if vs == nil {
+		return
+	}
+	if !vs.markEmitted(call.ID, rankKey("completed")) {
+		vs.forget(call.ID)
+		return
+	}
+	if c.audio != nil {
+		_ = c.audio.Stop(call.ID)
+	}
+	if m := c.media.take(call.ID); m != nil {
+		_ = m.Close()
+	}
+	vs.forget(call.ID)
+	c.emitEvent(deviceID, voicehost.CallEvent{
+		Type: "CallEnded", DeviceID: deviceID, CallID: call.ID,
+		Caller: call.Peer, Callee: call.Peer, Direction: call.Direction,
+		State: "completed", Time: time.Now(), Reason: reason, AudioCodec: call.Codec,
+		RecordingError: audioError(c.Status(deviceID)),
+	})
 }
 
 func (c *Controller) SendCallDTMF(deviceID, id, digit string) error {

@@ -38,13 +38,28 @@ func GetQMIError(err error) *QMIError {
 	return nil
 }
 
+// VoiceCallAlreadyGone reports EndCall/Answer errors that mean the QMI call
+// is no longer on the modem (stale id, no effect, or already out of call).
+func VoiceCallAlreadyGone(err error) bool {
+	qe := GetQMIError(err)
+	if qe == nil {
+		return false
+	}
+	switch qe.ErrorCode {
+	case QMIErrInvalidID, QMIErrNoEffect, QMIErrOutOfCall:
+		return true
+	default:
+		return false
+	}
+}
+
 // Common QMI error codes / 常见 QMI 错误码
 const (
 	QMIErrNone                   uint16 = 0x0000 // Success / 成功
 	QMIErrMalformedMsg           uint16 = 0x0001 // Malformed message / 消息格式错误
 	QMIErrNoMemory               uint16 = 0x0002 // No memory / 内存不足
 	QMIErrInternal               uint16 = 0x0003 // Internal error / 内部错误
-	QMIErrInvalidID              uint16 = 0x0029 // Invalid client ID / 无效客户端 ID
+	QMIErrInvalidID              uint16 = 0x0029 // Invalid client/call ID / 无效客户端或呼叫 ID
 	QMIErrNoEffect               uint16 = 0x001A // No effect / 无效果
 	QMIErrInvalidArg             uint16 = 0x0004 // Invalid argument / 无效参数
 	QMIErrDeviceNotReady         uint16 = 0x0005 // Device not ready / 设备未就绪

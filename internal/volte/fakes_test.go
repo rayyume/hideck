@@ -44,6 +44,7 @@ type FakeModem struct {
 	CEREG         int
 	imsCID        int
 	imsActive     bool
+	hangupErr     error
 }
 
 func newFakeModem() *FakeModem {
@@ -266,7 +267,11 @@ func (f *FakeModem) VOICEDial(context.Context, string, string) (uint8, error) {
 	return 1, nil
 }
 func (f *FakeModem) VOICEAnswer(context.Context, string, uint8) error { return nil }
-func (f *FakeModem) VOICEHangup(context.Context, string, uint8) error { return nil }
+func (f *FakeModem) VOICEHangup(context.Context, string, uint8) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.hangupErr
+}
 func (f *FakeModem) VOICEBurstDTMF(context.Context, string, uint8, string) error {
 	return nil
 }

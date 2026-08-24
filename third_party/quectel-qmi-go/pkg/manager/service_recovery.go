@@ -863,5 +863,8 @@ func (m *Manager) rebindVOICEService(reason string) (*qmi.VOICEService, error) {
 }
 
 func (m *Manager) shouldRecoverVOICEError(op string, err error) bool {
+	if op == "VOICEEndCall" && qmi.VoiceCallAlreadyGone(err) {
+		return false
+	}
 	return m.shouldRecoverServiceOperationError("VOICE", op, err, "voice service not available")
 }

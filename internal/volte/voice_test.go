@@ -163,6 +163,61 @@ func TestVoiceAgentDTMFUsesCallID(t *testing.T) {
 	_ = host
 }
 
+func TestRejectAlreadyGoneClearsCall(t *testing.T) {
+	ctl, host := enableVoice(t)
+	var events []voicehost.CallEvent
+	var incoming []voicehost.IncomingCall
+	ctl.SubscribeCallEvents(func(ev voicehost.CallEvent) { events = append(events, ev) })
+	ctl.SubscribeIncomingCalls(func(call voicehost.IncomingCall) { incoming = append(incoming, call) })
+	host.fireVoice(&qmi.VoiceAllCallInfo{
+		Calls:              []qmi.VoiceCallInfo{{ID: 4, State: qmiCallIncoming, Direction: qmiDirMT}},
+		RemotePartyNumbers: []qmi.VoiceRemotePartyNumber{{CallID: 4, Number: "4001995558"}},
+	})
+	if len(incoming) != 1 {
+		t.Fatalf("incoming %d", len(incoming))
+	}
+	host.hangupErr = &qmi.QMIError{
+		Service: qmi.ServiceVOICE, MessageID: qmi.VOICEEndCall, Result: 1, ErrorCode: qmi.QMIErrInvalidID,
+	}
+	if err := ctl.RejectIncomingCall(voicehost.RejectRequest{DeviceID: "wwan1", CallID: incoming[0].CallID}); err != nil {
+		t.Fatalf("reject stale call: %v", err)
+	}
+	if countType(events, "CallEnded") != 1 {
+		t.Fatalf("events %v", eventTypes(events))
+	}
+	if _, ok := ctl.lookup("wwan1", incoming[0].CallID); ok {
+		t.Fatal("stale call still in voice session")
+	}
+	if err := ctl.RejectIncomingCall(voicehost.RejectRequest{DeviceID: "wwan1", CallID: incoming[0].CallID}); err != nil {
+		t.Fatalf("repeat reject: %v", err)
+	}
+}
+
+func TestHangupAlreadyGoneClearsCall(t *testing.T) {
+	ctl, host := enableVoice(t)
+	var events []voicehost.CallEvent
+	ctl.SubscribeCallEvents(func(ev voicehost.CallEvent) { events = append(events, ev) })
+	snap, err := ctl.BeginCall(context.Background(), voicehost.BeginCallRequest{DeviceID: "wwan1", Callee: "10000"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	host.hangupErr = &qmi.QMIError{
+		Service: qmi.ServiceVOICE, MessageID: qmi.VOICEEndCall, Result: 1, ErrorCode: qmi.QMIErrInvalidID,
+	}
+	if err := ctl.HangupCall(context.Background(), "wwan1", snap.CallID); err != nil {
+		t.Fatalf("hangup stale call: %v", err)
+	}
+	if countType(events, "CallEnded") != 1 {
+		t.Fatalf("events %v", eventTypes(events))
+	}
+	host.fireVoice(&qmi.VoiceAllCallInfo{
+		Calls: []qmi.VoiceCallInfo{{ID: 1, State: qmiCallEnd, Direction: qmiDirMO}},
+	})
+	if countType(events, "CallEnded") != 1 {
+		t.Fatalf("duplicate end after local finish: %v", eventTypes(events))
+	}
+}
+
 func TestVoiceAgentBusyRemoteRelease(t *testing.T) {
 	ctl, host := enableVoice(t)
 	var events []voicehost.CallEvent
