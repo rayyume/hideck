@@ -28,10 +28,11 @@ type Controller struct {
 }
 
 type session struct {
-	gen       uint64
-	imsHooked bool
-	status    Status
-	voice     *voiceSession
+	gen             uint64
+	imsHooked       bool
+	status          Status
+	voice           *voiceSession
+	alsaUnavailable bool
 }
 
 func NewController(host Host) *Controller {

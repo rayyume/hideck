@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/iniwex5/quectel-qmi-go/pkg/qmi"
@@ -26,6 +27,7 @@ const (
 type voiceSession struct {
 	mu           sync.Mutex
 	active       map[string]nativeCall
+	byQMI        map[uint8]string
 	emitted      map[string]map[string]bool
 	incomingSeen map[string]bool
 	attached     bool
@@ -48,6 +50,7 @@ type nativeCall struct {
 func newVoiceSession() *voiceSession {
 	return &voiceSession{
 		active:       make(map[string]nativeCall),
+		byQMI:        make(map[uint8]string),
 		emitted:      make(map[string]map[string]bool),
 		incomingSeen: make(map[string]bool),
 	}
@@ -177,8 +180,19 @@ func (c *Controller) BeginCall(ctx context.Context, request voicehost.BeginCallR
 	if err != nil {
 		return voicehost.CallSnapshot{}, err
 	}
-	id := callID(deviceID, qmiID)
 	now := time.Now()
+	id := ""
+	if vs := c.sessionVoice(deviceID); vs != nil {
+		if prev, ok := vs.getByQMI(qmiID); ok && stateRank(prev.State) != rankTerminal {
+			id = prev.ID
+			if !prev.Start.IsZero() {
+				now = prev.Start
+			}
+		}
+	}
+	if id == "" {
+		id = newPersistentCallID(deviceID, qmiID)
+	}
 	media, mediaErr := startCallMedia(request.SDP, c.callPCM(deviceID), sdpHasRecvOnly(request.SDP))
 	sdp := ""
 	if mediaErr != nil {
@@ -356,18 +370,21 @@ func (c *Controller) handleVoiceInfo(deviceID string, vs *voiceSession, info *qm
 	now := time.Now()
 	seen := make(map[string]bool, len(info.Calls))
 	for _, item := range info.Calls {
-		id := callID(deviceID, item.ID)
-		seen[id] = true
 		peer := remoteNumber(info, item.ID)
 		state, eventType := mapQMIState(item.State)
 		dir := "outbound"
 		if item.Direction == qmiDirMT {
 			dir = "inbound"
 		}
-		prev, existed := vs.get(id)
+		prev, existed := vs.getByQMI(item.ID)
 		if !existed && stateRank(state) == rankTerminal {
 			continue
 		}
+		id := prev.ID
+		if !existed {
+			id = newPersistentCallID(deviceID, item.ID)
+		}
+		seen[id] = true
 		if existed && stateRank(state) < stateRank(prev.State) && stateRank(state) != rankTerminal {
 			continue
 		}
@@ -517,8 +534,11 @@ func stateRank(state string) int {
 	}
 }
 
-func callID(deviceID string, qmiID uint8) string {
-	return fmt.Sprintf("volte-%s-%d", deviceID, qmiID)
+var callIDSeq atomic.Uint64
+
+func newPersistentCallID(deviceID string, qmiID uint8) string {
+	seq := callIDSeq.Add(1)
+	return fmt.Sprintf("volte-%s-%d-%d-%d", strings.TrimSpace(deviceID), qmiID, time.Now().UnixNano(), seq)
 }
 
 func remoteNumber(info *qmi.VoiceAllCallInfo, id uint8) string {
@@ -547,8 +567,36 @@ func audioError(st Status) string {
 	return "VoLTE 音频不可用：未检测到 UAC 声卡"
 }
 
+const alsaOpenBudget = 800 * time.Millisecond
+
+func openALSAPCMBounded(device string, budget time.Duration) (PCMPort, error) {
+	if budget <= 0 {
+		budget = alsaOpenBudget
+	}
+	type result struct {
+		pcm PCMPort
+		err error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		pcm, err := openALSAPCM(device)
+		ch <- result{pcm: pcm, err: err}
+	}()
+	timer := time.NewTimer(budget)
+	defer timer.Stop()
+	select {
+	case r := <-ch:
+		return r.pcm, r.err
+	case <-timer.C:
+		return nil, fmt.Errorf("volte: open %s timed out after %s", device, budget)
+	}
+}
+
 func (c *Controller) callPCM(deviceID string) PCMPort {
 	if c == nil || c.host == nil {
+		return nullPCM{}
+	}
+	if c.alsaUnavailable(deviceID) {
 		return nullPCM{}
 	}
 	dev := strings.TrimSpace(c.host.AudioDevice(deviceID))
@@ -556,12 +604,38 @@ func (c *Controller) callPCM(deviceID string) PCMPort {
 		logger.Warn("VoLTE 无模组声卡，本次通话无音频", "device", deviceID)
 		return nullPCM{}
 	}
-	pcm, err := openALSAPCM(dev)
+	pcm, err := openALSAPCMBounded(dev, alsaOpenBudget)
 	if err != nil {
-		logger.Warn("VoLTE 打开模组声卡失败，本次通话无音频", "device", deviceID, "alsa", dev, "err", err)
+		c.markALSAUnavailable(deviceID)
+		logger.Warn("VoLTE 打开模组声卡失败，本次通话无音频，后续不再同步打开以免卡住拨号",
+			"device", deviceID, "alsa", dev, "err", err)
 		return nullPCM{}
 	}
 	return pcm
+}
+
+func (c *Controller) alsaUnavailable(deviceID string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	s := c.sess[strings.TrimSpace(deviceID)]
+	return s != nil && s.alsaUnavailable
+}
+
+func (c *Controller) markALSAUnavailable(deviceID string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	s := c.ensureLocked(deviceID)
+	s.alsaUnavailable = true
+}
+
+func (c *Controller) sessionVoice(deviceID string) *voiceSession {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	s := c.sess[strings.TrimSpace(deviceID)]
+	if s == nil {
+		return nil
+	}
+	return s.voice
 }
 
 func (c *Controller) storeCall(deviceID string, call nativeCall) {
@@ -629,13 +703,28 @@ func (vs *voiceSession) put(call nativeCall) {
 	if vs.active == nil {
 		vs.active = make(map[string]nativeCall)
 	}
+	if vs.byQMI == nil {
+		vs.byQMI = make(map[uint8]string)
+	}
 	vs.active[call.ID] = call
+	vs.byQMI[call.QMI] = call.ID
 	vs.mu.Unlock()
 }
 
 func (vs *voiceSession) get(id string) (nativeCall, bool) {
 	vs.mu.Lock()
 	defer vs.mu.Unlock()
+	call, ok := vs.active[id]
+	return call, ok
+}
+
+func (vs *voiceSession) getByQMI(qmiID uint8) (nativeCall, bool) {
+	vs.mu.Lock()
+	defer vs.mu.Unlock()
+	id, ok := vs.byQMI[qmiID]
+	if !ok {
+		return nativeCall{}, false
+	}
 	call, ok := vs.active[id]
 	return call, ok
 }
@@ -668,6 +757,9 @@ func (vs *voiceSession) markEmitted(id, eventType string) bool {
 
 func (vs *voiceSession) forget(id string) {
 	vs.mu.Lock()
+	if call, ok := vs.active[id]; ok && vs.byQMI[call.QMI] == id {
+		delete(vs.byQMI, call.QMI)
+	}
 	delete(vs.active, id)
 	delete(vs.emitted, id)
 	delete(vs.incomingSeen, id)

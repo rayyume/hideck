@@ -55,3 +55,46 @@ func TestVoiceCallStoreUpsertsAndListsNewestFirst(t *testing.T) {
 		t.Fatalf("updated record = %+v", records[0])
 	}
 }
+
+func TestVoiceCallStoreKeepsBothRecordsWhenQMISlotIsReused(t *testing.T) {
+	database, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "calls.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := database.AutoMigrate(&VoiceCallRecord{}); err != nil {
+		t.Fatal(err)
+	}
+	store := NewVoiceCallStore(database)
+	ctx := context.Background()
+	firstStart := time.Now().Add(-2 * time.Minute).UTC()
+	firstEnd := firstStart.Add(116 * time.Second)
+	if err := store.Upsert(ctx, phone.CallRecord{
+		CallID: "volte-wwan0-1-100-1", DeviceID: "wwan0", Direction: "inbound",
+		Peer: "13200000002", Status: phone.StatusRejected, StartedAt: firstStart,
+		EndedAt: &firstEnd, DurationSeconds: 116, EndReason: "rejected",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	secondStart := time.Now().UTC()
+	secondEnd := secondStart.Add(29 * time.Second)
+	if err := store.Upsert(ctx, phone.CallRecord{
+		CallID: "volte-wwan0-1-200-2", DeviceID: "wwan0", Direction: "outbound",
+		Peer: "10000", Status: phone.StatusFailed, StartedAt: secondStart,
+		EndedAt: &secondEnd, DurationSeconds: 29, EndReason: "local_hangup",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	records, err := store.List(ctx, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 2 {
+		t.Fatalf("records = %d, want 2 (QMI slot reuse must not overwrite history)", len(records))
+	}
+	if records[0].CallID != "volte-wwan0-1-200-2" || records[1].CallID != "volte-wwan0-1-100-1" {
+		t.Fatalf("records = %+v", records)
+	}
+	if records[1].Status != phone.StatusRejected || records[1].Peer != "13200000002" {
+		t.Fatalf("first inbound overwritten: %+v", records[1])
+	}
+}

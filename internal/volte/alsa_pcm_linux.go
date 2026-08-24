@@ -3,7 +3,6 @@
 package volte
 
 import (
-	"encoding/binary"
 	"fmt"
 	"os"
 	"sync"
@@ -13,19 +12,10 @@ import (
 )
 
 const (
-	alsaHWParamsSize   = 608
-	alsaIoctlHWParams  = 0xc2604111
-	alsaIoctlPrepare   = 0x4140
-	alsaIoctlDrop      = 0x4143
-	alsaParamAccess    = 0
-	alsaParamFormat    = 1
-	alsaParamChannels  = 10
-	alsaParamRate      = 11
-	alsaParamPeriodSz  = 13
-	alsaParamBufferSz  = 17
-	alsaAccessRWInter  = 3
-	alsaFormatS16LE    = 2
-	alsaIntervalFirst  = 8
+	alsaIoctlHWRefine = 0xc2604110
+	alsaIoctlHWParams = 0xc2604111
+	alsaIoctlPrepare  = 0x4140
+	alsaIoctlDrop     = 0x4143
 )
 
 type alsaStream struct {
@@ -73,43 +63,18 @@ func openALSAStream(path string, playback bool) (alsaStream, error) {
 }
 
 func configureALSA(f *os.File) error {
-	var params [alsaHWParamsSize]byte
-	binary.LittleEndian.PutUint32(params[512:], 0xffffffff) // rmask
-	setALSAMask(&params, alsaParamAccess, alsaAccessRWInter)
-	setALSAMask(&params, alsaParamFormat, alsaFormatS16LE)
-	setALSAInterval(&params, alsaParamChannels, 1)
-	setALSAInterval(&params, alsaParamRate, uint32(pcmuClockRate))
-	setALSAInterval(&params, alsaParamPeriodSz, uint32(pcmuFrameSamples))
-	setALSAInterval(&params, alsaParamBufferSz, uint32(pcmuFrameSamples*8))
+	params := newALSAHWParams()
+	constrainALSAMask(&params, alsaParamAccess, alsaAccessRWInter)
+	constrainALSAMask(&params, alsaParamFormat, alsaFormatS16LE)
+	constrainALSAInterval(&params, alsaParamChannels, 1)
+	constrainALSAInterval(&params, alsaParamRate, uint32(pcmuClockRate))
+	if err := ioctl(f, alsaIoctlHWRefine, unsafe.Pointer(&params[0])); err != nil {
+		return err
+	}
 	if err := ioctl(f, alsaIoctlHWParams, unsafe.Pointer(&params[0])); err != nil {
 		return err
 	}
 	return ioctl(f, alsaIoctlPrepare, nil)
-}
-
-func setALSAMask(params *[alsaHWParamsSize]byte, param, bit int) {
-	if param < 0 || param > 2 {
-		return
-	}
-	off := 4 + param*32
-	word := bit / 32
-	shift := uint(bit % 32)
-	if word < 0 || word >= 8 {
-		return
-	}
-	val := binary.LittleEndian.Uint32(params[off+word*4:])
-	binary.LittleEndian.PutUint32(params[off+word*4:], val|uint32(1)<<shift)
-}
-
-func setALSAInterval(params *[alsaHWParamsSize]byte, param int, value uint32) {
-	idx := param - alsaIntervalFirst
-	if idx < 0 || idx > 11 {
-		return
-	}
-	off := 260 + idx*12
-	binary.LittleEndian.PutUint32(params[off:], value)
-	binary.LittleEndian.PutUint32(params[off+4:], value)
-	binary.LittleEndian.PutUint32(params[off+8:], 1) // integer
 }
 
 func ioctl(f *os.File, req uint, arg unsafe.Pointer) error {

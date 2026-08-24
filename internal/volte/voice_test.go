@@ -22,6 +22,33 @@ func enableVoice(t *testing.T) (*Controller, *FakeModem) {
 	return ctl, host
 }
 
+func TestBeginCallReusesIndicationCallID(t *testing.T) {
+	ctl, host := enableVoice(t)
+	var events []voicehost.CallEvent
+	ctl.SubscribeCallEvents(func(ev voicehost.CallEvent) { events = append(events, ev) })
+	host.dialVoice = &qmi.VoiceAllCallInfo{
+		Calls:              []qmi.VoiceCallInfo{{ID: 1, State: qmiCallOriginating, Direction: qmiDirMO}},
+		RemotePartyNumbers: []qmi.VoiceRemotePartyNumber{{CallID: 1, Number: "10000"}},
+	}
+	snap, err := ctl.BeginCall(context.Background(), voicehost.BeginCallRequest{DeviceID: "wwan1", Callee: "10000"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) == 0 {
+		t.Fatal("expected ringing from dial indication")
+	}
+	if events[0].CallID != snap.CallID {
+		t.Fatalf("BeginCall id %s != indication id %s", snap.CallID, events[0].CallID)
+	}
+	ids := map[string]bool{}
+	for _, ev := range events {
+		ids[ev.CallID] = true
+	}
+	if len(ids) != 1 {
+		t.Fatalf("split call ids %v", ids)
+	}
+}
+
 func TestVoiceAgentMOSequenceOnce(t *testing.T) {
 	ctl, host := enableVoice(t)
 	var events []voicehost.CallEvent
@@ -49,7 +76,7 @@ func TestVoiceAgentMOSequenceOnce(t *testing.T) {
 	host.fireVoice(&qmi.VoiceAllCallInfo{
 		Calls: []qmi.VoiceCallInfo{{ID: 1, State: qmiCallEnd, Direction: qmiDirMO}},
 	})
-	if snap.CallID != "volte-wwan1-1" {
+	if !strings.HasPrefix(snap.CallID, "volte-wwan1-1-") {
 		t.Fatalf("call id %s", snap.CallID)
 	}
 	got := eventTypes(events)
@@ -110,7 +137,8 @@ func TestVoiceAgentReusesQMICallIDAfterEnd(t *testing.T) {
 	ctl, host := enableVoice(t)
 	var events []voicehost.CallEvent
 	ctl.SubscribeCallEvents(func(ev voicehost.CallEvent) { events = append(events, ev) })
-	if _, err := ctl.BeginCall(context.Background(), voicehost.BeginCallRequest{DeviceID: "wwan1", Callee: "10086"}); err != nil {
+	first, err := ctl.BeginCall(context.Background(), voicehost.BeginCallRequest{DeviceID: "wwan1", Callee: "10086"})
+	if err != nil {
 		t.Fatal(err)
 	}
 	host.fireVoice(&qmi.VoiceAllCallInfo{
@@ -119,14 +147,63 @@ func TestVoiceAgentReusesQMICallIDAfterEnd(t *testing.T) {
 	host.fireVoice(&qmi.VoiceAllCallInfo{
 		Calls: []qmi.VoiceCallInfo{{ID: 1, State: qmiCallEnd, Direction: qmiDirMO}},
 	})
-	if _, err := ctl.BeginCall(context.Background(), voicehost.BeginCallRequest{DeviceID: "wwan1", Callee: "10010"}); err != nil {
+	second, err := ctl.BeginCall(context.Background(), voicehost.BeginCallRequest{DeviceID: "wwan1", Callee: "10010"})
+	if err != nil {
 		t.Fatal(err)
 	}
 	host.fireVoice(&qmi.VoiceAllCallInfo{
 		Calls: []qmi.VoiceCallInfo{{ID: 1, State: qmiCallConversation, Direction: qmiDirMO}},
 	})
+	if first.CallID == second.CallID {
+		t.Fatalf("persistent call id reused after QMI slot recycle: %s", first.CallID)
+	}
+	if !strings.HasPrefix(first.CallID, "volte-wwan1-1-") || !strings.HasPrefix(second.CallID, "volte-wwan1-1-") {
+		t.Fatalf("call ids %s %s", first.CallID, second.CallID)
+	}
 	if countType(events, "CallAnswered") != 2 {
 		t.Fatalf("second call must answer after id reuse: %v", eventTypes(events))
+	}
+	answered := 0
+	for _, ev := range events {
+		if ev.Type != "CallAnswered" {
+			continue
+		}
+		answered++
+		if answered == 1 && ev.CallID != first.CallID {
+			t.Fatalf("first answered call id %s want %s", ev.CallID, first.CallID)
+		}
+		if answered == 2 && ev.CallID != second.CallID {
+			t.Fatalf("second answered call id %s want %s", ev.CallID, second.CallID)
+		}
+	}
+}
+
+func TestVoiceAgentMTReusesQMISlotKeepsDistinctCallIDs(t *testing.T) {
+	ctl, host := enableVoice(t)
+	var incoming []voicehost.IncomingCall
+	ctl.SubscribeIncomingCalls(func(call voicehost.IncomingCall) { incoming = append(incoming, call) })
+	host.fireVoice(&qmi.VoiceAllCallInfo{
+		Calls:              []qmi.VoiceCallInfo{{ID: 2, State: qmiCallIncoming, Direction: qmiDirMT}},
+		RemotePartyNumbers: []qmi.VoiceRemotePartyNumber{{CallID: 2, Number: "13000000001"}},
+	})
+	if err := ctl.RejectIncomingCall(voicehost.RejectRequest{DeviceID: "wwan1", CallID: incoming[0].CallID}); err != nil {
+		t.Fatal(err)
+	}
+	host.fireVoice(&qmi.VoiceAllCallInfo{
+		Calls: []qmi.VoiceCallInfo{{ID: 2, State: qmiCallEnd, Direction: qmiDirMT}},
+	})
+	host.fireVoice(&qmi.VoiceAllCallInfo{
+		Calls:              []qmi.VoiceCallInfo{{ID: 2, State: qmiCallIncoming, Direction: qmiDirMT}},
+		RemotePartyNumbers: []qmi.VoiceRemotePartyNumber{{CallID: 2, Number: "13200000002"}},
+	})
+	if len(incoming) != 2 {
+		t.Fatalf("incoming %d want 2", len(incoming))
+	}
+	if incoming[0].CallID == incoming[1].CallID {
+		t.Fatalf("MT call id reused after QMI slot recycle: %s", incoming[0].CallID)
+	}
+	if incoming[0].Caller != "13000000001" || incoming[1].Caller != "13200000002" {
+		t.Fatalf("callers %s %s", incoming[0].Caller, incoming[1].Caller)
 	}
 }
 

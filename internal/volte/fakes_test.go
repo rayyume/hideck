@@ -45,6 +45,7 @@ type FakeModem struct {
 	imsCID        int
 	imsActive     bool
 	hangupErr     error
+	dialVoice     *qmi.VoiceAllCallInfo
 }
 
 func newFakeModem() *FakeModem {
@@ -264,6 +265,12 @@ func (f *FakeModem) IMSAStatus(context.Context, string) (Registration, error) {
 }
 func (f *FakeModem) AudioDevice(string) string { return f.Audio }
 func (f *FakeModem) VOICEDial(context.Context, string, string) (uint8, error) {
+	f.mu.Lock()
+	info := f.dialVoice
+	f.mu.Unlock()
+	if info != nil {
+		f.fireVoice(info)
+	}
 	return 1, nil
 }
 func (f *FakeModem) VOICEAnswer(context.Context, string, uint8) error { return nil }
