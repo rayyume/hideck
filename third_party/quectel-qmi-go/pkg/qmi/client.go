@@ -67,8 +67,12 @@ type ClientLogFunc func(level ClientLogLevel, format string, args ...any)
 
 // ClientOptions controls runtime behavior for the low-level QMI client.
 type ClientOptions struct {
-	SyncOnOpen            bool
-	QueryVersionOnOpen    bool // 启动时自动查询服务版本信息
+	SyncOnOpen         bool
+	QueryVersionOnOpen bool // 启动时自动查询服务版本信息
+	// DisableOpenHandshake 明确跳过 Sync / GET_VERSION_INFO。
+	// 身份探测只需要 DMS，这两步会把短超时吃光；normalizeClientOptions 的零值启发式
+	// 也会把单独设成 false 的 SyncOnOpen 改回 true，所以必须用这个开关钉死。
+	DisableOpenHandshake  bool
 	ReadDeadline          time.Duration
 	DefaultRequestTimeout time.Duration
 	TxQueueSize           int
@@ -94,6 +98,24 @@ func DefaultClientOptions() ClientOptions {
 		ProxyExecutable:       defaultProxyExecutable,
 		ProxyOpenTimeout:      defaultProxyOpenTimeout,
 	}
+}
+
+const (
+	openHandshakeTimeout          = 2 * time.Second
+	openHandshakeNoDeadlineBudget = 5 * time.Second
+)
+
+// openHandshakeContext 给非致命的 Sync / GET_VERSION_INFO 单独封顶。
+// 这两步如果直接用调用方剩余 deadline，会把 IMEI 探测和 QMI Core 启动预算吃光。
+func openHandshakeContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	timeout := openHandshakeNoDeadlineBudget
+	if _, hasDeadline := ctx.Deadline(); hasDeadline {
+		timeout = openHandshakeTimeout
+	}
+	return context.WithTimeout(ctx, timeout)
 }
 
 // ClientStats summarizes key runtime behaviors without exposing payloads.
@@ -205,6 +227,11 @@ func normalizeClientOptions(opts ClientOptions) ClientOptions {
 	if opts.ProxyOpenTimeout <= 0 {
 		opts.ProxyOpenTimeout = defaults.ProxyOpenTimeout
 	}
+	if opts.DisableOpenHandshake {
+		opts.SyncOnOpen = false
+		opts.QueryVersionOnOpen = false
+		return opts
+	}
 	// Preserve backwards-compatible zero-value construction while still allowing explicit false
 	// when at least one other option is set.
 	if !opts.SyncOnOpen &&
@@ -297,31 +324,16 @@ func NewClientWithOptions(ctx context.Context, path string, opts ClientOptions) 
 
 	// Initial sync (non-fatal, helps clear modem state) / 初始同步 (非致命，有助于清除modem状态)
 	if opts.SyncOnOpen {
-		syncCtx := ctx
-		if syncCtx == nil {
-			syncCtx = context.Background()
-		}
-		if _, hasDeadline := syncCtx.Deadline(); !hasDeadline {
-			var cancel context.CancelFunc
-			syncCtx, cancel = context.WithTimeout(syncCtx, 5*time.Second)
-			defer cancel()
-		}
+		syncCtx, cancel := openHandshakeContext(ctx)
 		if err := c.Sync(syncCtx); err != nil {
 			c.logf(ClientLogLevelDebug, "QMI: initial sync failed (non-fatal): %v", err)
 		}
+		cancel()
 	}
 
 	// Query version info (non-fatal) / 查询版本信息 (非致命)
 	if opts.QueryVersionOnOpen {
-		versionCtx := ctx
-		if versionCtx == nil {
-			versionCtx = context.Background()
-		}
-		if _, hasDeadline := versionCtx.Deadline(); !hasDeadline {
-			var cancel context.CancelFunc
-			versionCtx, cancel = context.WithTimeout(versionCtx, 5*time.Second)
-			defer cancel()
-		}
+		versionCtx, cancel := openHandshakeContext(ctx)
 		if versions, err := c.GetServiceVersions(versionCtx); err != nil {
 			c.logf(ClientLogLevelDebug, "QMI: version info query failed (non-fatal): %v", err)
 		} else {
@@ -329,6 +341,7 @@ func NewClientWithOptions(ctx context.Context, path string, opts ClientOptions) 
 			c.versionQueried = true
 			c.logf(ClientLogLevelDebug, "QMI: modem 支持 %d 个 QMI 服务", len(versions))
 		}
+		cancel()
 	}
 
 	return c, nil

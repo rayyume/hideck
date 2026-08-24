@@ -398,6 +398,7 @@ func ProbeIMEIViaQMIContext(ctx context.Context, controlPath string) (string, er
 		return "", fmt.Errorf("QMI control path %s is already held by a non-proxy process", strings.TrimSpace(controlPath))
 	}
 	// 身份探测只需要 DMS，跳过启动同步和版本枚举，避免耗尽重枚举窗口。
+	clientOptions.DisableOpenHandshake = true
 	clientOptions.SyncOnOpen = false
 	clientOptions.QueryVersionOnOpen = false
 	return ProbeIMEIViaQMIWithOptionsContext(ctx, controlPath, clientOptions)
@@ -407,6 +408,16 @@ func ProbeIMEIViaQMIWithOptions(controlPath string, clientOptions qmi.ClientOpti
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	return ProbeIMEIViaQMIWithOptionsContext(ctx, controlPath, clientOptions)
+}
+
+// identityQMIClientOptions 把任意 QMI client 选项收成身份探测专用：只开 DMS 读 IMEI，
+// 跳过 Sync / GET_VERSION_INFO。UAC 重枚举后这两步经常把短超时吃光，导致 IMEI 为空、
+// 已配置设备永远配不上 Worker。
+func identityQMIClientOptions(opts qmi.ClientOptions) qmi.ClientOptions {
+	opts.DisableOpenHandshake = true
+	opts.SyncOnOpen = false
+	opts.QueryVersionOnOpen = false
+	return opts
 }
 
 func ProbeIMEIViaQMIWithOptionsContext(
@@ -422,7 +433,7 @@ func ProbeIMEIViaQMIWithOptionsContext(
 		ctx = context.Background()
 	}
 
-	client, err := qmi.NewClientWithOptions(ctx, controlPath, clientOptions)
+	client, err := qmi.NewClientWithOptions(ctx, controlPath, identityQMIClientOptions(clientOptions))
 	if err != nil {
 		return "", fmt.Errorf("打开 QMI 设备 %s 失败: %w", controlPath, err)
 	}

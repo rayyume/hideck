@@ -6,6 +6,7 @@ import (
 
 	qmiq "github.com/iniwex5/quectel-qmi-go/pkg/qmi"
 	"github.com/yibaiba/hideck/internal/config"
+	"github.com/yibaiba/hideck/pkg/logger"
 )
 
 var discoverQMIDevicesFn = DiscoverQMIDevices
@@ -25,8 +26,16 @@ type CompatibleModemEnrichOptions struct {
 	QMIClientOptions   qmiq.ClientOptions
 }
 
+func atProbeTimeoutOrDefault(timeout time.Duration) time.Duration {
+	if timeout > 0 {
+		return timeout
+	}
+	return 1600 * time.Millisecond
+}
+
 // EnrichDiscoveredQMIDevice 按调用方策略补全单台静态发现到的 QMI 设备信息。
 // 该流程只会在本设备 ATPorts 范围内做 AT 口探测；QMI IMEI 补读作为最后手段单独开关控制。
+// QMI 身份探测失败时，再在本设备 AT 口上回退一次，避免 Sync/版本查询超时把硬件打成 degraded。
 func EnrichDiscoveredQMIDevice(dev QMIDevice, opts QMIDeviceEnrichOptions) (QMIDevice, string) {
 	imei := ""
 
@@ -38,9 +47,24 @@ func EnrichDiscoveredQMIDevice(dev QMIDevice, opts QMIDeviceEnrichOptions) (QMID
 		}
 	}
 
+	qmiAttempted := false
 	if imei == "" && opts.EnableQMIIMEIProbe && strings.TrimSpace(dev.ControlPath) != "" {
+		qmiAttempted = true
 		if qmiIMEI, err := probeIMEIViaQMIFn(dev.ControlPath, opts.QMIClientOptions); err == nil && qmiIMEI != "" {
 			imei = qmiIMEI
+		} else if err != nil {
+			logger.Debug("QMI IMEI 探测失败", "control_path", dev.ControlPath, "err", err)
+		}
+	}
+
+	if imei == "" && qmiAttempted && !opts.EnableATProbe {
+		resolved, probedIMEI := ResolveQMIDeviceATPort(dev, atProbeTimeoutOrDefault(opts.ATProbeTimeout))
+		if probedIMEI != "" {
+			dev = resolved
+			imei = probedIMEI
+			logger.Debug("QMI IMEI 探测失败，已用本设备 AT 口回退",
+				"control_path", dev.ControlPath,
+				"at", dev.ATPort)
 		}
 	}
 	return dev, imei
@@ -62,10 +86,25 @@ func EnrichDiscoveredCompatibleModem(dev CompatibleModem, opts CompatibleModemEn
 		}
 	}
 
+	qmiAttempted := false
 	if imei == "" && opts.EnableQMIIMEIProbe && strings.TrimSpace(dev.ControlPath) != "" {
+		qmiAttempted = true
 		if qmiIMEI, err := probeIMEIViaQMIFn(dev.ControlPath, opts.QMIClientOptions); err == nil && qmiIMEI != "" {
 			imei = qmiIMEI
 			dev.IMEI = qmiIMEI
+		} else if err != nil {
+			logger.Debug("QMI IMEI 探测失败", "control_path", dev.ControlPath, "err", err)
+		}
+	}
+
+	if imei == "" && qmiAttempted && !opts.EnableATProbe {
+		resolved, probedIMEI := ResolveCompatibleModemATPort(dev, atProbeTimeoutOrDefault(opts.ATProbeTimeout))
+		if probedIMEI != "" {
+			dev = resolved
+			imei = probedIMEI
+			logger.Debug("QMI IMEI 探测失败，已用本设备 AT 口回退",
+				"control_path", dev.ControlPath,
+				"at", dev.ATPort)
 		}
 	}
 

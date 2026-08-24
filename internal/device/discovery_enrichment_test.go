@@ -61,6 +61,92 @@ func TestEnrichDiscoveredQMIDeviceHonorsQMIIMEIProbeFlag(t *testing.T) {
 	}
 }
 
+func TestIdentityQMIClientOptionsSkipsOpenHandshake(t *testing.T) {
+	opts := qmiq.DefaultClientOptions()
+	if !opts.SyncOnOpen || !opts.QueryVersionOnOpen {
+		t.Fatal("precondition: default QMI client options enable open handshake")
+	}
+	got := identityQMIClientOptions(opts)
+	if !got.DisableOpenHandshake {
+		t.Fatal("DisableOpenHandshake=false, want true so normalizeClientOptions cannot restore handshake")
+	}
+	if got.SyncOnOpen {
+		t.Fatal("SyncOnOpen=true, want false for IMEI-only probe")
+	}
+	if got.QueryVersionOnOpen {
+		t.Fatal("QueryVersionOnOpen=true, want false for IMEI-only probe")
+	}
+	if opts.SyncOnOpen != true || opts.QueryVersionOnOpen != true || opts.DisableOpenHandshake {
+		t.Fatal("identityQMIClientOptions mutated the input options")
+	}
+}
+
+func TestResolveDiscoveredQMIDeviceFallsBackToATWhenQMIIMEIEmpty(t *testing.T) {
+	origATProbe := probeIMEICachedFn
+	origQMIProbe := probeIMEIViaQMIFn
+	t.Cleanup(func() {
+		probeIMEICachedFn = origATProbe
+		probeIMEIViaQMIFn = origQMIProbe
+	})
+
+	atCalls := 0
+	probeIMEICachedFn = func(atPort string, timeout time.Duration) (string, error) {
+		atCalls++
+		if atPort != "/dev/ttyUSB6" {
+			t.Fatalf("atPort=%q want /dev/ttyUSB6", atPort)
+		}
+		return "867123456789099", nil
+	}
+	probeIMEIViaQMIFn = func(controlPath string, opts qmiq.ClientOptions) (string, error) {
+		return "", fmt.Errorf("qmi timeout")
+	}
+
+	dev, imei := resolveDiscoveredQMIDevice(QMIDevice{
+		ControlPath: "/dev/cdc-wdm1",
+		ATPort:      "/dev/ttyUSB6",
+		ATPorts:     []string{"/dev/ttyUSB6"},
+	}, 50*time.Millisecond, true)
+
+	if atCalls != 1 {
+		t.Fatalf("AT probe calls=%d want 1 after QMI IMEI miss", atCalls)
+	}
+	if imei != "867123456789099" {
+		t.Fatalf("imei=%q want AT-derived IMEI", imei)
+	}
+	if dev.ATPort != "/dev/ttyUSB6" {
+		t.Fatalf("ATPort=%q want /dev/ttyUSB6", dev.ATPort)
+	}
+}
+
+func TestResolveDiscoveredQMIDeviceKeepsATPortWhenFallbackFails(t *testing.T) {
+	origATProbe := probeIMEICachedFn
+	origQMIProbe := probeIMEIViaQMIFn
+	t.Cleanup(func() {
+		probeIMEICachedFn = origATProbe
+		probeIMEIViaQMIFn = origQMIProbe
+	})
+
+	probeIMEICachedFn = func(atPort string, timeout time.Duration) (string, error) {
+		return "", fmt.Errorf("no at imei")
+	}
+	probeIMEIViaQMIFn = func(controlPath string, opts qmiq.ClientOptions) (string, error) {
+		return "", fmt.Errorf("qmi timeout")
+	}
+
+	dev, imei := resolveDiscoveredQMIDevice(QMIDevice{
+		ControlPath: "/dev/cdc-wdm1",
+		ATPort:      "/dev/ttyUSB6",
+		ATPorts:     []string{"/dev/ttyUSB6"},
+	}, 50*time.Millisecond, true)
+
+	if imei != "" {
+		t.Fatalf("imei=%q want empty when QMI and AT both fail", imei)
+	}
+	if dev.ATPort != "/dev/ttyUSB6" {
+		t.Fatalf("ATPort=%q want original /dev/ttyUSB6", dev.ATPort)
+	}
+}
+
 func TestResolveDiscoveredQMIDeviceDoesNotProbeATPort(t *testing.T) {
 	origATProbe := probeIMEICachedFn
 	origQMIProbe := probeIMEIViaQMIFn
