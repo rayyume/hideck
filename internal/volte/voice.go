@@ -179,7 +179,7 @@ func (c *Controller) BeginCall(ctx context.Context, request voicehost.BeginCallR
 	}
 	id := callID(deviceID, qmiID)
 	now := time.Now()
-	media, mediaErr := startCallMedia(request.SDP, nullPCM{}, sdpHasRecvOnly(request.SDP))
+	media, mediaErr := startCallMedia(request.SDP, c.callPCM(deviceID), sdpHasRecvOnly(request.SDP))
 	sdp := ""
 	if mediaErr != nil {
 		logger.Warn("VoLTE 媒体端点未建立", "device", deviceID, "err", mediaErr)
@@ -316,7 +316,7 @@ func (c *Controller) StartCallCapture(deviceID, id, basePath string) error {
 	if c.media.get(id) != nil {
 		return nil
 	}
-	media, err := startCallMedia("", nullPCM{}, true)
+	media, err := startCallMedia("", c.callPCM(deviceID), true)
 	if err != nil {
 		return err
 	}
@@ -398,7 +398,7 @@ func (c *Controller) handleVoiceInfo(deviceID string, vs *voiceSession, info *qm
 		vs.put(next)
 		if dir == "inbound" && vs.markIncoming(id) {
 			if next.ClientSDP == "" {
-				if media, err := startCallMedia("", nullPCM{}, false); err == nil {
+				if media, err := startCallMedia("", c.callPCM(deviceID), false); err == nil {
 					next.ClientSDP = media.sdp
 					vs.put(next)
 					c.media.put(id, media)
@@ -545,6 +545,23 @@ func audioError(st Status) string {
 		return "VoLTE 音频需要 UAC，模组可能要重启后才有声卡"
 	}
 	return "VoLTE 音频不可用：未检测到 UAC 声卡"
+}
+
+func (c *Controller) callPCM(deviceID string) PCMPort {
+	if c == nil || c.host == nil {
+		return nullPCM{}
+	}
+	dev := strings.TrimSpace(c.host.AudioDevice(deviceID))
+	if dev == "" {
+		logger.Warn("VoLTE 无模组声卡，本次通话无音频", "device", deviceID)
+		return nullPCM{}
+	}
+	pcm, err := openALSAPCM(dev)
+	if err != nil {
+		logger.Warn("VoLTE 打开模组声卡失败，本次通话无音频", "device", deviceID, "alsa", dev, "err", err)
+		return nullPCM{}
+	}
+	return pcm
 }
 
 func (c *Controller) storeCall(deviceID string, call nativeCall) {

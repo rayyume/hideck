@@ -199,8 +199,7 @@ func (c *Controller) provisionConfig(ctx context.Context, deviceID string) error
 	if err := c.host.SetNativeIMS(ctx, deviceID, true); err != nil {
 		logger.Warn("QMI 打开原生 IMS 失败，继续用 AT 结果", "device", deviceID, "err", err)
 	}
-	audio := strings.TrimSpace(c.host.AudioDevice(deviceID))
-	c.patch(deviceID, func(st *Status) { st.AudioDevice = audio })
+	c.syncAudioStatus(deviceID, res.Current.UACEnabled)
 	if !res.Current.IMSEnabled {
 		return c.fail(deviceID, fmt.Errorf("native IMS did not enable"))
 	}
@@ -211,10 +210,29 @@ func (c *Controller) applyProvision(deviceID string, res Result) {
 	c.patch(deviceID, func(st *Status) {
 		st.IMSEnabled = res.Current.IMSEnabled
 		st.VoLTEEnabled = res.Current.VoLTEEnabled
-		st.UACEnabled = res.Current.UACEnabled && res.Verified
-		st.RebootRequired = res.RebootRequired
+		st.UACEnabled = false
+		st.RebootRequired = res.RebootRequired || res.Current.UACEnabled
 		st.ProvisionStage = res.Stage
 		st.IMEITail = res.IMEITail
+	})
+}
+
+func (c *Controller) syncAudioStatus(deviceID string, nvUAC bool) {
+	audio := ""
+	if c.host != nil {
+		audio = strings.TrimSpace(c.host.AudioDevice(deviceID))
+	}
+	c.patch(deviceID, func(st *Status) {
+		st.AudioDevice = audio
+		if audio != "" {
+			st.UACEnabled = true
+			st.RebootRequired = false
+			return
+		}
+		st.UACEnabled = false
+		if nvUAC {
+			st.RebootRequired = true
+		}
 	})
 }
 

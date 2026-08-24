@@ -179,7 +179,18 @@ func (p *Pool) AudioDevice(deviceID string) string {
 	if w == nil {
 		return ""
 	}
-	return strings.TrimSpace(w.Config.AudioDevice)
+	if dev := strings.TrimSpace(w.Config.AudioDevice); dev != "" {
+		return dev
+	}
+	usbPath := strings.TrimSpace(w.Config.USBPath)
+	if usbPath == "" {
+		return ""
+	}
+	dev, _ := findAudioDevice(usbPath)
+	if dev != "" {
+		w.Config.AudioDevice = dev
+	}
+	return dev
 }
 
 func (p *Pool) VOICEDial(ctx context.Context, deviceID, number string) (uint8, error) {
