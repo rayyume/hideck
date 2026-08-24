@@ -12,7 +12,7 @@ function device(partial: Partial<DeviceOverviewItem> = {}): DeviceOverviewItem {
     network_connected: false,
     public_ip: '',
     network_enabled: false,
-    modem: { iccid: '89860317840286845381' },
+    modem: { iccid: '8986000000000000000' },
     backend_mode: 'qmi',
     interface: 'wwan1',
     ...partial
