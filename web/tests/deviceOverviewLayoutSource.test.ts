@@ -14,6 +14,10 @@ const identityPanel = await readFile(
   new URL('../src/components/DeviceOverviewIdentityPanel.vue', import.meta.url),
   'utf8'
 )
+const connectionPresentation = await readFile(
+  new URL('../src/utils/overviewConnectionPresentation.ts', import.meta.url),
+  'utf8'
+)
 
 test('VoWiFi overview exposes one service path and centralizes diagnostics', () => {
   assert.doesNotMatch(overviewTab, /VoWiFi 运行时|readinessItems|showVowifiDetail/)
@@ -22,9 +26,11 @@ test('VoWiFi overview exposes one service path and centralizes diagnostics', () 
   assert.doesNotMatch(overviewTab, /phone_mode !== 'cellular'/)
   assert.match(overviewTab, /<DeviceOverviewIdentityPanel/)
   assert.equal(connectionStage.match(/class="overview-service-path"/g)?.length, 1)
+  assert.match(connectionStage, /createOverviewConnectionPresentation/)
+  assert.match(connectionPresentation, /VoLTE 已注册/)
 
   for (const label of ['接入方式', '数据平面', '协议', '接口', '最后原因', '错误分类']) {
-    assert.match(connectionStage, new RegExp(`label: '${label}'`))
+    assert.match(connectionPresentation, new RegExp(`'${label}'`))
   }
 })
 

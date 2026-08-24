@@ -1,92 +1,24 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import {
+  Cellular4G24Regular,
+  CellularData124Regular,
   Checkmark12Regular,
   Dismiss12Regular,
   Subtract12Regular,
   Wifi124Regular
 } from '@vicons/fluent'
 import type { DeviceOverviewItem } from '../types/api'
-import {
-  createDashboardStages,
-  formatDashboardSignal,
-  hasDashboardSignal
-} from '../utils/dashboardPresentation'
+import { createOverviewConnectionPresentation } from '../utils/overviewConnectionPresentation'
 
 const props = defineProps<{
   device: DeviceOverviewItem | null
 }>()
 
-const stages = computed(() => createDashboardStages(props.device?.vowifi_runtime))
-const hasFailedStage = computed(() => stages.value.some(stage => stage.ready === false))
-const hasReadyStage = computed(() => stages.value.some(stage => stage.ready === true))
-const allStagesReady = computed(() => stages.value.every(stage => stage.ready === true))
-
-const serviceState = computed(() => {
-  const device = props.device
-  if (!device?.vowifi_enabled) {
-    return { tone: 'is-idle', title: 'VoWiFi 未启用', detail: '当前设备使用蜂窝网络' }
-  }
-  if (hasFailedStage.value) {
-    return { tone: 'is-failed', title: 'VoWiFi 链路异常', detail: runtimeReason.value || '请检查失败阶段' }
-  }
-  if (device.vowifi_active && allStagesReady.value) {
-    return { tone: 'is-ready', title: 'VoWiFi 已连接', detail: '通过 Wi-Fi 建立安全隧道并注册 IMS' }
-  }
-  if (hasReadyStage.value) {
-    return { tone: 'is-pending', title: 'VoWiFi 正在建立', detail: runtimeReason.value || '等待剩余阶段就绪' }
-  }
-  return { tone: 'is-idle', title: 'VoWiFi 等待连接', detail: runtimeReason.value || '尚未收到链路状态' }
-})
-
-const runtimeReason = computed(() => {
-  const runtime = props.device?.vowifi_runtime
-  return runtime?.sms_ready_reason || runtime?.last_reason || ''
-})
-
-const pathIsFlowing = computed(() => {
-  return props.device?.healthy === true
-    && props.device.vowifi_active === true
-    && !hasFailedStage.value
-})
-
-const cellularSignalMetric = computed(() => {
-  const signal = props.device?.modem?.signal_dbm
-  return {
-    label: '蜂窝信号',
-    value: formatDashboardSignal(signal),
-    hint: hasDashboardSignal(signal) ? signalQuality(signal) : ''
-  }
-})
-
-const metrics = computed(() => {
-  const protocol = { label: '协议', value: props.device?.backend_mode?.toUpperCase() || '不可用', hint: '' }
-  const deviceInterface = { label: '接口', value: props.device?.interface || '不可用', hint: '' }
-  if (props.device?.vowifi_enabled) {
-    const runtime = props.device.vowifi_runtime
-    return [
-      { label: '接入方式', value: 'Wi-Fi Calling', hint: '' },
-      { label: '数据平面', value: runtime?.dataplane_mode || '不可用', hint: '' },
-      protocol,
-      deviceInterface,
-      { label: '最后原因', value: runtime?.last_reason || runtime?.sms_ready_reason || '无', hint: '' },
-      { label: '错误分类', value: runtime?.last_error_class || '无', hint: '' }
-    ]
-  }
-  return [
-    cellularSignalMetric.value,
-    { label: '公网 IPv4', value: props.device?.public_ip || '未分配', hint: '' },
-    { label: '公网 IPv6', value: props.device?.public_ipv6 || '未分配', hint: '' },
-    deviceInterface
-  ]
-})
-
-function signalQuality(value: number): string {
-  if (value >= -75) return '优秀'
-  if (value >= -90) return '良好'
-  if (value >= -105) return '一般'
-  return '较弱'
-}
+const presentation = computed(() => createOverviewConnectionPresentation(props.device))
+const stages = computed(() => presentation.value.stages)
+const metrics = computed(() => presentation.value.metrics)
+const pathIsFlowing = computed(() => presentation.value.pathIsFlowing)
 
 function stageLabel(ready: boolean | undefined): string {
   if (ready === true) return '已就绪'
@@ -96,16 +28,28 @@ function stageLabel(ready: boolean | undefined): string {
 </script>
 
 <template>
-  <section class="overview-connection-stage" :class="serviceState.tone" aria-label="VoWiFi 连接状态">
+  <section
+    class="overview-connection-stage"
+    :class="presentation.tone"
+    :aria-label="presentation.kind === 'volte' ? 'VoLTE 连接状态' : 'VoWiFi 连接状态'"
+  >
     <div class="overview-connection-main">
-      <span class="overview-eyebrow">WI-FI CALLING</span>
+      <span class="overview-eyebrow">{{ presentation.eyebrow }}</span>
       <h2>
-        <el-icon aria-hidden="true"><Wifi124Regular /></el-icon>
-        {{ serviceState.title }}
+        <el-icon aria-hidden="true">
+          <Wifi124Regular v-if="presentation.kind === 'wifi'" />
+          <Cellular4G24Regular v-else-if="presentation.kind === 'volte'" />
+          <CellularData124Regular v-else />
+        </el-icon>
+        {{ presentation.title }}
       </h2>
-      <p>{{ serviceState.detail }}</p>
+      <p>{{ presentation.detail }}</p>
 
-      <div class="overview-service-path" :class="{ 'is-flowing': pathIsFlowing }" aria-label="VoWiFi 服务链路">
+      <div
+        class="overview-service-path"
+        :class="{ 'is-flowing': pathIsFlowing }"
+        :aria-label="presentation.kind === 'volte' ? 'VoLTE 服务链路' : 'VoWiFi 服务链路'"
+      >
         <div class="overview-service-track" aria-hidden="true"><span /></div>
         <div
           v-for="stage in stages"
@@ -184,6 +128,8 @@ function stageLabel(ready: boolean | undefined): string {
 .overview-connection-stage.is-failed h2 .el-icon { color: var(--ui-danger); }
 .overview-connection-stage.is-pending h2,
 .overview-connection-stage.is-pending h2 .el-icon { color: var(--ui-warning); }
+.overview-connection-stage.is-ready h2,
+.overview-connection-stage.is-ready h2 .el-icon { color: var(--ui-primary); }
 
 .overview-service-path {
   position: relative;

@@ -36,6 +36,26 @@ export type RealtimeTrafficSnapshot = {
   error?: string
 }
 
+export type NativeVoLTEStatus = {
+  device_id?: string
+  phase?: string
+  ims_enabled?: boolean
+  volte_enabled?: boolean
+  ims_registered?: boolean
+  voice_available?: boolean
+  uac_enabled?: boolean
+  audio_device?: string
+  reboot_required?: boolean
+  qmi_ims_unavailable?: boolean
+  provision_stage?: string
+  imei_tail?: string
+  plmn?: string
+  mbn_name?: string
+  lte_registered?: boolean
+  ims_pdn_active?: boolean
+  last_error?: string
+}
+
 export type VoWiFiRuntimeState = {
   device_id?: string
   dataplane_mode?: string
@@ -98,6 +118,7 @@ export type DeviceOverviewItem = {
   vowifi_enabled?: boolean
   vowifi_active?: boolean
   vowifi_runtime?: VoWiFiRuntimeState
+  native_volte?: NativeVoLTEStatus
   radio_live_ok?: boolean
   modem: ModemStatus
   traffic?: DeviceTrafficFormatted

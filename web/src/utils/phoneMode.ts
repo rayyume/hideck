@@ -4,6 +4,10 @@ export function normalizePhoneMode(mode?: string | null): string {
   return value || 'wifi'
 }
 
+export function isNativeVoLTEMode(mode?: string | null): boolean {
+  return normalizePhoneMode(mode) === 'volte'
+}
+
 export function phoneModeCampsOnCell(mode?: string | null): boolean {
   const value = normalizePhoneMode(mode)
   return value === 'cellular' || value === 'volte'

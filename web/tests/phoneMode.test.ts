@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { isWifiCallingEnabled, phoneModeCampsOnCell, phoneModeLabel } from '../src/utils/phoneMode'
+import { isNativeVoLTEMode, isWifiCallingEnabled, phoneModeCampsOnCell, phoneModeLabel } from '../src/utils/phoneMode'
+
+test('native volte is only the volte phone mode', () => {
+  assert.equal(isNativeVoLTEMode('volte'), true)
+  assert.equal(isNativeVoLTEMode('cellular'), false)
+  assert.equal(isNativeVoLTEMode('wifi'), false)
+})
 
 test('volte and cellular camp on cell; wifi does not', () => {
   assert.equal(phoneModeCampsOnCell('volte'), true)
