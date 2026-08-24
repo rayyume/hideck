@@ -2,6 +2,7 @@ package volte
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -20,6 +21,25 @@ func enableVoice(t *testing.T) (*Controller, *FakeModem) {
 		t.Fatal(err)
 	}
 	return ctl, host
+}
+
+func TestQPCMVFailureIsExposedAsSilentAudio(t *testing.T) {
+	host := newFakeModem()
+	host.IMS, host.VoLTE = 1, 1
+	host.USB[len(host.USB)-1] = "1"
+	host.Audio = "hw:1,0"
+	host.Fail = map[string]error{"AT+QPCMV=1,2": errors.New("ERROR")}
+	ctl := NewControllerWithBackup(host, t.TempDir())
+	if err := ctl.Enable(context.Background(), "wwan1"); err != nil {
+		t.Fatal(err)
+	}
+	st := ctl.Status("wwan1")
+	if !st.QPCMVFailed {
+		t.Fatalf("QPCMVFailed=%v want true", st.QPCMVFailed)
+	}
+	if got := audioError(st); !strings.Contains(got, "QPCMV") {
+		t.Fatalf("audioError=%q", got)
+	}
 }
 
 func TestBeginCallReusesIndicationCallID(t *testing.T) {

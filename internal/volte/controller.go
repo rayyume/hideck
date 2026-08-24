@@ -34,6 +34,8 @@ type session struct {
 	voice           *voiceSession
 	alsaUnavailable bool
 	lastVoiceAt     time.Time
+	qpcmvTried      bool
+	qpcmvOK         bool
 }
 
 const voiceUSBQuiet = 20 * time.Second
@@ -190,6 +192,7 @@ func (c *Controller) Status(deviceID string) Status {
 		return Status{DeviceID: deviceID, Phase: PhaseIdle}
 	}
 	st := s.status
+	qpcmvFailed := s.qpcmvTried && !s.qpcmvOK
 	c.mu.Unlock()
 	audio := ""
 	if c.host != nil {
@@ -201,10 +204,12 @@ func (c *Controller) Status(deviceID string) Status {
 	st.AudioDevice = audio
 	st.UACEnabled = true
 	st.RebootRequired = false
-	c.patch(deviceID, func(s *Status) {
-		s.AudioDevice = audio
-		s.UACEnabled = true
-		s.RebootRequired = false
+	st.QPCMVFailed = qpcmvFailed
+	c.patch(deviceID, func(st *Status) {
+		st.AudioDevice = audio
+		st.UACEnabled = true
+		st.RebootRequired = false
+		st.QPCMVFailed = qpcmvFailed
 	})
 	return st
 }
@@ -249,6 +254,7 @@ func (c *Controller) provisionConfig(ctx context.Context, deviceID string) error
 		logger.Warn("QMI 打开原生 IMS 失败，继续用 AT 结果", "device", deviceID, "err", err)
 	}
 	c.syncAudioStatus(deviceID, res.Current.UACEnabled)
+	c.ensureVoicePCM(deviceID)
 	if !res.Current.IMSEnabled {
 		return c.fail(deviceID, fmt.Errorf("native IMS did not enable"))
 	}
@@ -264,6 +270,30 @@ func (c *Controller) applyProvision(deviceID string, res Result) {
 		st.ProvisionStage = res.Stage
 		st.IMEITail = res.IMEITail
 	})
+}
+
+func (c *Controller) ensureVoicePCM(deviceID string) {
+	if c == nil || c.host == nil {
+		return
+	}
+	deviceID = strings.TrimSpace(deviceID)
+	c.mu.Lock()
+	s := c.ensureLocked(deviceID)
+	if s.qpcmvTried {
+		c.mu.Unlock()
+		return
+	}
+	s.qpcmvTried = true
+	c.mu.Unlock()
+	_, err := c.host.ExecuteAT(deviceID, "AT+QPCMV=1,2", 2*time.Second)
+	c.mu.Lock()
+	s = c.ensureLocked(deviceID)
+	s.qpcmvOK = err == nil
+	s.status.QPCMVFailed = err != nil
+	c.mu.Unlock()
+	if err != nil {
+		logger.Warn("VoLTE 无法把通话 PCM 接到 USB 声卡", "device", deviceID, "err", err)
+	}
 }
 
 func (c *Controller) syncAudioStatus(deviceID string, nvUAC bool) {

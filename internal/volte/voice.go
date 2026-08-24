@@ -568,6 +568,9 @@ func startedAt(prev nativeCall, now time.Time) time.Time {
 }
 
 func audioError(st Status) string {
+	if st.QPCMVFailed {
+		return "模组无法把通话 PCM 接到 USB 声卡（QPCMV 失败），能打通但没有声音"
+	}
 	if strings.TrimSpace(st.AudioDevice) != "" && st.UACEnabled && !st.RebootRequired {
 		return ""
 	}
@@ -606,6 +609,7 @@ func (c *Controller) callPCM(deviceID string) PCMPort {
 	if c == nil || c.host == nil {
 		return nullPCM{}
 	}
+	c.ensureVoicePCM(deviceID)
 	if c.alsaUnavailable(deviceID) {
 		return nullPCM{}
 	}
