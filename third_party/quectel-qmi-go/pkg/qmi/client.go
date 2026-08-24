@@ -643,6 +643,7 @@ func (c *Client) readLoop() {
 				}
 				c.logf(ClientLogLevelDebug, "QMI: received response with unmatched key 0x%08x (MsgID 0x%04x, Service 0x%02x, TxID %d)",
 					key, packet.MessageID, packet.ServiceType, packet.TransactionID)
+				continue
 			}
 			c.dispatchIndication(packet)
 		}

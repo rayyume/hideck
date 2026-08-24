@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/unix"
@@ -127,18 +128,31 @@ func (p *alsaPCM) Close() error {
 		return nil
 	}
 	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.play.f != nil {
-		_ = ioctl(p.play.f, alsaIoctlDrop, nil)
-		_ = p.play.f.Close()
-		p.play.f = nil
-	}
-	if p.capt.f != nil {
-		_ = ioctl(p.capt.f, alsaIoctlDrop, nil)
-		_ = p.capt.f.Close()
-		p.capt.f = nil
-	}
+	play, capt := p.play.f, p.capt.f
+	p.play.f, p.capt.f = nil, nil
+	p.mu.Unlock()
+	closeALSAFile(play)
+	closeALSAFile(capt)
 	return nil
+}
+
+const alsaCloseBudget = 300 * time.Millisecond
+
+func closeALSAFile(f *os.File) {
+	if f == nil {
+		return
+	}
+	done := make(chan struct{})
+	go func() {
+		_ = ioctl(f, alsaIoctlDrop, nil)
+		_ = f.Close()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(alsaCloseBudget):
+		_ = f.Close()
+	}
 }
 
 func (s alsaStream) close() error {

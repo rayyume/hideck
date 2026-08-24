@@ -270,6 +270,20 @@ func TestRejectAlreadyGoneClearsCall(t *testing.T) {
 	}
 }
 
+func TestVoiceUSBQuietRemainingAfterIndication(t *testing.T) {
+	ctl, host := enableVoice(t)
+	if ctl.VoiceUSBQuietRemaining("wwan1") != 0 {
+		t.Fatal("quiet window before any call")
+	}
+	host.fireVoice(&qmi.VoiceAllCallInfo{
+		Calls:              []qmi.VoiceCallInfo{{ID: 1, State: qmiCallIncoming, Direction: qmiDirMT}},
+		RemotePartyNumbers: []qmi.VoiceRemotePartyNumber{{CallID: 1, Number: "+1555550100"}},
+	})
+	if ctl.VoiceUSBQuietRemaining("wwan1") <= 0 {
+		t.Fatal("expected USB quiet window after voice indication")
+	}
+}
+
 func TestSameQMISlotDoesNotSpawnGhostIncoming(t *testing.T) {
 	ctl, host := enableVoice(t)
 	var incoming []voicehost.IncomingCall

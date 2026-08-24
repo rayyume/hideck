@@ -35,6 +35,14 @@ func (p *Pool) suppressQMIUnhealthyEviction(worker *Worker) (bool, string) {
 			return true, reason
 		}
 	}
+	if p != nil && p.volteCtl != nil {
+		if p.volteCtl.ActiveCall(worker.ID) != nil {
+			return true, "native_volte_call"
+		}
+		if remain := p.volteCtl.VoiceUSBQuietRemaining(worker.ID); remain > 0 {
+			return true, "native_volte_usb_quiet"
+		}
+	}
 	if worker.Backend == nil {
 		return false, ""
 	}

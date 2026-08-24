@@ -251,6 +251,7 @@ func (c *Controller) HangupCall(ctx context.Context, deviceID, id string) error 
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	c.releaseCallAudio(id)
 	err := c.host.VOICEHangup(ctx, deviceID, call.QMI)
 	if err != nil && !qmi.VoiceCallAlreadyGone(err) {
 		return err
@@ -278,6 +279,7 @@ func (c *Controller) RejectIncomingCall(request voicehost.RejectRequest) error {
 	if !ok {
 		return nil
 	}
+	c.releaseCallAudio(request.CallID)
 	err := c.host.VOICEHangup(context.Background(), request.DeviceID, call.QMI)
 	if err != nil && !qmi.VoiceCallAlreadyGone(err) {
 		return err
@@ -310,13 +312,9 @@ func (c *Controller) finishLocalCall(deviceID string, call nativeCall, reason st
 		vs.forget(call.ID)
 		return
 	}
-	if c.audio != nil {
-		_ = c.audio.Stop(call.ID)
-	}
-	if m := c.media.take(call.ID); m != nil {
-		_ = m.Close()
-	}
+	c.releaseCallAudio(call.ID)
 	vs.forget(call.ID)
+	c.noteVoiceActivity(deviceID)
 	c.emitEvent(deviceID, voicehost.CallEvent{
 		Type: "CallEnded", DeviceID: deviceID, CallID: call.ID,
 		Caller: call.Peer, Callee: call.Peer, Direction: call.Direction,
@@ -370,9 +368,21 @@ func (c *Controller) DeviceStatus(deviceID string) map[string]interface{} {
 	}
 }
 
+func (c *Controller) releaseCallAudio(id string) {
+	if c.audio != nil {
+		_ = c.audio.Stop(id)
+	}
+	if m := c.media.take(id); m != nil {
+		_ = m.Close()
+	}
+}
+
 func (c *Controller) handleVoiceInfo(deviceID string, vs *voiceSession, info *qmi.VoiceAllCallInfo) {
 	if info == nil || vs == nil {
 		return
+	}
+	if len(info.Calls) > 0 {
+		c.noteVoiceActivity(deviceID)
 	}
 	now := time.Now()
 	seen := make(map[string]bool, len(info.Calls))
@@ -450,12 +460,7 @@ func (c *Controller) handleVoiceInfo(deviceID string, vs *voiceSession, info *qm
 			}
 		}
 		if eventType == "CallEnded" {
-			if c.audio != nil {
-				_ = c.audio.Stop(id)
-			}
-			if m := c.media.take(id); m != nil {
-				_ = m.Close()
-			}
+			c.releaseCallAudio(id)
 			vs.forget(id)
 		}
 	}
@@ -471,12 +476,7 @@ func (c *Controller) handleVoiceInfo(deviceID string, vs *voiceSession, info *qm
 				Direction: call.Direction, State: "completed", Time: now, Reason: call.Reason, AudioCodec: call.Codec,
 				RecordingError: audioError(c.Status(deviceID)),
 			})
-			if c.audio != nil {
-				_ = c.audio.Stop(call.ID)
-			}
-			if m := c.media.take(call.ID); m != nil {
-				_ = m.Close()
-			}
+			c.releaseCallAudio(call.ID)
 			vs.forget(call.ID)
 		}
 	}

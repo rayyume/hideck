@@ -33,6 +33,36 @@ type session struct {
 	status          Status
 	voice           *voiceSession
 	alsaUnavailable bool
+	lastVoiceAt     time.Time
+}
+
+const voiceUSBQuiet = 20 * time.Second
+
+func (c *Controller) noteVoiceActivity(deviceID string) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	s := c.ensureLocked(strings.TrimSpace(deviceID))
+	s.lastVoiceAt = time.Now()
+	c.mu.Unlock()
+}
+
+func (c *Controller) VoiceUSBQuietRemaining(deviceID string) time.Duration {
+	if c == nil {
+		return 0
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	s := c.sess[strings.TrimSpace(deviceID)]
+	if s == nil || s.lastVoiceAt.IsZero() {
+		return 0
+	}
+	remain := voiceUSBQuiet - time.Since(s.lastVoiceAt)
+	if remain < 0 {
+		return 0
+	}
+	return remain
 }
 
 func NewController(host Host) *Controller {
