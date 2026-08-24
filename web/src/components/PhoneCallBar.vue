@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
@@ -11,15 +11,26 @@ import {
 } from '@vicons/fluent'
 import { usePhoneStore } from '../stores/phone'
 import { formatCallDuration, phoneCallStatusLabel, phoneErrorMessage } from '../utils/phone'
+import PhoneDialPad from './PhoneDialPad.vue'
 
 const router = useRouter()
 const phone = usePhoneStore()
 const ending = ref(false)
+const keypadOpen = ref(false)
+const lastDTMF = ref('')
 const call = computed(() => phone.currentCall)
 const callEnding = computed(() => call.value ? phone.isCallEnding(call.value.call_id) : false)
+const connected = computed(() => call.value?.status === 'connected')
 const canControl = computed(() => !!call.value
   && !call.value.read_only
   && !(call.value.direction === 'inbound' && call.value.status === 'ringing'))
+
+watch(connected, (isConnected) => {
+  if (!isConnected) {
+    keypadOpen.value = false
+    lastDTMF.value = ''
+  }
+})
 
 async function hangup() {
   if (!call.value || ending.value) return
@@ -33,55 +44,85 @@ async function hangup() {
     ending.value = false
   }
 }
+
+function toggleKeypad() {
+  if (!connected.value || callEnding.value) return
+  keypadOpen.value = !keypadOpen.value
+}
+
+async function sendDigit(digit: string) {
+  try {
+    await phone.sendDTMF(digit)
+    lastDTMF.value = digit
+  } catch (error) {
+    ElMessage.error(phoneErrorMessage(error, 'DTMF 发送失败'))
+  }
+}
 </script>
 
 <template>
-  <aside v-if="call" class="call-bar" aria-live="polite" aria-label="当前电话">
-    <button type="button" class="call-summary" @click="router.push('/phone')">
-      <span class="call-pulse" aria-hidden="true" />
-      <span class="call-copy">
-        <strong>{{ call.peer || '未知号码' }}</strong>
-        <small>{{ phone.mediaMode === 'listen-only' ? '仅听 · ' : '' }}{{ phoneCallStatusLabel(call, callEnding) }} · {{ formatCallDuration(call, phone.now) }}</small>
-      </span>
-      <span v-if="call.read_only" class="read-only-tag">只读</span>
-    </button>
-    <div class="call-actions">
-      <button
-        v-if="phone.mediaReady && !call.read_only"
-        type="button"
-        class="call-action"
-        :disabled="phone.mediaMode !== 'two-way'"
-        :aria-label="phone.mediaMode === 'listen-only' ? '仅听模式，对方听不到你' : phone.muted ? '取消静音' : '静音'"
-        :aria-pressed="phone.muted"
-        @click="phone.toggleMute"
-      >
-        <el-icon>
-          <Speaker224Regular v-if="phone.mediaMode === 'listen-only'" />
-          <MicOff24Regular v-else-if="phone.muted" />
-          <Mic24Regular v-else />
-        </el-icon>
+  <aside v-if="call" class="call-bar-wrap" aria-live="polite" aria-label="当前电话">
+    <div class="call-bar">
+      <button type="button" class="call-summary" @click="router.push('/phone')">
+        <span class="call-pulse" aria-hidden="true" />
+        <span class="call-copy">
+          <strong>{{ call.peer || '未知号码' }}</strong>
+          <small>{{ phone.mediaMode === 'listen-only' ? '仅听 · ' : '' }}{{ phoneCallStatusLabel(call, callEnding) }} · {{ formatCallDuration(call, phone.now) }}</small>
+        </span>
+        <span v-if="call.read_only" class="read-only-tag">只读</span>
       </button>
-      <button type="button" class="call-action" aria-label="返回电话页" @click="router.push('/phone')">
-        <el-icon><Dialpad24Regular /></el-icon>
-      </button>
-      <button
-        v-if="canControl"
-        type="button"
-        class="call-action is-danger"
-        :disabled="ending || callEnding"
-        :aria-label="ending || callEnding ? '正在挂断电话' : '挂断电话'"
-        @click="hangup"
-      >
-        <el-icon><CallEnd24Regular /></el-icon>
-      </button>
+      <div class="call-actions">
+        <button
+          v-if="phone.mediaReady && !call.read_only"
+          type="button"
+          class="call-action"
+          :disabled="phone.mediaMode !== 'two-way'"
+          :aria-label="phone.mediaMode === 'listen-only' ? '仅听模式，对方听不到你' : phone.muted ? '取消静音' : '静音'"
+          :aria-pressed="phone.muted"
+          @click="phone.toggleMute"
+        >
+          <el-icon>
+            <Speaker224Regular v-if="phone.mediaMode === 'listen-only'" />
+            <MicOff24Regular v-else-if="phone.muted" />
+            <Mic24Regular v-else />
+          </el-icon>
+        </button>
+        <button
+          type="button"
+          class="call-action"
+          :disabled="!connected || callEnding || call.read_only"
+          :aria-label="connected ? (keypadOpen ? '关闭拨号键盘' : '打开拨号键盘') : '接通后可发送拨号音'"
+          :aria-pressed="keypadOpen"
+          @click="toggleKeypad"
+        >
+          <el-icon><Dialpad24Regular /></el-icon>
+        </button>
+        <button
+          v-if="canControl"
+          type="button"
+          class="call-action is-danger"
+          :disabled="ending || callEnding"
+          :aria-label="ending || callEnding ? '正在挂断电话' : '挂断电话'"
+          @click="hangup"
+        >
+          <el-icon><CallEnd24Regular /></el-icon>
+        </button>
+      </div>
+    </div>
+    <div v-if="keypadOpen && connected" class="call-bar-keypad">
+      <p aria-live="polite">发送 DTMF{{ lastDTMF ? `：${lastDTMF}` : '' }}</p>
+      <PhoneDialPad :disabled="callEnding" @digit="sendDigit" />
     </div>
   </aside>
 </template>
 
 <style scoped>
+.call-bar-wrap {
+  margin: 12px 18px 0;
+}
+
 .call-bar {
   min-height: 62px;
-  margin: 12px 18px 0;
   padding: 8px 10px 8px 14px;
   display: flex;
   align-items: center;
@@ -91,6 +132,22 @@ async function hangup() {
   border-radius: 14px;
   background: color-mix(in srgb, var(--ui-success) 8%, var(--ui-surface));
   box-shadow: var(--ui-shadow-sm);
+}
+
+.call-bar-keypad {
+  margin-top: 8px;
+  padding: 14px 16px 16px;
+  border: 1px solid var(--ui-border);
+  border-radius: 14px;
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow-sm);
+}
+
+.call-bar-keypad > p {
+  margin: 0 0 12px;
+  color: var(--ui-text-muted);
+  font-size: 11px;
+  text-align: center;
 }
 
 .call-summary {
@@ -126,7 +183,8 @@ async function hangup() {
 .call-summary:focus-visible, .call-action:focus-visible { outline: 2px solid var(--ui-primary); outline-offset: 2px; }
 
 @media (max-width: 820px) {
-  .call-bar { min-height: 58px; margin: 8px 10px 0; }
+  .call-bar-wrap { margin: 8px 10px 0; }
+  .call-bar { min-height: 58px; }
   .call-copy small { max-width: 148px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .read-only-tag { display: none; }
 }

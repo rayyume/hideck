@@ -55,6 +55,10 @@ test('phone view exposes explicit listen-only and microphone call actions withou
   assert.match(phoneView, /sendDTMF\(digit\)/)
   assert.match(phoneView, /<PhoneCallHistory/)
   assert.match(callBar, /aria-live="polite"/)
+  assert.match(callBar, /打开拨号键盘/)
+  assert.match(callBar, /<PhoneDialPad/)
+  assert.match(callBar, /toggleKeypad/)
+  assert.doesNotMatch(callBar, /aria-label="返回电话页"/)
 })
 
 test('hangup feedback stays pending until the real call-ended event arrives', () => {
