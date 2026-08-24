@@ -57,6 +57,19 @@ func TestCaptureWritesBackupWithSchemaIMEIAndTargets(t *testing.T) {
 	}
 }
 
+func TestEnsureContinuesWhenUSBCFGQueryUnsupported(t *testing.T) {
+	modem := newFakeModem()
+	modem.Fail = map[string]error{`AT+QCFG="usbcfg"?`: errors.New("ERROR")}
+	p := NewProvisioner(modem, &MemoryStore{})
+	res, err := p.Ensure(context.Background(), "wwan1", Desired{IMSEnabled: boolPtr(true), VoLTEEnabled: boolPtr(true), UACEnabled: boolPtr(true)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.OK || !res.Current.IMSEnabled {
+		t.Fatalf("IMS should apply without usbcfg: %+v", res)
+	}
+}
+
 func TestApplyOnlyChangesApprovedFieldsAndPreservesVIDPID(t *testing.T) {
 	modem := newFakeModem()
 	p := NewProvisioner(modem, &MemoryStore{})

@@ -129,6 +129,9 @@ func (s *Server) handleDeviceVoWiFiPatch(c *gin.Context) {
 		}
 		s.pool.SetWorkerVoWiFiPolicy(deviceID, true)
 		if w := s.pool.GetWorker(deviceID); w != nil && device.IsNativeVoLTEMode(w.Config.PhoneMode) {
+			if err := s.pool.ApplyCurrentCardPolicy(deviceID, "api_enable_native_volte"); err != nil {
+				logger.Warn("VoLTE 投影射频失败，仍尝试启用原生 IMS", "device", deviceID, "err", err)
+			}
 			s.pool.ScheduleNativeVoLTE(deviceID, "api_enable_vowifi")
 			c.JSON(http.StatusOK, gin.H{
 				"status":  "ok",

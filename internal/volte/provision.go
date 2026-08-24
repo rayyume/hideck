@@ -430,7 +430,8 @@ func (p *Provisioner) applyUSBCFG(deviceID string, res *Result) error {
 	}
 	fields := withUACFields(res.Current.USBFields, res.Target.UACEnabled)
 	if len(fields) < 3 {
-		return p.fail(*res, StageApplyUSBCFG, "usbcfg too short", errors.New("need VID/PID plus function bits"))
+		// Some QDC507 MBN images reject AT+QCFG="usbcfg"?. Skip UAC; IMS still proceeds.
+		return nil
 	}
 	fields[0] = res.Current.USBFields[0]
 	fields[1] = res.Current.USBFields[1]
@@ -460,13 +461,14 @@ func (p *Provisioner) readSettings(deviceID string) (VoiceSettings, string, erro
 	if err != nil {
 		return VoiceSettings{}, imei, err
 	}
-	usbResp, err := p.exec(deviceID, USBConfigQueryCommand())
-	if err != nil {
-		return VoiceSettings{}, imei, fmt.Errorf("query usbcfg: %w", err)
-	}
-	usb, err := ParseUSBConfig(usbResp)
-	if err != nil {
-		return VoiceSettings{}, imei, err
+	var usb USBConfig
+	usbResp, usbErr := p.exec(deviceID, USBConfigQueryCommand())
+	if usbErr == nil {
+		parsed, parseErr := ParseUSBConfig(usbResp)
+		if parseErr != nil {
+			return VoiceSettings{}, imei, parseErr
+		}
+		usb = parsed
 	}
 	autoResp, err := p.exec(deviceID, MBNAutoSelQueryCommand())
 	if err != nil {
@@ -545,7 +547,7 @@ func overlayDesired(current VoiceSettings, d Desired) VoiceSettings {
 	if d.VoLTEEnabled != nil {
 		t.VoLTEEnabled = *d.VoLTEEnabled
 	}
-	if d.UACEnabled != nil {
+	if d.UACEnabled != nil && len(current.USBFields) >= 3 {
 		t.UACEnabled = *d.UACEnabled
 		t.USBFields = withUACFields(current.USBFields, *d.UACEnabled)
 	}
