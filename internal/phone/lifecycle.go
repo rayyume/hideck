@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yibaiba/hideck/pkg/logger"
 	"github.com/iniwex5/vowifi-go/runtimehost/voicehost"
+	"github.com/yibaiba/hideck/pkg/logger"
 )
 
 func (s *Service) handleIncoming(incoming voicehost.IncomingCall) {
@@ -136,6 +136,9 @@ func (s *Service) updateAnswered(event voicehost.CallEvent) {
 	}
 	call.view.Status, call.record.Status = StatusConnected, StatusConnected
 	call.view.AnsweredAt, call.record.AnsweredAt = &answeredAt, &answeredAt
+	if codec := strings.TrimSpace(event.AudioCodec); codec != "" {
+		call.view.Codec, call.record.Codec = codec, codec
+	}
 	mediaID, direction, deviceID := call.mediaID, call.view.Direction, call.view.DeviceID
 	s.mu.Unlock()
 	if direction == "outbound" {

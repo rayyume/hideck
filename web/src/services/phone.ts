@@ -134,7 +134,7 @@ export const phoneService = {
     afterId: number,
     signal: AbortSignal,
     onEvent: (event: PhoneEvent) => void,
-    onOpen?: () => void
+    onOpen?: () => void | Promise<void>
   ) {
     const token = localStorage.getItem('token') || ''
     const response = await fetch(`/api/phone/events?after_id=${afterId}`, {
@@ -147,7 +147,7 @@ export const phoneService = {
     if (!response.ok || !response.body) {
       throw new Error(`电话事件流连接失败（HTTP ${response.status}）`)
     }
-    onOpen?.()
+    await onOpen?.()
     await readPhoneEvents(response.body, onEvent)
   }
 }

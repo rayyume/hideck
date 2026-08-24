@@ -6,7 +6,7 @@ type ListenerCallbacks = {
   cursor: () => number
   onEvent: (event: PhoneEvent) => void
   onError: (message: string) => void
-  onOpen: () => void
+  onOpen: () => void | Promise<void>
 }
 
 export class PhoneEventListener {

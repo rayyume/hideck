@@ -13,6 +13,7 @@ import (
 
 var calleePattern = regexp.MustCompile(`^\+?[0-9]{1,32}$`)
 var dtmfPattern = regexp.MustCompile(`^[0-9*#]$`)
+var errActiveCallNotFound = errors.New("phone: active call not found")
 
 func (s *Service) StartCall(request StartCallRequest) (CallView, error) {
 	request.DeviceID, request.Callee = strings.TrimSpace(request.DeviceID), strings.TrimSpace(request.Callee)
@@ -42,7 +43,6 @@ func (s *Service) StartCall(request StartCallRequest) (CallView, error) {
 	pendingMediaDrop := s.bindMediaLocked(call.view.CallID, call.mediaID)
 	pendingEvents := s.pendingEvents[call.view.CallID]
 	delete(s.pendingEvents, call.view.CallID)
-	startedView := call.snapshot(request.Lease)
 	s.mu.Unlock()
 	s.resumePendingMediaDrop(call.mediaID, pendingMediaDrop)
 	s.persist(call.record)
@@ -50,7 +50,7 @@ func (s *Service) StartCall(request StartCallRequest) (CallView, error) {
 	for _, event := range pendingEvents {
 		s.dispatchCallEvent(event)
 	}
-	return startedView, nil
+	return s.callView(call.view.CallID, request.Lease), nil
 }
 
 func (s *Service) newOutboundCall(
@@ -65,6 +65,9 @@ func (s *Service) newOutboundCall(
 	record := CallRecord{
 		CallID: snapshot.CallID, DeviceID: request.DeviceID, ICCID: s.iccid(request.DeviceID),
 		Direction: "outbound", Peer: request.Callee, Status: StatusCalling, StartedAt: startedAt,
+	}
+	if endpoint, err := parseRTPEndpoint(snapshot.ClientSDP); err == nil && endpoint.Codec != "" {
+		view.Codec, record.Codec = endpoint.Codec, endpoint.Codec
 	}
 	return &activeCall{
 		view: view, record: record, owner: request.Owner, lease: request.Lease,
@@ -111,20 +114,38 @@ func (s *Service) Reject(request ControlRequest) error {
 	deviceID := call.view.DeviceID
 	s.mu.Unlock()
 	s.resumePendingMediaDrop(request.MediaID, pendingMediaDrop)
-	return s.gateway.RejectIncomingCall(voicehost.RejectRequest{
+	if err := s.gateway.RejectIncomingCall(voicehost.RejectRequest{
 		DeviceID: deviceID, CallID: request.CallID, StatusCode: 486,
+	}); err != nil {
+		return err
+	}
+	s.finishCall(voicehost.CallEvent{
+		Type: "CallCanceled", DeviceID: deviceID, CallID: request.CallID,
+		Reason: "local_reject", Time: time.Now(),
 	})
+	return nil
 }
 
 func (s *Service) Hangup(ctx context.Context, owner, callID, lease string) error {
 	call, err := s.controlledCall(owner, callID, lease)
 	if err != nil {
+		if errors.Is(err, errActiveCallNotFound) {
+			return nil
+		}
 		return err
 	}
 	s.mu.RLock()
 	deviceID, resolvedCallID := call.view.DeviceID, call.view.CallID
 	s.mu.RUnlock()
-	return s.gateway.HangupCall(ctx, deviceID, resolvedCallID)
+	if err := s.gateway.HangupCall(ctx, deviceID, resolvedCallID); err != nil {
+		return err
+	}
+	// Native lookup can succeed the HTTP hangup without emitting CallEnded.
+	s.finishCall(voicehost.CallEvent{
+		Type: "CallEnded", DeviceID: deviceID, CallID: resolvedCallID,
+		Reason: "local_hangup", Time: time.Now(),
+	})
+	return nil
 }
 
 func (s *Service) DTMF(owner, callID, lease, digit string) error {
@@ -153,7 +174,7 @@ func (s *Service) RefreshMedia(request RefreshRequest) (CallView, string, error)
 	call := s.calls[request.CallID]
 	if call == nil || call.terminal {
 		s.mu.RUnlock()
-		return CallView{}, "", errors.New("phone: active call not found")
+		return CallView{}, "", errActiveCallNotFound
 	}
 	if !request.Takeover && !secureEqual(call.lease, request.Lease) {
 		s.mu.RUnlock()
@@ -201,7 +222,7 @@ func (s *Service) attachCurrentMedia(callID string, media *MediaSession) error {
 	call := s.calls[callID]
 	if call == nil {
 		s.mu.RUnlock()
-		return errors.New("phone: active call not found")
+		return errActiveCallNotFound
 	}
 	remoteSDP, deviceID := call.incomingSDP, call.view.DeviceID
 	s.mu.RUnlock()
@@ -244,7 +265,7 @@ func (s *Service) controlledCall(owner, callID, lease string) (*activeCall, erro
 	defer s.mu.RUnlock()
 	call := s.calls[strings.TrimSpace(callID)]
 	if call == nil || call.terminal {
-		return nil, errors.New("phone: active call not found")
+		return nil, errActiveCallNotFound
 	}
 	if call.owner != owner || !secureEqual(call.lease, lease) {
 		return nil, errors.New("phone: control lease does not own this call")

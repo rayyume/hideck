@@ -223,6 +223,10 @@ export const usePhoneStore = defineStore('phone', {
       this.endingCallIds = [...this.endingCallIds, target.call_id]
       try {
         await phoneService.hangup(target.call_id, this.lease)
+        this.calls = this.calls.filter((item) => item.call_id !== target.call_id)
+        this.clearEndingCall(target.call_id)
+        if (target.media_id === this.mediaId) this.releaseMedia()
+        void this.reloadHistory()
       } catch (error) {
         this.clearEndingCall(target.call_id)
         throw error
@@ -311,7 +315,7 @@ export const usePhoneStore = defineStore('phone', {
     },
 
     handleEvent(event: PhoneEvent) {
-      if (event.id <= this.lastEventId) return
+      if (event.id === this.lastEventId) return
       this.lastEventId = event.id
       if (ACTIVE_STATUSES.has(event.call.status)) this.upsertCall(event.call)
       else this.calls = this.calls.filter((call) => call.call_id !== event.call.call_id)
@@ -333,7 +337,14 @@ export const usePhoneStore = defineStore('phone', {
         cursor: () => this.lastEventId,
         onEvent: (event) => this.handleEvent(event),
         onError: (message) => { this.eventError = message },
-        onOpen: () => { this.eventError = '' }
+        onOpen: async () => {
+          this.eventError = ''
+          try {
+            await this.refresh()
+          } catch (error) {
+            this.eventError = phoneErrorMessage(error, '电话状态同步失败')
+          }
+        }
       })
       eventListener.start()
     },

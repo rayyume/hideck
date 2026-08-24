@@ -24,6 +24,8 @@ type fakeVoiceGateway struct {
 	rejectCalls     chan voicehost.RejectRequest
 	captureError    error
 	activeSnapshots map[string]voicehost.CallSnapshot
+	silentHangup    bool
+	silentReject    bool
 }
 
 func newFakeVoiceGateway() *fakeVoiceGateway {
@@ -76,7 +78,7 @@ func (g *fakeVoiceGateway) AnswerIncomingCall(_ context.Context, request voiceho
 
 func (g *fakeVoiceGateway) RejectIncomingCall(request voicehost.RejectRequest) error {
 	g.rejectCalls <- request
-	if g.rejectEmits {
+	if g.rejectEmits && !g.silentReject {
 		g.emitEvent(voicehost.CallEvent{
 			Type: "CallCanceled", DeviceID: request.DeviceID, CallID: request.CallID,
 			Reason: "local_reject", Time: time.Now(),
@@ -87,6 +89,9 @@ func (g *fakeVoiceGateway) RejectIncomingCall(request voicehost.RejectRequest) e
 
 func (g *fakeVoiceGateway) HangupCall(_ context.Context, deviceID, callID string) error {
 	g.hangupCalls <- callID
+	if g.silentHangup {
+		return nil
+	}
 	g.emitEvent(voicehost.CallEvent{
 		Type: "CallEnded", DeviceID: deviceID, CallID: callID,
 		Reason: "local_hangup", Time: time.Now(),

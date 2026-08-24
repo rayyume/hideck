@@ -47,6 +47,24 @@ test('store ignores replayed events and never grants another media session contr
   assert.equal(store.calls[0].read_only, false)
 })
 
+test('applies call_ended after the event stream restarts with lower ids', () => {
+  setActivePinia(createPinia())
+  const store = usePhoneStore()
+  store.mediaId = 'media-1'
+  store.calls = [call('media-1')]
+  store.endingCallIds = ['call-1']
+  store.lastEventId = 9
+  store.handleEvent({
+    id: 1,
+    type: 'call_ended',
+    call: call('media-1', { status: 'completed' }),
+    time: '2026-08-13T12:01:00Z'
+  })
+  assert.equal(store.calls.length, 0)
+  assert.equal(store.lastEventId, 1)
+  assert.equal(store.isCallEnding('call-1'), false)
+})
+
 test('listen-only mode cannot be presented as a muteable microphone', () => {
   setActivePinia(createPinia())
   const store = usePhoneStore()
@@ -143,10 +161,14 @@ test('surfaces API error messages without hiding the underlying failure', () => 
   assert.equal(phoneErrorMessage(new Error('network down'), 'fallback'), 'network down')
 })
 
-test('keeps a call pending until its real ended event and prevents duplicate hangups', async () => {
+test('hangup success drops the local call without waiting for events and ignores a second click', async () => {
   const originalHangup = phoneService.hangup
   let requests = 0
-  phoneService.hangup = async () => { requests += 1 }
+  let hangupStarted: ((value?: unknown) => void) | undefined
+  phoneService.hangup = () => {
+    requests += 1
+    return new Promise((resolve) => { hangupStarted = resolve })
+  }
 
   try {
     setActivePinia(createPinia())
@@ -159,22 +181,12 @@ test('keeps a call pending until its real ended event and prevents duplicate han
     store.releaseMedia = () => { releases += 1 }
     store.reloadHistory = async () => {}
 
-    await store.hangup(active)
+    const first = store.hangup(active)
     await store.hangup(active)
     assert.equal(requests, 1)
     assert.equal(store.isCallEnding(active.call_id), true)
-    assert.equal(store.calls.length, 1)
-
-    store.handleEvent({
-      id: 12,
-      type: 'call_ended',
-      call: call('media-1', {
-        status: 'completed',
-        ended_at: '2026-08-13T12:01:00Z',
-        end_reason: 'local_hangup'
-      }),
-      time: '2026-08-13T12:01:00Z'
-    })
+    hangupStarted?.()
+    await first
     assert.equal(store.isCallEnding(active.call_id), false)
     assert.equal(store.calls.length, 0)
     assert.equal(releases, 1)

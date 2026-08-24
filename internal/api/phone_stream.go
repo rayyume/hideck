@@ -23,7 +23,10 @@ func (s *Server) handlePhoneEvents(c *gin.Context) {
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
+	c.Header("X-Accel-Buffering", "no")
 	c.Status(http.StatusOK)
+	_, _ = fmt.Fprint(c.Writer, ": connected\n\n")
+	c.Writer.Flush()
 	for _, event := range backlog {
 		writePhoneEvent(c, event)
 	}

@@ -42,6 +42,10 @@ func (hub *eventHub) publish(event Event) Event {
 func (hub *eventHub) subscribe(afterID uint64) ([]Event, <-chan Event, func()) {
 	hub.mu.Lock()
 	defer hub.mu.Unlock()
+	if afterID > hub.nextID {
+		// Cursor is from a previous process (IDs restart at 1). Replay the live buffer.
+		afterID = 0
+	}
 	backlog := make([]Event, 0, len(hub.events))
 	for _, event := range hub.events {
 		if event.ID > afterID {

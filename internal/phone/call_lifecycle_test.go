@@ -115,6 +115,94 @@ func TestOutboundEventsEmittedBeforeBeginReturnsAreReplayed(t *testing.T) {
 		t.Fatalf("returned Call-ID = %q", call.CallID)
 	}
 	waitForRecordStatus(t, store, call.CallID, StatusFailed)
+	if call.Status != StatusFailed {
+		t.Fatalf("StartCall snapshot status=%q want failed after replayed CallFailed", call.Status)
+	}
+	if err := service.Hangup(context.Background(), "admin", call.CallID, "lease-1"); err != nil {
+		t.Fatalf("hangup of already-ended call: %v", err)
+	}
+}
+
+func TestHangupPublishesCallEndedWhenGatewayStaysSilent(t *testing.T) {
+	gateway, store := newFakeVoiceGateway(), newMemoryCallStore()
+	gateway.silentHangup = true
+	service := newPhoneTestService(t, gateway, store, time.Second)
+	addStubMedia(t, service, "media-1", "admin", "lease-1")
+	call, err := service.StartCall(StartCallRequest{
+		Owner: "admin", DeviceID: "dev-1", Callee: "888", MediaID: "media-1", Lease: "lease-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, stream, cancel := service.Subscribe(0)
+	defer cancel()
+	if err := service.Hangup(context.Background(), "admin", call.CallID, "lease-1"); err != nil {
+		t.Fatal(err)
+	}
+	waitForRecordStatus(t, store, call.CallID, StatusFailed)
+	if active := service.Active("lease-1"); len(active) != 0 {
+		t.Fatalf("active after hangup = %+v", active)
+	}
+	deadline := time.After(time.Second)
+	for {
+		select {
+		case event := <-stream:
+			if event.Type == "call_ended" && event.Call.CallID == call.CallID {
+				return
+			}
+		case <-deadline:
+			t.Fatal("call_ended was not published after silent gateway hangup")
+		}
+	}
+}
+
+func TestHangupPublishesCallEndedOnceWhenGatewayAlreadyEmitted(t *testing.T) {
+	gateway, store := newFakeVoiceGateway(), newMemoryCallStore()
+	service := newPhoneTestService(t, gateway, store, time.Second)
+	addStubMedia(t, service, "media-1", "admin", "lease-1")
+	call, err := service.StartCall(StartCallRequest{
+		Owner: "admin", DeviceID: "dev-1", Callee: "888", MediaID: "media-1", Lease: "lease-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, stream, cancel := service.Subscribe(0)
+	defer cancel()
+	if err := service.Hangup(context.Background(), "admin", call.CallID, "lease-1"); err != nil {
+		t.Fatal(err)
+	}
+	waitForRecordStatus(t, store, call.CallID, StatusFailed)
+	ended := 0
+	deadline := time.After(150 * time.Millisecond)
+	for {
+		select {
+		case event := <-stream:
+			if event.Type == "call_ended" {
+				ended++
+			}
+		case <-deadline:
+			if ended != 1 {
+				t.Fatalf("call_ended count = %d, want 1", ended)
+			}
+			return
+		}
+	}
+}
+
+func TestStartCallCopiesLocalPCMUCodec(t *testing.T) {
+	gateway, store := newFakeVoiceGateway(), newMemoryCallStore()
+	gateway.beginSnapshot.ClientSDP = "v=0\r\no=hideck 0 0 IN IP4 127.0.0.1\r\ns=HiDeck VoLTE\r\nc=IN IP4 127.0.0.1\r\nt=0 0\r\nm=audio 41000 RTP/AVP 0 101\r\na=rtpmap:0 PCMU/8000\r\n"
+	service := newPhoneTestService(t, gateway, store, time.Second)
+	addStubMedia(t, service, "media-1", "admin", "lease-1")
+	call, err := service.StartCall(StartCallRequest{
+		Owner: "admin", DeviceID: "dev-1", Callee: "10000", MediaID: "media-1", Lease: "lease-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if call.Codec != "PCMU" {
+		t.Fatalf("codec=%q want PCMU from local SDP", call.Codec)
+	}
 }
 
 func TestControlLeaseProtectsDTMFAndHangup(t *testing.T) {

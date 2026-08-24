@@ -25,6 +25,17 @@ func TestEventHubReplaysOnlyEventsAfterLastID(t *testing.T) {
 	}
 }
 
+func TestEventHubReplaysBufferWhenCursorIsFromAPreviousProcess(t *testing.T) {
+	hub := newEventHub()
+	first := hub.publish(Event{Type: "first", Time: time.Now()})
+	second := hub.publish(Event{Type: "second", Time: time.Now()})
+	backlog, _, cancel := hub.subscribe(first.ID + 100)
+	defer cancel()
+	if len(backlog) != 2 || backlog[0].ID != first.ID || backlog[1].ID != second.ID {
+		t.Fatalf("stale cursor backlog = %+v", backlog)
+	}
+}
+
 func TestEventHubDisconnectsSlowSubscriberForReplay(t *testing.T) {
 	hub := newEventHub()
 	_, stream, cancel := hub.subscribe(0)
