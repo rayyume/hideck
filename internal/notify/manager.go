@@ -17,6 +17,9 @@ type Manager struct {
 	pool                    *device.Pool
 	updateMu                sync.Mutex
 	channelsMu              sync.Mutex
+	incomingMu              sync.Mutex
+	lastIncomingKey         string
+	lastIncomingAt          time.Time
 	channels                []Channel // 所有已启用的通知渠道
 	channelActivity         []*channelActivity
 	stateStore              RuntimeStateStore
@@ -230,6 +233,16 @@ func (m *Manager) NotifyIncomingCall(deviceID, caller, callee string) {
 	if channelCount == 0 {
 		return
 	}
+	key := strings.TrimSpace(deviceID) + "\x00" + strings.TrimSpace(caller) + "\x00" + strings.TrimSpace(callee)
+	now := time.Now()
+	m.incomingMu.Lock()
+	if key != "" && key == m.lastIncomingKey && now.Sub(m.lastIncomingAt) < 2*time.Second {
+		m.incomingMu.Unlock()
+		return
+	}
+	m.lastIncomingKey = key
+	m.lastIncomingAt = now
+	m.incomingMu.Unlock()
 
 	msg := fmt.Sprintf("来电通知\n设备    %s\n主叫    %s\n被叫    %s",
 		deviceID, caller, callee)

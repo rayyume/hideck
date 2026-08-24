@@ -51,6 +51,7 @@ type RealtimeCodec interface {
 type RealtimeCodecFactory func(codec, fmtp string) (RealtimeCodec, error)
 
 type ResultNotifier interface {
+	NotifyIncomingCall(deviceID, caller, callee string)
 	NotifyCallResult(deviceID, peer, direction, status, reason string, at time.Time)
 }
 

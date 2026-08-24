@@ -54,13 +54,9 @@ func TestIncomingTerminalClassificationsAndDeduplication(t *testing.T) {
 				Type: "CallCanceled", DeviceID: "dev-1", CallID: test.callID,
 				Reason: "duplicate", Time: time.Now(),
 			})
-			select {
-			case notification := <-notifications:
-				if notification.status != test.status {
-					t.Fatalf("notification status = %q, want %q", notification.status, test.status)
-				}
-			case <-time.After(time.Second):
-				t.Fatal("terminal notification was not delivered")
+			notification := waitForResultNotification(t, notifications)
+			if notification.status != test.status {
+				t.Fatalf("notification status = %q, want %q", notification.status, test.status)
 			}
 			select {
 			case duplicate := <-notifications:
@@ -69,6 +65,46 @@ func TestIncomingTerminalClassificationsAndDeduplication(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestIncomingCallNotifiesChannelsWhileRinging(t *testing.T) {
+	gateway, store := newFakeVoiceGateway(), newMemoryCallStore()
+	notifications := make(chan capturedNotification, 4)
+	service := newPhoneTestService(t, gateway, store, time.Second)
+	service.notifier = captureNotifier{notifications: notifications}
+	gateway.emitIncoming(voicehost.IncomingCall{
+		DeviceID: "dev-1", CallID: "ring-1", Caller: "14787483081", Callee: "10010",
+		OfferSDP: testPlainSDP, ReceivedAt: time.Now(),
+	})
+	select {
+	case notification := <-notifications:
+		if !notification.incoming || notification.caller != "14787483081" || notification.callee != "10010" {
+			t.Fatalf("incoming notification = %+v", notification)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("incoming call was not notified")
+	}
+	select {
+	case extra := <-notifications:
+		t.Fatalf("result notified before hangup: %+v", extra)
+	case <-time.After(30 * time.Millisecond):
+	}
+}
+
+func waitForResultNotification(t *testing.T, notifications <-chan capturedNotification) capturedNotification {
+	t.Helper()
+	deadline := time.After(time.Second)
+	for {
+		select {
+		case notification := <-notifications:
+			if !notification.incoming {
+				return notification
+			}
+		case <-deadline:
+			t.Fatal("terminal notification was not delivered")
+		}
+	}
+	return capturedNotification{}
 }
 
 func TestBusyIncomingCallIsRecordedOnce(t *testing.T) {

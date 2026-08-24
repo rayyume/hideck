@@ -191,12 +191,22 @@ func (s *memoryCallStore) record(callID string) CallRecord {
 	return s.records[callID]
 }
 
-type capturedNotification struct{ status string }
+type capturedNotification struct {
+	incoming bool
+	status   string
+	device   string
+	caller   string
+	callee   string
+}
 
 type captureNotifier struct{ notifications chan capturedNotification }
 
-func (n captureNotifier) NotifyCallResult(_, _, _, status, _ string, _ time.Time) {
-	n.notifications <- capturedNotification{status: status}
+func (n captureNotifier) NotifyIncomingCall(deviceID, caller, callee string) {
+	n.notifications <- capturedNotification{incoming: true, device: deviceID, caller: caller, callee: callee}
+}
+
+func (n captureNotifier) NotifyCallResult(deviceID, peer, _, status, _ string, _ time.Time) {
+	n.notifications <- capturedNotification{status: status, device: deviceID, caller: peer}
 }
 
 func newPhoneTestService(t *testing.T, gateway *fakeVoiceGateway, store *memoryCallStore, grace time.Duration) *Service {

@@ -49,6 +49,9 @@ func (s *Service) handleIncoming(incoming voicehost.IncomingCall) {
 	s.mu.RUnlock()
 	s.persist(record)
 	s.publish("incoming_call", call)
+	if s.notifier != nil {
+		go s.notifier.NotifyIncomingCall(incoming.DeviceID, incoming.Caller, incoming.Callee)
+	}
 }
 
 func (s *Service) newIncomingCall(incoming voicehost.IncomingCall, startedAt time.Time) *activeCall {
