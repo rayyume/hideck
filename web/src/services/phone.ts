@@ -10,9 +10,17 @@ export type PhoneDevice = {
   native_volte?: {
     phase?: string
     ims_registered?: boolean
+    ims_enabled?: boolean
+    volte_enabled?: boolean
+    voice_available?: boolean
     reboot_required?: boolean
     last_error?: string
     uac_enabled?: boolean
+    provision_stage?: string
+    plmn?: string
+    mbn_name?: string
+    lte_registered?: boolean
+    ims_pdn_active?: boolean
   }
   data_strategy?: string   // "always" | "on_demand"
   network_enabled?: boolean

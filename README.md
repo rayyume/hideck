@@ -50,6 +50,7 @@ HiDeck 是面向高通 4G/LTE/5G 模组的综合管理平台，将设备热插�
 | 移动代理 | 为指定数据网卡创建 SOCKS5 / HTTP 出口，并通过 `SO_BINDTODEVICE` 绑定流量 |
 | 短信与命令 | 收发短信、管理联系人和会话、执行 AT/USSD 命令、查询余额并保存历史 |
 | VoWiFi / IMS | 建立 SWu/IMS 连接，处理短信与通话，并保存通话记录和录音 |
+| 原生 VoLTE | `phone_mode=volte` 走模组 IMS / QMI VOICE；协议与回滚见 [docs/volte-native.md](docs/volte-native.md) |
 | eSIM | 下载、启用、停用、重命名和删除 eSIM Profile |
 | 自动任务 | 按设备、Profile、时区和计划执行任务，记录运行历史和错误 |
 | 通知 | 支持 Telegram、Email、PushPlus、Bark、飞书、企业微信、微信和 QQ 等渠道 |

@@ -57,7 +57,7 @@ function selectFirstAvailableDevice(devices: PhoneDevice[]) {
 function isDeviceReady(device: PhoneDevice) {
   if (device.phone_mode === 'volte') {
     return device.voice.ready === true || device.native_volte?.ims_registered === true
-      || device.native_volte?.phase === 'registered' || device.native_volte?.phase === 'ims_enabled_unverified'
+      || device.native_volte?.phase === 'registered'
   }
   return device.voice.ready === true || device.voice.registered === true
 }
@@ -77,7 +77,9 @@ function deviceStatus(device?: PhoneDevice) {
   const mode = deviceModeLabel(device)
   if (isDeviceReady(device) || device.vowifi_active) return `${mode} · 就绪`
   if (device.phone_mode === 'volte' && device.vowifi_enabled) {
-    if (device.native_volte?.ims_registered) return `${mode} · 已注册`
+    if (device.native_volte?.ims_registered || device.native_volte?.phase === 'registered') return `${mode} · IMS 已注册`
+    if (device.native_volte?.phase === 'registering') return `${mode} · IMS 注册中`
+    if (device.native_volte?.phase === 'failed') return `${mode} · 失败`
     if (device.native_volte?.reboot_required) return `${mode} · 需重启模组`
     if (device.native_volte?.last_error) return `${mode} · ${device.native_volte.last_error}`
     return `${mode} · 连接中`

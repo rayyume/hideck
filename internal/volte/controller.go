@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/iniwex5/quectel-qmi-go/pkg/qmi"
 	"github.com/iniwex5/vowifi-go/runtimehost/voicehost"
@@ -16,6 +17,9 @@ type Controller struct {
 	host           Host
 	provision      *Provisioner
 	audio          *AudioRuntime
+	media          mediaTable
+	lteWait        time.Duration
+	imsWait        time.Duration
 	mu             sync.Mutex
 	sess           map[string]*session
 	globalIncoming []func(voicehost.IncomingCall)
@@ -28,7 +32,10 @@ type session struct {
 }
 
 func NewController(host Host) *Controller {
-	return NewControllerWithBackup(host, DefaultBackupDir)
+	c := NewControllerWithBackup(host, DefaultBackupDir)
+	c.lteWait = 45 * time.Second
+	c.imsWait = 45 * time.Second
+	return c
 }
 
 func NewControllerWithBackup(host Host, backupDir string) *Controller {
@@ -67,6 +74,9 @@ func (c *Controller) Enable(ctx context.Context, deviceID string) error {
 	}
 	if err := c.provisionConfig(ctx, deviceID); err != nil {
 		return err
+	}
+	if err := c.bringUpAccess(ctx, deviceID); err != nil {
+		return c.fail(deviceID, err)
 	}
 	c.patch(deviceID, func(st *Status) {
 		if st.Phase == PhaseEnabling {
@@ -130,11 +140,24 @@ func (c *Controller) Active(deviceID string) bool {
 }
 
 func (c *Controller) provisionConfig(ctx context.Context, deviceID string) error {
-	res, err := c.provision.Ensure(ctx, deviceID, Desired{
+	mcc, mnc, plmnErr := c.readPLMN(deviceID)
+	if plmnErr != nil {
+		return c.fail(deviceID, fmt.Errorf("read serving PLMN: %w", plmnErr))
+	}
+	c.patch(deviceID, func(st *Status) { st.PLMN = NormalizePLMN(mcc, mnc) })
+	name, mbnErr := c.resolveMBN(deviceID, mcc, mnc)
+	if mbnErr != nil {
+		return c.fail(deviceID, mbnErr)
+	}
+	c.patch(deviceID, func(st *Status) { st.MBNName = name })
+	desired := Desired{
 		IMSEnabled:   boolPtr(true),
 		VoLTEEnabled: boolPtr(true),
 		UACEnabled:   boolPtr(true),
-	})
+		MBNSelect:    &name,
+		MBNAutoSel:   boolPtr(false),
+	}
+	res, err := c.provision.Ensure(ctx, deviceID, desired)
 	c.applyProvision(deviceID, res)
 	if err != nil && !res.Current.IMSEnabled && !errors.Is(err, ErrRebootRequired) && !errors.Is(err, ErrFieldDrift) {
 		return c.fail(deviceID, err)
@@ -250,4 +273,110 @@ func (c *Controller) patch(deviceID string, fn func(*Status)) {
 		c.sess[deviceID] = s
 	}
 	fn(&s.status)
+}
+
+func (c *Controller) readPLMN(deviceID string) (string, string, error) {
+	resp, err := c.host.ExecuteAT(deviceID, COPSQueryCommand(), defaultATTimeout)
+	if err != nil {
+		return "", "", err
+	}
+	return ParseCOPS(resp)
+}
+
+func (c *Controller) resolveMBN(deviceID, mcc, mnc string) (string, error) {
+	resp, err := c.host.ExecuteAT(deviceID, MBNListQueryCommand(), defaultATTimeout)
+	if err != nil {
+		return "", err
+	}
+	entries, err := ParseMBNList(resp)
+	if err != nil {
+		return "", err
+	}
+	return UniqueMBN(mcc, mnc, entries)
+}
+
+func (c *Controller) bringUpAccess(ctx context.Context, deviceID string) error {
+	if err := c.waitLTE(deviceID); err != nil {
+		return err
+	}
+	if err := c.activateIMSPDN(deviceID); err != nil {
+		logger.Warn("IMS PDN 未激活，继续等注册", "device", deviceID, "err", err)
+		c.setError(deviceID, err)
+	}
+	c.waitIMS(ctx, deviceID)
+	return nil
+}
+
+func (c *Controller) waitLTE(deviceID string) error {
+	check := func() error {
+		resp, err := c.host.ExecuteAT(deviceID, CEREGQueryCommand(), defaultATTimeout)
+		if err != nil {
+			return fmt.Errorf("query CEREG: %w", err)
+		}
+		lte, err := ParseCEREG(resp)
+		if err != nil {
+			return err
+		}
+		c.patch(deviceID, func(st *Status) { st.LTERegistered = lte.Registered })
+		if lte.Registered {
+			return nil
+		}
+		return fmt.Errorf("LTE not registered (CEREG %d)", lte.Stat)
+	}
+	if err := check(); err == nil || c.lteWait <= 0 {
+		return err
+	}
+	deadline := time.Now().Add(c.lteWait)
+	for time.Now().Before(deadline) {
+		time.Sleep(200 * time.Millisecond)
+		if err := check(); err == nil {
+			return nil
+		}
+	}
+	return check()
+}
+
+func (c *Controller) activateIMSPDN(deviceID string) error {
+	resp, err := c.host.ExecuteAT(deviceID, CGDCONTQueryCommand(), defaultATTimeout)
+	if err != nil {
+		return fmt.Errorf("query CGDCONT: %w", err)
+	}
+	ctxs, err := ParseCGDCONT(resp)
+	if err != nil {
+		return err
+	}
+	ims, ok := IMSContext(ctxs)
+	if !ok {
+		return fmt.Errorf("volte: no IMS APN in CGDCONT")
+	}
+	actResp, err := c.host.ExecuteAT(deviceID, CGACTQueryCommand(), defaultATTimeout)
+	if err != nil {
+		return fmt.Errorf("query CGACT: %w", err)
+	}
+	active, err := ParseCGACT(actResp)
+	if err != nil {
+		return err
+	}
+	if !active[ims.CID] {
+		if _, err := c.host.ExecuteAT(deviceID, CGACTSetCommand(ims.CID, true), defaultATTimeout); err != nil {
+			return fmt.Errorf("activate IMS PDN cid %d: %w", ims.CID, err)
+		}
+	}
+	c.patch(deviceID, func(st *Status) { st.IMSPDNActive = true })
+	return nil
+}
+
+func (c *Controller) waitIMS(ctx context.Context, deviceID string) {
+	c.refreshRegistration(ctx, deviceID)
+	if c.Status(deviceID).IMSRegistered || c.imsWait <= 0 {
+		return
+	}
+	deadline := time.Now().Add(c.imsWait)
+	for time.Now().Before(deadline) {
+		time.Sleep(200 * time.Millisecond)
+		c.refreshRegistration(ctx, deviceID)
+		if c.Status(deviceID).IMSRegistered {
+			return
+		}
+	}
 }

@@ -199,6 +199,38 @@ func TestParseVoiceAllCallStatusIndication(t *testing.T) {
 	}
 }
 
+func TestParseVoiceEndReasonAndCodec(t *testing.T) {
+	packet := &Packet{
+		TLVs: []TLV{
+			{
+				Type:  0x01,
+				Value: []byte{0x01, 0x01, 0x08, 0x00, 0x01, 0x04, 0x00, 0x00},
+			},
+			{
+				Type:  0x16,
+				Value: []byte{0x01, 0x01, 0x11, 0x00},
+			},
+			{
+				Type:  0x23,
+				Value: []byte{0x01, 0x01, 0x08, 0x07},
+			},
+		},
+	}
+	info, err := ParseVoiceAllCallStatus(packet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !info.Calls[0].Mode.PacketSwitched() {
+		t.Fatalf("LTE mode should be packet switched: %+v", info.Calls[0])
+	}
+	if len(info.EndReasons) != 1 || info.EndReasons[0].CallID != 1 || info.EndReasons[0].Reason != 0x11 {
+		t.Fatalf("end reasons %+v", info.EndReasons)
+	}
+	if len(info.SpeechCodecs) != 1 || info.SpeechCodecs[0].Codec != 0x07 {
+		t.Fatalf("codecs %+v", info.SpeechCodecs)
+	}
+}
+
 func TestParseVoiceSupplementaryServiceStatusResponse(t *testing.T) {
 	resp := &Packet{
 		TLVs: []TLV{
@@ -433,7 +465,7 @@ func TestNewVOICEService_Unsupported(t *testing.T) {
 	client := &Client{}
 	client.versionQueried = true
 	client.serviceVersions = map[uint8]ServiceVersion{}
-	
+
 	_, err := NewVOICEService(client)
 	if err != ErrServiceNotSupported {
 		t.Fatalf("expected ErrServiceNotSupported, got %v", err)

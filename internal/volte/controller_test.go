@@ -100,6 +100,18 @@ func TestControllerReleasesIMSClientsAndFollowsIndications(t *testing.T) {
 	}
 }
 
+func TestControllerRejectsUnknownPLMNWithoutGuessingMBN(t *testing.T) {
+	host := newFakeModem()
+	host.COPS = "23433"
+	ctl := NewControllerWithBackup(host, t.TempDir())
+	if err := ctl.Enable(context.Background(), "wwan1"); err == nil {
+		t.Fatal("UK PLMN must not guess an MBN")
+	}
+	if ctl.Status("wwan1").Phase != PhaseFailed {
+		t.Fatalf("status %+v", ctl.Status("wwan1"))
+	}
+}
+
 func TestControllerKeepsGoingWhenVoLTEBitStuck(t *testing.T) {
 	host := newFakeModem()
 	host.FailIMS11 = true

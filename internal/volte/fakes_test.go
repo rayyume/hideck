@@ -40,21 +40,33 @@ type FakeModem struct {
 	allCalls      *qmi.VoiceAllCallInfo
 	Reg           Registration
 	RegErr        error
+	COPS          string
+	CEREG         int
+	imsCID        int
+	imsActive     bool
 }
 
 func newFakeModem() *FakeModem {
 	return &FakeModem{
-		ID:           "wwan1",
-		Port:         "/dev/ttyUSB6",
-		IMEI:         "861234567890123",
-		IMS:          0,
-		VoLTE:        0,
-		USB:          []string{"0x2C7C", "0x125", "1", "1", "1", "1", "1", "0", "0"},
-		AutoSel:      1,
-		MBN:          []MBNEntry{{Index: 0, Selected: true, Activated: true, Name: "ROW_Generic_3GPP"}},
+		ID:      "wwan1",
+		Port:    "/dev/ttyUSB6",
+		IMEI:    "861234567890123",
+		IMS:     0,
+		VoLTE:   0,
+		USB:     []string{"0x2C7C", "0x125", "1", "1", "1", "1", "1", "0", "0"},
+		AutoSel: 1,
+		MBN: []MBNEntry{
+			{Index: 0, Selected: true, Activated: true, Name: "ROW_Generic_3GPP"},
+			{Index: 11, Name: "Volte_OpenMkt-Commercial-CMCC"},
+			{Index: 12, Name: "VoLTE_OPNMKT_CT"},
+			{Index: 13, Name: "CU-VoLTE"},
+		},
 		UACImmediate: true,
 		Audio:        "",
 		Reg:          Registration{Registered: true, VoiceAvailable: true},
+		COPS:         "46000",
+		CEREG:        1,
+		imsCID:       2,
 	}
 }
 
@@ -115,6 +127,28 @@ func (f *FakeModem) ExecuteAT(deviceID, cmd string, _ time.Duration) (string, er
 		}
 		return "OK", nil
 	case cmd == "AT+CFUN=1,1":
+		return "OK", nil
+	case cmd == COPSQueryCommand():
+		plmn := f.COPS
+		if plmn == "" {
+			plmn = "46000"
+		}
+		return fmt.Sprintf("+COPS: 0,2,\"%s\",7\r\nOK\r\n", plmn), nil
+	case cmd == CEREGQueryCommand():
+		return fmt.Sprintf("+CEREG: 0,%d\r\nOK\r\n", f.CEREG), nil
+	case cmd == CGDCONTQueryCommand():
+		return "+CGDCONT: 1,\"IP\",\"cmnet\"\r\n+CGDCONT: 2,\"IPV4V6\",\"ims\"\r\nOK\r\n", nil
+	case cmd == CGACTQueryCommand():
+		bit := 0
+		if f.imsActive {
+			bit = 1
+		}
+		return fmt.Sprintf("+CGACT: 1,1\r\n+CGACT: %d,%d\r\nOK\r\n", f.imsCID, bit), nil
+	case strings.HasPrefix(cmd, "AT+CGACT="):
+		f.imsActive = strings.Contains(cmd, ",2") || strings.HasSuffix(cmd, ",2")
+		if strings.Contains(cmd, "1,2") {
+			f.imsActive = true
+		}
 		return "OK", nil
 	default:
 		return "OK", nil

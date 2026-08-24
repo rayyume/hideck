@@ -2,17 +2,21 @@ package volte
 
 import (
 	"net"
+	"sync"
 	"testing"
 	"time"
 )
 
 type memPCM struct {
+	mu      sync.Mutex
 	written [][]int16
 	toRead  [][]int16
 	closed  bool
 }
 
 func (m *memPCM) ReadFrame() ([]int16, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if len(m.toRead) == 0 {
 		return make([]int16, pcmuFrameSamples), nil
 	}
@@ -21,6 +25,8 @@ func (m *memPCM) ReadFrame() ([]int16, error) {
 	return frame, nil
 }
 func (m *memPCM) WriteFrame(frame []int16) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	cp := append([]int16(nil), frame...)
 	m.written = append(m.written, cp)
 	if len(m.written) > pcmJitterDepth {
@@ -28,7 +34,12 @@ func (m *memPCM) WriteFrame(frame []int16) error {
 	}
 	return nil
 }
-func (m *memPCM) Close() error { m.closed = true; return nil }
+func (m *memPCM) Close() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.closed = true
+	return nil
+}
 
 func errorsNew(s string) error { return errStr(s) }
 
@@ -73,9 +84,6 @@ func TestPCMBridgeListenOnlyWritesSilence(t *testing.T) {
 	for time.Now().Before(deadline) {
 		_, _, silent, _, _ := bridge.Stats()
 		if silent > 0 {
-			if len(pcm.written) == 0 {
-				// listen-only still accepts downlink; silence is uplink
-			}
 			return
 		}
 		time.Sleep(20 * time.Millisecond)

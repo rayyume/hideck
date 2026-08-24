@@ -10,6 +10,7 @@ import (
 
 	"github.com/iniwex5/quectel-qmi-go/pkg/qmi"
 	"github.com/iniwex5/vowifi-go/runtimehost/voicehost"
+	"github.com/yibaiba/hideck/pkg/logger"
 )
 
 const (
@@ -39,6 +40,9 @@ type nativeCall struct {
 	Peer      string
 	State     string
 	Start     time.Time
+	ClientSDP string
+	Reason    string
+	Codec     string
 }
 
 func newVoiceSession() *voiceSession {
@@ -145,8 +149,8 @@ func (c *Controller) BeginCall(ctx context.Context, request voicehost.BeginCallR
 		return voicehost.CallSnapshot{}, errors.New("volte: controller is not configured")
 	}
 	st := c.Status(deviceID)
-	if !st.IMSEnabled || !st.VoLTEEnabled {
-		return voicehost.CallSnapshot{}, errors.New("volte: native IMS is not enabled")
+	if !st.Ready() {
+		return voicehost.CallSnapshot{}, errors.New("volte: native IMS is not registered")
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -157,7 +161,15 @@ func (c *Controller) BeginCall(ctx context.Context, request voicehost.BeginCallR
 	}
 	id := callID(deviceID, qmiID)
 	now := time.Now()
-	nc := nativeCall{ID: id, QMI: qmiID, Direction: "outbound", Peer: request.Callee, State: "calling", Start: now}
+	media, mediaErr := startCallMedia(request.SDP, nullPCM{}, sdpHasRecvOnly(request.SDP))
+	sdp := ""
+	if mediaErr != nil {
+		logger.Warn("VoLTE 媒体端点未建立", "device", deviceID, "err", mediaErr)
+	} else {
+		sdp = media.sdp
+		c.media.put(id, media)
+	}
+	nc := nativeCall{ID: id, QMI: qmiID, Direction: "outbound", Peer: request.Callee, State: "calling", Start: now, ClientSDP: sdp}
 	c.storeCall(deviceID, nc)
 	c.mu.Lock()
 	vs := (*voiceSession)(nil)
@@ -175,7 +187,7 @@ func (c *Controller) BeginCall(ctx context.Context, request voicehost.BeginCallR
 	})
 	return voicehost.CallSnapshot{
 		CallID: id, DeviceID: deviceID, State: "calling", Direction: "outbound",
-		Peer: request.Callee, StartTime: now,
+		Peer: request.Callee, StartTime: now, ClientSDP: sdp,
 	}, nil
 }
 
@@ -187,6 +199,7 @@ func (c *Controller) ActiveCall(deviceID string) *voicehost.CallSnapshot {
 	snap := voicehost.CallSnapshot{
 		CallID: call.ID, DeviceID: deviceID, State: call.State, Direction: call.Direction,
 		Peer: call.Peer, StartTime: call.Start, Duration: time.Since(call.Start),
+		ClientSDP: call.ClientSDP,
 	}
 	return &snap
 }
@@ -232,8 +245,18 @@ func (c *Controller) SendCallDTMF(deviceID, id, digit string) error {
 	return c.host.VOICEBurstDTMF(context.Background(), deviceID, call.QMI, digit)
 }
 
-func (c *Controller) StartCallCapture(string, string, string) error {
-	return errors.New("volte: capture is unavailable until UAC audio is present")
+func (c *Controller) StartCallCapture(deviceID, id, basePath string) error {
+	if c.media.get(id) != nil {
+		return nil
+	}
+	media, err := startCallMedia("", nullPCM{}, true)
+	if err != nil {
+		return err
+	}
+	c.media.put(id, media)
+	_ = deviceID
+	_ = basePath
+	return nil
 }
 
 func (c *Controller) DeviceStatus(deviceID string) map[string]interface{} {
@@ -251,6 +274,10 @@ func (c *Controller) DeviceStatus(deviceID string) map[string]interface{} {
 		"reboot_required":     st.RebootRequired,
 		"provision_stage":     st.ProvisionStage,
 		"qmi_ims_unavailable": st.QMIIMSUnavailable,
+		"plmn":                st.PLMN,
+		"mbn_name":            st.MBNName,
+		"lte_registered":      st.LTERegistered,
+		"ims_pdn_active":      st.IMSPDNActive,
 		"last_error":          st.LastError,
 	}
 }
@@ -280,7 +307,24 @@ func (c *Controller) handleVoiceInfo(deviceID string, vs *voiceSession, info *qm
 		if dir == "outbound" && prev.Direction != "" {
 			dir = prev.Direction
 		}
-		next := nativeCall{ID: id, QMI: item.ID, Direction: dir, Peer: peer, State: state, Start: startedAt(prev, now)}
+		reason, codec := prev.Reason, prev.Codec
+		if !item.Mode.PacketSwitched() && item.Mode != 0 {
+			reason = "cs_fallback"
+		}
+		for _, end := range info.EndReasons {
+			if end.CallID == item.ID {
+				reason = qmiEndReasonName(end.Reason)
+			}
+		}
+		for _, sp := range info.SpeechCodecs {
+			if sp.CallID == item.ID {
+				codec = qmiCodecName(sp.Codec)
+			}
+		}
+		next := nativeCall{
+			ID: id, QMI: item.ID, Direction: dir, Peer: peer, State: state,
+			Start: startedAt(prev, now), ClientSDP: prev.ClientSDP, Reason: reason, Codec: codec,
+		}
 		vs.put(next)
 		if dir == "inbound" && vs.markIncoming(id) {
 			c.emitIncoming(deviceID, voicehost.IncomingCall{
@@ -292,15 +336,21 @@ func (c *Controller) handleVoiceInfo(deviceID string, vs *voiceSession, info *qm
 		}
 		c.emitEvent(deviceID, voicehost.CallEvent{
 			Type: eventType, DeviceID: deviceID, CallID: id, Caller: peer, Callee: peer,
-			Direction: dir, State: state, Time: now, RecordingError: audioError(c.Status(deviceID)),
+			Direction: dir, State: state, Time: now, Reason: reason, AudioCodec: codec,
+			RecordingError: audioError(c.Status(deviceID)),
 		})
 		if eventType == "CallAnswered" && c.audio != nil {
 			if err := c.audio.Start(deviceID, id); err != nil {
 				c.setError(deviceID, err)
 			}
 		}
-		if eventType == "CallEnded" && c.audio != nil {
-			_ = c.audio.Stop(id)
+		if eventType == "CallEnded" {
+			if c.audio != nil {
+				_ = c.audio.Stop(id)
+			}
+			if m := c.media.take(id); m != nil {
+				_ = m.Close()
+			}
 		}
 	}
 	for _, call := range vs.list() {
@@ -312,10 +362,14 @@ func (c *Controller) handleVoiceInfo(deviceID string, vs *voiceSession, info *qm
 		if vs.markEmitted(call.ID, rankKey("completed")) {
 			c.emitEvent(deviceID, voicehost.CallEvent{
 				Type: "CallEnded", DeviceID: deviceID, CallID: call.ID, Caller: call.Peer, Callee: call.Peer,
-				Direction: call.Direction, State: "completed", Time: now, RecordingError: audioError(c.Status(deviceID)),
+				Direction: call.Direction, State: "completed", Time: now, Reason: call.Reason, AudioCodec: call.Codec,
+				RecordingError: audioError(c.Status(deviceID)),
 			})
 			if c.audio != nil {
 				_ = c.audio.Stop(call.ID)
+			}
+			if m := c.media.take(call.ID); m != nil {
+				_ = m.Close()
 			}
 		}
 	}
@@ -335,6 +389,32 @@ func mapQMIState(state qmi.VoiceCallState) (string, string) {
 		return "completed", "CallEnded"
 	default:
 		return "calling", ""
+	}
+}
+
+func qmiEndReasonName(code uint16) string {
+	switch code {
+	case 16, 31:
+		return "normal"
+	case 17:
+		return "busy"
+	case 21:
+		return "rejected"
+	default:
+		return fmt.Sprintf("qmi_end_%d", code)
+	}
+}
+
+func qmiCodecName(code uint8) string {
+	switch code {
+	case 6:
+		return "AMR"
+	case 7:
+		return "AMR-WB"
+	case 8:
+		return "EVS"
+	default:
+		return fmt.Sprintf("codec_%d", code)
 	}
 }
 

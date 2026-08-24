@@ -22,9 +22,13 @@ type Status struct {
 	QMIIMSUnavailable bool   `json:"qmi_ims_unavailable"`
 	ProvisionStage    string `json:"provision_stage,omitempty"`
 	IMEITail          string `json:"imei_tail,omitempty"`
+	PLMN              string `json:"plmn,omitempty"`
+	MBNName           string `json:"mbn_name,omitempty"`
+	LTERegistered     bool   `json:"lte_registered"`
+	IMSPDNActive      bool   `json:"ims_pdn_active"`
 	LastError         string `json:"last_error,omitempty"`
 }
 
 func (s Status) Ready() bool {
-	return s.IMSRegistered || (s.IMSEnabled && s.VoLTEEnabled && s.Phase == PhaseUnverified)
+	return s.IMSRegistered && s.Phase == PhaseRegistered
 }

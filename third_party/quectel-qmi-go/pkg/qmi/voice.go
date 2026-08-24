@@ -56,6 +56,21 @@ type VoiceIndicationRegistration struct {
 	MTPageMissInformationEvents                     bool
 }
 
+const (
+	VoiceCallModeNoService VoiceCallMode = 0x00
+	VoiceCallModeCDMA      VoiceCallMode = 0x01
+	VoiceCallModeGSM       VoiceCallMode = 0x02
+	VoiceCallModeUMTS      VoiceCallMode = 0x03
+	VoiceCallModeLTE       VoiceCallMode = 0x04
+	VoiceCallModeTDS       VoiceCallMode = 0x05
+	VoiceCallModeUnknown   VoiceCallMode = 0x06
+	VoiceCallModeWLAN      VoiceCallMode = 0x07
+)
+
+func (m VoiceCallMode) PacketSwitched() bool {
+	return m == VoiceCallModeLTE || m == VoiceCallModeWLAN
+}
+
 type VoiceCallInfo struct {
 	ID        uint8
 	State     VoiceCallState
@@ -64,6 +79,17 @@ type VoiceCallInfo struct {
 	Mode      VoiceCallMode
 	Multipart bool
 	ALS       uint8
+}
+
+type VoiceCallEndReason struct {
+	CallID uint8
+	Reason uint16
+}
+
+type VoiceSpeechCodec struct {
+	CallID      uint8
+	NetworkMode uint8
+	Codec       uint8
 }
 
 type VoiceRemotePartyNumber struct {
@@ -76,6 +102,8 @@ type VoiceRemotePartyNumber struct {
 type VoiceAllCallInfo struct {
 	Calls              []VoiceCallInfo
 	RemotePartyNumbers []VoiceRemotePartyNumber
+	EndReasons         []VoiceCallEndReason
+	SpeechCodecs       []VoiceSpeechCodec
 }
 
 type VoiceManageCallsRequest struct {
@@ -705,6 +733,26 @@ func parseVoiceAllCallInfoPacket(packet *Packet, callTLVType uint8, remoteTLVTyp
 		}
 		info.RemotePartyNumbers = numbers
 	}
+	for _, typ := range []uint8{0x14, 0x16} {
+		if tlv := FindTLV(packet.TLVs, typ); tlv != nil {
+			reasons, err := parseVoiceEndReasonArray(tlv.Value)
+			if err != nil {
+				return nil, err
+			}
+			info.EndReasons = reasons
+			break
+		}
+	}
+	for _, typ := range []uint8{0x1C, 0x23, 0x2A} {
+		if tlv := FindTLV(packet.TLVs, typ); tlv != nil {
+			codecs, err := parseVoiceSpeechCodecArray(tlv.Value)
+			if err != nil {
+				return nil, err
+			}
+			info.SpeechCodecs = codecs
+			break
+		}
+	}
 	return info, nil
 }
 
@@ -852,6 +900,49 @@ func parseVoiceCallInfoArray(value []byte) ([]VoiceCallInfo, error) {
 		offset += 7
 	}
 	return items, nil
+}
+
+func parseVoiceEndReasonArray(value []byte) ([]VoiceCallEndReason, error) {
+	if len(value) < 1 {
+		return nil, fmt.Errorf("voice end reason array too short")
+	}
+	count := int(value[0])
+	expected := 1 + count*3
+	if len(value) < expected {
+		return nil, fmt.Errorf("voice end reason array truncated: need %d, have %d", expected, len(value))
+	}
+	out := make([]VoiceCallEndReason, 0, count)
+	offset := 1
+	for i := 0; i < count; i++ {
+		out = append(out, VoiceCallEndReason{
+			CallID: value[offset],
+			Reason: binary.LittleEndian.Uint16(value[offset+1 : offset+3]),
+		})
+		offset += 3
+	}
+	return out, nil
+}
+
+func parseVoiceSpeechCodecArray(value []byte) ([]VoiceSpeechCodec, error) {
+	if len(value) < 1 {
+		return nil, fmt.Errorf("voice speech codec array too short")
+	}
+	count := int(value[0])
+	expected := 1 + count*3
+	if len(value) < expected {
+		return nil, fmt.Errorf("voice speech codec array truncated: need %d, have %d", expected, len(value))
+	}
+	out := make([]VoiceSpeechCodec, 0, count)
+	offset := 1
+	for i := 0; i < count; i++ {
+		out = append(out, VoiceSpeechCodec{
+			CallID:      value[offset],
+			NetworkMode: value[offset+1],
+			Codec:       value[offset+2],
+		})
+		offset += 3
+	}
+	return out, nil
 }
 
 func parseVoiceRemotePartyNumberArray(value []byte) ([]VoiceRemotePartyNumber, error) {
