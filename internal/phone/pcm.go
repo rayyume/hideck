@@ -2,6 +2,14 @@ package phone
 
 import "fmt"
 
+func DecodePCMU(payload []byte) []int16 {
+	return decodePCMU(payload)
+}
+
+func EncodePCMU(pcm []int16) []byte {
+	return encodePCMU(pcm)
+}
+
 func decodePCMU(payload []byte) []int16 {
 	pcm := make([]int16, len(payload))
 	for index, sample := range payload {

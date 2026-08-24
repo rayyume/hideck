@@ -3,6 +3,8 @@
 `phone_mode=volte` 走模组原生 IMS / QMI VOICE，不建 ePDG/SWu，也不走软件 IMS。
 `phone_mode=cellular` 仍是蜂窝数据上的软件 IMS；`wifi` 仍是 VoWiFi。
 
+卡策略里的 `vowifi_enabled` 仍是“电话开”开关（库字段不改名）。蜂窝软件电话和原生 VoLTE 开电话时驻网、不强制飞行；只有 WiFi calling 会占射频。`GET` 设备状态里的 `native_volte` 是 `volte.Status`。
+
 插卡前协议已经按下面顺序写完。插卡后只验证，不再改协议骨架。
 
 ## 启用顺序

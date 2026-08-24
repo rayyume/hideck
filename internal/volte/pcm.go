@@ -6,6 +6,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/yibaiba/hideck/internal/phone"
 )
 
 const (
@@ -111,10 +113,7 @@ func (b *PCMBridge) downlink() {
 			b.lost.Add(1)
 			continue
 		}
-		pcm := make([]int16, len(payload))
-		for i, v := range payload {
-			pcm[i] = muLawToPCM(v)
-		}
+		pcm := phone.DecodePCMU(payload)
 		if b.pcm == nil {
 			continue
 		}
@@ -150,10 +149,7 @@ func (b *PCMBridge) uplink() {
 					b.fromPCM.Add(1)
 				}
 			}
-			payload := make([]byte, pcmuFrameSamples)
-			for i, s := range samples {
-				payload[i] = pcmToMuLaw(s)
-			}
+			payload := phone.EncodePCMU(samples)
 			pkt := encodePCMURTP(b.seq, b.ts, payload)
 			b.seq++
 			b.ts += pcmuFrameSamples
@@ -188,32 +184,4 @@ func encodePCMURTP(seq uint16, ts uint32, payload []byte) []byte {
 	binary.BigEndian.PutUint32(pkt[8:], 0x48444543)
 	copy(pkt[12:], payload)
 	return pkt
-}
-
-func muLawToPCM(value byte) int16 {
-	value = ^value
-	magnitude := ((int(value&0x0f) << 3) + 0x84) << ((value & 0x70) >> 4)
-	if value&0x80 != 0 {
-		return int16(0x84 - magnitude)
-	}
-	return int16(magnitude - 0x84)
-}
-
-func pcmToMuLaw(sample int16) byte {
-	value := int(sample)
-	sign := byte(0)
-	if value < 0 {
-		sign = 0x80
-		value = -value
-	}
-	if value > 32635 {
-		value = 32635
-	}
-	value += 0x84
-	exponent := 7
-	for mask := 0x4000; exponent > 0 && value&mask == 0; mask >>= 1 {
-		exponent--
-	}
-	mantissa := (value >> (exponent + 3)) & 0x0f
-	return ^(sign | byte(exponent<<4) | byte(mantissa))
 }

@@ -1,5 +1,15 @@
 package phone
 
+// MuLawToPCM decodes one G.711 µ-law sample. Native VoLTE PCMU uses this path.
+func MuLawToPCM(value byte) int16 {
+	return muLawToPCM(value)
+}
+
+// PCMToMuLaw encodes one PCM sample as G.711 µ-law.
+func PCMToMuLaw(sample int16) byte {
+	return pcmToMuLaw(sample)
+}
+
 func muLawToPCM(value byte) int16 {
 	value = ^value
 	magnitude := ((int(value&0x0f) << 3) + 0x84) << ((value & 0x70) >> 4)

@@ -25,7 +25,7 @@ func shouldSuppressCellularRadio(cfg config.DeviceConfig) bool {
 		return true
 	}
 	// WiFi calling 关射频。蜂窝软件电话和原生 VoLTE 都要驻网。
-	return cfg.VoWiFiEnabled && !PhoneModeCampsOnCell(cfg.PhoneMode)
+	return PhoneServiceEnabled(cfg) && !PhoneModeCampsOnCell(cfg.PhoneMode)
 }
 
 // applyPolicyToWorker 把卡策略投影进 worker.Config 的运行时有效字段。
@@ -43,11 +43,11 @@ func applyPolicyToWorker(w *Worker, p cardpolicy.Policy) error {
 	w.Config.AirplaneEnabled = p.AirplaneEnabled
 	w.Config.PhoneMode = p.PhoneMode
 	w.Config.DataStrategy = p.DataStrategy
-	if p.VoWiFiEnabled {
+	if PhoneServiceEnabled(w.Config) {
 		if PhoneModeCampsOnCell(p.PhoneMode) {
 			if p.AirplaneEnabled {
 				w.Config.NetworkEnabled = false
-			} else if p.PhoneMode == "cellular" && p.DataStrategy == "always" {
+			} else if cellularAlwaysData(w.Config) {
 				w.Config.NetworkEnabled = true
 			}
 		} else {
@@ -106,13 +106,13 @@ func (p *Pool) resolveAndApplyPolicy(worker *Worker, reason string) policyApplyR
 	case effective.AirplaneEnabled:
 		// 飞行优先：蜂窝软件电话可以保持开启，只关射频和流量。
 		p.enterAirplaneModeFromPolicy(worker, reason)
-	case effective.VoWiFiEnabled && PhoneModeCampsOnCell(effective.PhoneMode):
+	case PhoneServiceEnabled(effective) && PhoneModeCampsOnCell(effective.PhoneMode):
 		// 蜂窝软件电话 / 原生 VoLTE：射频保持在线以驻网。网络开着才连上网数据。
 		p.exitAirplaneModeIfNeeded(worker, reason)
 		if err := p.applyNetworkPreference(worker); err != nil {
 			logger.Warn("应用网络偏好失败", "device", worker.ID, "err", err)
 		}
-	case effective.VoWiFiEnabled:
+	case PhoneServiceEnabled(effective):
 		// WiFi calling 原有路径：网络偏好按 false 走(停数据网)，射频由 VoWiFi 恢复流程切 RFOff。
 		if err := p.applyNetworkPreference(worker); err != nil {
 			logger.Warn("应用网络偏好失败", "device", worker.ID, "err", err)
@@ -124,12 +124,12 @@ func (p *Pool) resolveAndApplyPolicy(worker *Worker, reason string) policyApplyR
 			logger.Warn("应用网络偏好失败", "device", worker.ID, "err", err)
 		}
 	}
-	if IsNativeVoLTEMode(effective.PhoneMode) && effective.VoWiFiEnabled && !effective.AirplaneEnabled {
+	if IsNativeVoLTEMode(effective.PhoneMode) && PhoneServiceEnabled(effective) && !effective.AirplaneEnabled {
 		p.clearDesiredVoWiFiRecoverState(worker.ID)
 		p.scheduleNativeVoLTE(worker.ID, reason)
 	} else {
 		p.stopNativeVoLTE(worker.ID, reason)
-		if effective.VoWiFiEnabled && !cellularSoftwarePhoneHeld(worker, pol) {
+		if PhoneServiceEnabled(effective) && !cellularSoftwarePhoneHeld(worker, pol) {
 			p.scheduleDesiredVoWiFiRecover(worker.ID, reason, time.Now())
 		} else {
 			p.clearDesiredVoWiFiRecoverState(worker.ID)

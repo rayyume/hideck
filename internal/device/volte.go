@@ -24,7 +24,7 @@ func (p *Pool) IsNativeVoLTE(deviceID string) bool {
 	if w == nil {
 		return false
 	}
-	return IsNativeVoLTEMode(w.Config.PhoneMode) && w.Config.VoWiFiEnabled
+	return IsNativeVoLTEMode(w.Config.PhoneMode) && PhoneServiceEnabled(w.Config)
 }
 
 func (p *Pool) NativeVoLTEStatus(deviceID string) volte.Status {

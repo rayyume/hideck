@@ -1971,10 +1971,11 @@ func (p *Pool) SetWorkerNetworkPolicy(deviceID string, networkEnabled bool, ipVe
 	return w
 }
 
-// SetWorkerVoWiFiPolicy 同步 worker 运行时的 VoWiFi 策略字段（供热切换后概览即时反映模式面板）。
-// 开 VoWiFi ⇒ airplane=true（射频被 VoWiFi 等效接管）、network=false；
-// 关 VoWiFi 仅清 vowifi，不在此清 airplane——airplane 反映用户的纯飞行意图，
-// 由随后的 resolveAndApplyPolicy 按当前卡策略重投影回退（之前飞行回飞行，否则回在线）。
+// SetWorkerVoWiFiPolicy 同步 worker 运行时的电话开关（供热切换后概览即时反映模式面板）。
+// 驻网模式（cellular/volte）开电话 ⇒ 关飞行；仅 cellular always 才强制开流量。
+// WiFi calling 开电话 ⇒ airplane=true、network=false。
+// 关电话仅清 vowifi，不在此清 airplane——airplane 反映用户的纯飞行意图，
+// 由随后的 resolveAndApplyPolicy 按当前卡策略重投影回退。
 func (p *Pool) SetWorkerVoWiFiPolicy(deviceID string, vowifiEnabled bool) *Worker {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -1984,21 +1985,7 @@ func (p *Pool) SetWorkerVoWiFiPolicy(deviceID string, vowifiEnabled bool) *Worke
 	}
 	w.Config.VoWiFiEnabled = vowifiEnabled
 	if vowifiEnabled {
-		if w.Config.PhoneMode == "cellular" {
-			w.Config.AirplaneEnabled = false
-			if w.Config.DataStrategy == "always" {
-				w.Config.NetworkEnabled = true
-			}
-			w.setCellularRadioSuppressed(shouldSuppressCellularRadio(w.Config))
-			return w
-		}
-		if IsNativeVoLTEMode(w.Config.PhoneMode) {
-			w.Config.AirplaneEnabled = false
-			w.setCellularRadioSuppressed(shouldSuppressCellularRadio(w.Config))
-			return w
-		}
-		w.Config.AirplaneEnabled = true
-		w.Config.NetworkEnabled = false
+		applyPhoneRadioPolicy(&w.Config)
 	}
 	w.setCellularRadioSuppressed(shouldSuppressCellularRadio(w.Config))
 	return w
@@ -2019,7 +2006,7 @@ func (p *Pool) SetWorkerAirplanePolicy(deviceID string, airplaneEnabled bool) *W
 		if !PhoneModeCampsOnCell(w.Config.PhoneMode) {
 			w.Config.VoWiFiEnabled = false
 		}
-	} else if w.Config.PhoneMode == "cellular" && w.Config.DataStrategy == "always" {
+	} else if cellularAlwaysData(w.Config) {
 		w.Config.NetworkEnabled = true
 	}
 	w.setCellularRadioSuppressed(shouldSuppressCellularRadio(w.Config))

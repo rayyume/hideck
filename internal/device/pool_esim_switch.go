@@ -594,7 +594,7 @@ func (p *Pool) waitPostSwitchCoreReady(deviceID string, worker *Worker) {
 		return
 	}
 	logger.Info("切卡后控制面已就绪，开始恢复运行态", "device", deviceID)
-	if worker != nil && IsNativeVoLTEMode(worker.Config.PhoneMode) && worker.Config.VoWiFiEnabled && !worker.Config.AirplaneEnabled {
+	if worker != nil && IsNativeVoLTEMode(worker.Config.PhoneMode) && PhoneServiceEnabled(worker.Config) && !worker.Config.AirplaneEnabled {
 		p.scheduleNativeVoLTE(deviceID, "post_esim_switch")
 	}
 }

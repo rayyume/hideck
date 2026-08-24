@@ -49,6 +49,28 @@ func TestSetWorkerVoWiFiPolicyCellularKeepsExistingNetwork(t *testing.T) {
 	}
 }
 
+func TestSetWorkerVoWiFiPolicyVoLTECampsOnCell(t *testing.T) {
+	p, w := newPoolWithWorkerForSync("wwan1", config.DeviceConfig{
+		PhoneMode:       PhoneModeVoLTE,
+		DataStrategy:    "always",
+		NetworkEnabled:  false,
+		AirplaneEnabled: true,
+	})
+
+	p.SetWorkerVoWiFiPolicy("wwan1", true)
+	if !w.Config.VoWiFiEnabled || w.Config.AirplaneEnabled || w.Config.NetworkEnabled {
+		t.Fatalf("VoLTE 开电话应驻网且不强制开流量: %+v", w.Config)
+	}
+	if w.cellularRadioIsSuppressed() {
+		t.Fatal("VoLTE 开电话不应抑制射频")
+	}
+
+	p.SetWorkerVoWiFiPolicy("wwan1", false)
+	if w.Config.VoWiFiEnabled {
+		t.Fatalf("关电话应清 vowifi: %+v", w.Config)
+	}
+}
+
 func TestSetWorkerVoWiFiPolicyCellularIdleStaysAirplane(t *testing.T) {
 	p, w := newPoolWithWorkerForSync("wwan0", config.DeviceConfig{
 		PhoneMode:    "cellular",

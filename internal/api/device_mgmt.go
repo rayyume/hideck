@@ -22,6 +22,7 @@ import (
 	"github.com/yibaiba/hideck/internal/modem"
 	"github.com/yibaiba/hideck/internal/pcsc"
 	proxytraffic "github.com/yibaiba/hideck/internal/proxy/traffic"
+	"github.com/yibaiba/hideck/internal/volte"
 	"github.com/yibaiba/hideck/pkg/logger"
 
 	"github.com/gin-gonic/gin"
@@ -400,7 +401,7 @@ type deviceMgmtOverviewLiteItem struct {
 	VoWiFiEnabled          bool               `json:"vowifi_enabled"`
 	VoWiFiActive           bool               `json:"vowifi_active"`
 	VoWiFiRuntime          *voWiFiRuntimeDTO  `json:"vowifi_runtime,omitempty"`
-	NativeVoLTE            any                `json:"native_volte,omitempty"`
+	NativeVoLTE            volte.Status       `json:"native_volte,omitempty"`
 	RadioLiveOK            *bool              `json:"radio_live_ok,omitempty"`
 	Modem                  modem.DeviceStatus `json:"modem"`
 	Traffic                map[string]string  `json:"traffic,omitempty"`
