@@ -66,6 +66,9 @@ func (p *Pool) ShouldRouteSMSViaVoWiFi(deviceID string) bool {
 	if worker == nil || !worker.Config.VoWiFiEnabled {
 		return false
 	}
+	if IsNativeVoLTEMode(worker.Config.PhoneMode) {
+		return false
+	}
 	return strings.TrimSpace(worker.Config.PhoneMode) != "cellular" ||
 		strings.TrimSpace(worker.Config.DataStrategy) == "always"
 }

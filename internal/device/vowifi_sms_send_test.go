@@ -115,6 +115,7 @@ func TestShouldRouteSMSViaVoWiFiDuringConfiguredRecovery(t *testing.T) {
 		{name: "wifi recovery", config: config.DeviceConfig{VoWiFiEnabled: true, PhoneMode: "wifi"}, expected: true},
 		{name: "cellular always recovery", config: config.DeviceConfig{VoWiFiEnabled: true, PhoneMode: "cellular", DataStrategy: "always"}, expected: true},
 		{name: "cellular on demand idle", config: config.DeviceConfig{VoWiFiEnabled: true, PhoneMode: "cellular", DataStrategy: "on_demand"}, expected: false},
+		{name: "native volte uses modem SMS", config: config.DeviceConfig{VoWiFiEnabled: true, PhoneMode: "volte"}, expected: false},
 		{name: "disabled", config: config.DeviceConfig{VoWiFiEnabled: false}, expected: false},
 	}
 	for _, tt := range tests {
