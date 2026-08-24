@@ -158,6 +158,33 @@ func (s *memoryCallStore) List(_ context.Context, _ int) ([]CallRecord, error) {
 	return result, nil
 }
 
+func (s *memoryCallStore) AbandonIncomplete(_ context.Context, endedAt time.Time, reason string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for id, record := range s.records {
+		if record.EndedAt != nil {
+			continue
+		}
+		switch record.Status {
+		case StatusCalling, StatusRinging, StatusConnected:
+		default:
+			continue
+		}
+		ended := endedAt
+		record.EndedAt = &ended
+		record.EndReason = reason
+		if record.AnsweredAt != nil {
+			record.Status = StatusCompleted
+		} else if record.Direction == "inbound" {
+			record.Status = StatusMissed
+		} else {
+			record.Status = StatusFailed
+		}
+		s.records[id] = record
+	}
+	return nil
+}
+
 func (s *memoryCallStore) record(callID string) CallRecord {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -270,6 +270,37 @@ func TestRejectAlreadyGoneClearsCall(t *testing.T) {
 	}
 }
 
+func TestSameQMISlotDoesNotSpawnGhostIncoming(t *testing.T) {
+	ctl, host := enableVoice(t)
+	var incoming []voicehost.IncomingCall
+	ctl.SubscribeIncomingCalls(func(call voicehost.IncomingCall) { incoming = append(incoming, call) })
+	host.fireVoice(&qmi.VoiceAllCallInfo{
+		Calls:              []qmi.VoiceCallInfo{{ID: 1, State: qmiCallIncoming, Direction: qmiDirMT}},
+		RemotePartyNumbers: []qmi.VoiceRemotePartyNumber{{CallID: 1, Number: "14787483081"}},
+	})
+	if len(incoming) != 1 {
+		t.Fatalf("first incoming = %d", len(incoming))
+	}
+	host.fireVoice(&qmi.VoiceAllCallInfo{
+		Calls:              []qmi.VoiceCallInfo{{ID: 1, State: qmiCallEnd, Direction: qmiDirMT}},
+		RemotePartyNumbers: []qmi.VoiceRemotePartyNumber{{CallID: 1, Number: "14787483081"}},
+	})
+	host.fireVoice(&qmi.VoiceAllCallInfo{
+		Calls:              []qmi.VoiceCallInfo{{ID: 1, State: qmiCallIncoming, Direction: qmiDirMT}},
+		RemotePartyNumbers: []qmi.VoiceRemotePartyNumber{{CallID: 1, Number: "14787483081"}},
+	})
+	if len(incoming) != 1 {
+		t.Fatalf("ghost incoming after slot reuse = %d ids=%v", len(incoming), incoming)
+	}
+	host.fireVoice(&qmi.VoiceAllCallInfo{
+		Calls:              []qmi.VoiceCallInfo{{ID: 1, State: qmiCallIncoming, Direction: qmiDirMT}},
+		RemotePartyNumbers: []qmi.VoiceRemotePartyNumber{{CallID: 1, Number: "13800000000"}},
+	})
+	if len(incoming) != 2 {
+		t.Fatalf("new caller on reused slot = %d, want 2", len(incoming))
+	}
+}
+
 func TestHangupAlreadyGoneClearsCall(t *testing.T) {
 	ctl, host := enableVoice(t)
 	var events []voicehost.CallEvent

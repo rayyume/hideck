@@ -24,15 +24,22 @@ const (
 	qmiDirMT            qmi.VoiceCallDirection = 0x02
 )
 
+type qmiTombstone struct {
+	Peer      string
+	Direction string
+	At        time.Time
+}
+
 type voiceSession struct {
-	mu           sync.Mutex
-	active       map[string]nativeCall
-	byQMI        map[uint8]string
-	emitted      map[string]map[string]bool
-	incomingSeen map[string]bool
-	attached     bool
-	incoming     []func(voicehost.IncomingCall)
-	events       []func(voicehost.CallEvent)
+	mu            sync.Mutex
+	active        map[string]nativeCall
+	byQMI         map[uint8]string
+	emitted       map[string]map[string]bool
+	incomingSeen  map[string]bool
+	recentlyEnded map[uint8]qmiTombstone
+	attached      bool
+	incoming      []func(voicehost.IncomingCall)
+	events        []func(voicehost.CallEvent)
 }
 
 type nativeCall struct {
@@ -378,6 +385,9 @@ func (c *Controller) handleVoiceInfo(deviceID string, vs *voiceSession, info *qm
 		}
 		prev, existed := vs.getByQMI(item.ID)
 		if !existed && stateRank(state) == rankTerminal {
+			continue
+		}
+		if !existed && vs.ignoreReusedQMISlot(item.ID, peer, dir, now) {
 			continue
 		}
 		id := prev.ID
@@ -757,13 +767,41 @@ func (vs *voiceSession) markEmitted(id, eventType string) bool {
 
 func (vs *voiceSession) forget(id string) {
 	vs.mu.Lock()
-	if call, ok := vs.active[id]; ok && vs.byQMI[call.QMI] == id {
-		delete(vs.byQMI, call.QMI)
+	if call, ok := vs.active[id]; ok {
+		if vs.byQMI[call.QMI] == id {
+			delete(vs.byQMI, call.QMI)
+		}
+		if vs.recentlyEnded == nil {
+			vs.recentlyEnded = make(map[uint8]qmiTombstone)
+		}
+		vs.recentlyEnded[call.QMI] = qmiTombstone{Peer: call.Peer, Direction: call.Direction, At: time.Now()}
 	}
 	delete(vs.active, id)
 	delete(vs.emitted, id)
 	delete(vs.incomingSeen, id)
 	vs.mu.Unlock()
+}
+
+const qmiSlotReuseGrace = 3 * time.Second
+
+func (vs *voiceSession) ignoreReusedQMISlot(qmiID uint8, peer, direction string, now time.Time) bool {
+	vs.mu.Lock()
+	defer vs.mu.Unlock()
+	tomb, ok := vs.recentlyEnded[qmiID]
+	if !ok {
+		return false
+	}
+	if now.Sub(tomb.At) > qmiSlotReuseGrace {
+		delete(vs.recentlyEnded, qmiID)
+		return false
+	}
+	if peer != "" && tomb.Peer != "" && peer != tomb.Peer {
+		return false
+	}
+	if direction != "" && tomb.Direction != "" && direction != tomb.Direction {
+		return false
+	}
+	return true
 }
 
 func (vs *voiceSession) markIncoming(id string) bool {

@@ -336,7 +336,12 @@ export const usePhoneStore = defineStore('phone', {
       eventListener = new PhoneEventListener({
         cursor: () => this.lastEventId,
         onEvent: (event) => this.handleEvent(event),
-        onError: (message) => { this.eventError = message },
+        onError: (message) => {
+          this.eventError = message
+          void this.refresh().catch((error) => {
+            this.eventError = phoneErrorMessage(error, message)
+          })
+        },
         onOpen: async () => {
           this.eventError = ''
           try {

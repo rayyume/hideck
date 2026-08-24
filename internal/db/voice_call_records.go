@@ -62,6 +62,50 @@ func (store *VoiceCallStore) List(ctx context.Context, limit int) ([]phone.CallR
 	return records, nil
 }
 
+func (store *VoiceCallStore) AbandonIncomplete(ctx context.Context, endedAt time.Time, reason string) error {
+	var models []VoiceCallRecord
+	err := store.database.WithContext(ctx).Where(
+		"status IN ? AND ended_at IS NULL",
+		[]string{phone.StatusCalling, phone.StatusRinging, phone.StatusConnected},
+	).Find(&models).Error
+	if err != nil {
+		return err
+	}
+	for _, model := range models {
+		record := voiceCallRecordToDomain(model)
+		ended := endedAt
+		record.EndedAt = &ended
+		record.EndReason = reason
+		record.Status = abandonedCallStatus(record)
+		record.DurationSeconds = abandonedCallDuration(record, ended)
+		if err := store.Upsert(ctx, record); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func abandonedCallStatus(record phone.CallRecord) string {
+	if record.AnsweredAt != nil {
+		return phone.StatusCompleted
+	}
+	if record.Direction == "inbound" {
+		return phone.StatusMissed
+	}
+	return phone.StatusFailed
+}
+
+func abandonedCallDuration(record phone.CallRecord, endedAt time.Time) int64 {
+	start := record.StartedAt
+	if record.AnsweredAt != nil {
+		start = *record.AnsweredAt
+	}
+	if start.IsZero() || endedAt.Before(start) {
+		return 0
+	}
+	return int64(endedAt.Sub(start) / time.Second)
+}
+
 func voiceCallRecordFromDomain(record phone.CallRecord) VoiceCallRecord {
 	return VoiceCallRecord{
 		ID: record.ID, CallID: record.CallID, DeviceID: record.DeviceID, ICCID: record.ICCID,

@@ -34,6 +34,7 @@ type VoiceGateway interface {
 type RecordStore interface {
 	Upsert(context.Context, CallRecord) error
 	List(context.Context, int) ([]CallRecord, error)
+	AbandonIncomplete(ctx context.Context, endedAt time.Time, reason string) error
 }
 
 type AudioTranscoder interface {

@@ -71,6 +71,11 @@ func NewService(options ServiceOptions) (*Service, error) {
 	service.media = media
 	service.unsubscribeIncoming = options.Gateway.SubscribeIncomingCalls(service.handleIncoming)
 	service.unsubscribeEvents = options.Gateway.SubscribeCallEvents(service.handleCallEvent)
+	if service.store != nil {
+		if err := service.store.AbandonIncomplete(ctx, time.Now(), "process_restart"); err != nil {
+			logger.Error("清理未结束通话记录失败", "err", err)
+		}
+	}
 	return service, nil
 }
 
@@ -169,6 +174,10 @@ func (s *Service) closeCall(ctx context.Context, call *activeCall) error {
 	terminalDone, finalizedDone := call.terminalDone, call.finalizedDone
 	s.mu.RUnlock()
 	result := s.gateway.HangupCall(ctx, deviceID, callID)
+	s.finishCall(voicehost.CallEvent{
+		Type: "CallEnded", DeviceID: deviceID, CallID: callID,
+		Reason: "service_stop", Time: time.Now(),
+	})
 	if !waitForCallCleanup(ctx, terminalDone, finalizedDone) {
 		result = errors.Join(result, ctx.Err())
 	}

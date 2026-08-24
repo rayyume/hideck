@@ -189,6 +189,20 @@ func TestHangupPublishesCallEndedOnceWhenGatewayAlreadyEmitted(t *testing.T) {
 	}
 }
 
+func TestNewServiceAbandonsIncompleteHistory(t *testing.T) {
+	gateway, store := newFakeVoiceGateway(), newMemoryCallStore()
+	started := time.Now().Add(-15 * time.Second)
+	store.records["ghost-ring"] = CallRecord{
+		CallID: "ghost-ring", DeviceID: "wwan0", Direction: "inbound",
+		Peer: "14787483081", Status: StatusRinging, StartedAt: started,
+	}
+	_ = newPhoneTestService(t, gateway, store, time.Second)
+	record := store.record("ghost-ring")
+	if record.Status != StatusMissed || record.EndReason != "process_restart" || record.EndedAt == nil {
+		t.Fatalf("abandoned record = %+v", record)
+	}
+}
+
 func TestStartCallCopiesLocalPCMUCodec(t *testing.T) {
 	gateway, store := newFakeVoiceGateway(), newMemoryCallStore()
 	gateway.beginSnapshot.ClientSDP = "v=0\r\no=hideck 0 0 IN IP4 127.0.0.1\r\ns=HiDeck VoLTE\r\nc=IN IP4 127.0.0.1\r\nt=0 0\r\nm=audio 41000 RTP/AVP 0 101\r\na=rtpmap:0 PCMU/8000\r\n"

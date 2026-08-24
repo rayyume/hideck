@@ -56,6 +56,39 @@ func TestVoiceCallStoreUpsertsAndListsNewestFirst(t *testing.T) {
 	}
 }
 
+func TestVoiceCallStoreAbandonsIncompleteRecords(t *testing.T) {
+	database, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "calls.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := database.AutoMigrate(&VoiceCallRecord{}); err != nil {
+		t.Fatal(err)
+	}
+	store := NewVoiceCallStore(database)
+	ctx := context.Background()
+	started := time.Now().Add(-20 * time.Second).UTC()
+	if err := store.Upsert(ctx, phone.CallRecord{
+		CallID: "ghost-ring", DeviceID: "wwan0", Direction: "inbound",
+		Peer: "14787483081", Status: phone.StatusRinging, StartedAt: started,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ended := started.Add(20 * time.Second)
+	if err := store.AbandonIncomplete(ctx, ended, "process_restart"); err != nil {
+		t.Fatal(err)
+	}
+	records, err := store.List(ctx, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 1 || records[0].Status != phone.StatusMissed || records[0].EndReason != "process_restart" {
+		t.Fatalf("abandoned = %+v", records)
+	}
+	if records[0].EndedAt == nil || records[0].DurationSeconds != 20 {
+		t.Fatalf("abandoned timestamps = %+v", records[0])
+	}
+}
+
 func TestVoiceCallStoreKeepsBothRecordsWhenQMISlotIsReused(t *testing.T) {
 	database, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "calls.db")), &gorm.Config{})
 	if err != nil {
