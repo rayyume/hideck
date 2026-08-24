@@ -10,6 +10,7 @@ import (
 
 	"github.com/yibaiba/hideck/internal/backend"
 	"github.com/yibaiba/hideck/internal/db"
+	"github.com/yibaiba/hideck/pkg/logger"
 )
 
 const (
@@ -96,9 +97,16 @@ func ClassifyWorkerLebaraUKForControl(ctx context.Context, w *Worker) (LebaraUKC
 		defer cancel()
 		liveIMSI, err := w.Backend.GetIMSI(liveCtx)
 		if err != nil {
-			return LebaraUKClass{}, fmt.Errorf("读取实时 IMSI 失败: %w", err)
+			if liveCtx.Err() != nil {
+				return LebaraUKClass{}, fmt.Errorf("读取实时 IMSI 失败: %w", err)
+			}
+			// UIM 读失败（换卡卡死、QMI 0x0003）不是 Lebara 证据。
+			// 有档名/历史 23487 仍会锁射频；没有证据则允许关飞行，避免死锁。
+			logger.Warn("实时 IMSI 不可用，按缓存与卡历史识别 Lebara", "err", err)
+			imsi = strings.TrimSpace(w.GetCachedIMSI())
+		} else {
+			imsi = strings.TrimSpace(liveIMSI)
 		}
-		imsi = strings.TrimSpace(liveIMSI)
 	}
 	return classifyLebaraUKWithHistory(imsi, workerLebaraUKProfileName(w), w.CurrentICCID())
 }

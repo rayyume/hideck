@@ -68,6 +68,36 @@ func TestClassifyWorkerLebaraUKForControlHonorsContext(t *testing.T) {
 	}
 }
 
+func TestClassifyWorkerLebaraUKForControlUIMErrorDoesNotBlockUnlock(t *testing.T) {
+	stub := &vowifiLockBackendStub{
+		mode:    backend.BackendQMI,
+		imsiErr: errors.New("QMI error: service=0x0b error=0x0003"),
+	}
+	class, err := ClassifyWorkerLebaraUKForControl(context.Background(), &Worker{Backend: stub})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if class.IsLebara {
+		t.Fatalf("UIM 读失败且无 Lebara 证据不应锁射频: %+v", class)
+	}
+}
+
+func TestClassifyWorkerLebaraUKForControlUIMErrorKeepsCachedLebaraLock(t *testing.T) {
+	stub := &vowifiLockBackendStub{
+		mode:    backend.BackendQMI,
+		imsiErr: errors.New("QMI error: service=0x0b error=0x0003"),
+	}
+	w := &Worker{Backend: stub}
+	w.state.Identity.IMSI = "234870000000001"
+	class, err := ClassifyWorkerLebaraUKForControl(context.Background(), w)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !class.IsLebara || !class.LiveHome23487 {
+		t.Fatalf("缓存 23487 在 UIM 失败时仍应锁: %+v", class)
+	}
+}
+
 func TestClassifyWorkerLebaraUKForControlDoesNotQueryAT(t *testing.T) {
 	stub := &vowifiLockBackendStub{
 		mode: backend.BackendAT, imsi: "234870000000001", getIMSIDelay: time.Hour,

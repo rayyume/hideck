@@ -11,10 +11,10 @@ import (
 
 	"github.com/iniwex5/quectel-qmi-go/pkg/manager"
 	"github.com/iniwex5/quectel-qmi-go/pkg/qmi"
+	"github.com/warthog618/sms/encoding/tpdu"
 	"github.com/yibaiba/hideck/internal/modem"
 	"github.com/yibaiba/hideck/pkg/logger"
 	"github.com/yibaiba/hideck/pkg/smscodec"
-	"github.com/warthog618/sms/encoding/tpdu"
 )
 
 // QMISource 定义了 QMI 后端需要从底层 QMI Core 提供者 (qmicore.Manager) 获得的所有功能接口。
@@ -538,9 +538,13 @@ func qmiOperatorDisplay(mcc, mnc uint16) string {
 }
 
 func (q *QMIBackend) IsSimInserted(ctx context.Context) (bool, error) {
+	// 快照里只有「曾经插过卡」、却没有 IMSI/ICCID 时，多半是换卡后的过期值。
+	// 这时必须打实时 UIM，否则页面会显示已插卡，AT 却 CIMI ERROR。
 	if snap := q.source.GetDeviceSnapshot(); snap != nil {
 		if ids, ready := snap.Identities(); ready && ids.SimInserted != nil {
-			return *ids.SimInserted, nil
+			if strings.TrimSpace(ids.IMSI) != "" || strings.TrimSpace(ids.ICCID) != "" {
+				return *ids.SimInserted, nil
+			}
 		}
 	}
 	status, err := q.source.GetSIMStatus(ctx)

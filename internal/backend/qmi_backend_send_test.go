@@ -12,9 +12,9 @@ import (
 
 	qmimanager "github.com/iniwex5/quectel-qmi-go/pkg/manager"
 	"github.com/iniwex5/quectel-qmi-go/pkg/qmi"
+	"github.com/warthog618/sms/encoding/tpdu"
 	"github.com/yibaiba/hideck/internal/modem"
 	"github.com/yibaiba/hideck/pkg/smscodec"
-	"github.com/warthog618/sms/encoding/tpdu"
 )
 
 type qmiBackendSendSourceStub struct {
@@ -41,6 +41,9 @@ type qmiBackendSendSourceStub struct {
 	incrementalOK    bool
 	getSysSelPref    *qmi.SystemSelectionPreference
 	initiateRegReqs  []qmi.NASInitiateNetworkRegisterRequest
+	snapshot         *qmimanager.DeviceSnapshot
+	simStatus        *qmi.SIMStatus
+	simStatusCalls   int
 }
 
 func (s *qmiBackendSendSourceStub) GetDeviceSerialNumbers(ctx context.Context) (*qmi.DeviceInfo, error) {
@@ -67,6 +70,10 @@ func (s *qmiBackendSendSourceStub) GetMSISDN(ctx context.Context) (string, error
 }
 
 func (s *qmiBackendSendSourceStub) GetSIMStatus(ctx context.Context) (qmi.SIMStatus, error) {
+	s.simStatusCalls++
+	if s.simStatus != nil {
+		return *s.simStatus, nil
+	}
 	return qmi.SIMReady, nil
 }
 
@@ -824,9 +831,9 @@ func (s *qmiBackendSendSourceStub) GetSMSC(ctx context.Context) (string, error) 
 	return "", nil
 }
 
-// GetDeviceSnapshot 返回 nil，表示没有快照，会降级到实时 IPC。
+// GetDeviceSnapshot 默认 nil，表示没有快照，会降级到实时 IPC。
 func (s *qmiBackendSendSourceStub) GetDeviceSnapshot() *qmimanager.DeviceSnapshot {
-	return nil
+	return s.snapshot
 }
 
 type qmiBackendSIMAuthChannelSourceStub struct {
