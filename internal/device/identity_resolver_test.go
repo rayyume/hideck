@@ -10,13 +10,13 @@ import (
 func TestResolveDeviceIdentitiesMatchesByIMEIAcrossChangedPaths(t *testing.T) {
 	configured := []config.DeviceConfig{{
 		ID:            "wwan1",
-		ModemIMEI:     "867383058993207",
+		ModemIMEI:     "860000000008008",
 		Interface:     "wwan0",
 		ControlDevice: "/dev/cdc-wdm0",
 		USBPath:       "/sys/bus/usb/devices/1-4",
 	}}
 	hardware := []CompatibleModem{{
-		IMEI:         "867383058993207",
+		IMEI:         "860000000008008",
 		NetInterface: "wwan1",
 		ControlPath:  "/dev/cdc-wdm2",
 		USBPath:      "/sys/bus/usb/devices/1-9",
@@ -80,7 +80,7 @@ func TestResolveDeviceIdentitiesMigratesLegacyConfigByUSBPathAndBackfills(t *tes
 		Interface: "wwan1",
 	}}
 	hardware := []CompatibleModem{{
-		IMEI:         "867383058993207",
+		IMEI:         "860000000008008",
 		USBPath:      "/sys/bus/usb/devices/1-4",
 		NetInterface: "wwan0", // 接口名已变,但 USB 端口稳定
 		Mode:         "qmi",
@@ -95,8 +95,8 @@ func TestResolveDeviceIdentitiesMigratesLegacyConfigByUSBPathAndBackfills(t *tes
 	if pair.Config.ID != "wwan1" {
 		t.Fatalf("matched config ID = %q, want wwan1", pair.Config.ID)
 	}
-	if pair.BackfillIMEI != "867383058993207" {
-		t.Fatalf("BackfillIMEI = %q, want 867383058993207", pair.BackfillIMEI)
+	if pair.BackfillIMEI != "860000000008008" {
+		t.Fatalf("BackfillIMEI = %q, want 860000000008008", pair.BackfillIMEI)
 	}
 	if len(got.Unmatched) != 0 || len(got.Offline) != 0 || len(got.Degraded) != 0 {
 		t.Fatalf("want only Matched; got unmatched=%d offline=%d degraded=%d", len(got.Unmatched), len(got.Offline), len(got.Degraded))
@@ -113,7 +113,7 @@ func TestResolveDeviceIdentitiesLegacyMigrationIgnoresVolatileInterfaceAcrossPor
 		Interface: "wwan1",
 	}}
 	hardware := []CompatibleModem{{
-		IMEI:         "867383058993207",
+		IMEI:         "860000000008008",
 		USBPath:      "/sys/bus/usb/devices/1-9", // 不同物理端口
 		NetInterface: "wwan1",                    // 仅接口名相同
 		Mode:         "qmi",
@@ -137,11 +137,11 @@ func TestResolveDeviceIdentitiesLegacyMigrationIgnoresVolatileInterfaceAcrossPor
 func TestResolveDeviceIdentitiesDedupesSameIMEIMultiCompositionForMatched(t *testing.T) {
 	configured := []config.DeviceConfig{{
 		ID:        "wwan1",
-		ModemIMEI: "867383058993207",
+		ModemIMEI: "860000000008008",
 	}}
 	hardware := []CompatibleModem{
-		{IMEI: "867383058993207", ControlPath: "/dev/cdc-wdm1", Mode: "mbim", USBPath: "/sys/bus/usb/devices/1-4"},
-		{IMEI: "867383058993207", ControlPath: "/dev/cdc-wdm2", Mode: "qmi", USBPath: "/sys/bus/usb/devices/1-9"},
+		{IMEI: "860000000008008", ControlPath: "/dev/cdc-wdm1", Mode: "mbim", USBPath: "/sys/bus/usb/devices/1-4"},
+		{IMEI: "860000000008008", ControlPath: "/dev/cdc-wdm2", Mode: "qmi", USBPath: "/sys/bus/usb/devices/1-9"},
 	}
 
 	got := ResolveDeviceIdentities(hardware, configured)
@@ -160,8 +160,8 @@ func TestResolveDeviceIdentitiesDedupesSameIMEIMultiCompositionForMatched(t *tes
 // 同 IMEI 多组态但无配置时,也只产生一个可添加候选(择优 qmi)。
 func TestResolveDeviceIdentitiesDedupesSameIMEIMultiCompositionForUnmatched(t *testing.T) {
 	hardware := []CompatibleModem{
-		{IMEI: "867383058993207", ControlPath: "/dev/cdc-wdm1", Mode: "mbim", USBPath: "/sys/bus/usb/devices/1-4"},
-		{IMEI: "867383058993207", ControlPath: "/dev/cdc-wdm2", Mode: "qmi", USBPath: "/sys/bus/usb/devices/1-9"},
+		{IMEI: "860000000008008", ControlPath: "/dev/cdc-wdm1", Mode: "mbim", USBPath: "/sys/bus/usb/devices/1-4"},
+		{IMEI: "860000000008008", ControlPath: "/dev/cdc-wdm2", Mode: "qmi", USBPath: "/sys/bus/usb/devices/1-9"},
 	}
 
 	got := ResolveDeviceIdentities(hardware, nil)

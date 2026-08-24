@@ -18,18 +18,18 @@ func TestOverlayRuntimeQMIAttachmentFillsEmptyDiskPaths(t *testing.T) {
 		Interface:     "wwan0",
 		USBPath:       "/sys/bus/usb/devices/2-1",
 		ATPort:        "/dev/ttyUSB2",
-		ModemIMEI:     "866069051900973",
+		ModemIMEI:     "860000000001001",
 	})
 
 	got := p.overlayRuntimeQMIAttachment(config.DeviceConfig{
 		ID:            "wwan0",
 		DeviceBackend: "qmi",
-		ModemIMEI:     "866069051900973",
+		ModemIMEI:     "860000000001001",
 	})
 	if got.ControlDevice != "/dev/cdc-wdm0" || got.Interface != "wwan0" || got.USBPath != "/sys/bus/usb/devices/2-1" {
 		t.Fatalf("runtime attachment was not overlaid: %+v", got)
 	}
-	if got.ModemIMEI != "866069051900973" {
+	if got.ModemIMEI != "860000000001001" {
 		t.Fatalf("IMEI changed: %q", got.ModemIMEI)
 	}
 }
@@ -40,20 +40,20 @@ func TestOverlayRuntimeQMIAttachmentDoesNotOverrideDiskIMEI(t *testing.T) {
 
 	p.rememberRuntimeQMIAttachment(config.DeviceConfig{
 		ID:        "wwan0",
-		ModemIMEI: "864388041069422",
+		ModemIMEI: "860000000004004",
 	})
 	got := p.overlayRuntimeQMIAttachment(config.DeviceConfig{
 		ID:        "wwan0",
-		ModemIMEI: "866069051900973",
+		ModemIMEI: "860000000001001",
 	})
-	if got.ModemIMEI != "866069051900973" {
+	if got.ModemIMEI != "860000000001001" {
 		t.Fatalf("disk IMEI was overwritten: %q", got.ModemIMEI)
 	}
 }
 
 func TestDeviceIMEIBackfillNeeded(t *testing.T) {
 	stored := config.DeviceConfig{ID: "dev1"} // 配置侧无 IMEI
-	learned := config.DeviceConfig{ID: "dev1", ModemIMEI: "867383058993207"}
+	learned := config.DeviceConfig{ID: "dev1", ModemIMEI: "860000000008008"}
 
 	if !deviceIMEIBackfillNeeded(stored, learned) {
 		t.Fatal("learned IMEI for empty-config should need backfill")
@@ -65,7 +65,7 @@ func TestDeviceIMEIBackfillNeeded(t *testing.T) {
 	}
 
 	// 配置已有相同 IMEI → 无需回填。
-	same := config.DeviceConfig{ID: "dev1", ModemIMEI: "867383058993207"}
+	same := config.DeviceConfig{ID: "dev1", ModemIMEI: "860000000008008"}
 	if deviceIMEIBackfillNeeded(same, same) {
 		t.Fatal("identical IMEI should not need backfill")
 	}
@@ -75,7 +75,7 @@ func TestDeviceIMEIBackfillNeeded(t *testing.T) {
 // 零路径架构:raw 不含路径键(迁移后磁盘状态),persistDeviceAttachmentsIfChanged 也绝不写入路径。
 func TestPersistDeviceAttachmentsDoesNotWritePaths(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.yaml")
-	raw := "devices:\n- id: dev-qmi\n  device_backend: qmi\n  modem_imei: \"867383058993207\"\n"
+	raw := "devices:\n- id: dev-qmi\n  device_backend: qmi\n  modem_imei: \"860000000008008\"\n"
 	if err := os.WriteFile(configPath, []byte(raw), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
@@ -94,7 +94,7 @@ func TestPersistDeviceAttachmentsDoesNotWritePaths(t *testing.T) {
 	// 运行时解析出全新路径(热插拔后内核重排),且 IMEI 与配置一致。
 	newCfg := config.DeviceConfig{
 		ID:            "dev-qmi",
-		ModemIMEI:     "867383058993207",
+		ModemIMEI:     "860000000008008",
 		ControlDevice: "/dev/cdc-wdm2",
 		Interface:     "wwan1",
 		ATPort:        "/dev/ttyUSB6",
@@ -127,7 +127,7 @@ func TestPersistDeviceAttachmentsBackfillsLearnedIMEIForLegacyConfig(t *testing.
 
 	learned := config.DeviceConfig{
 		ID:            "dev-qmi",
-		ModemIMEI:     "867383058993207",
+		ModemIMEI:     "860000000008008",
 		ControlDevice: "/dev/cdc-wdm2", // 运行时路径,绝不写回磁盘
 		Interface:     "wwan1",
 		ATPort:        "/dev/ttyUSB6",
@@ -139,8 +139,8 @@ func TestPersistDeviceAttachmentsBackfillsLearnedIMEIForLegacyConfig(t *testing.
 		t.Fatalf("Load() error = %v", err)
 	}
 	got := updated.Devices[0]
-	if got.ModemIMEI != "867383058993207" {
-		t.Fatalf("ModemIMEI = %q, want backfilled 867383058993207", got.ModemIMEI)
+	if got.ModemIMEI != "860000000008008" {
+		t.Fatalf("ModemIMEI = %q, want backfilled 860000000008008", got.ModemIMEI)
 	}
 	// 零路径架构: Load() 绝不从文件回填运行时路径字段(mapstructure:"-")。
 	if got.ControlDevice != "" || got.Interface != "" || got.ATPort != "" {

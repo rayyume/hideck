@@ -11,7 +11,7 @@ import (
 // 当前实现会写 control_device/interface/at_port → 本测试现在应 FAIL,证明保存侧泄漏。
 func TestUpdateDeviceInFileDoesNotPersistRuntimePaths(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
-	raw := "devices:\n- id: dev1\n  device_backend: qmi\n  modem_imei: \"867383058993207\"\n  vowifi_enabled: true\n"
+	raw := "devices:\n- id: dev1\n  device_backend: qmi\n  modem_imei: \"860000000008008\"\n  vowifi_enabled: true\n"
 	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
@@ -20,7 +20,7 @@ func TestUpdateDeviceInFileDoesNotPersistRuntimePaths(t *testing.T) {
 	usbNetMode := 2
 	newDev := DeviceConfig{
 		ID:            "dev1",
-		ModemIMEI:     "867383058993207",
+		ModemIMEI:     "860000000008008",
 		DeviceBackend: "qmi",
 		USBNetMode:    &usbNetMode,
 		VoWiFiEnabled: true,
@@ -38,7 +38,7 @@ func TestUpdateDeviceInFileDoesNotPersistRuntimePaths(t *testing.T) {
 		t.Fatalf("Load() error = %v", err)
 	}
 	d := got.Devices[0]
-	if d.ModemIMEI != "867383058993207" || d.DeviceBackend != "qmi" {
+	if d.ModemIMEI != "860000000008008" || d.DeviceBackend != "qmi" {
 		t.Fatalf("identity/intent fields lost: %+v", d)
 	}
 	if d.USBNetMode == nil || *d.USBNetMode != 2 {
@@ -129,7 +129,7 @@ func TestUpdateDeviceInFilePersistsPCSCBindingAndPINReference(t *testing.T) {
 func TestDeviceConfigToNodeOmitsConnectHoldRF(t *testing.T) {
 	node := deviceConfigToNode(DeviceConfig{
 		ID:              "dev1",
-		ModemIMEI:       "867383058993207",
+		ModemIMEI:       "860000000008008",
 		ConnectHoldRF:   true,
 		AirplaneEnabled: true,
 	})

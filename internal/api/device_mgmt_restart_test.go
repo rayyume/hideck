@@ -52,8 +52,8 @@ func TestDeviceConfigRequiresRestartWhenQMIProxyConfigChanges(t *testing.T) {
 }
 
 func TestDeviceConfigRequiresRestartIgnoresIMEIFormatOnly(t *testing.T) {
-	old := config.DeviceConfig{ModemIMEI: "864388041069422"}
-	next := config.DeviceConfig{ModemIMEI: " 864388041069422"}
+	old := config.DeviceConfig{ModemIMEI: "860000000004004"}
+	next := config.DeviceConfig{ModemIMEI: " 860000000004004"}
 
 	if deviceConfigRequiresRestart(old, next) {
 		t.Fatal("format-only IMEI difference must not require restart")
@@ -63,12 +63,12 @@ func TestDeviceConfigRequiresRestartIgnoresIMEIFormatOnly(t *testing.T) {
 		t.Fatal("two empty IMEIs must not require restart")
 	}
 
-	diff := config.DeviceConfig{ModemIMEI: "864513045234397"}
+	diff := config.DeviceConfig{ModemIMEI: "860000000005005"}
 	if !deviceConfigRequiresRestart(old, diff) {
 		t.Fatal("different modem IMEI must require restart")
 	}
 
-	imeisv := config.DeviceConfig{ModemIMEI: "8643880410694201"}
+	imeisv := config.DeviceConfig{ModemIMEI: "8600000000040001"}
 	if deviceConfigRequiresRestart(old, imeisv) {
 		t.Fatal("IMEISV-only IMEI difference must not require restart")
 	}

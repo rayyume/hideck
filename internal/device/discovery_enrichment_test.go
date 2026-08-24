@@ -372,16 +372,16 @@ func TestConfiguredDeviceIndexSeparatesIdentityAndDynamicPath(t *testing.T) {
 
 func TestConfiguredDeviceIndexLookupByIMEINormalizes(t *testing.T) {
 	idx := BuildConfiguredDeviceIndex([]config.DeviceConfig{
-		{ID: "ec20-1", ModemIMEI: "864388041069422"},
+		{ID: "ec20-1", ModemIMEI: "860000000004004"},
 	})
 
-	if id := idx.LookupByIMEI(" 864388041069422"); id != "ec20-1" {
+	if id := idx.LookupByIMEI(" 860000000004004"); id != "ec20-1" {
 		t.Fatalf("whitespace-differing lookup = %q, want ec20-1", id)
 	}
-	if id := idx.LookupByIMEI("8643880410694201"); id != "ec20-1" {
+	if id := idx.LookupByIMEI("8600000000040001"); id != "ec20-1" {
 		t.Fatalf("IMEISV lookup = %q, want ec20-1", id)
 	}
-	if id := idx.LookupByIMEI("864513045234397"); id != "" {
+	if id := idx.LookupByIMEI("860000000005005"); id != "" {
 		t.Fatalf("different modem lookup = %q, want empty", id)
 	}
 	if id := idx.LookupByIMEI("123"); id != "" {

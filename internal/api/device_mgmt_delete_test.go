@@ -17,10 +17,10 @@ func TestHandleDeviceMgmtDeleteDeviceRemovesConfigWhileRecovering(t *testing.T) 
 devices:
   - id: wwan0
     device_backend: qmi
-    modem_imei: "866069051900973"
+    modem_imei: "860000000001001"
   - id: wwan1
     device_backend: qmi
-    modem_imei: "866069053342612"
+    modem_imei: "860000000002002"
 `)
 	if err := config.InitGlobalManager(path); err != nil {
 		t.Fatalf("InitGlobalManager() error = %v", err)

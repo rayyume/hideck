@@ -10,13 +10,13 @@ import (
 // 总览展示必须用 worker 运行时 config 的路径与策略投影,意图字段(name/backend)仍取持久化值。
 func TestOverviewDisplayConfigPrefersRuntimePaths(t *testing.T) {
 	runtime := config.DeviceConfig{
-		ID: "wwan0", ModemIMEI: "863212060398051", DeviceBackend: "qmi",
+		ID: "wwan0", ModemIMEI: "860000000007007", DeviceBackend: "qmi",
 		Interface: "wwan0", ControlDevice: "/dev/cdc-wdm0", ATPort: "/dev/ttyUSB2",
 		QMIDevice: "/dev/cdc-wdm0", USBPath: "/sys/bus/usb/devices/1-4",
 		VoWiFiEnabled: true, // 策略跟卡走，存在于运行时投影
 	}
 	persisted := config.DeviceConfig{
-		ID: "wwan0", Name: "主卡", ModemIMEI: "863212060398051", DeviceBackend: "qmi",
+		ID: "wwan0", Name: "主卡", ModemIMEI: "860000000007007", DeviceBackend: "qmi",
 	}
 
 	got := overviewDisplayConfig(runtime, persisted, true)

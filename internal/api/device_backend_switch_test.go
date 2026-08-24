@@ -236,7 +236,7 @@ func newBackendSwitchTestService(
 		pool:      pool,
 		discovery: waiter,
 		workerIMEI: func(context.Context, *device.Worker) (string, error) {
-			return "866069053342612", nil
+			return "860000000002002", nil
 		},
 		openAT: func(string) (manualATSession, error) {
 			return at, nil
@@ -254,7 +254,7 @@ func backendSwitchTestRequest(current, target string) backendSwitchRequest {
 	base := config.DeviceConfig{
 		ID:            "wwan1",
 		Name:          "test",
-		ModemIMEI:     "866069053342612",
+		ModemIMEI:     "860000000002002",
 		DeviceBackend: current,
 	}
 	desired := base
@@ -265,7 +265,7 @@ func backendSwitchTestRequest(current, target string) backendSwitchRequest {
 func backendSwitchTestAttachment(backend string) device.BackendAttachment {
 	return device.BackendAttachment{
 		Backend:       backend,
-		IMEI:          "866069053342612",
+		IMEI:          "860000000002002",
 		ControlDevice: "/dev/cdc-wdm1",
 		Interface:     "wwan1",
 		USBPath:       "1-2",

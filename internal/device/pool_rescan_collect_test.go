@@ -23,7 +23,7 @@ func TestCollectRescanHardwarePopulatesIMEIAndPaths(t *testing.T) {
 
 	origResolve := resolveDiscoveredQMIDeviceFn
 	resolveDiscoveredQMIDeviceFn = func(dev QMIDevice, timeout time.Duration, allowIMEIProbe bool) (QMIDevice, string) {
-		return dev, "867383058993207"
+		return dev, "860000000008008"
 	}
 	t.Cleanup(func() { resolveDiscoveredQMIDeviceFn = origResolve })
 
@@ -37,8 +37,8 @@ func TestCollectRescanHardwarePopulatesIMEIAndPaths(t *testing.T) {
 		t.Fatalf("expected 1 hardware, got %d", len(hardware))
 	}
 	hw := hardware[0]
-	if hw.IMEI != "867383058993207" {
-		t.Errorf("expected IMEI 867383058993207, got %q", hw.IMEI)
+	if hw.IMEI != "860000000008008" {
+		t.Errorf("expected IMEI 860000000008008, got %q", hw.IMEI)
 	}
 	if hw.ControlPath != "/dev/cdc-wdm0" {
 		t.Errorf("expected ControlPath /dev/cdc-wdm0, got %q", hw.ControlPath)

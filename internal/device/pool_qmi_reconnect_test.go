@@ -95,7 +95,7 @@ func TestQMIManagedAttachmentChanged(t *testing.T) {
 func TestApplyQMIManagedAttachment(t *testing.T) {
 	cfg := config.DeviceConfig{
 		ID:            "wwan0",
-		ModemIMEI:     "864819055348922",
+		ModemIMEI:     "860000000006006",
 		ControlDevice: "/dev/cdc-wdm1",
 		Interface:     "wwan0",
 		USBPath:       "/sys/bus/usb/devices/1-9",
@@ -134,7 +134,7 @@ func TestApplyQMIManagedAttachment(t *testing.T) {
 	if got.AudioDevice != "hw:2,0" {
 		t.Fatalf("AudioDevice = %q, want hw:2,0", got.AudioDevice)
 	}
-	if got.ModemIMEI != "864819055348922" || got.DeviceBackend != "qmi" {
+	if got.ModemIMEI != "860000000006006" || got.DeviceBackend != "qmi" {
 		t.Fatalf("stable fields changed unexpectedly: %#v", got)
 	}
 
@@ -150,7 +150,7 @@ func TestQMIHealthyWorkerNeedsRebuildWhenManagedAttachmentChanges(t *testing.T) 
 		ID: "wwan0",
 		Config: config.DeviceConfig{
 			ID:            "wwan0",
-			ModemIMEI:     "864819055348922",
+			ModemIMEI:     "860000000006006",
 			ControlDevice: "/dev/cdc-wdm1",
 			Interface:     "wwan0",
 			USBPath:       "/sys/bus/usb/devices/1-9",
@@ -183,7 +183,7 @@ func TestQMIHealthyWorkerDoesNotNeedRebuildForSameAttachment(t *testing.T) {
 		ID: "wwan0",
 		Config: config.DeviceConfig{
 			ID:            "wwan0",
-			ModemIMEI:     "864819055348922",
+			ModemIMEI:     "860000000006006",
 			ControlDevice: "/dev/cdc-wdm1",
 			Interface:     "wwan0",
 			USBPath:       "/sys/bus/usb/devices/1-9",
@@ -234,7 +234,7 @@ func TestQMIHealthyWorkerAttachmentUpdateSkipsInvalidWorkers(t *testing.T) {
 func TestStartAllIMEIMissAllowsConfiguredStaticQMIAttachment(t *testing.T) {
 	cfg := config.DeviceConfig{
 		ID:            "wwan0",
-		ModemIMEI:     "864819055348922",
+		ModemIMEI:     "860000000006006",
 		ControlDevice: "/dev/cdc-wdm0",
 		Interface:     "wwan0",
 		USBPath:       "/sys/bus/usb/devices/1-9",
@@ -254,7 +254,7 @@ func TestStartAllIMEIMissAllowsConfiguredStaticQMIAttachment(t *testing.T) {
 func TestStartAllIMEIMissRejectsStaleStaticQMIAttachment(t *testing.T) {
 	cfg := config.DeviceConfig{
 		ID:            "wwan0",
-		ModemIMEI:     "864819055348922",
+		ModemIMEI:     "860000000006006",
 		ControlDevice: "/dev/cdc-wdm0",
 		Interface:     "wwan0",
 		USBPath:       "/sys/bus/usb/devices/1-9",
@@ -274,7 +274,7 @@ func TestStartAllIMEIMissRejectsStaleStaticQMIAttachment(t *testing.T) {
 func TestStartAllIMEIMissAllowsStaticQMIWhenDiscoveryUnavailable(t *testing.T) {
 	cfg := config.DeviceConfig{
 		ID:            "wwan0",
-		ModemIMEI:     "864819055348922",
+		ModemIMEI:     "860000000006006",
 		ControlDevice: "/dev/cdc-wdm0",
 		DeviceBackend: "qmi",
 	}
@@ -321,7 +321,7 @@ func TestShouldFastStartMissingQMIWorker(t *testing.T) {
 	}
 	cfg := config.DeviceConfig{
 		ID:            "wwan0",
-		ModemIMEI:     "864819055348922",
+		ModemIMEI:     "860000000006006",
 		ControlDevice: controlPath,
 		Interface:     "wwan0",
 		USBPath:       "/sys/bus/usb/devices/1-9",

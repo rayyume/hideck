@@ -13,14 +13,14 @@ func TestEnsureAddDeviceIMEIBackfillsWhenEmpty(t *testing.T) {
 		if controlPath != "/dev/cdc-wdm2" {
 			t.Fatalf("probe got %q", controlPath)
 		}
-		return "864388041069422", nil
+		return "860000000004004", nil
 	}
 
 	got, err := ensureAddDeviceIMEI(cfg, probe)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got.ModemIMEI != "864388041069422" {
+	if got.ModemIMEI != "860000000004004" {
 		t.Fatalf("ModemIMEI = %q, want probed value", got.ModemIMEI)
 	}
 }
@@ -44,12 +44,12 @@ func TestEnsureAddDeviceIMEIRejectsWhenProbeEmpty(t *testing.T) {
 }
 
 func TestEnsureAddDeviceIMEILeavesExistingIMEIAndATOnly(t *testing.T) {
-	withIMEI := config.DeviceConfig{ID: "ec20-1", ControlDevice: "/dev/cdc-wdm2", ModemIMEI: "864388041069422"}
+	withIMEI := config.DeviceConfig{ID: "ec20-1", ControlDevice: "/dev/cdc-wdm2", ModemIMEI: "860000000004004"}
 	probeFail := func(string) (string, error) {
 		t.Fatal("probe must not run when IMEI present")
 		return "", nil
 	}
-	if got, err := ensureAddDeviceIMEI(withIMEI, probeFail); err != nil || got.ModemIMEI != "864388041069422" {
+	if got, err := ensureAddDeviceIMEI(withIMEI, probeFail); err != nil || got.ModemIMEI != "860000000004004" {
 		t.Fatalf("with-IMEI: got %+v err %v", got, err)
 	}
 

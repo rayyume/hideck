@@ -8,14 +8,14 @@ func TestNormalizeIMEI(t *testing.T) {
 		in   string
 		want string
 	}{
-		{"plain 15-digit", "864388041069422", "86438804106942"},
-		{"trailing space", "864388041069422 ", "86438804106942"},
-		{"leading space + newline", " 864388041069422\n", "86438804106942"},
-		{"imeisv 16-digit", "8643880410694201", "86438804106942"},
-		{"embedded non-digits", "86-4388 0410.69422", "86438804106942"},
+		{"plain 15-digit", "860000000004004", "86000000000400"},
+		{"trailing space", "860000000004004 ", "86000000000400"},
+		{"leading space + newline", " 860000000004004\n", "86000000000400"},
+		{"imeisv 16-digit", "8600000000040001", "86000000000400"},
+		{"embedded non-digits", "86-0000 0000.04004", "86000000000400"},
 		{"too short", "12345", ""},
 		{"empty", "", ""},
-		{"exactly 14", "86438804106942", "86438804106942"},
+		{"exactly 14", "86000000000400", "86000000000400"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -27,13 +27,13 @@ func TestNormalizeIMEI(t *testing.T) {
 }
 
 func TestIMEIMatches(t *testing.T) {
-	if !IMEIMatches("864388041069422", " 864388041069422") {
+	if !IMEIMatches("860000000004004", " 860000000004004") {
 		t.Fatal("whitespace-differing same IMEI should match")
 	}
-	if !IMEIMatches("864388041069422", "8643880410694201") {
+	if !IMEIMatches("860000000004004", "8600000000040001") {
 		t.Fatal("IMEI(15) and IMEISV(16) of same modem should match")
 	}
-	if IMEIMatches("864388041069422", "864513045234397") {
+	if IMEIMatches("860000000004004", "860000000005005") {
 		t.Fatal("different modems must not match")
 	}
 	if IMEIMatches("", "") {

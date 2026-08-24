@@ -33,7 +33,7 @@ func TestSetUSBNetModeRoutesThroughTransactionalSwitcher(t *testing.T) {
 	path := writeDeviceMgmtLimitConfig(t, `
 devices:
   - id: wwan1
-    modem_imei: "866069053342612"
+    modem_imei: "860000000002002"
     device_backend: qmi
 `)
 	if err := config.InitGlobalManager(path); err != nil {
@@ -97,7 +97,7 @@ func TestUpdateDeviceBackendChangeRoutesThroughTransactionalSwitcher(t *testing.
 devices:
   - id: wwan1
     name: old
-    modem_imei: "866069053342612"
+    modem_imei: "860000000002002"
     device_backend: qmi
 `)
 	if err := config.InitGlobalManager(path); err != nil {
@@ -120,7 +120,7 @@ devices:
 	ctx.Request = httptest.NewRequest(
 		http.MethodPut,
 		"/devices/wwan1",
-		strings.NewReader(`{"config":{"id":"wwan1","name":"new","modem_imei":"866069053342612","device_backend":"mbim"}}`),
+		strings.NewReader(`{"config":{"id":"wwan1","name":"new","modem_imei":"860000000002002","device_backend":"mbim"}}`),
 	)
 	ctx.Request.Header.Set("Content-Type", "application/json")
 	server.handleDeviceMgmtUpdateDevice(ctx)

@@ -68,7 +68,7 @@ func TestUSBUnplugRecoveryKeepsWaitingAfterInitialWindow(t *testing.T) {
 
 func TestAbandonDeviceStopsRecoveryLoopFromRescanning(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.yaml")
-	if err := os.WriteFile(configPath, []byte("devices:\n- id: wwan0\n  device_backend: qmi\n  modem_imei: \"866069051900973\"\n"), 0600); err != nil {
+	if err := os.WriteFile(configPath, []byte("devices:\n- id: wwan0\n  device_backend: qmi\n  modem_imei: \"860000000001001\"\n"), 0600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	if err := config.InitGlobalManager(configPath); err != nil {
@@ -83,7 +83,7 @@ func TestAbandonDeviceStopsRecoveryLoopFromRescanning(t *testing.T) {
 
 	origResolve := resolveDiscoveredQMIDeviceFn
 	resolveDiscoveredQMIDeviceFn = func(dev QMIDevice, timeout time.Duration, allowIMEIProbe bool) (QMIDevice, string) {
-		return dev, "866069051900973"
+		return dev, "860000000001001"
 	}
 	t.Cleanup(func() { resolveDiscoveredQMIDeviceFn = origResolve })
 
@@ -132,7 +132,7 @@ func TestAbandonDeviceStopsRecoveryLoopFromRescanning(t *testing.T) {
 
 func TestModemRebootRecoveryOverlaysRuntimeAttachmentWhenDiskHasNoPaths(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.yaml")
-	if err := os.WriteFile(configPath, []byte("devices:\n- id: wwan0\n  device_backend: qmi\n  modem_imei: \"866069051900973\"\n"), 0600); err != nil {
+	if err := os.WriteFile(configPath, []byte("devices:\n- id: wwan0\n  device_backend: qmi\n  modem_imei: \"860000000001001\"\n"), 0600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	if err := config.InitGlobalManager(configPath); err != nil {
@@ -296,7 +296,7 @@ func TestQMIRecoveryScanGateAllowsLiveIMEIAttachmentWhenConfiguredPathStale(t *t
 	cfg := config.DeviceConfig{
 		ID:            "dev-qmi",
 		DeviceBackend: "qmi",
-		ModemIMEI:     "867383058993207",
+		ModemIMEI:     "860000000008008",
 		ControlDevice: "/dev/cdc-wdm2",
 		Interface:     "wwan1",
 	}
@@ -307,7 +307,7 @@ func TestQMIRecoveryScanGateAllowsLiveIMEIAttachmentWhenConfiguredPathStale(t *t
 	}
 	decision := qmiRecoveryScanGate(cfg, []qmiRecoveryLiveCandidate{{
 		Device: live,
-		IMEI:   "867383058993207",
+		IMEI:   "860000000008008",
 	}}, true)
 
 	if !decision.Ready {
@@ -324,11 +324,11 @@ func TestQMIRecoveryScanGateMatchesNormalizedLiveIMEI(t *testing.T) {
 		DeviceBackend: backend.BackendQMI,
 		ControlDevice: "/dev/cdc-wdm0",
 		Interface:     "wwan0",
-		ModemIMEI:     "864388041069422",
+		ModemIMEI:     "860000000004004",
 	}
 	live := []qmiRecoveryLiveCandidate{{
 		Device: QMIDevice{ControlPath: "/dev/cdc-wdm0", NetInterface: "wwan0"},
-		IMEI:   "8643880410694201",
+		IMEI:   "8600000000040001",
 	}}
 
 	decision := qmiRecoveryScanGate(cfg, live, true)
@@ -339,7 +339,7 @@ func TestQMIRecoveryScanGateMatchesNormalizedLiveIMEI(t *testing.T) {
 
 func TestModemRebootRecoveryDoesNotBlockScanOnStaleConfiguredControlPath(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.yaml")
-	if err := os.WriteFile(configPath, []byte("devices:\n- id: dev-qmi\n  device_backend: qmi\n  modem_imei: \"867383058993207\"\n  control_device: /dev/cdc-wdm2\n  interface: wwan1\n"), 0600); err != nil {
+	if err := os.WriteFile(configPath, []byte("devices:\n- id: dev-qmi\n  device_backend: qmi\n  modem_imei: \"860000000008008\"\n  control_device: /dev/cdc-wdm2\n  interface: wwan1\n"), 0600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	if err := config.InitGlobalManager(configPath); err != nil {
@@ -360,7 +360,7 @@ func TestModemRebootRecoveryDoesNotBlockScanOnStaleConfiguredControlPath(t *test
 
 	origResolve := resolveDiscoveredQMIDeviceFn
 	resolveDiscoveredQMIDeviceFn = func(dev QMIDevice, timeout time.Duration, allowIMEIProbe bool) (QMIDevice, string) {
-		return dev, "867383058993207"
+		return dev, "860000000008008"
 	}
 	t.Cleanup(func() { resolveDiscoveredQMIDeviceFn = origResolve })
 
@@ -439,7 +439,7 @@ func TestManualModemRebootRecoveryEvictsHalfReadyWorkerAfterIdentityFailure(t *t
 		Pool:    p,
 		stop:    make(chan struct{}),
 	}
-	w.state.Identity.IMEI = "861716071104530"
+	w.state.Identity.IMEI = "860000000003003"
 
 	p.mu.Lock()
 	p.workers[w.ID] = w

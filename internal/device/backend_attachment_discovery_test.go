@@ -13,11 +13,11 @@ func TestBackendAttachmentDiscoveryWaitFindsTargetByIMEI(t *testing.T) {
 		NetInterface:  "wwan2",
 		USBPath:       "1-2",
 		ATPort:        "/dev/ttyUSB6",
-		IMEI:          "866069053342612",
+		IMEI:          "860000000002002",
 		TransportType: "mbim",
 	}})
 
-	got, err := discovery.Wait(context.Background(), "866069053342612", "mbim")
+	got, err := discovery.Wait(context.Background(), "860000000002002", "mbim")
 	if err != nil {
 		t.Fatalf("Wait() error = %v", err)
 	}
@@ -36,7 +36,7 @@ func TestBackendAttachmentDiscoveryWaitRejectsAmbiguousIMEI(t *testing.T) {
 
 	result := make(chan error, 1)
 	go func() {
-		_, err := discovery.Wait(ctx, "866069053342612", "qmi")
+		_, err := discovery.Wait(ctx, "860000000002002", "qmi")
 		result <- err
 	}()
 	select {
@@ -55,7 +55,7 @@ func TestBackendAttachmentDiscoveryWaitReportsTimeoutAndLastState(t *testing.T) 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
 	defer cancel()
 
-	_, err := discovery.Wait(ctx, "866069053342612", "qmi")
+	_, err := discovery.Wait(ctx, "860000000002002", "qmi")
 	if err == nil || !strings.Contains(err.Error(), "未发现 IMEI") || !strings.Contains(err.Error(), "deadline exceeded") {
 		t.Fatalf("Wait() error = %v", err)
 	}
@@ -63,7 +63,7 @@ func TestBackendAttachmentDiscoveryWaitReportsTimeoutAndLastState(t *testing.T) 
 
 func TestBackendAttachmentDiscoveryWaitRejectsUnknownTarget(t *testing.T) {
 	discovery := backendAttachmentTestDiscovery(nil)
-	_, err := discovery.Wait(context.Background(), "866069053342612", "auto")
+	_, err := discovery.Wait(context.Background(), "860000000002002", "auto")
 	if err == nil || !strings.Contains(err.Error(), "仅支持 qmi 或 mbim") {
 		t.Fatalf("Wait() error = %v", err)
 	}
@@ -81,7 +81,7 @@ func TestBackendAttachmentDiscoveryWaitCancelsBlockedResolver(t *testing.T) {
 	defer cancel()
 
 	started := time.Now()
-	_, err := discovery.Wait(ctx, "866069053342612", "qmi")
+	_, err := discovery.Wait(ctx, "860000000002002", "qmi")
 	if err == nil || !strings.Contains(err.Error(), "deadline exceeded") {
 		t.Fatalf("Wait() error = %v", err)
 	}
@@ -102,7 +102,7 @@ func TestBackendAttachmentDiscoveryWaitCancelsBlockedIdentityProbe(t *testing.T)
 	defer cancel()
 
 	start := time.Now()
-	_, err := discovery.Wait(ctx, "866069053342612", "qmi")
+	_, err := discovery.Wait(ctx, "860000000002002", "qmi")
 	if err == nil || !strings.Contains(err.Error(), "deadline exceeded") {
 		t.Fatalf("Wait() error = %v", err)
 	}
@@ -124,7 +124,7 @@ func TestBackendAttachmentDiscoveryUsesOwnedATPortHintAfterProtocolIdentity(t *t
 	got, err := discovery.WaitWithHint(
 		context.Background(),
 		BackendAttachmentQuery{
-			IMEI:          "866069053342612",
+			IMEI:          "860000000002002",
 			TargetBackend: "qmi",
 			ATPortHint:    "/dev/ttyUSB6",
 		},
@@ -144,13 +144,13 @@ func TestBackendAttachmentDiscoveryRebindsWhenATPortNumberChanges(t *testing.T) 
 	discovery := backendAttachmentTestDiscovery([]CompatibleModem{modem})
 	discovery.Resolve = func(_ context.Context, candidate CompatibleModem, _ time.Duration) (CompatibleModem, string) {
 		candidate.ATPort = "/dev/ttyUSB8"
-		return candidate, "866069053342612"
+		return candidate, "860000000002002"
 	}
 
 	got, err := discovery.WaitWithHint(
 		context.Background(),
 		BackendAttachmentQuery{
-			IMEI:          "866069053342612",
+			IMEI:          "860000000002002",
 			TargetBackend: "qmi",
 			ATPortHint:    "/dev/ttyUSB6",
 		},
@@ -173,11 +173,11 @@ func TestBackendAttachmentDiscoveryUsesExplicitATIdentityRecovery(t *testing.T) 
 	}
 	discovery.Resolve = func(_ context.Context, candidate CompatibleModem, _ time.Duration) (CompatibleModem, string) {
 		candidate.ATPort = "/dev/ttyUSB6"
-		return candidate, "866069053342612"
+		return candidate, "860000000002002"
 	}
 
 	got, err := discovery.WaitWithHint(context.Background(), BackendAttachmentQuery{
-		IMEI:                    "866069053342612",
+		IMEI:                    "860000000002002",
 		TargetBackend:           "mbim",
 		ATPortHint:              "/dev/ttyUSB6",
 		AllowATIdentityRecovery: true,
@@ -228,7 +228,7 @@ func backendAttachmentTestModem(usbPath, controlPath, iface string) CompatibleMo
 		NetInterface:  iface,
 		USBPath:       usbPath,
 		ATPort:        "/dev/ttyUSB2",
-		IMEI:          "866069053342612",
+		IMEI:          "860000000002002",
 		TransportType: "qmi",
 	}
 }

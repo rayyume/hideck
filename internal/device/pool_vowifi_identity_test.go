@@ -49,7 +49,7 @@ func TestVoWiFiMainStartupPrepareRejectsPartialISIMBeforeDataplaneDisconnect(t *
 			IMSI: "310280233621715",
 			MCC:  "310",
 			MNC:  "280",
-			IMEI: "350225622441987",
+			IMEI: "350000000000001",
 		},
 		Access: runtimehost.NewModemAccessAdapter(vowifiIdentityTestModem{
 			identity: identity.Identity{IMPI: "310280233621715@private.att.net"},
@@ -70,7 +70,7 @@ func TestVoWiFiMainStartupUsesPreparedSessionIdentity(t *testing.T) {
 			IMSI: "310280233621715",
 			MCC:  "310",
 			MNC:  "280",
-			IMEI: "350225622441987",
+			IMEI: "350000000000001",
 			SMSC: "+13123149810",
 		},
 		Access: runtimehost.NewModemAccessAdapter(vowifiIdentityTestModem{
@@ -110,7 +110,7 @@ func TestVoWiFiMainStartupPreparedSessionAppliesRuntimeEPDGOverride(t *testing.T
 			IMSI: "310280233621715",
 			MCC:  "310",
 			MNC:  "280",
-			IMEI: "350225622441987",
+			IMEI: "350000000000001",
 		},
 		Access: runtimehost.NewModemAccessAdapter(vowifiIdentityTestModem{
 			identity: identity.Identity{
@@ -135,7 +135,7 @@ func TestVoWiFiMainStartupPrepareUsesISIMIdentity(t *testing.T) {
 			IMSI: "310280233621715",
 			MCC:  "310",
 			MNC:  "280",
-			IMEI: "350225622441987",
+			IMEI: "350000000000001",
 		},
 		Access: runtimehost.NewModemAccessAdapter(vowifiIdentityTestModem{
 			identity: identity.Identity{

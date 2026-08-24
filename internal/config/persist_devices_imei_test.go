@@ -8,7 +8,7 @@ import (
 
 func TestDeleteDeviceInFileRemovesAndIsIdempotent(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
-	raw := "devices:\n- id: wwan0\n  device_backend: qmi\n  modem_imei: \"866069051900973\"\n- id: wwan1\n  device_backend: qmi\n"
+	raw := "devices:\n- id: wwan0\n  device_backend: qmi\n  modem_imei: \"860000000001001\"\n- id: wwan1\n  device_backend: qmi\n"
 	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
@@ -37,7 +37,7 @@ func TestUpdateDeviceIMEIInFileWritesOnlyIMEI(t *testing.T) {
 		t.Fatalf("write config: %v", err)
 	}
 
-	if err := UpdateDeviceIMEIInFile(path, map[string]string{"dev1": "867383058993207"}); err != nil {
+	if err := UpdateDeviceIMEIInFile(path, map[string]string{"dev1": "860000000008008"}); err != nil {
 		t.Fatalf("UpdateDeviceIMEIInFile() error = %v", err)
 	}
 
@@ -46,8 +46,8 @@ func TestUpdateDeviceIMEIInFileWritesOnlyIMEI(t *testing.T) {
 		t.Fatalf("Load() error = %v", err)
 	}
 	got := updated.Devices[0]
-	if got.ModemIMEI != "867383058993207" {
-		t.Fatalf("ModemIMEI = %q, want 867383058993207", got.ModemIMEI)
+	if got.ModemIMEI != "860000000008008" {
+		t.Fatalf("ModemIMEI = %q, want 860000000008008", got.ModemIMEI)
 	}
 	// 零路径架构: Load() 绝不从文件回填运行时路径字段(mapstructure:"-")。
 	if got.ControlDevice != "" || got.Interface != "" || got.ATPort != "" {
