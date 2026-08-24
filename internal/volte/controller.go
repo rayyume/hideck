@@ -21,14 +21,17 @@ type Controller struct {
 	lteWait        time.Duration
 	imsWait        time.Duration
 	mu             sync.Mutex
+	locks          map[string]*sync.Mutex
 	sess           map[string]*session
 	globalIncoming []func(voicehost.IncomingCall)
 	globalEvents   []func(voicehost.CallEvent)
 }
 
 type session struct {
-	status Status
-	voice  *voiceSession
+	gen       uint64
+	imsHooked bool
+	status    Status
+	voice     *voiceSession
 }
 
 func NewController(host Host) *Controller {
@@ -39,7 +42,7 @@ func NewController(host Host) *Controller {
 }
 
 func NewControllerWithBackup(host Host, backupDir string) *Controller {
-	c := &Controller{host: host, sess: make(map[string]*session)}
+	c := &Controller{host: host, sess: make(map[string]*session), locks: make(map[string]*sync.Mutex)}
 	c.provision = NewProvisioner(host, &FileStore{Dir: backupDir})
 	return c
 }
@@ -59,34 +62,45 @@ func (c *Controller) Enable(ctx context.Context, deviceID string) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	c.mu.Lock()
-	s := c.sess[deviceID]
-	if s == nil {
-		s = &session{status: Status{DeviceID: deviceID, Phase: PhaseEnabling}}
-		c.sess[deviceID] = s
-	}
-	s.status.Phase = PhaseEnabling
-	s.status.LastError = ""
-	c.mu.Unlock()
-
-	if err := c.host.StopSoftwareIMS(deviceID); err != nil {
-		return c.fail(deviceID, fmt.Errorf("stop software IMS: %w", err))
-	}
-	if err := c.provisionConfig(ctx, deviceID); err != nil {
-		return err
-	}
-	if err := c.bringUpAccess(ctx, deviceID); err != nil {
-		return c.fail(deviceID, err)
-	}
-	c.patch(deviceID, func(st *Status) {
-		if st.Phase == PhaseEnabling {
-			st.Phase = PhaseRegistering
+	return c.withDevice(deviceID, func() error {
+		c.mu.Lock()
+		s := c.sess[deviceID]
+		if s == nil {
+			s = &session{status: Status{DeviceID: deviceID, Phase: PhaseEnabling}}
+			c.sess[deviceID] = s
 		}
+		s.gen++
+		gen := s.gen
+		s.status.Phase = PhaseEnabling
+		s.status.LastError = ""
+		c.mu.Unlock()
+
+		if err := c.host.StopSoftwareIMS(deviceID); err != nil {
+			return c.fail(deviceID, fmt.Errorf("stop software IMS: %w", err))
+		}
+		if _, err := c.host.ExecuteAT(deviceID, COPSNumericFormatCommand(), defaultATTimeout); err != nil {
+			logger.Debug("AT+COPS=3,2 失败，继续用当前 COPS 格式", "device", deviceID, "err", err)
+		}
+		if err := c.waitLTE(ctx, deviceID); err != nil {
+			return c.fail(deviceID, err)
+		}
+		if err := c.provisionConfig(ctx, deviceID); err != nil {
+			return err
+		}
+		if err := c.activateIMSPDN(deviceID); err != nil {
+			logger.Warn("IMS PDN 未激活，继续等注册", "device", deviceID, "err", err)
+			c.setError(deviceID, err)
+		}
+		c.patch(deviceID, func(st *Status) {
+			if st.Phase == PhaseEnabling {
+				st.Phase = PhaseRegistering
+			}
+		})
+		c.attachIMS(deviceID, gen)
+		c.attachVoice(deviceID)
+		c.waitIMS(ctx, deviceID)
+		return nil
 	})
-	c.attachIMS(deviceID)
-	c.attachVoice(deviceID)
-	c.refreshRegistration(ctx, deviceID)
-	return nil
 }
 
 func (c *Controller) Restore(ctx context.Context, deviceID string) error {
@@ -111,14 +125,26 @@ func (c *Controller) Disable(deviceID string) {
 	if c == nil || deviceID == "" {
 		return
 	}
-	if c.host != nil {
-		if err := c.host.ReleaseIMSClients(deviceID); err != nil {
-			logger.Warn("释放原生 IMS 客户端失败", "device", deviceID, "err", err)
+	_ = c.withDevice(deviceID, func() error {
+		if active := c.ActiveCall(deviceID); active != nil {
+			_ = c.HangupCall(context.Background(), deviceID, active.CallID)
+			if m := c.media.take(active.CallID); m != nil {
+				_ = m.Close()
+			}
 		}
-	}
-	c.mu.Lock()
-	delete(c.sess, deviceID)
-	c.mu.Unlock()
+		if c.host != nil {
+			if err := c.host.ReleaseIMSClients(deviceID); err != nil {
+				logger.Warn("释放原生 IMS 客户端失败", "device", deviceID, "err", err)
+			}
+		}
+		c.mu.Lock()
+		if s := c.sess[deviceID]; s != nil {
+			s.gen++
+		}
+		delete(c.sess, deviceID)
+		c.mu.Unlock()
+		return nil
+	})
 }
 
 func (c *Controller) Status(deviceID string) Status {
@@ -165,13 +191,13 @@ func (c *Controller) provisionConfig(ctx context.Context, deviceID string) error
 	if err != nil {
 		c.setError(deviceID, err)
 	}
-	if err := c.host.SetNativeIMS(ctx, deviceID, true); err != nil {
-		logger.Warn("QMI 打开原生 IMS 失败，继续用 AT 结果", "device", deviceID, "err", err)
-	}
 	if err := c.host.EnsureIMSClients(ctx, deviceID); err != nil {
 		logger.Warn("QMI IMS/IMSA 客户端不可用", "device", deviceID, "err", err)
 		c.patch(deviceID, func(st *Status) { st.QMIIMSUnavailable = true })
 		return c.fail(deviceID, err)
+	}
+	if err := c.host.SetNativeIMS(ctx, deviceID, true); err != nil {
+		logger.Warn("QMI 打开原生 IMS 失败，继续用 AT 结果", "device", deviceID, "err", err)
 	}
 	audio := strings.TrimSpace(c.host.AudioDevice(deviceID))
 	c.patch(deviceID, func(st *Status) { st.AudioDevice = audio })
@@ -192,20 +218,57 @@ func (c *Controller) applyProvision(deviceID string, res Result) {
 	})
 }
 
-func (c *Controller) attachIMS(deviceID string) {
+func (c *Controller) attachIMS(deviceID string, gen uint64) {
 	if c == nil || c.host == nil {
 		return
 	}
+	c.mu.Lock()
+	s := c.sess[deviceID]
+	if s == nil || s.imsHooked {
+		c.mu.Unlock()
+		return
+	}
+	s.imsHooked = true
+	c.mu.Unlock()
 	_ = c.host.OnIMSRegistration(deviceID, func(info *qmi.IMSARegistrationStatus) {
+		if !c.generationLive(deviceID, gen) {
+			return
+		}
 		c.patch(deviceID, func(st *Status) { applyIMSARegistration(st, info) })
 	})
 	_ = c.host.OnIMSServices(deviceID, func(info *qmi.IMSAServicesStatus) {
+		if !c.generationLive(deviceID, gen) {
+			return
+		}
 		c.patch(deviceID, func(st *Status) {
 			if info != nil && info.HasVoiceServiceStatus {
 				st.VoiceAvailable = info.VoiceServiceStatus == qmi.IMSAServiceAvailabilityAvailable
 			}
 		})
 	})
+}
+
+func (c *Controller) generationLive(deviceID string, gen uint64) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	s := c.sess[deviceID]
+	return s != nil && s.gen == gen
+}
+
+func (c *Controller) withDevice(deviceID string, fn func() error) error {
+	c.mu.Lock()
+	if c.locks == nil {
+		c.locks = map[string]*sync.Mutex{}
+	}
+	lk := c.locks[deviceID]
+	if lk == nil {
+		lk = &sync.Mutex{}
+		c.locks[deviceID] = lk
+	}
+	c.mu.Unlock()
+	lk.Lock()
+	defer lk.Unlock()
+	return fn()
 }
 
 func applyIMSARegistration(st *Status, info *qmi.IMSARegistrationStatus) {
@@ -295,19 +358,7 @@ func (c *Controller) resolveMBN(deviceID, mcc, mnc string) (string, error) {
 	return UniqueMBN(mcc, mnc, entries)
 }
 
-func (c *Controller) bringUpAccess(ctx context.Context, deviceID string) error {
-	if err := c.waitLTE(deviceID); err != nil {
-		return err
-	}
-	if err := c.activateIMSPDN(deviceID); err != nil {
-		logger.Warn("IMS PDN 未激活，继续等注册", "device", deviceID, "err", err)
-		c.setError(deviceID, err)
-	}
-	c.waitIMS(ctx, deviceID)
-	return nil
-}
-
-func (c *Controller) waitLTE(deviceID string) error {
+func (c *Controller) waitLTE(ctx context.Context, deviceID string) error {
 	check := func() error {
 		resp, err := c.host.ExecuteAT(deviceID, CEREGQueryCommand(), defaultATTimeout)
 		if err != nil {
@@ -328,6 +379,9 @@ func (c *Controller) waitLTE(deviceID string) error {
 	}
 	deadline := time.Now().Add(c.lteWait)
 	for time.Now().Before(deadline) {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		time.Sleep(200 * time.Millisecond)
 		if err := check(); err == nil {
 			return nil
@@ -361,6 +415,17 @@ func (c *Controller) activateIMSPDN(deviceID string) error {
 		if _, err := c.host.ExecuteAT(deviceID, CGACTSetCommand(ims.CID, true), defaultATTimeout); err != nil {
 			return fmt.Errorf("activate IMS PDN cid %d: %w", ims.CID, err)
 		}
+		actResp, err = c.host.ExecuteAT(deviceID, CGACTQueryCommand(), defaultATTimeout)
+		if err != nil {
+			return fmt.Errorf("re-query CGACT: %w", err)
+		}
+		active, err = ParseCGACT(actResp)
+		if err != nil {
+			return err
+		}
+		if !active[ims.CID] {
+			return fmt.Errorf("IMS PDN cid %d still down", ims.CID)
+		}
 	}
 	c.patch(deviceID, func(st *Status) { st.IMSPDNActive = true })
 	return nil
@@ -373,6 +438,9 @@ func (c *Controller) waitIMS(ctx context.Context, deviceID string) {
 	}
 	deadline := time.Now().Add(c.imsWait)
 	for time.Now().Before(deadline) {
+		if ctx.Err() != nil {
+			return
+		}
 		time.Sleep(200 * time.Millisecond)
 		c.refreshRegistration(ctx, deviceID)
 		if c.Status(deviceID).IMSRegistered {

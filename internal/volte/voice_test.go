@@ -2,6 +2,7 @@ package volte
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -99,6 +100,33 @@ func TestVoiceAgentMTNoDuplicateIncoming(t *testing.T) {
 	})
 	if countType(events, "CallRinging") != 1 || countType(events, "CallAnswered") != 1 || countType(events, "CallEnded") != 1 {
 		t.Fatalf("events %v", eventTypes(events))
+	}
+	if incoming[0].OfferSDP == "" || !strings.Contains(incoming[0].OfferSDP, "PCMU/8000") {
+		t.Fatalf("MT OfferSDP %q", incoming[0].OfferSDP)
+	}
+}
+
+func TestVoiceAgentReusesQMICallIDAfterEnd(t *testing.T) {
+	ctl, host := enableVoice(t)
+	var events []voicehost.CallEvent
+	ctl.SubscribeCallEvents(func(ev voicehost.CallEvent) { events = append(events, ev) })
+	if _, err := ctl.BeginCall(context.Background(), voicehost.BeginCallRequest{DeviceID: "wwan1", Callee: "10086"}); err != nil {
+		t.Fatal(err)
+	}
+	host.fireVoice(&qmi.VoiceAllCallInfo{
+		Calls: []qmi.VoiceCallInfo{{ID: 1, State: qmiCallConversation, Direction: qmiDirMO}},
+	})
+	host.fireVoice(&qmi.VoiceAllCallInfo{
+		Calls: []qmi.VoiceCallInfo{{ID: 1, State: qmiCallEnd, Direction: qmiDirMO}},
+	})
+	if _, err := ctl.BeginCall(context.Background(), voicehost.BeginCallRequest{DeviceID: "wwan1", Callee: "10010"}); err != nil {
+		t.Fatal(err)
+	}
+	host.fireVoice(&qmi.VoiceAllCallInfo{
+		Calls: []qmi.VoiceCallInfo{{ID: 1, State: qmiCallConversation, Direction: qmiDirMO}},
+	})
+	if countType(events, "CallAnswered") != 2 {
+		t.Fatalf("second call must answer after id reuse: %v", eventTypes(events))
 	}
 }
 

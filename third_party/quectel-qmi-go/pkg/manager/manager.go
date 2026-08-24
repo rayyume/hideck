@@ -1236,13 +1236,28 @@ func (m *Manager) SetIMSServiceEnabled(ctx context.Context, enabled bool) error 
 	if m == nil || m.client == nil {
 		return fmt.Errorf("manager not initialized")
 	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	m.imsLifecycleMu.Lock()
+	defer m.imsLifecycleMu.Unlock()
+	m.mu.Lock()
 	ims := m.ims
+	m.mu.Unlock()
 	if ims == nil {
-		svc, err := qmi.NewIMSService(m.client)
+		svc, err := m.createIMSService(ctx)
 		if err != nil {
 			return fmt.Errorf("allocate IMS service: %w", err)
 		}
-		ims = svc
+		m.mu.Lock()
+		if m.ims == nil {
+			m.ims = svc
+			ims = svc
+		} else {
+			ims = m.ims
+			_ = m.closeSvc(svc)
+		}
+		m.mu.Unlock()
 	}
 	v := enabled
 	return ims.SetServicesEnabledSetting(ctx, qmi.IMSServicesEnabledSettingsUpdate{

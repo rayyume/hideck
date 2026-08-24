@@ -24,6 +24,7 @@ type PCMPort interface {
 
 type PCMBridge struct {
 	conn       net.PacketConn
+	remoteMu   sync.Mutex
 	remote     net.Addr
 	pcm        PCMPort
 	listenOnly bool
@@ -43,6 +44,26 @@ func NewPCMBridge(conn net.PacketConn, remote net.Addr, pcm PCMPort, listenOnly 
 	go b.downlink()
 	go b.uplink()
 	return b
+}
+
+func (b *PCMBridge) setRemote(addr net.Addr) {
+	if b == nil || addr == nil {
+		return
+	}
+	b.remoteMu.Lock()
+	if b.remote == nil {
+		b.remote = addr
+	}
+	b.remoteMu.Unlock()
+}
+
+func (b *PCMBridge) getRemote() net.Addr {
+	if b == nil {
+		return nil
+	}
+	b.remoteMu.Lock()
+	defer b.remoteMu.Unlock()
+	return b.remote
 }
 
 func (b *PCMBridge) Stats() (toPCM, fromPCM, silent, lost, overflow uint64) {
@@ -82,8 +103,8 @@ func (b *PCMBridge) downlink() {
 			}
 			return
 		}
-		if b.remote == nil {
-			b.remote = addr
+		if addr != nil {
+			b.setRemote(addr)
 		}
 		payload, ok := rtpPCMUPayload(buf[:n])
 		if !ok {
@@ -113,7 +134,8 @@ func (b *PCMBridge) uplink() {
 		case <-b.closed:
 			return
 		case <-ticker.C:
-			if b.conn == nil || b.remote == nil {
+			remote := b.getRemote()
+			if b.conn == nil || remote == nil {
 				continue
 			}
 			samples := make([]int16, pcmuFrameSamples)
@@ -135,7 +157,7 @@ func (b *PCMBridge) uplink() {
 			pkt := encodePCMURTP(b.seq, b.ts, payload)
 			b.seq++
 			b.ts += pcmuFrameSamples
-			if _, err := b.conn.WriteTo(pkt, b.remote); err != nil {
+			if _, err := b.conn.WriteTo(pkt, remote); err != nil {
 				return
 			}
 		}

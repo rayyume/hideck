@@ -152,10 +152,11 @@ func parseCGDCONTArgs(rest string) (cid, pdp, apn string, ok bool) {
 	return cid, pdp, apn, cid != ""
 }
 
-func COPSQueryCommand() string    { return "AT+COPS?" }
-func CEREGQueryCommand() string   { return "AT+CEREG?" }
-func CGDCONTQueryCommand() string { return "AT+CGDCONT?" }
-func CGACTQueryCommand() string   { return "AT+CGACT?" }
+func COPSQueryCommand() string         { return "AT+COPS?" }
+func COPSNumericFormatCommand() string { return "AT+COPS=3,2" }
+func CEREGQueryCommand() string        { return "AT+CEREG?" }
+func CGDCONTQueryCommand() string      { return "AT+CGDCONT?" }
+func CGACTQueryCommand() string        { return "AT+CGACT?" }
 
 func CGACTSetCommand(cid int, active bool) string {
 	bit := 0

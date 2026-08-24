@@ -128,6 +128,8 @@ func (f *FakeModem) ExecuteAT(deviceID, cmd string, _ time.Duration) (string, er
 		return "OK", nil
 	case cmd == "AT+CFUN=1,1":
 		return "OK", nil
+	case cmd == COPSNumericFormatCommand():
+		return "OK", nil
 	case cmd == COPSQueryCommand():
 		plmn := f.COPS
 		if plmn == "" {

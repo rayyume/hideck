@@ -29,8 +29,12 @@ function isNativeVoLTE(cur: PolicyMirror): boolean {
   return (cur.phone_mode ?? 'wifi') === 'volte'
 }
 
+function campsOnCell(cur: PolicyMirror): boolean {
+  return isCellularMode(cur) || isNativeVoLTE(cur)
+}
+
 function isWifiCalling(cur: PolicyMirror): boolean {
-  return !!cur.vowifi_enabled && !isCellularMode(cur) && !isNativeVoLTE(cur)
+  return !!cur.vowifi_enabled && !campsOnCell(cur)
 }
 
 // 互斥规则（开关联动，避免用户点出冲突组合）：
@@ -50,7 +54,7 @@ function nextMirror(
     }
     return {
       network_enabled: true,
-      vowifi_enabled: isCellularMode(cur) ? cur.vowifi_enabled : false,
+      vowifi_enabled: campsOnCell(cur) ? cur.vowifi_enabled : false,
       airplane_enabled: false,
       phone_mode: cur.phone_mode ?? 'wifi',
       data_strategy: cur.data_strategy ?? 'on_demand'
@@ -58,11 +62,11 @@ function nextMirror(
   }
   if (field === 'vowifi_enabled') {
     if (val) {
-      const cellular = isCellularMode(cur)
+      const camp = campsOnCell(cur)
       return {
-        network_enabled: cellular ? (cur.data_strategy === 'always' || cur.network_enabled) : false,
+        network_enabled: camp ? (cur.data_strategy === 'always' || cur.network_enabled) : false,
         vowifi_enabled: true,
-        airplane_enabled: cellular ? false : true,
+        airplane_enabled: camp ? false : true,
         phone_mode: cur.phone_mode ?? 'wifi',
         data_strategy: cur.data_strategy ?? 'on_demand',
       }
@@ -73,12 +77,12 @@ function nextMirror(
     return {
       ...cur,
       airplane_enabled: false,
-      network_enabled: isCellularMode(cur) && cur.data_strategy === 'always' ? true : cur.network_enabled
+      network_enabled: campsOnCell(cur) && cur.data_strategy === 'always' ? true : cur.network_enabled
     }
   }
   return {
     network_enabled: false,
-    vowifi_enabled: isCellularMode(cur) ? cur.vowifi_enabled : false,
+    vowifi_enabled: campsOnCell(cur) ? cur.vowifi_enabled : false,
     airplane_enabled: true,
     phone_mode: cur.phone_mode ?? 'wifi',
     data_strategy: cur.data_strategy ?? 'on_demand'

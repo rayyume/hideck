@@ -66,9 +66,13 @@ func (c *Controller) attachVoice(deviceID string) {
 	vs := s.voice
 	first := !vs.attached
 	vs.attached = true
+	gen := s.gen
 	c.mu.Unlock()
 	if first {
 		_ = c.host.OnVoiceStatus(deviceID, func(info *qmi.VoiceAllCallInfo) {
+			if !c.generationLive(deviceID, gen) {
+				return
+			}
 			c.handleVoiceInfo(deviceID, vs, info)
 		})
 	}
@@ -114,7 +118,14 @@ func (c *Controller) addIncoming(deviceID string, handler func(voicehost.Incomin
 	defer c.mu.Unlock()
 	if deviceID == "" {
 		c.globalIncoming = append(c.globalIncoming, handler)
-		return func() {}
+		idx := len(c.globalIncoming) - 1
+		return func() {
+			c.mu.Lock()
+			if idx < len(c.globalIncoming) {
+				c.globalIncoming[idx] = nil
+			}
+			c.mu.Unlock()
+		}
 	}
 	s := c.ensureLocked(deviceID)
 	s.voice.incoming = append(s.voice.incoming, handler)
@@ -128,7 +139,14 @@ func (c *Controller) SubscribeCallEvents(handler func(voicehost.CallEvent)) func
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.globalEvents = append(c.globalEvents, handler)
-	return func() {}
+	idx := len(c.globalEvents) - 1
+	return func() {
+		c.mu.Lock()
+		if idx < len(c.globalEvents) {
+			c.globalEvents[idx] = nil
+		}
+		c.mu.Unlock()
+	}
 }
 
 func (c *Controller) ensureLocked(deviceID string) *session {
@@ -298,6 +316,9 @@ func (c *Controller) handleVoiceInfo(deviceID string, vs *voiceSession, info *qm
 			dir = "inbound"
 		}
 		prev, existed := vs.get(id)
+		if !existed && stateRank(state) == rankTerminal {
+			continue
+		}
 		if existed && stateRank(state) < stateRank(prev.State) && stateRank(state) != rankTerminal {
 			continue
 		}
@@ -327,8 +348,16 @@ func (c *Controller) handleVoiceInfo(deviceID string, vs *voiceSession, info *qm
 		}
 		vs.put(next)
 		if dir == "inbound" && vs.markIncoming(id) {
+			if next.ClientSDP == "" {
+				if media, err := startCallMedia("", nullPCM{}, false); err == nil {
+					next.ClientSDP = media.sdp
+					vs.put(next)
+					c.media.put(id, media)
+				}
+			}
 			c.emitIncoming(deviceID, voicehost.IncomingCall{
 				DeviceID: deviceID, CallID: id, Caller: peer, State: "ringing", ReceivedAt: now,
+				OfferSDP: next.ClientSDP,
 			})
 		}
 		if eventType == "" || !vs.markEmitted(id, rankKey(state)) {
@@ -351,6 +380,7 @@ func (c *Controller) handleVoiceInfo(deviceID string, vs *voiceSession, info *qm
 			if m := c.media.take(id); m != nil {
 				_ = m.Close()
 			}
+			vs.forget(id)
 		}
 	}
 	for _, call := range vs.list() {
@@ -371,6 +401,7 @@ func (c *Controller) handleVoiceInfo(deviceID string, vs *voiceSession, info *qm
 			if m := c.media.take(call.ID); m != nil {
 				_ = m.Close()
 			}
+			vs.forget(call.ID)
 		}
 	}
 }
@@ -507,7 +538,9 @@ func (c *Controller) emitEvent(deviceID string, event voicehost.CallEvent) {
 	}
 	c.mu.Unlock()
 	for _, h := range handlers {
-		h(event)
+		if h != nil {
+			h(event)
+		}
 	}
 }
 
@@ -519,7 +552,9 @@ func (c *Controller) emitIncoming(deviceID string, call voicehost.IncomingCall) 
 	}
 	c.mu.Unlock()
 	for _, h := range handlers {
-		h(call)
+		if h != nil {
+			h(call)
+		}
 	}
 }
 
@@ -563,6 +598,14 @@ func (vs *voiceSession) markEmitted(id, eventType string) bool {
 	}
 	vs.emitted[id][eventType] = true
 	return true
+}
+
+func (vs *voiceSession) forget(id string) {
+	vs.mu.Lock()
+	delete(vs.active, id)
+	delete(vs.emitted, id)
+	delete(vs.incomingSeen, id)
+	vs.mu.Unlock()
 }
 
 func (vs *voiceSession) markIncoming(id string) bool {

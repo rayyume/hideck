@@ -100,6 +100,33 @@ func TestControllerReleasesIMSClientsAndFollowsIndications(t *testing.T) {
 	}
 }
 
+func TestControllerForcesNumericCOPSBeforePLMN(t *testing.T) {
+	host := newFakeModem()
+	ctl := NewControllerWithBackup(host, t.TempDir())
+	if err := ctl.Enable(context.Background(), "wwan1"); err != nil {
+		t.Fatal(err)
+	}
+	var sawFormat, sawCEREG, sawCOPS bool
+	formatAt := -1
+	copsAt := -1
+	for i, cmd := range host.Commands {
+		if cmd == COPSNumericFormatCommand() {
+			sawFormat = true
+			formatAt = i
+		}
+		if cmd == CEREGQueryCommand() {
+			sawCEREG = true
+		}
+		if cmd == COPSQueryCommand() && copsAt < 0 {
+			copsAt = i
+			sawCOPS = true
+		}
+	}
+	if !sawFormat || !sawCEREG || !sawCOPS || formatAt > copsAt {
+		t.Fatalf("command order %v", host.Commands)
+	}
+}
+
 func TestControllerRejectsUnknownPLMNWithoutGuessingMBN(t *testing.T) {
 	host := newFakeModem()
 	host.COPS = "23433"

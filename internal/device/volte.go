@@ -53,7 +53,7 @@ func (p *Pool) EnableNativeVoLTE(deviceID string) error {
 	if p.IsESIMSwitching(deviceID) {
 		return fmt.Errorf("设备 %s 正在切卡，暂不允许启动 VoLTE", deviceID)
 	}
-	class, err := ClassifyWorkerLebaraUK(w)
+	class, err := ClassifyWorkerLebaraUKForControl(p.Context(), w)
 	if err != nil {
 		return err
 	}
@@ -64,6 +64,10 @@ func (p *Pool) EnableNativeVoLTE(deviceID string) error {
 		logger.Warn("VoLTE 等待 QMI 就绪失败，继续尝试 AT", "device", deviceID, "err", err)
 	}
 	return p.volteCtl.Enable(p.Context(), deviceID)
+}
+
+func (p *Pool) ScheduleNativeVoLTE(deviceID, reason string) {
+	p.scheduleNativeVoLTE(deviceID, reason)
 }
 
 func (p *Pool) scheduleNativeVoLTE(deviceID, reason string) {
@@ -161,7 +165,8 @@ func (p *Pool) IMSAStatus(ctx context.Context, deviceID string) (volte.Registrat
 	if err != nil {
 		return volte.Registration{}, err
 	}
-	out := volte.Registration{Registered: reg != nil && reg.HasStatus && reg.Status == qmi.IMSARegistrationStateRegistered}
+	out := volte.Registration{Registered: reg != nil && reg.HasStatus &&
+		(reg.Status == qmi.IMSARegistrationStateRegistered || reg.Status == qmi.IMSARegistrationStateLimitedRegistered)}
 	svc, svcErr := w.QMICore.IMSAGetIMSServicesStatus(ctx)
 	if svcErr == nil && svc != nil && svc.HasVoiceServiceStatus {
 		out.VoiceAvailable = svc.VoiceServiceStatus == qmi.IMSAServiceAvailabilityAvailable

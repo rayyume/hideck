@@ -129,14 +129,7 @@ func (s *Server) handleDeviceVoWiFiPatch(c *gin.Context) {
 		}
 		s.pool.SetWorkerVoWiFiPolicy(deviceID, true)
 		if w := s.pool.GetWorker(deviceID); w != nil && device.IsNativeVoLTEMode(w.Config.PhoneMode) {
-			if err := s.pool.EnableNativeVoLTE(deviceID); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{
-					"status":  "error",
-					"message": "切换 VoLTE 失败: " + err.Error(),
-					"device":  deviceID,
-				})
-				return
-			}
+			s.pool.ScheduleNativeVoLTE(deviceID, "api_enable_vowifi")
 			c.JSON(http.StatusOK, gin.H{
 				"status":  "ok",
 				"message": "VoLTE 已设置，会驻网并由模组原生 IMS 打电话。打开「网络」才会走上网流量",
