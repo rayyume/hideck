@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import type { DeviceOverviewItem } from '../types/api'
 import StatusLight from './StatusLight.vue'
 import { lifecycleStatusLabel, primaryLifecycleStatus } from '../utils/deviceLifecycle'
+import { useSensitiveVisibility } from '../composables/useSensitiveVisibility'
 import { ArrowSync24Regular, Mail24Regular, Power24Regular, Sim24Regular } from '@vicons/fluent'
 
 const props = defineProps<{
@@ -20,16 +21,17 @@ const emit = defineEmits<{
 }>()
 
 const status = computed(() => primaryLifecycleStatus(props.device))
+const showSensitive = useSensitiveVisibility()
 
 const operatorName = computed(() => {
   return props.device.modem?.operator || props.device.modem?.native_spn || '运营商不可用'
 })
 
 const identityItems = computed(() => [
-  { label: 'IMEI', value: props.device.modem?.imei || '不可用' },
-  { label: 'ICCID', value: props.device.modem?.iccid || '不可用' },
-  { label: '协议', value: props.device.backend_mode?.toUpperCase() || '不可用' },
-  { label: '接口', value: props.device.interface || '不可用' }
+  { label: 'IMEI', value: props.device.modem?.imei || '不可用', sensitive: true },
+  { label: 'ICCID', value: props.device.modem?.iccid || '不可用', sensitive: true },
+  { label: '协议', value: props.device.backend_mode?.toUpperCase() || '不可用', sensitive: false },
+  { label: '接口', value: props.device.interface || '不可用', sensitive: false }
 ])
 </script>
 
@@ -52,7 +54,10 @@ const identityItems = computed(() => [
         <dl class="device-workspace-meta">
           <div v-for="item in identityItems" :key="item.label">
             <dt>{{ item.label }}</dt>
-            <dd :title="item.value">{{ item.value }}</dd>
+            <dd
+              :class="{ 'is-sensitive': item.sensitive && !showSensitive }"
+              :title="item.sensitive && !showSensitive ? '' : item.value"
+            >{{ item.value }}</dd>
           </div>
         </dl>
       </div>
@@ -184,6 +189,11 @@ const identityItems = computed(() => [
   font: var(--ui-font-body-sm) "v-mono", ui-monospace, monospace;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.device-workspace-meta dd.is-sensitive {
+  filter: blur(5px);
+  user-select: none;
 }
 
 .device-workspace-actions {

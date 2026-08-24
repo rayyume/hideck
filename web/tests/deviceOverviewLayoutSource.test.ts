@@ -14,6 +14,10 @@ const identityPanel = await readFile(
   new URL('../src/components/DeviceOverviewIdentityPanel.vue', import.meta.url),
   'utf8'
 )
+const detailHeader = await readFile(
+  new URL('../src/components/DeviceDetailHeader.vue', import.meta.url),
+  'utf8'
+)
 const connectionPresentation = await readFile(
   new URL('../src/utils/overviewConnectionPresentation.ts', import.meta.url),
   'utf8'
@@ -50,6 +54,9 @@ test('identity panel keeps production facts and existing operations', () => {
 
   assert.match(identityPanel, /useSensitiveVisibility/)
   assert.match(identityPanel, /copyToClipboard/)
+  assert.match(detailHeader, /useSensitiveVisibility/)
+  assert.match(detailHeader, /sensitive: true/)
+  assert.match(detailHeader, /is-sensitive/)
   assert.match(identityPanel, /device\?\.e911_setup_available/)
   assert.match(identityPanel, /emit\('setup-e911'\)/)
 })
