@@ -151,13 +151,31 @@ func (c *Controller) Status(deviceID string) Status {
 	if c == nil {
 		return Status{DeviceID: deviceID, Phase: PhaseIdle}
 	}
+	deviceID = strings.TrimSpace(deviceID)
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	s := c.sess[strings.TrimSpace(deviceID)]
+	s := c.sess[deviceID]
 	if s == nil {
+		c.mu.Unlock()
 		return Status{DeviceID: deviceID, Phase: PhaseIdle}
 	}
-	return s.status
+	st := s.status
+	c.mu.Unlock()
+	audio := ""
+	if c.host != nil {
+		audio = strings.TrimSpace(c.host.AudioDevice(deviceID))
+	}
+	if audio == "" {
+		return st
+	}
+	st.AudioDevice = audio
+	st.UACEnabled = true
+	st.RebootRequired = false
+	c.patch(deviceID, func(s *Status) {
+		s.AudioDevice = audio
+		s.UACEnabled = true
+		s.RebootRequired = false
+	})
+	return st
 }
 
 func (c *Controller) Active(deviceID string) bool {
