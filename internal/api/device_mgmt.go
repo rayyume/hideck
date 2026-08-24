@@ -258,13 +258,15 @@ func overviewDisplayConfig(runtime, persisted config.DeviceConfig, hasPersisted 
 	cfg.USBPath = runtime.USBPath
 	cfg.QMIDevice = runtime.QMIDevice
 	cfg.AudioDevice = runtime.AudioDevice
-	// 策略字段（network/vowifi/airplane/ip/apn）已改为跟卡走、只存在于运行时投影，
-	// 不再来自 persisted(config.yaml)。必须取 runtime，否则概览显示恒为 off。
+	// 策略字段（network/vowifi/airplane/ip/apn/phone_mode/data_strategy）已改为跟卡走、只存在于运行时投影，
+	// 不再来自 persisted(config.yaml)。必须取 runtime，否则概览显示恒为 off / wifi。
 	cfg.NetworkEnabled = runtime.NetworkEnabled
 	cfg.VoWiFiEnabled = runtime.VoWiFiEnabled
 	cfg.AirplaneEnabled = runtime.AirplaneEnabled
 	cfg.IPVersion = runtime.IPVersion
 	cfg.APN = runtime.APN
+	cfg.PhoneMode = runtime.PhoneMode
+	cfg.DataStrategy = runtime.DataStrategy
 	// SMS 是系统不变量（恒开），不随卡策略/投影时序变化，直接置真，
 	// 否则 worker 投影完成前或离线时 sms_enabled 为 false，会被短信中心设备过滤掉。
 	cfg.SMSEnabled = true
@@ -775,7 +777,7 @@ func (s *Server) handleDeviceMgmtList(c *gin.Context) {
 			SMSEnabled:             cfg.SMSEnabled,
 			NetworkEnabled:         cfg.NetworkEnabled,
 			PhoneMode:              overviewPhoneMode(cfg.PhoneMode),
-			VoWiFiEnabled:          s.pool.IsVoWiFiActive(w.ID), // 使用多设备状态查询
+			VoWiFiEnabled:          cfg.VoWiFiEnabled,
 			VoWiFiRuntime:          s.getVoWiFiRuntimeDTO(w.ID),
 			NetworkConnected:       w.NetworkConnected(),
 			RegistrationStateLabel: registrationStateLabel(status.RegStatus),
@@ -2673,8 +2675,8 @@ func (s *Server) handleDeviceMgmtSetFlightMode(c *gin.Context) {
 		}
 	}
 
-	if s.pool.IsVoWiFiActive(id) && worker.Config.PhoneMode != "cellular" {
-		c.JSON(http.StatusConflict, gin.H{"status": "error", "message": "WiFi calling 正在接管射频，请先关掉软件电话或改成蜂窝"})
+	if s.pool.IsVoWiFiActive(id) && !device.PhoneModeCampsOnCell(worker.Config.PhoneMode) {
+		c.JSON(http.StatusConflict, gin.H{"status": "error", "message": "WiFi calling 正在接管射频，请先关掉软件电话或改成蜂窝/VoLTE"})
 		return
 	}
 

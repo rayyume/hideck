@@ -7,6 +7,7 @@ import { devicesService } from '../services/devices'
 import { useCardPolicyToggles, type PolicyMirror } from '../composables/useCardPolicyToggles'
 import { useCardPolicyFields } from '../composables/useCardPolicyFields'
 import { cardsService } from '../services/cards'
+import { phoneModeLabel } from '../utils/phoneMode'
 
 const props = defineProps<{
   deviceId: string | undefined
@@ -120,7 +121,7 @@ const policyStatus = computed(() => {
 const policyProjection = computed(() => [
   `飞行 ${radioMode.value === 'airplane' ? '开启' : '关闭'}`,
   `网络 ${local.value.network_enabled ? '开启' : '关闭'}`,
-  `通话 ${local.value.phone_mode === 'volte' ? 'VoLTE' : local.value.phone_mode === 'cellular' ? '蜂窝数据' : 'WiFi calling'}${local.value.vowifi_enabled ? '开启' : '关闭'}`,
+  `通话 ${phoneModeLabel(local.value.phone_mode)}${local.value.vowifi_enabled ? '开启' : '关闭'}`,
   `IP ${ipVersion.value.toUpperCase()}`
 ].join(' · '))
 
@@ -129,7 +130,7 @@ const airplaneHint = computed(() => {
     return '这张 Lebara UK 分享卡不能关飞行或开网络，驻国内网会切到 20404，WiFi calling 会废'
   }
   if (wifiCallingLocksRadio.value) {
-    return 'WiFi calling 占用射频，飞行已锁定。改成蜂窝或关掉软件电话后才能注册运营商'
+    return 'WiFi calling 占用射频，飞行已锁定。改成蜂窝/VoLTE或关掉电话后才能注册运营商'
   }
   if (radioMode.value === 'airplane') {
     return '开启后关射频和流量，不再注册运营商'
@@ -251,7 +252,7 @@ const airplaneHint = computed(() => {
           class="policy-setting-row"
           :class="{ 'is-active': local.vowifi_enabled }"
         >
-          <span><strong>软件电话</strong><small>开启后可用浏览器/命令拨号。WiFi calling 会锁定飞行；蜂窝会退出飞行</small></span>
+          <span><strong>软件电话</strong><small>开启后可用浏览器/命令拨号。WiFi calling 会锁定飞行；蜂窝和 VoLTE 会退出飞行</small></span>
             <div class="flex items-center gap-2">
               <span v-if="vowifiFailed" class="text-xs text-orange-500 dark:text-orange-400">未生效</span>
               <el-icon v-if="vowifiPending" class="animate-spin text-gray-400"><Loading /></el-icon>

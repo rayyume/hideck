@@ -216,6 +216,9 @@ const {
             ? '已注册运营商，网络开启，会走流量。'
             : '已注册运营商，不走流量。打开网络后才按策略连数据。' }}
         </template>
+        <template v-else-if="(local.phone_mode ?? 'wifi') === 'volte'">
+          原生 VoLTE 驻网。飞行关闭后由模组 IMS 打电话，网络开关只控制流量。
+        </template>
         <template v-else>已注册运营商。打开网络才会用数据。</template>
       </div>
       <div v-if="phoneModeFailed" class="text-xs text-orange-500">通话方式未生效</div>

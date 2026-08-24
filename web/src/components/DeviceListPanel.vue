@@ -5,6 +5,7 @@ import ListSkeleton from './ListSkeleton.vue'
 import StatusLight from './StatusLight.vue'
 import type { DeviceMgmtListItem } from '../types/api'
 import { isControlOnline, isRadioRegistered, lifecycleStatusLabel, primaryLifecycleStatus } from '../utils/deviceLifecycle'
+import { isWifiCallingEnabled } from '../utils/phoneMode'
 
 const props = defineProps<{
   loading: boolean
@@ -69,7 +70,7 @@ const softwarePhoneText = (d: DeviceMgmtListItem) => {
 }
 
 const dataNetworkText = (d: DeviceMgmtListItem) => {
-  if (d?.phone_mode !== 'cellular' && d?.vowifi_enabled) return ''
+  if (isWifiCallingEnabled(d?.phone_mode, d?.vowifi_enabled)) return ''
   if (!d?.network_enabled) return '数据未开启'
   if (!d?.network_connected) return '数据网络未连接'
   return ''

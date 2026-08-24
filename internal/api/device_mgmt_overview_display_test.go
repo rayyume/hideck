@@ -19,6 +19,8 @@ func TestOverviewDisplayConfigTakesPolicyFromRuntime(t *testing.T) {
 		IPVersion:       "v4v6",
 		APN:             "ims",
 		SMSEnabled:      true,
+		PhoneMode:       "volte",
+		DataStrategy:    "on_demand",
 	}
 	persisted := config.DeviceConfig{
 		ID:        "wwan0",
@@ -36,6 +38,9 @@ func TestOverviewDisplayConfigTakesPolicyFromRuntime(t *testing.T) {
 	}
 	if got.Interface != "wwan0" {
 		t.Fatalf("硬件路径仍应取自 runtime: %+v", got)
+	}
+	if got.PhoneMode != "volte" || got.DataStrategy != "on_demand" {
+		t.Fatalf("通话方式应取自 runtime: %+v", got)
 	}
 }
 

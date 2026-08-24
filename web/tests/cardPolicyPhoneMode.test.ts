@@ -158,6 +158,52 @@ test('airplane in wifi calling turns software phone off', async () => {
   assert.equal(applied?.network_enabled, false)
 })
 
+test('switching to volte unlocks radio and is not wifi calling', async () => {
+  const source = ref<PolicyMirror | null>(mirror({
+    vowifi_enabled: true,
+    airplane_enabled: true,
+    phone_mode: 'wifi'
+  }))
+  let applied: PolicyMirror | null = null
+  const toggles = useCardPolicyToggles(source, {
+    applyNetwork: async () => ({ ok: true }),
+    applyVoWiFi: async () => ({ ok: true }),
+    applyAirplane: async () => ({ ok: true }),
+    applyPhoneMode: async (next) => {
+      applied = next
+      return { ok: true }
+    }
+  })
+  await nextTick()
+
+  await toggles.onPhoneModeChange('volte')
+
+  assert.equal(applied?.phone_mode, 'volte')
+  assert.equal(applied?.vowifi_enabled, true)
+  assert.equal(applied?.airplane_enabled, false)
+  assert.equal(toggles.wifiCallingLocksRadio.value, false)
+  assert.equal(toggles.radioMode.value, 'camp')
+})
+
+test('volte with software phone does not lock flight', async () => {
+  const source = ref<PolicyMirror | null>(mirror({
+    vowifi_enabled: true,
+    airplane_enabled: false,
+    phone_mode: 'volte'
+  }))
+  const toggles = useCardPolicyToggles(source, {
+    applyNetwork: async () => ({ ok: true }),
+    applyVoWiFi: async () => ({ ok: true }),
+    applyAirplane: async () => ({ ok: true }),
+    applyPhoneMode: async () => ({ ok: true })
+  })
+  await nextTick()
+
+  assert.equal(toggles.wifiCallingLocksRadio.value, false)
+  assert.equal(toggles.radioMode.value, 'camp')
+  assert.equal(toggles.local.value.airplane_enabled, false)
+})
+
 test('wifi calling locks camp so radio cannot independently leave airplane', async () => {
   const source = ref<PolicyMirror | null>(mirror({
     vowifi_enabled: true,

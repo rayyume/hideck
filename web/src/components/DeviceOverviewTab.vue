@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import type { DeviceOverviewItem } from '../types/api'
 import { isControlOnline, isRadioRegistered, isRecoveryPhase, lifecycleStatusLabel } from '../utils/deviceLifecycle'
+import { isWifiCallingEnabled } from '../utils/phoneMode'
 import StatusLight from './StatusLight.vue'
 import OperatorSelectionDialog from './OperatorSelectionDialog.vue'
 import { Settings24Regular } from '@vicons/fluent'
@@ -115,7 +116,7 @@ const cellularStatusText = computed(() => {
 })
 
 const isWifiCalling = computed(() =>
-  !!props.device?.vowifi_enabled && props.device?.phone_mode !== 'cellular'
+  isWifiCallingEnabled(props.device?.phone_mode, props.device?.vowifi_enabled)
 )
 
 const networkPanelMessage = computed(() => {

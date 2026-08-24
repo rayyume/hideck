@@ -1,11 +1,12 @@
 import { computed, ref, watch, type Ref } from 'vue'
+import { isWifiCallingEnabled, phoneModeCampsOnCell } from '../utils/phoneMode'
 
 // 卡策略三开关镜像（不含 ip/apn——那两项仅在独立"卡策略"页编辑）
 export type PolicyMirror = {
   network_enabled: boolean
   vowifi_enabled: boolean
   airplane_enabled: boolean
-  phone_mode?: string       // "wifi" | "cellular"
+  phone_mode?: string       // "wifi" | "cellular" | "volte"
   data_strategy?: string    // "always" | "on_demand"
 }
 
@@ -21,20 +22,12 @@ export type CardPolicyExecutors = {
   onChanged?: () => void
 }
 
-function isCellularMode(cur: PolicyMirror): boolean {
-  return (cur.phone_mode ?? 'wifi') === 'cellular'
-}
-
-function isNativeVoLTE(cur: PolicyMirror): boolean {
-  return (cur.phone_mode ?? 'wifi') === 'volte'
-}
-
 function campsOnCell(cur: PolicyMirror): boolean {
-  return isCellularMode(cur) || isNativeVoLTE(cur)
+  return phoneModeCampsOnCell(cur.phone_mode)
 }
 
 function isWifiCalling(cur: PolicyMirror): boolean {
-  return !!cur.vowifi_enabled && !campsOnCell(cur)
+  return isWifiCallingEnabled(cur.phone_mode, cur.vowifi_enabled)
 }
 
 // 互斥规则（开关联动，避免用户点出冲突组合）：

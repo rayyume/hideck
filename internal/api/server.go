@@ -1019,11 +1019,9 @@ func (s *Server) handleDeviceMgmtStartNetwork(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "当前设备不支持网络控制"})
 		return
 	}
-	if s.pool.IsVoWiFiActive(deviceID) {
-		if worker.Config.PhoneMode != "cellular" {
-			c.JSON(http.StatusConflict, gin.H{"status": "error", "message": "VoWiFi 运行中，无法启动数据网络"})
-			return
-		}
+	if s.pool.IsVoWiFiActive(deviceID) && !device.PhoneModeCampsOnCell(worker.Config.PhoneMode) {
+		c.JSON(http.StatusConflict, gin.H{"status": "error", "message": "VoWiFi 运行中，无法启动数据网络"})
+		return
 	}
 	if err := worker.StartNetwork(); err != nil {
 		if writeLebaraUKRFLockError(c, err) {
