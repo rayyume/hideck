@@ -264,22 +264,61 @@ func (m *Manager) NotifyCallResult(deviceID, peer, direction, status, reason str
 	if m.channelCount() == 0 {
 		return
 	}
-	labels := map[string]string{
-		"completed": "已完成", "missed": "未接", "rejected": "已拒接",
-		"busy": "忙线", "failed": "失败",
-	}
-	label := labels[status]
-	if label == "" {
-		label = status
-	}
-	message := fmt.Sprintf("通话结果 / %s\n设备    %s\n号码    %s\n方向    %s", label, deviceID, peer, direction)
-	if strings.TrimSpace(reason) != "" {
-		message += "\n原因    " + strings.TrimSpace(reason)
-	}
 	m.broadcastWithContext(NotificationContext{
-		Event: "call_" + status, Text: message, DeviceID: deviceID,
-		DeviceName: m.resolveDeviceName(deviceID), Timestamp: at,
+		Event:      "call_" + status,
+		Text:       formatCallResultMessage(deviceID, peer, direction, status, reason),
+		DeviceID:   deviceID,
+		DeviceName: m.resolveDeviceName(deviceID),
+		Number:     peer,
+		Timestamp:  at,
 	})
+}
+
+func formatCallResultMessage(deviceID, peer, direction, status, reason string) string {
+	return fmt.Sprintf("通话结束 / %s\n设备    %s\n%s    %s",
+		callResultLabel(status, reason), deviceID, callResultPeerField(direction), peer)
+}
+
+func callResultPeerField(direction string) string {
+	switch strings.ToLower(strings.TrimSpace(direction)) {
+	case "inbound", "incoming":
+		return "主叫"
+	case "outbound", "outgoing":
+		return "被叫"
+	default:
+		return "号码"
+	}
+}
+
+func callResultLabel(status, reason string) string {
+	switch strings.ToLower(strings.TrimSpace(reason)) {
+	case "local_hangup":
+		return "已挂断"
+	case "remote_bye", "remote_hangup":
+		return "对方已挂断"
+	case "local_reject", "rejected":
+		return "已拒接"
+	case "remote_cancel":
+		return "未接"
+	case "device_busy", "busy":
+		return "忙线"
+	}
+	switch status {
+	case "completed":
+		return "已结束"
+	case "missed":
+		return "未接"
+	case "rejected":
+		return "已拒接"
+	case "busy":
+		return "忙线"
+	case "failed":
+		return "失败"
+	}
+	if strings.TrimSpace(status) != "" {
+		return status
+	}
+	return "已结束"
 }
 
 func (m *Manager) resolveDeviceName(deviceID string) string {

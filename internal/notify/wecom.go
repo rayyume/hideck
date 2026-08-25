@@ -168,8 +168,8 @@ func weComNotificationTitle(event string) string {
 		return "收到新短信"
 	case "incoming_call":
 		return "来电通知"
-	case "call_ended", "call_failed", "call_missed":
-		return "通话结果"
+	case "call_ended", "call_completed", "call_failed", "call_missed", "call_rejected", "call_busy":
+		return "通话结束"
 	case "ip_rotated":
 		return "公网切换"
 	default:

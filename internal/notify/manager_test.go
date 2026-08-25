@@ -479,9 +479,84 @@ func TestManagerNotifyCallResultIsSeparateFromIncomingCall(t *testing.T) {
 	if result.Timestamp != at {
 		t.Fatalf("result timestamp=%s, want %s", result.Timestamp, at)
 	}
-	want := "通话结果 / 未接\n设备    wwan0\n号码    10086\n方向    incoming\n原因    remote_cancel"
+	want := "通话结束 / 未接\n设备    wwan0\n主叫    10086"
 	if result.Text != want {
 		t.Fatalf("result text=%q, want %q", result.Text, want)
+	}
+}
+
+func TestFormatCallResultMessageUsesIncomingCallStyle(t *testing.T) {
+	tests := []struct {
+		name      string
+		deviceID  string
+		peer      string
+		direction string
+		status    string
+		reason    string
+		want      string
+	}{
+		{
+			name:      "outbound local hangup",
+			deviceID:  "wwan1",
+			peer:      "888",
+			direction: "outbound",
+			status:    "completed",
+			reason:    "local_hangup",
+			want:      "通话结束 / 已挂断\n设备    wwan1\n被叫    888",
+		},
+		{
+			name:      "inbound remote hangup",
+			deviceID:  "wwan0",
+			peer:      "10086",
+			direction: "inbound",
+			status:    "completed",
+			reason:    "remote_bye",
+			want:      "通话结束 / 对方已挂断\n设备    wwan0\n主叫    10086",
+		},
+		{
+			name:      "incoming missed",
+			deviceID:  "wwan0",
+			peer:      "10086",
+			direction: "incoming",
+			status:    "missed",
+			reason:    "remote_cancel",
+			want:      "通话结束 / 未接\n设备    wwan0\n主叫    10086",
+		},
+		{
+			name:      "inbound rejected",
+			deviceID:  "wwan0",
+			peer:      "10010",
+			direction: "inbound",
+			status:    "rejected",
+			reason:    "local_reject",
+			want:      "通话结束 / 已拒接\n设备    wwan0\n主叫    10010",
+		},
+		{
+			name:      "inbound busy",
+			deviceID:  "wwan0",
+			peer:      "10086",
+			direction: "inbound",
+			status:    "busy",
+			reason:    "device_busy",
+			want:      "通话结束 / 忙线\n设备    wwan0\n主叫    10086",
+		},
+		{
+			name:      "completed without specific reason",
+			deviceID:  "wwan1",
+			peer:      "888",
+			direction: "outbound",
+			status:    "completed",
+			reason:    "normal",
+			want:      "通话结束 / 已结束\n设备    wwan1\n被叫    888",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := formatCallResultMessage(tt.deviceID, tt.peer, tt.direction, tt.status, tt.reason)
+			if got != tt.want {
+				t.Fatalf("got %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 
