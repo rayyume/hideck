@@ -2326,7 +2326,8 @@ func (s *Server) handleEsimGetOverview(c *gin.Context) {
 //
 // 请求方式：GET，通过 Query 参数传递下载参数：
 //
-//	smdp=<SM-DP+ 地址>（必填）
+//	smdp=<SM-DP+ 地址或 LPA:1$ 激活码>（与 activation_code 二选一）
+//	activation_code=<二维码/LPA 激活码>（可选，优先于 smdp）
 //	matching_id=<Matching ID>（可选）
 //	confirmation_code=<确认码>（可选）
 //	aid_hex=<目标 AID hex>（可选）
@@ -2349,12 +2350,15 @@ func (s *Server) handleEsimDownloadProfile(c *gin.Context) {
 		return
 	}
 
-	smdp := strings.TrimSpace(c.Query("smdp"))
-	if smdp == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "smdp 为必填项"})
+	smdpOrCode := strings.TrimSpace(c.Query("activation_code"))
+	if smdpOrCode == "" {
+		smdpOrCode = strings.TrimSpace(c.Query("smdp"))
+	}
+	smdp, matchingID, err := esim.ResolveDownloadAddress(smdpOrCode, c.Query("matching_id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	matchingID := c.Query("matching_id")
 	confirmationCode := c.Query("confirmation_code")
 	aidHex := c.Query("aid_hex")
 	imei := strings.TrimSpace(c.Query("imei"))

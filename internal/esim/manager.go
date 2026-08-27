@@ -3692,21 +3692,18 @@ func (m *Manager) DownloadProfile(ctx context.Context, aidHex, smdp, matchingID,
 		return DownloadProfileResult{}, err
 	}
 
-	smdpAddr := strings.TrimSpace(smdp)
-	if smdpAddr == "" {
-		return DownloadProfileResult{}, fmt.Errorf("SM-DP+ 地址不能为空")
+	smdpHost, matchingID, err := ResolveDownloadAddress(smdp, matchingID)
+	if err != nil {
+		return DownloadProfileResult{}, err
 	}
-	if !strings.Contains(smdpAddr, "://") {
-		smdpAddr = "https://" + smdpAddr
-	}
-	parsedURL, err := url.Parse(smdpAddr)
+	parsedURL, err := url.Parse("https://" + smdpHost)
 	if err != nil || parsedURL.Host == "" {
 		return DownloadProfileResult{}, fmt.Errorf("无效的 SM-DP+ 地址 %q", smdp)
 	}
 
 	activationCode := &lpa.ActivationCode{
 		SMDP:             &url.URL{Scheme: "https", Host: parsedURL.Host},
-		MatchingID:       strings.TrimSpace(matchingID),
+		MatchingID:       matchingID,
 		IMEI:             imei,
 		ConfirmationCode: strings.TrimSpace(confirmationCode),
 	}

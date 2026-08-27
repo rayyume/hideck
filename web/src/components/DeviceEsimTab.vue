@@ -12,6 +12,11 @@ import { esimProfileActionForState } from './deviceEsimProfileAction'
 import { pickNextDownloadAid } from './deviceEsimOverviewRefresh'
 import { describeDeleteResultNotice, describeDownloadTerminalNotice, describeSpaceDelta } from './deviceEsimOperationNotice'
 import {
+  looksLikeEsimActivationCode,
+  parseEsimActivationInput,
+  readQrPayloadFromImageFile
+} from '../utils/esimActivationCode'
+import {
   formatEsimNotificationEvent,
   notificationDialogWidth,
   notificationListItemLayoutClass,
@@ -27,7 +32,9 @@ import {
   ArrowDownload24Regular,
   ArrowSync24Regular,
   Eye24Regular,
-  EyeOff24Regular
+  EyeOff24Regular,
+  Image24Regular,
+  QrCode24Regular
 } from '@vicons/fluent'
 
 const props = defineProps<{
@@ -61,12 +68,17 @@ const retryingNotificationSequence = ref<number | null>(null)
 
 // 下载表单
 const downloadForm = ref({
+  activationCode: '',
   smdp: '',
   matchingId: '',
   confirmationCode: '',
   aidHex: '',
   imei: ''
 })
+const confirmationRequired = ref(false)
+const activationHint = ref('')
+const qrFileInput = ref<HTMLInputElement | null>(null)
+const qrReading = ref(false)
 const downloading = ref(false)
 const downloadProgress = ref(0)
 const downloadMsg = ref('')
@@ -88,21 +100,61 @@ function applyDeviceImeiDefault(force = false) {
   lastDeviceImeiDefault = next
 }
 
-// 智能解析完整的 LPA 激活码或移除 URL 前缀
-watch(() => downloadForm.value.smdp, (newVal) => {
-  if (!newVal) return
-
-  if (newVal.startsWith('LPA:')) {
-    const parts = newVal.split('$')
-    if (parts.length >= 3) {
-      downloadForm.value.smdp = parts[1] // SM-DP+
-      downloadForm.value.matchingId = parts[2] // Matching ID
-      ElMessage.success('已自动解析完整的 LPA 激活码')
-    }
-  } else if (newVal.startsWith('http://') || newVal.startsWith('https://')) {
-    downloadForm.value.smdp = newVal.replace(/^https?:\/\//i, '')
+function applyActivationInput(raw: string | number, announce?: boolean) {
+  const text = String(raw ?? '')
+  const shouldAnnounce = announce === true
+  downloadForm.value.activationCode = text
+  const parsed = parseEsimActivationInput(text)
+  if (!parsed) {
+    confirmationRequired.value = false
+    const parts = text.replace(/\s+/g, '').split('$')
+    activationHint.value = looksLikeEsimActivationCode(text) && parts.length >= 2 && parts[1]
+      ? '无法识别这段内容。请贴 LPA:1$ 激活码，或包含 SM-DP+ 地址和激活码的文本'
+      : ''
+    return
   }
-})
+  downloadForm.value.smdp = parsed.smdp
+  if (parsed.matchingId) downloadForm.value.matchingId = parsed.matchingId
+  if (parsed.confirmationCode) downloadForm.value.confirmationCode = parsed.confirmationCode
+  confirmationRequired.value = parsed.confirmationRequired
+  activationHint.value = parsed.matchingId
+    ? `已识别 ${parsed.smdp} / ${parsed.matchingId}`
+    : `已识别 SM-DP+ ${parsed.smdp}`
+  if (shouldAnnounce) ElMessage.success('已识别激活码')
+}
+
+function openQrFilePicker() {
+  qrFileInput.value?.click()
+}
+
+async function onQrFileChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  qrReading.value = true
+  try {
+    const payload = await readQrPayloadFromImageFile(file)
+    applyActivationInput(payload, true)
+  } catch (e: unknown) {
+    ElMessage.error(errorMessage(e, '识别二维码失败'))
+  } finally {
+    qrReading.value = false
+  }
+}
+
+function resetDownloadForm(aidHex: string, imei: string) {
+  downloadForm.value = {
+    activationCode: '',
+    smdp: '',
+    matchingId: '',
+    confirmationCode: '',
+    aidHex,
+    imei
+  }
+  confirmationRequired.value = false
+  activationHint.value = ''
+}
 
 let fetchAbortController: AbortController | null = null
 let fetchOverviewRequestId = 0
@@ -353,10 +405,17 @@ async function deleteProfile(iccid: string, name: string, aidHex: string) {
 
 // 下载新 profile（SSE 流式进度）
 async function downloadProfile() {
-  const { smdp, matchingId, confirmationCode, aidHex, imei } = downloadForm.value
+  const parsedCode = parseEsimActivationInput(downloadForm.value.activationCode)
+  const smdp = (downloadForm.value.smdp || parsedCode?.smdp || '').trim()
+  const matchingId = (downloadForm.value.matchingId || parsedCode?.matchingId || '').trim()
+  const { confirmationCode, aidHex, imei } = downloadForm.value
   const targetAidHex = aidHex || pickNextDownloadAid(chipInfo.value, '')
   if (!smdp) {
-    ElMessage.warning('请输入 SM-DP+ 地址')
+    ElMessage.warning('请粘贴二维码里的激活码，或上传二维码图片')
+    return
+  }
+  if (confirmationRequired.value && !confirmationCode.trim()) {
+    ElMessage.warning('这张卡需要确认码')
     return
   }
 
@@ -371,6 +430,9 @@ async function downloadProfile() {
   if (confirmationCode) params.set('confirmation_code', confirmationCode)
   if (targetAidHex) params.set('aid_hex', targetAidHex)
   if (imei.trim()) params.set('imei', imei.trim())
+  if (looksLikeEsimActivationCode(downloadForm.value.activationCode)) {
+    params.set('activation_code', downloadForm.value.activationCode.trim())
+  }
 
   const base = api.defaults.baseURL || ''
   const url = `${base}/devices/${props.deviceId}/esim/actions/download?${params}`
@@ -425,7 +487,7 @@ async function downloadProfile() {
             } else {
               ElMessage.success(notice.message)
             }
-            downloadForm.value = { smdp: '', matchingId: '', confirmationCode: '', aidHex: targetAidHex, imei }
+            resetDownloadForm(targetAidHex, imei)
             await fetchOverview(true)
             break outer
           }
@@ -479,7 +541,7 @@ onBeforeUnmount(() => {
       <div>
         <span>ESIM PROFILES</span>
         <h2>eSIM 档案管理</h2>
-        <p>查看真实 eUICC 状态、管理档案并安装运营商提供的激活码</p>
+        <p>查看真实 eUICC 状态、管理档案。把运营商二维码或 LPA:1$ 激活码贴到下面即可</p>
       </div>
       <div class="esim-workspace-actions">
         <el-button :loading="profilesRefreshing" @click="fetchOverview(true)" class="ui-glass-border !border-0">
@@ -759,33 +821,73 @@ onBeforeUnmount(() => {
           <div class="text-sm font-bold text-gray-900 dark:text-white">安装新档案</div>
         </div>
       </div>
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+      <p class="esim-install-copy">
+        市面常见 eSIM（VOXI、Giffgaff、Airalo、联通等）给的是一张二维码，或一行
+        <span class="esim-install-code">LPA:1$</span>
+        激活码。扫出来贴进来，或上传截图。邮件里如果是分开的 SM-DP+ 地址和激活码，整段贴进来也可以。
+      </p>
+      <div class="space-y-3">
         <div class="space-y-1">
-          <div class="text-xs font-bold text-gray-500 uppercase tracking-wider">SM-DP+ 地址 *</div>
-          <el-input v-model="downloadForm.smdp" placeholder="例如 rsp.truphone.com" />
+          <div class="text-xs font-bold text-gray-500 uppercase tracking-wider">激活码 / 二维码内容</div>
+          <el-input
+            v-model="downloadForm.activationCode"
+            type="textarea"
+            :autosize="{ minRows: 2, maxRows: 4 }"
+            placeholder="LPA:1$smdp.example.com$匹配码"
+            @update:model-value="applyActivationInput"
+          />
+          <div class="flex flex-wrap items-center gap-2">
+            <input
+              ref="qrFileInput"
+              type="file"
+              accept="image/*"
+              class="esim-qr-file"
+              @change="onQrFileChange"
+            >
+            <el-button :loading="qrReading" @click="openQrFilePicker">
+              <el-icon><Image24Regular /></el-icon>
+              识别二维码图片
+            </el-button>
+            <span v-if="activationHint" class="esim-activation-hint">{{ activationHint }}</span>
+          </div>
         </div>
-        <div class="space-y-1">
-          <div class="text-xs font-bold text-gray-500 uppercase tracking-wider">Matching ID</div>
-          <el-input v-model="downloadForm.matchingId" placeholder="可选" />
-        </div>
-        <div class="space-y-1">
-          <div class="text-xs font-bold text-gray-500 uppercase tracking-wider">确认码</div>
-          <el-input v-model="downloadForm.confirmationCode" placeholder="可选" />
-        </div>
-        <div class="space-y-1">
-          <div class="text-xs font-bold text-gray-500 uppercase tracking-wider">IMEI</div>
-          <el-input v-model="downloadForm.imei" maxlength="15" placeholder="默认使用设备 IMEI，可修改" />
-        </div>
-        <div class="space-y-1">
-          <div class="text-xs font-bold text-gray-500 uppercase tracking-wider">目标 eUICC</div>
-          <el-select v-model="downloadForm.aidHex" placeholder="选择目标 eUICC">
-            <el-option
-              v-for="(eid, ei) in (chipInfo?.eids || [])"
-              :key="eid.aid"
-              :label="`eUICC #${Number(ei) + 1} (...${eid.eid.slice(-4)}) — ${eid.free_nvram} 可用`"
-              :value="eid.aid"
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          <div class="space-y-1">
+            <div class="text-xs font-bold text-gray-500 uppercase tracking-wider">SM-DP+ 地址</div>
+            <el-input v-model="downloadForm.smdp" placeholder="解析后自动填写，也可手填">
+              <template #prefix>
+                <el-icon><QrCode24Regular /></el-icon>
+              </template>
+            </el-input>
+          </div>
+          <div class="space-y-1">
+            <div class="text-xs font-bold text-gray-500 uppercase tracking-wider">Matching ID</div>
+            <el-input v-model="downloadForm.matchingId" placeholder="解析后自动填写" />
+          </div>
+          <div class="space-y-1">
+            <div class="text-xs font-bold text-gray-500 uppercase tracking-wider">
+              确认码{{ confirmationRequired ? ' *' : '' }}
+            </div>
+            <el-input
+              v-model="downloadForm.confirmationCode"
+              :placeholder="confirmationRequired ? '这张卡需要确认码' : '可选'"
             />
-          </el-select>
+          </div>
+          <div class="space-y-1">
+            <div class="text-xs font-bold text-gray-500 uppercase tracking-wider">IMEI</div>
+            <el-input v-model="downloadForm.imei" maxlength="15" placeholder="默认使用设备 IMEI，可修改" />
+          </div>
+          <div class="space-y-1">
+            <div class="text-xs font-bold text-gray-500 uppercase tracking-wider">目标 eUICC</div>
+            <el-select v-model="downloadForm.aidHex" placeholder="选择目标 eUICC">
+              <el-option
+                v-for="(eid, ei) in (chipInfo?.eids || [])"
+                :key="eid.aid"
+                :label="`eUICC #${Number(ei) + 1} (...${eid.eid.slice(-4)}) — ${eid.free_nvram} 可用`"
+                :value="eid.aid"
+              />
+            </el-select>
+          </div>
         </div>
       </div>
       <!-- 下载进度条 -->
@@ -902,9 +1004,35 @@ onBeforeUnmount(() => {
 }
 
 .esim-install-panel {
+  position: relative;
   background:
     linear-gradient(145deg, color-mix(in srgb, var(--ui-primary) 4%, transparent), transparent 48%),
     var(--ui-surface-muted);
+}
+
+.esim-install-copy {
+  margin: 0 0 12px;
+  color: var(--ui-text-muted);
+  font-size: var(--ui-font-body-sm);
+  line-height: 1.5;
+}
+
+.esim-install-code {
+  color: var(--ui-text);
+  font-family: "v-mono", ui-monospace, monospace;
+}
+
+.esim-qr-file {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
+.esim-activation-hint {
+  color: var(--ui-text-muted);
+  font-size: var(--ui-font-body-sm);
 }
 
 .esim-loading-hero {
