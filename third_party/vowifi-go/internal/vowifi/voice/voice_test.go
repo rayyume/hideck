@@ -561,7 +561,7 @@ func TestBuildIMSInvite(t *testing.T) {
 		t.Errorf("invite missing Call-ID: %q", invite)
 	}
 	if strings.Contains(invite, "m=audio 0 ") ||
-		!strings.Contains(invite, "m=audio 12000 RTP/AVP 104 114 9 8 0 101") {
+		!strings.Contains(invite, "m=audio 12000 RTP/AVP 104 110 102 108 101 0") {
 		t.Errorf("builder did not emit the recovered basic offer: %q", invite)
 	}
 }

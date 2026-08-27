@@ -216,8 +216,14 @@ func TestGenerateBasicSDPUsesRecoveredPortSelection(t *testing.T) {
 	gateway := NewGateway(agent)
 	gateway.SetClientAdapter(&agentVoiceClientAdapter{})
 	got := string(agent.generateBasicSDP())
-	if !strings.Contains(got, "m=audio 19998 RTP/AVP 104 114 9 8 0 101") {
+	if !strings.Contains(got, "m=audio 19998 RTP/AVP 104 110 102 108 101 0") {
 		t.Fatalf("basic SDP uses wrong payload order or port: %q", got)
+	}
+	if !strings.Contains(got, "a=fmtp:104 mode-change-capability=2;max-red=0") ||
+		strings.Contains(got, "a=fmtp:104 octet-align=1") ||
+		!strings.Contains(got, "a=fmtp:110 octet-align=1") ||
+		strings.Contains(got, "G722/8000") {
+		t.Fatalf("basic SDP is not IR.92 AMR-WB first: %q", got)
 	}
 	for _, line := range strings.Split(got, "\r\n") {
 		fields := strings.Fields(line)

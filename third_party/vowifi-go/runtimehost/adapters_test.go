@@ -482,7 +482,7 @@ func assertProductionVoiceRequests(t *testing.T, requests <-chan string) {
 		case request := <-requests:
 			method := strings.Fields(request)[0]
 			seen[method] = true
-			if method == "INVITE" && (strings.Contains(request, "m=audio 0 ") || !strings.Contains(request, "RTP/AVP 104 114 9 8 0 101")) {
+			if method == "INVITE" && (strings.Contains(request, "m=audio 0 ") || !strings.Contains(request, "RTP/AVP 104 110 102 108 101 0")) {
 				t.Fatalf("INVITE did not advertise the allocated production media endpoint: %q", request)
 			}
 		default:

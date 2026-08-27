@@ -194,7 +194,29 @@ func buildBasicSDP(ip string, port int, sessionID int64) []byte {
 		return nil
 	}
 	ipFamily := sdpIPFamily(ip)
-	return []byte(fmt.Sprintf("v=0\r\no=- %d %d IN %s %s\r\ns=VoHive Call\r\nc=IN %s %s\r\nt=0 0\r\nm=audio %d RTP/AVP 104 114 9 8 0 101\r\nb=AS:50\r\na=rtpmap:104 AMR-WB/16000\r\na=fmtp:104 octet-align=1; max-red=0\r\na=rtpmap:114 AMR/8000\r\na=fmtp:114 octet-align=1; max-red=0\r\na=rtpmap:9 G722/8000\r\na=rtpmap:8 PCMA/8000\r\na=rtpmap:0 PCMU/8000\r\na=rtpmap:101 telephone-event/8000\r\na=fmtp:101 0-15\r\na=sendrecv\r\na=ptime:20\r\na=maxptime:20\r\n", sessionID, sessionID, ipFamily, ip, ipFamily, ip, port))
+	return []byte(fmt.Sprintf(
+		"v=0\r\n"+
+			"o=- %d %d IN %s %s\r\n"+
+			"s=VoHive Call\r\n"+
+			"c=IN %s %s\r\n"+
+			"t=0 0\r\n"+
+			"m=audio %d RTP/AVP 104 110 102 108 101 0\r\n"+
+			"b=AS:41\r\n"+
+			"a=rtpmap:104 AMR-WB/16000\r\n"+
+			"a=fmtp:104 mode-change-capability=2;max-red=0\r\n"+
+			"a=rtpmap:110 AMR-WB/16000\r\n"+
+			"a=fmtp:110 octet-align=1;mode-change-capability=2;max-red=0\r\n"+
+			"a=rtpmap:102 AMR/8000\r\n"+
+			"a=fmtp:102 mode-change-capability=2;max-red=0\r\n"+
+			"a=rtpmap:108 AMR/8000\r\n"+
+			"a=fmtp:108 octet-align=1;mode-change-capability=2;max-red=0\r\n"+
+			"a=rtpmap:101 telephone-event/8000\r\n"+
+			"a=fmtp:101 0-15\r\n"+
+			"a=rtpmap:0 PCMU/8000\r\n"+
+			"a=sendrecv\r\n"+
+			"a=ptime:20\r\n"+
+			"a=maxptime:20\r\n",
+		sessionID, sessionID, ipFamily, ip, ipFamily, ip, port))
 }
 
 func (a *Agent) localAddr() string {
