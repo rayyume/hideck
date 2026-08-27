@@ -2,6 +2,7 @@ package imscore
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
@@ -22,6 +23,10 @@ const (
 	imsKeepaliveTransactionTimeout = 15 * time.Second
 	imsTCPCRLFWriteTimeout         = 2 * time.Second
 	imsTCPCRLFPongTimeout          = 10 * time.Second
+	imsSTUNRetransmitRTO           = 500 * time.Millisecond
+	imsSTUNRetransmitCount         = 7
+	imsUDPSTUNMinInterval          = 24 * time.Second
+	imsUDPSTUNMaxInterval          = 29 * time.Second
 	imsKeepaliveFailureLimit       = 3
 	imsMaintenancePollInterval     = 5 * time.Second
 	imsMaintenanceMinimumDelay     = 100 * time.Millisecond
@@ -99,7 +104,7 @@ func (s *Service) computeNextWakeTime(now time.Time) time.Time {
 	refreshAt := s.registrationRefreshAt
 	subscribeAt := s.subscriptionRefreshAt
 	lastTrafficAt := s.lastPingAt
-	interval := s.keepaliveInterval
+	interval := s.keepaliveIntervalLocked()
 	s.mu.RUnlock()
 
 	next := now.Add(imsMaintenancePollInterval)
@@ -135,7 +140,7 @@ func (s *Service) nextIMSMaintenanceAction(now time.Time) imsMaintenanceAction {
 		(s.subscriptionRefreshAt.IsZero() || !now.Before(s.subscriptionRefreshAt)) {
 		return imsMaintenanceSubscribe
 	}
-	if s.lastPingAt.IsZero() || !now.Before(s.lastPingAt.Add(s.keepaliveInterval)) {
+	if s.lastPingAt.IsZero() || !now.Before(s.lastPingAt.Add(s.keepaliveIntervalLocked())) {
 		return imsMaintenanceKeepalive
 	}
 	return imsMaintenanceIdle
@@ -182,7 +187,7 @@ func (s *Service) recordIMSKeepaliveResult(err error, completedAt time.Time) {
 	logging.WarnRate("ims-keepalive", "IMS SIP keepalive failed",
 		"device", s.DeviceID(), "attempt", failures, "err", err)
 	if failures == limit && s.keepaliveFailureRequiresRefresh(err) {
-		s.triggerRegisterImmediate(fmt.Sprintf("SIP TCP keepalive failed %d times: %v", failures, err))
+		s.triggerRegisterImmediate(fmt.Sprintf("SIP keepalive failed %d times: %v", failures, err))
 	}
 }
 
@@ -248,7 +253,33 @@ func (s *Service) sendIMSKeepalive() error {
 	if conn := s.liveRegistrationTCP(); conn != nil {
 		return s.sendTCPCRLFKeepalive(conn)
 	}
-	return s.sendOPTIONSKeepalive()
+	return s.sendSTUNKeepalive()
+}
+
+func (s *Service) keepaliveIntervalLocked() time.Duration {
+	if !s.udpSTUNKeepaliveLocked() {
+		if s.keepaliveInterval > 0 {
+			return s.keepaliveInterval
+		}
+		return imsKeepaliveInterval
+	}
+	if s.stunKeepaliveInterval > 0 {
+		return s.stunKeepaliveInterval
+	}
+	if s.flowTimer > 0 {
+		return stunIntervalFromFlowTimer(s.flowTimer)
+	}
+	return stunUDPKeepaliveInterval()
+}
+
+func (s *Service) udpSTUNKeepaliveLocked() bool {
+	if s.registrationTCP != nil {
+		return false
+	}
+	if s.registrationIO != nil || strings.EqualFold(s.registrationTransport, "udp") {
+		return true
+	}
+	return s.cfg != nil && strings.EqualFold(s.cfg.Transport, "udp")
 }
 
 func (s *Service) liveRegistrationTCP() net.Conn {
@@ -258,6 +289,179 @@ func (s *Service) liveRegistrationTCP() net.Conn {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.registrationTCP
+}
+
+type stunKeepaliveResult struct {
+	mapped *net.UDPAddr
+	err    error
+}
+
+func (s *Service) sendSTUNKeepalive() error {
+	conn, remote := s.udpKeepaliveEndpoint()
+	if conn == nil || remote == nil {
+		return fmt.Errorf("%w: UDP registration flow is unavailable", errSTUNKeepalive)
+	}
+	var txID [12]byte
+	if _, err := io.ReadFull(rand.Reader, txID[:]); err != nil {
+		return fmt.Errorf("%w: %w", errSTUNKeepalive, err)
+	}
+	request := buildSTUNBindingRequest(txID)
+	wait := make(chan stunKeepaliveResult, 1)
+	s.mu.Lock()
+	s.stunKeepaliveWait = wait
+	s.stunKeepaliveTxID = txID
+	s.mu.Unlock()
+	defer s.clearSTUNKeepaliveWait(wait)
+
+	rto := s.stunRetransmitRTO()
+	attempts := 0
+	timer := time.NewTimer(rto)
+	defer timer.Stop()
+	for {
+		if err := s.writeSTUNPacket(conn, request, remote); err != nil {
+			return fmt.Errorf("%w: %w", errSTUNKeepalive, err)
+		}
+		attempts++
+		select {
+		case result := <-wait:
+			return s.finishSTUNKeepalive(result)
+		case <-timer.C:
+			if attempts >= s.stunRetransmitCount() {
+				return errSTUNKeepaliveTimeout
+			}
+			rto *= 2
+			timer.Reset(rto)
+		case <-s.stop:
+			return errors.New("imscore: STUN keepalive aborted")
+		}
+	}
+}
+
+func (s *Service) udpKeepaliveEndpoint() (net.PacketConn, *net.UDPAddr) {
+	if s == nil || s.stopped() {
+		return nil, nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.registrationIO, cloneUDPAddr(s.registrationRemote)
+}
+
+func (s *Service) writeSTUNPacket(conn net.PacketConn, pkt []byte, remote net.Addr) error {
+	s.sipWriteMu.Lock()
+	defer s.sipWriteMu.Unlock()
+	if err := conn.SetWriteDeadline(time.Now().Add(imsTCPCRLFWriteTimeout)); err != nil {
+		return err
+	}
+	defer func() { _ = conn.SetWriteDeadline(time.Time{}) }()
+	_, err := conn.WriteTo(pkt, remote)
+	return err
+}
+
+func (s *Service) finishSTUNKeepalive(result stunKeepaliveResult) error {
+	if result.err != nil {
+		return result.err
+	}
+	if result.mapped == nil {
+		return fmt.Errorf("%w: %w", errSTUNKeepalive, errSTUNMappedAddress)
+	}
+	s.mu.Lock()
+	previous := s.stunMappedAddr
+	s.stunMappedAddr = cloneUDPAddr(result.mapped)
+	s.mu.Unlock()
+	if previous != nil && !sameUDPAddr(previous, result.mapped) {
+		return errSTUNMappedChanged
+	}
+	return nil
+}
+
+func (s *Service) handleInboundSTUN(pkt []byte) {
+	txID, ok := stunTransactionID(pkt)
+	if !ok {
+		return
+	}
+	s.mu.Lock()
+	wait := s.stunKeepaliveWait
+	expected := s.stunKeepaliveTxID
+	s.mu.Unlock()
+	if wait == nil || txID != expected {
+		return
+	}
+	msg, err := parseSTUNMessage(pkt)
+	if err != nil {
+		s.completeSTUNKeepalive(wait, stunKeepaliveResult{err: fmt.Errorf("%w: %w", errSTUNKeepalive, err)})
+		return
+	}
+	var result stunKeepaliveResult
+	switch msg.Type {
+	case stunBindingSuccess:
+		mapped, mappedErr := stunMappedAddress(msg)
+		if mappedErr != nil {
+			result.err = fmt.Errorf("%w: %w", errSTUNKeepalive, mappedErr)
+			break
+		}
+		result.mapped = mapped
+	case stunBindingError:
+		result.err = fmt.Errorf("%w: error response", errSTUNKeepalive)
+	default:
+		return
+	}
+	s.completeSTUNKeepalive(wait, result)
+}
+
+func (s *Service) completeSTUNKeepalive(wait chan stunKeepaliveResult, result stunKeepaliveResult) {
+	if wait == nil {
+		return
+	}
+	select {
+	case wait <- result:
+	default:
+	}
+}
+
+func (s *Service) clearSTUNKeepaliveWait(wait chan stunKeepaliveResult) {
+	if s == nil || wait == nil {
+		return
+	}
+	s.mu.Lock()
+	if s.stunKeepaliveWait == wait {
+		s.stunKeepaliveWait = nil
+		s.stunKeepaliveTxID = [12]byte{}
+	}
+	s.mu.Unlock()
+}
+
+func (s *Service) stunRetransmitRTO() time.Duration {
+	if s != nil && s.stunRTO > 0 {
+		return s.stunRTO
+	}
+	return imsSTUNRetransmitRTO
+}
+
+func (s *Service) stunRetransmitCount() int {
+	if s != nil && s.stunRc > 0 {
+		return s.stunRc
+	}
+	return imsSTUNRetransmitCount
+}
+
+func stunUDPKeepaliveInterval() time.Duration {
+	var b [1]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return 27 * time.Second
+	}
+	return time.Duration(24+int(b[0]%6)) * time.Second
+}
+
+func stunIntervalFromFlowTimer(flowTimer time.Duration) time.Duration {
+	if flowTimer <= 0 {
+		return stunUDPKeepaliveInterval()
+	}
+	var b [1]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return flowTimer * 9 / 10
+	}
+	percent := 80 + int(b[0]%21)
+	return flowTimer * time.Duration(percent) / 100
 }
 
 func (s *Service) sendTCPCRLFKeepalive(conn net.Conn) error {

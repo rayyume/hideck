@@ -208,6 +208,13 @@ type Service struct {
 	tcpKeepalivePong          chan error
 	tcpCRLFPongWait           time.Duration
 	sipOutboundKeepalive      bool
+	flowTimer                 time.Duration
+	stunKeepaliveWait         chan stunKeepaliveResult
+	stunKeepaliveTxID         [12]byte
+	stunMappedAddr            *net.UDPAddr
+	stunRTO                   time.Duration
+	stunRc                    int
+	stunKeepaliveInterval     time.Duration
 
 	// Dialogs.
 	dialogRegistry *dialogRegistry

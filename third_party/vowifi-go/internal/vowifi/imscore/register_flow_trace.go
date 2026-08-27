@@ -1,7 +1,9 @@
 package imscore
 
 import (
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/iniwex5/vowifi-go/internal/vowifi/logging"
 )
@@ -18,6 +20,8 @@ func (s *Service) logRegisterFlowNegotiation(response *sipResponse) {
 	viaKeep := viaHasKeepParameter(response.HeaderValues("Via"))
 	s.mu.Lock()
 	s.sipOutboundKeepalive = requiredOutbound || viaKeep
+	s.flowTimer = parseFlowTimerHeader(response.HeaderValues("Flow-Timer"))
+	s.stunMappedAddr = nil
 	s.mu.Unlock()
 	logging.Info("IMS REGISTER flow negotiation",
 		"device", s.DeviceID(),
@@ -27,6 +31,17 @@ func (s *Service) logRegisterFlowNegotiation(response *sipResponse) {
 		"path_present", strings.TrimSpace(path) != "",
 		"path_ob", containsSIPParameter(path, "ob"),
 		"contact_reg_id", containsSIPParameter(contact, "reg-id"))
+}
+
+func parseFlowTimerHeader(values []string) time.Duration {
+	for _, value := range values {
+		seconds, err := strconv.Atoi(strings.TrimSpace(value))
+		if err != nil || seconds <= 0 {
+			continue
+		}
+		return time.Duration(seconds) * time.Second
+	}
+	return 0
 }
 
 func viaHasKeepParameter(values []string) bool {

@@ -95,6 +95,8 @@ func (s *Service) Register(ctx context.Context) error {
 		s.signalingReady = false
 		s.signalingFailureReason = err.Error()
 		s.sipOutboundKeepalive = false
+		s.flowTimer = 0
+		s.stunMappedAddr = nil
 		s.mu.Unlock()
 		if !isRegisterOperationCanceled(err) {
 			s.applyRegistrationFailureStatus(err)

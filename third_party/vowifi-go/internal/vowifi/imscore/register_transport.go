@@ -204,6 +204,10 @@ func (s *Service) readRegistrationResponses(conn net.PacketConn) {
 			s.handleRegistrationPacketReadError(conn, err)
 			return
 		}
+		if isSTUNMessage(buffer[:n]) {
+			s.handleInboundSTUN(append([]byte(nil), buffer[:n]...))
+			continue
+		}
 		err = s.dispatchInboundSIP(string(buffer[:n]), func(response string) error {
 			if _, writeErr := conn.WriteTo([]byte(response), remote); writeErr != nil {
 				return fmt.Errorf("imscore: write SIP datagram: %w", writeErr)
