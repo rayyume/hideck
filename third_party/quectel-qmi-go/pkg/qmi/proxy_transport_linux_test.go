@@ -8,9 +8,57 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 	"time"
 )
+
+func TestShouldSpawnProxySkipsBusyListener(t *testing.T) {
+	if shouldSpawnProxy(syscall.EAGAIN) {
+		t.Fatal("EAGAIN should not start another qmi-proxy")
+	}
+	busy := &net.OpError{Op: "dial", Net: "unix", Err: syscall.EAGAIN}
+	if shouldSpawnProxy(busy) {
+		t.Fatal("busy unix dial should not start another qmi-proxy")
+	}
+	if !shouldSpawnProxy(syscall.ECONNREFUSED) {
+		t.Fatal("connection refused should start qmi-proxy")
+	}
+}
+
+func TestStartProxyProcessKeepsASingleLiveChild(t *testing.T) {
+	t.Cleanup(StopStartedProxy)
+	exe := filepath.Join(t.TempDir(), "qmi-proxy")
+	if err := os.WriteFile(exe, []byte("#!/bin/sh\nexec sleep 30\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := startProxyProcess(exe); err != nil {
+		t.Fatal(err)
+	}
+	if err := startProxyProcess(exe); err != nil {
+		t.Fatal(err)
+	}
+	proxyMu.Lock()
+	cmd := liveProxyCmd
+	proxyMu.Unlock()
+	if cmd == nil || cmd.Process == nil {
+		t.Fatal("expected a live qmi-proxy child")
+	}
+	pid := cmd.Process.Pid
+	if err := startProxyProcess(exe); err != nil {
+		t.Fatal(err)
+	}
+	proxyMu.Lock()
+	second := liveProxyCmd
+	proxyMu.Unlock()
+	if second == nil || second.Process == nil || second.Process.Pid != pid {
+		t.Fatalf("second start replaced the live proxy")
+	}
+	StopStartedProxy()
+	if err := syscall.Kill(pid, 0); err == nil {
+		t.Fatal("StopStartedProxy left the proxy running")
+	}
+}
 
 func TestProxySocketAddressNormalizesCommonAbstractSocketNames(t *testing.T) {
 	tests := []struct {
@@ -30,6 +78,39 @@ func TestProxySocketAddressNormalizesCommonAbstractSocketNames(t *testing.T) {
 				t.Fatalf("proxySocketAddress(%q)=%q, want %q", tt.in, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestOpenProxyTransportDoesNotSpawnWhenProxyIsBusy(t *testing.T) {
+	proxyExecutable := filepath.Join(t.TempDir(), "qmi-proxy")
+	if err := os.WriteFile(proxyExecutable, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	oldDial := dialProxyHook
+	oldStart := startProxyProcessHook
+	oldRetryDelay := proxyRetryDelay
+	t.Cleanup(func() {
+		dialProxyHook = oldDial
+		startProxyProcessHook = oldStart
+		proxyRetryDelay = oldRetryDelay
+	})
+	starts := 0
+	dialProxyHook = func(context.Context, string) (qmiTransport, error) {
+		return nil, syscall.EAGAIN
+	}
+	startProxyProcessHook = func(string) error {
+		starts++
+		return nil
+	}
+	proxyRetryDelay = time.Millisecond
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	_, err := openProxyTransport(ctx, ClientOptions{ProxyExecutable: proxyExecutable})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("error=%v, want deadline", err)
+	}
+	if starts != 0 {
+		t.Fatalf("starts=%d, want 0 when the proxy socket is busy", starts)
 	}
 }
 

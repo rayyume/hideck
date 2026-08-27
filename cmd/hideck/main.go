@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/iniwex5/quectel-qmi-go/pkg/qmi"
 	"github.com/iniwex5/vowifi-go/runtimehost/carrier"
 	"github.com/iniwex5/vowifi-go/runtimehost/voicehost"
 	"github.com/yibaiba/hideck/internal/api"
@@ -277,7 +278,7 @@ func main() {
 	logger.Info("正在优雅关闭所有服务...")
 
 	// 9. 优雅关闭
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 18*time.Second)
 	defer shutdownCancel()
 
 	done := make(chan struct{})
@@ -306,13 +307,14 @@ func main() {
 		if err := pool.Shutdown(); err != nil {
 			logger.Error("关闭工作器池时出错", "err", err)
 		}
+		qmi.StopStartedProxy()
 		close(done)
 	}()
 
 	select {
 	case <-done:
 	case <-quit:
-	case <-time.After(12 * time.Second):
+	case <-time.After(20 * time.Second):
 		logger.Warn("关闭超时，强制退出")
 	}
 

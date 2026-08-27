@@ -2373,6 +2373,15 @@ func (p *Pool) Shutdown() error {
 	}
 
 	mappingErr := p.removeAllDynamicInterfaceMappings(context.Background())
+	p.mu.RLock()
+	for _, w := range p.workers {
+		w.stopOnce.Do(func() {
+			if w.stop != nil {
+				close(w.stop)
+			}
+		})
+	}
+	p.mu.RUnlock()
 	p.cancel()
 	var wg sync.WaitGroup
 	p.mu.RLock()
@@ -2424,8 +2433,10 @@ func (p *Pool) Shutdown() error {
 	select {
 	case <-c:
 		logger.Info("所有工作器已正常关闭")
+		qmi.StopStartedProxy()
 		return mappingErr
 	case <-time.After(5 * time.Second):
+		qmi.StopStartedProxy()
 		return errors.Join(mappingErr, fmt.Errorf("关闭超时"))
 	}
 }

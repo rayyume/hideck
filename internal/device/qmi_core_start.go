@@ -97,6 +97,14 @@ func (p *Pool) startQMICoreRetryLoop(worker *Worker) {
 			case <-time.After(delay):
 			}
 
+			select {
+			case <-p.ctx.Done():
+				return
+			case <-worker.stop:
+				return
+			default:
+			}
+
 			if err := runQMIStartCoreRetryAttempt(p.ctx, worker.QMICore.StartCoreContext, qmiCoreRetryAttemptBudget); err == nil {
 				logger.Info(fmt.Sprintf("[%s] QMI Core 已恢复启动", worker.ID))
 				cleanupWorkerStartupSIMAuthLogicalChannels(worker)

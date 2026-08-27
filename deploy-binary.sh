@@ -232,7 +232,8 @@ WorkingDirectory=${working_dir}
 ExecStart=${binary_path} -c ${config_file}
 Restart=on-failure
 RestartSec=5s
-TimeoutStopSec=15s
+KillMode=control-group
+TimeoutStopSec=30s
 
 [Install]
 WantedBy=multi-user.target
