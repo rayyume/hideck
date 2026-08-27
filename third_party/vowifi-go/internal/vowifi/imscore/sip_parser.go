@@ -311,7 +311,7 @@ func rawSIPBody(raw string) ([]byte, error) {
 func parseInboundRPDU(body []byte) error {
 	info := smscodec.ClassifyRPDU(body)
 	switch info.Kind {
-	case smscodec.RPDUKindAck:
+	case smscodec.RPDUKindAck, smscodec.RPDUKindSMMA:
 		return nil
 	case smscodec.RPDUKindData:
 		_, _, _, _, err := smscodec.ParseRPDataWithAddresses(body)

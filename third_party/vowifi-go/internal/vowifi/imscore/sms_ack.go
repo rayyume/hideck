@@ -18,6 +18,7 @@ type rpReportRequest struct {
 	RPMR        byte
 	Fingerprint string
 	RemoteURI   string
+	ContentType string
 }
 
 type rpReportRejectError struct {
@@ -67,7 +68,7 @@ func (s *Service) recordMTAckAudit(audit mtAckAudit, err error) {
 }
 
 func (s *Service) sendRPReport(report rpReportRequest) error {
-	request, err := s.buildRPAckMESSAGE(report.Inbound, report.Body, report.RemoteURI)
+	request, err := s.buildRPAckMESSAGE(report.Inbound, report.Body, report.RemoteURI, report.ContentType)
 	if err != nil {
 		s.mtAckSendErr.Add(1)
 		return err

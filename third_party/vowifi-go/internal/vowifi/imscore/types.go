@@ -233,14 +233,17 @@ type Service struct {
 	smsRandom io.Reader
 
 	// Callbacks and SMS capability state.
-	onRegistered          func()
-	onSMSReady            func()
-	onSMSReadiness        func(SMSReadiness)
-	smsReceiverReady      bool
-	smsReadyNotified      bool
-	nextSIPCSeq           int
-	smsTransactionTimeout time.Duration
-	smsReportTimeout      time.Duration
+	onRegistered           func()
+	onSMSReady             func()
+	onSMSReadiness         func(SMSReadiness)
+	smsReceiverReady       bool
+	smsMemoryFull          bool
+	smsMemoryDenied        bool
+	smsMemoryDeniedGateway string
+	smsReadyNotified       bool
+	nextSIPCSeq            int
+	smsTransactionTimeout  time.Duration
+	smsReportTimeout       time.Duration
 	fragmentState
 
 	securityVerify         string

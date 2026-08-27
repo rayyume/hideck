@@ -19,9 +19,10 @@ func (s *Service) buildSMSMESSAGE(remoteURI string, body []byte) (string, error)
 }
 
 type smsMESSAGEOptions struct {
-	RemoteURI string
-	Body      []byte
-	InReplyTo string
+	RemoteURI   string
+	Body        []byte
+	InReplyTo   string
+	ContentType string
 }
 
 func (s *Service) buildSMSMESSAGEWithOptions(options smsMESSAGEOptions) (string, error) {
@@ -70,15 +71,28 @@ func (s *Service) buildSMSMESSAGEWithOptions(options smsMESSAGEOptions) (string,
 	if userAgent := strings.TrimSpace(profile.UserAgent); userAgent != "" {
 		request.WriteString("User-Agent: " + userAgent + "\r\n")
 	}
-	request.WriteString("Content-Type: " + imsSMSContentType + "\r\n")
-	request.WriteString("Content-Transfer-Encoding: binary\r\n")
+	contentType := strings.TrimSpace(options.ContentType)
+	if contentType == "" {
+		contentType = imsSMSContentType
+	}
+	if strings.ContainsAny(contentType, "\r\n") {
+		return "", errors.New("imscore: invalid SMS Content-Type")
+	}
+	request.WriteString("Content-Type: " + contentType + "\r\n")
+	if normalizedContentType(contentType) == imsSMSContentType {
+		request.WriteString("Content-Transfer-Encoding: binary\r\n")
+	}
 	fmt.Fprintf(&request, "Content-Length: %d\r\n\r\n", len(options.Body))
 	request.Write(options.Body)
 	return request.String(), nil
 }
 
 func (s *Service) buildOutboundMESSAGE(remoteURI string, body []byte) (*sip.Request, error) {
-	raw, err := s.buildSMSMESSAGE(remoteURI, body)
+	return s.buildOutboundMESSAGEWithOptions(smsMESSAGEOptions{RemoteURI: remoteURI, Body: body})
+}
+
+func (s *Service) buildOutboundMESSAGEWithOptions(options smsMESSAGEOptions) (*sip.Request, error) {
+	raw, err := s.buildSMSMESSAGEWithOptions(options)
 	if err != nil {
 		return nil, err
 	}
@@ -93,8 +107,8 @@ func (s *Service) buildOutboundMESSAGE(remoteURI string, body []byte) (*sip.Requ
 	return request, nil
 }
 
-func (s *Service) buildRPAckMESSAGE(inbound string, body []byte, remoteURI string) (*sip.Request, error) {
-	raw, err := s.buildInboundSMSControlRequest(inbound, body, remoteURI)
+func (s *Service) buildRPAckMESSAGE(inbound string, body []byte, remoteURI, contentType string) (*sip.Request, error) {
+	raw, err := s.buildInboundSMSControlRequest(inbound, body, remoteURI, contentType)
 	if err != nil {
 		return nil, err
 	}

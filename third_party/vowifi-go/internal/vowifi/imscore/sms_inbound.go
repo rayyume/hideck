@@ -36,11 +36,14 @@ type inboundSMS struct {
 	total             int
 	partNo            int
 	fragmentSessionID string
+	msisdnLess        bool
+	deliveryReportTo  string
 }
 
 type decodedInboundSMSRequest struct {
 	rpdu []byte
 	info smscodec.RPDUInfo
+	xml  shortMessageInfo
 }
 
 type fragmentLifecycleContext struct {
@@ -67,19 +70,25 @@ func inboundAckHeaders(request *sip.Request) (string, string, string, string) {
 }
 
 func (s *Service) decodeInboundSMSRequest(raw string) (*decodedInboundSMSRequest, error) {
-	if normalizedContentType(rawSIPHeaderValue(raw, "Content-Type")) != imsSMSContentType {
-		return nil, errors.New("unsupported IMS SMS content type")
+	contentType := rawSIPHeaderValue(raw, "Content-Type")
+	if !isSupportedSMSContentType(contentType) {
+		return nil, errUnsupportedSMSContentType
 	}
 	body, err := rawSIPBody(raw)
 	if err != nil {
 		return nil, err
 	}
-	rpdu, err := smscodec.DecodeBodyMaybeHex(body)
+	payload, err := extractIMSSMSPayload(contentType, body)
 	if err != nil {
+		if errors.Is(err, errUnsupportedSMSContentType) {
+			return nil, err
+		}
 		return nil, fmt.Errorf("decode RPDU body: %w", err)
 	}
-	decoded := &decodedInboundSMSRequest{rpdu: rpdu, info: smscodec.ClassifyRPDU(rpdu)}
-	if err := parseInboundRPDU(rpdu); err != nil {
+	decoded := &decodedInboundSMSRequest{
+		rpdu: payload.rpdu, info: smscodec.ClassifyRPDU(payload.rpdu), xml: payload.xml,
+	}
+	if err := parseInboundRPDU(payload.rpdu); err != nil {
 		return decoded, err
 	}
 	return decoded, nil
@@ -88,7 +97,7 @@ func (s *Service) decodeInboundSMSRequest(raw string) (*decodedInboundSMSRequest
 func (s *Service) handleInboundSMS(raw string) (inboundSIPResult, error) {
 	s.logInboundSMSProtocolTrace(raw)
 	decoded, err := s.decodeInboundSMSRequest(raw)
-	if err != nil && decoded == nil && normalizedContentType(rawSIPHeaderValue(raw, "Content-Type")) != imsSMSContentType {
+	if err != nil && decoded == nil && !isSupportedSMSContentType(rawSIPHeaderValue(raw, "Content-Type")) {
 		response, err := buildSIPRequestResponse(raw, 415)
 		return inboundSIPResult{response: response}, err
 	}
@@ -111,7 +120,7 @@ func (s *Service) routeDecodedInboundSMS(raw string, decoded *decodedInboundSMSR
 	info, rpdu := decoded.info, decoded.rpdu
 	switch {
 	case info.Kind == smscodec.RPDUKindData && info.RawType == 0x01:
-		return s.handleInboundSMSData(raw, rpdu, info.MR)
+		return s.handleInboundSMSData(raw, decoded)
 	case info.Kind == smscodec.RPDUKindAck && info.RawType == 0x03:
 		return s.handleInboundSMSReport(raw, info, "acked", "")
 	case info.Kind == smscodec.RPDUKindError && info.RawType == 0x05:
@@ -142,11 +151,14 @@ func (s *Service) handleInboundSMSReport(
 	return s.handleInboundRPReport(raw, info, state, errorText)
 }
 
-func (s *Service) handleInboundSMSData(raw string, rpdu []byte, rpMR byte) (inboundSIPResult, error) {
-	return s.handleInboundRPData(raw, rpdu, rpMR)
+func (s *Service) handleInboundSMSData(raw string, decoded *decodedInboundSMSRequest) (inboundSIPResult, error) {
+	if decoded == nil {
+		return s.inboundSMSProtocolError(raw, 400, 0, false, errors.New("empty decoded IMS SMS"))
+	}
+	return s.handleInboundRPData(raw, decoded.rpdu, decoded.info.MR, decoded.xml)
 }
 
-func (s *Service) handleInboundRPData(raw string, rpdu []byte, rpMR byte) (inboundSIPResult, error) {
+func (s *Service) handleInboundRPData(raw string, rpdu []byte, rpMR byte, xml shortMessageInfo) (inboundSIPResult, error) {
 	_, _, _, payload, err := smscodec.ParseRPDataWithAddresses(rpdu)
 	if err != nil {
 		return s.inboundSMSProtocolError(raw, 400, rpMR, true, err)
@@ -158,10 +170,30 @@ func (s *Service) handleInboundRPData(raw string, rpdu []byte, rpMR byte) (inbou
 	if err != nil {
 		return s.inboundSMSProtocolError(raw, 400, rpMR, true, err)
 	}
+	if smscodec.IsDummyMSISDN(message.sender) {
+		if !hasMSISDNLessFeatureCaps(raw) {
+			response, responseErr := buildSIPRequestResponse(raw, 200)
+			return inboundSIPResult{response: response}, responseErr
+		}
+		message.msisdnLess = true
+		if from := strings.TrimSpace(xml.From); from != "" {
+			message.sender = from
+			message.deliveryReportTo = from
+		}
+	}
 	s.logInboundSMSCorrelation(raw, message)
 	response, err := buildSIPRequestResponse(raw, 200)
 	if err != nil {
 		return inboundSIPResult{}, err
+	}
+	if s.smsMemoryIsFull() {
+		s.rememberSMSMemoryDenied(raw)
+		return inboundSIPResult{
+			response: response,
+			afterReply: func() {
+				s.sendRPReportWithRetry(s.rpReportForInbound(raw, message, smscodec.BuildRPError(message.rpMR, smscodec.RPCauseMemoryCapacityExceeded)))
+			},
+		}, nil
 	}
 	return s.finalizeInboundSMSData(raw, message, response)
 }
@@ -198,10 +230,9 @@ func (s *Service) finalizeInboundSMSData(
 			if fragmentKey != "" {
 				s.markFragmentAcked(fragmentKey, message.partNo)
 			}
-			s.sendRPReportWithRetry(rpReportRequest{
-				Inbound: raw, Body: smscodec.BuildRPAck(message.rpMR),
-				RPMR: message.rpMR, Fingerprint: fingerprint,
-			})
+			report := s.rpReportForInbound(raw, message, smscodec.BuildRPAck(message.rpMR))
+			report.Fingerprint = fingerprint
+			s.sendRPReportWithRetry(report)
 		},
 	}, nil
 }
@@ -327,7 +358,20 @@ func (s *Service) publishInboundSMSWithFragment(
 	})
 }
 
-func (s *Service) buildInboundSMSControlRequest(inbound string, body []byte, remoteURI string) (string, error) {
+func (s *Service) rpReportForInbound(raw string, message inboundSMS, rpdu []byte) rpReportRequest {
+	report := rpReportRequest{
+		Inbound: raw, Body: rpdu, RPMR: message.rpMR,
+	}
+	if message.msisdnLess && strings.TrimSpace(message.deliveryReportTo) != "" {
+		if contentType, body, err := buildMSISDNLessSMSPayload(shortMessageInfo{To: message.deliveryReportTo}, rpdu); err == nil {
+			report.ContentType = contentType
+			report.Body = body
+		}
+	}
+	return report
+}
+
+func (s *Service) buildInboundSMSControlRequest(inbound string, body []byte, remoteURI, contentType string) (string, error) {
 	remoteURI = strings.TrimSpace(remoteURI)
 	if remoteURI == "" {
 		targets := resolveRpAckTargets(
@@ -348,9 +392,10 @@ func (s *Service) buildInboundSMSControlRequest(inbound string, body []byte, rem
 		return "", errors.New("IMS RP-ACK In-Reply-To is unavailable")
 	}
 	return s.buildSMSMESSAGEWithOptions(smsMESSAGEOptions{
-		RemoteURI: remoteURI,
-		Body:      body,
-		InReplyTo: callID,
+		RemoteURI:   remoteURI,
+		Body:        body,
+		InReplyTo:   callID,
+		ContentType: contentType,
 	})
 }
 

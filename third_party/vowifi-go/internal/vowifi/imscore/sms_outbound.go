@@ -87,19 +87,19 @@ func (s *Service) prepareSendEnv(
 	if !readiness.Ready {
 		return nil, fmt.Errorf("imscore: %w: %s", smsdelivery.ErrSMSNotReady, readiness.Reason)
 	}
-	recipient, err := normalizeSMSRecipient(to)
+	destination, err := parseSMSDestination(to)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := s.resolveSendRoute(recipient); err != nil {
+	if _, err := s.resolveSendRoute(destination.display); err != nil {
 		return nil, err
 	}
-	parts, err := s.buildOutboundSMSParts(recipient, text, opts)
+	parts, err := s.buildOutboundSMSParts(destination, text, opts)
 	if err != nil {
 		return nil, err
 	}
 	return &smsSendEnvironment{
-		recipient: recipient, text: text, parts: parts, messageID: uuid.NewString(),
+		recipient: destination.display, text: text, parts: parts, messageID: uuid.NewString(),
 	}, nil
 }
 
@@ -235,14 +235,14 @@ func (s *Service) smsSendStatus() (string, time.Time, string) {
 	return s.lastSMSSendTraceID, s.lastSMSSendAt, s.lastSMSSendErr
 }
 
-func (s *Service) buildOutboundSMSParts(recipient, text string, opts SendOptions) ([]outboundSMSPart, error) {
-	tpdus, _, err := smscodec.BuildSubmitTPDUsWithOptions(recipient, text, smscodec.SubmitOptions{
+func (s *Service) buildOutboundSMSParts(destination smsDestination, text string, opts SendOptions) ([]outboundSMSPart, error) {
+	tpdus, _, err := smscodec.BuildSubmitTPDUsWithOptions(destination.tpDA, text, smscodec.SubmitOptions{
 		Encoding: smscodec.SMSEncoding(opts.Encoding),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("imscore: encode SMS-SUBMIT: %w", err)
 	}
-	remoteURI, err := s.resolveSendRoute(recipient)
+	remoteURI, err := s.resolveSendRoute(destination.display)
 	if err != nil {
 		return nil, err
 	}
@@ -252,7 +252,16 @@ func (s *Service) buildOutboundSMSParts(recipient, text string, opts SendOptions
 		if err != nil {
 			return nil, fmt.Errorf("imscore: allocate RP-MR for SMS part %d: %w", index+1, err)
 		}
-		request, err := s.buildOutboundMESSAGE(remoteURI, smscodec.BuildRPData(rpMR, tpdus[index], s.cfg.SMSC))
+		rpdu := smscodec.BuildRPData(rpMR, tpdus[index], s.cfg.SMSC)
+		options := smsMESSAGEOptions{RemoteURI: remoteURI, Body: rpdu}
+		if destination.msisdnLess() {
+			contentType, body, packErr := buildMSISDNLessSMSPayload(shortMessageInfo{To: destination.sipURI}, rpdu)
+			if packErr != nil {
+				return nil, fmt.Errorf("imscore: build MSISDN-less SMS MESSAGE part %d: %w", index+1, packErr)
+			}
+			options.ContentType, options.Body = contentType, body
+		}
+		request, err := s.buildOutboundMESSAGEWithOptions(options)
 		if err != nil {
 			return nil, fmt.Errorf("imscore: build SMS MESSAGE part %d: %w", index+1, err)
 		}

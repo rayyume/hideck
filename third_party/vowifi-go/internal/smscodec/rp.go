@@ -13,6 +13,7 @@ const (
 	RPDUKindData    RPDUKind = "RP-DATA"
 	RPDUKindAck     RPDUKind = "RP-ACK"
 	RPDUKindError   RPDUKind = "RP-ERROR"
+	RPDUKindSMMA    RPDUKind = "RP-SMMA"
 )
 
 type RPDUInfo struct {
@@ -90,6 +91,8 @@ func ClassifyRPDU(body []byte) RPDUInfo {
 		if cause, err := ParseRPErrorCause(body); err == nil {
 			info.Cause = int(cause)
 		}
+	case 0x06:
+		info.Kind = RPDUKindSMMA
 	}
 	return info
 }
@@ -298,8 +301,33 @@ func BuildRPAck(rpMR byte) []byte {
 	return []byte{0x02, rpMR}
 }
 
+// BuildRPSMMA 构造 RP-SMMA（TS 24.011：MS→网络 memory available，MTI 110）。
+func BuildRPSMMA(rpMR byte) []byte {
+	return []byte{0x06, rpMR}
+}
+
+// DummyMSISDN is the 15-zero international MSISDN from 3GPP TS 23.003.
+const DummyMSISDN = "+000000000000000"
+
 // RPCauseTemporaryFailure 临时故障（3GPP TS 24.011 §8.2.5.4），SMSC 应稍后重试
 const RPCauseTemporaryFailure byte = 41
+
+// RPCauseMemoryCapacityExceeded 内存满（3GPP TS 24.011 §8.2.5.4 cause 22）
+const RPCauseMemoryCapacityExceeded byte = 22
+
+// IsDummyMSISDN reports whether value is the TS 23.003 dummy MSISDN.
+func IsDummyMSISDN(value string) bool {
+	digits := strings.TrimPrefix(strings.TrimSpace(value), "+")
+	if len(digits) < 7 || len(digits) > 15 {
+		return false
+	}
+	for _, character := range digits {
+		if character != '0' {
+			return false
+		}
+	}
+	return true
+}
 
 // BuildRPError 构造 RP-ERROR（拒收 RP-DATA，通知 SMSC 投递失败）。
 func BuildRPError(rpMR byte, cause byte) []byte {

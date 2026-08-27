@@ -17,6 +17,7 @@ func TestClassifyRPDU(t *testing.T) {
 		{name: "rp-ack-net", in: []byte{0x03, 0x01}, kind: RPDUKindAck},
 		{name: "rp-error-ms", in: []byte{0x04, 0x0A, 0x01, 0x29, 0x00}, kind: RPDUKindError},
 		{name: "rp-error-net", in: []byte{0x05, 0x0A, 0x01, 0x29, 0x00}, kind: RPDUKindError},
+		{name: "rp-smma", in: []byte{0x06, 0x12}, kind: RPDUKindSMMA},
 		{name: "unknown", in: []byte{0x7F, 0x01}, kind: RPDUKindUnknown},
 		{name: "empty", in: []byte{}, kind: RPDUKindUnknown},
 	}
@@ -78,6 +79,15 @@ func TestParseRPErrorDetailsRejectsMalformedUserDataTLV(t *testing.T) {
 		if _, err := ParseRPErrorDetails(body); err == nil {
 			t.Fatalf("expected error for %x", body)
 		}
+	}
+}
+
+func TestBuildRPSMMAAndDummyMSISDN(t *testing.T) {
+	if got := BuildRPSMMA(0x2a); !bytes.Equal(got, []byte{0x06, 0x2a}) {
+		t.Fatalf("RP-SMMA = %x", got)
+	}
+	if !IsDummyMSISDN(DummyMSISDN) || !IsDummyMSISDN("0000000") || IsDummyMSISDN("+447700900123") {
+		t.Fatal("dummy MSISDN classification")
 	}
 }
 
