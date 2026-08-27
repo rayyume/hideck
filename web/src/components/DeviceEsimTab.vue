@@ -14,7 +14,9 @@ import { describeDeleteResultNotice, describeDownloadTerminalNotice, describeSpa
 import {
   looksLikeEsimActivationCode,
   parseEsimActivationInput,
-  readQrPayloadFromImageFile
+  pickClipboardOrDropImage,
+  readQrPayloadFromImageFile,
+  transferLooksLikeImageDrop
 } from '../utils/esimActivationCode'
 import {
   formatEsimNotificationEvent,
@@ -79,6 +81,8 @@ const confirmationRequired = ref(false)
 const activationHint = ref('')
 const qrFileInput = ref<HTMLInputElement | null>(null)
 const qrReading = ref(false)
+const qrDropActive = ref(false)
+let qrDropDepth = 0
 const downloading = ref(false)
 const downloadProgress = ref(0)
 const downloadMsg = ref('')
@@ -114,8 +118,8 @@ function applyActivationInput(raw: string | number, announce?: boolean) {
     return
   }
   downloadForm.value.smdp = parsed.smdp
-  if (parsed.matchingId) downloadForm.value.matchingId = parsed.matchingId
-  if (parsed.confirmationCode) downloadForm.value.confirmationCode = parsed.confirmationCode
+  downloadForm.value.matchingId = parsed.matchingId
+  downloadForm.value.confirmationCode = parsed.confirmationCode
   confirmationRequired.value = parsed.confirmationRequired
   activationHint.value = parsed.matchingId
     ? `已识别 ${parsed.smdp} / ${parsed.matchingId}`
@@ -127,11 +131,56 @@ function openQrFilePicker() {
   qrFileInput.value?.click()
 }
 
+function resetQrDropState() {
+  qrDropDepth = 0
+  qrDropActive.value = false
+}
+
+function onQrDragEnter(event: DragEvent) {
+  if (!transferLooksLikeImageDrop(event.dataTransfer)) return
+  event.preventDefault()
+  qrDropDepth += 1
+  qrDropActive.value = true
+}
+
+function onQrDragOver(event: DragEvent) {
+  if (!transferLooksLikeImageDrop(event.dataTransfer)) return
+  event.preventDefault()
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
+}
+
+function onQrDragLeave(event: DragEvent) {
+  if (!transferLooksLikeImageDrop(event.dataTransfer)) return
+  event.preventDefault()
+  qrDropDepth = Math.max(0, qrDropDepth - 1)
+  if (qrDropDepth === 0) qrDropActive.value = false
+}
+
+async function onQrDrop(event: DragEvent) {
+  event.preventDefault()
+  resetQrDropState()
+  await decodeQrImage(pickClipboardOrDropImage(event.dataTransfer))
+}
+
+async function onQrPaste(event: ClipboardEvent) {
+  const image = pickClipboardOrDropImage(event.clipboardData)
+  if (!image) return
+  event.preventDefault()
+  await decodeQrImage(image)
+}
+
 async function onQrFileChange(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   input.value = ''
-  if (!file) return
+  await decodeQrImage(file || null)
+}
+
+async function decodeQrImage(file: File | null) {
+  if (!file) {
+    ElMessage.warning('请放入二维码图片')
+    return
+  }
   qrReading.value = true
   try {
     const payload = await readQrPayloadFromImageFile(file)
@@ -430,9 +479,6 @@ async function downloadProfile() {
   if (confirmationCode) params.set('confirmation_code', confirmationCode)
   if (targetAidHex) params.set('aid_hex', targetAidHex)
   if (imei.trim()) params.set('imei', imei.trim())
-  if (looksLikeEsimActivationCode(downloadForm.value.activationCode)) {
-    params.set('activation_code', downloadForm.value.activationCode.trim())
-  }
 
   const base = api.defaults.baseURL || ''
   const url = `${base}/devices/${props.deviceId}/esim/actions/download?${params}`
@@ -528,6 +574,7 @@ watch(() => props.deviceImei, () => {
 })
 
 onBeforeUnmount(() => {
+  resetQrDropState()
   clearRecentSpaceDelta()
   if (fetchAbortController) {
     fetchAbortController.abort()
@@ -824,31 +871,42 @@ onBeforeUnmount(() => {
       <p class="esim-install-copy">
         市面常见 eSIM（VOXI、Giffgaff、Airalo、联通等）给的是一张二维码，或一行
         <span class="esim-install-code">LPA:1$</span>
-        激活码。扫出来贴进来，或上传截图。邮件里如果是分开的 SM-DP+ 地址和激活码，整段贴进来也可以。
+        激活码。可以把二维码图片拖进来，或复制后在这里粘贴。邮件里如果是分开的 SM-DP+ 地址和激活码，整段贴进来也可以。
       </p>
       <div class="space-y-3">
         <div class="space-y-1">
           <div class="text-xs font-bold text-gray-500 uppercase tracking-wider">激活码 / 二维码内容</div>
-          <el-input
-            v-model="downloadForm.activationCode"
-            type="textarea"
-            :autosize="{ minRows: 2, maxRows: 4 }"
-            placeholder="LPA:1$smdp.example.com$匹配码"
-            @update:model-value="applyActivationInput"
-          />
-          <div class="flex flex-wrap items-center gap-2">
-            <input
-              ref="qrFileInput"
-              type="file"
-              accept="image/*"
-              class="esim-qr-file"
-              @change="onQrFileChange"
-            >
-            <el-button :loading="qrReading" @click="openQrFilePicker">
-              <el-icon><Image24Regular /></el-icon>
-              识别二维码图片
-            </el-button>
-            <span v-if="activationHint" class="esim-activation-hint">{{ activationHint }}</span>
+          <div
+            class="esim-qr-drop"
+            :class="{ 'is-active': qrDropActive, 'is-reading': qrReading }"
+            tabindex="0"
+            @dragenter="onQrDragEnter"
+            @dragover="onQrDragOver"
+            @dragleave="onQrDragLeave"
+            @drop="onQrDrop"
+            @paste.capture="onQrPaste"
+          >
+            <el-input
+              v-model="downloadForm.activationCode"
+              type="textarea"
+              :autosize="{ minRows: 3, maxRows: 5 }"
+              placeholder="LPA:1$smdp.example.com$匹配码，或把二维码图片拖到这里 / Ctrl+V 粘贴"
+              @update:model-value="applyActivationInput"
+            />
+            <div class="flex flex-wrap items-center gap-2">
+              <input
+                ref="qrFileInput"
+                type="file"
+                accept="image/*"
+                class="esim-qr-file"
+                @change="onQrFileChange"
+              >
+              <el-button :loading="qrReading" @click="openQrFilePicker">
+                <el-icon><Image24Regular /></el-icon>
+                识别二维码图片
+              </el-button>
+              <span class="esim-activation-hint">{{ qrDropActive ? '放开即可识别二维码' : (activationHint || '支持拖入图片，或复制截图后粘贴') }}</span>
+            </div>
           </div>
         </div>
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
@@ -1020,6 +1078,29 @@ onBeforeUnmount(() => {
 .esim-install-code {
   color: var(--ui-text);
   font-family: "v-mono", ui-monospace, monospace;
+}
+
+.esim-qr-drop {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border: 1px dashed var(--ui-border);
+  border-radius: 6px;
+  outline: none;
+}
+
+.esim-qr-drop.is-active {
+  border-color: var(--ui-primary);
+  background: color-mix(in srgb, var(--ui-primary) 8%, transparent);
+}
+
+.esim-qr-drop.is-reading {
+  opacity: 0.85;
+}
+
+.esim-qr-drop:focus-visible {
+  border-color: var(--ui-primary);
 }
 
 .esim-qr-file {

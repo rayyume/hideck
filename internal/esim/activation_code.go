@@ -31,25 +31,30 @@ func looksLikeActivationCode(raw string) bool {
 	if strings.Contains(upper, "LPA:") || strings.HasPrefix(value, "1$") || strings.Contains(strings.ToLower(value), "carddata=") {
 		return true
 	}
-	if smdpFieldPattern.MatchString(value) && matchingFieldPattern.MatchString(value) {
+	if _, ok := parseTwoLineActivation(value); ok {
 		return true
 	}
-	compact := compactActivationText(value)
-	return hostTokenPattern.MatchString(compact)
+	if parsed, ok := parseLabeledActivation(value); ok && parsed.MatchingID != "" {
+		return true
+	}
+	return hostTokenPattern.MatchString(compactActivationText(value))
 }
 
 // ParseActivationCode accepts a QR payload, Apple-wrapped URL, labeled carrier text, or raw LPA:1$ string.
 func ParseActivationCode(raw string) (ParsedActivationCode, error) {
+	if code, err := extractActivationCode(raw); err == nil {
+		return unmarshalActivationCode(code)
+	}
 	if parsed, ok := parseLabeledActivation(raw); ok {
 		return parsed, nil
 	}
 	if parsed, ok := parseTwoLineActivation(raw); ok {
 		return parsed, nil
 	}
-	code, err := extractActivationCode(raw)
-	if err != nil {
-		return ParsedActivationCode{}, err
-	}
+	return ParsedActivationCode{}, fmt.Errorf("不是可识别的 eSIM 激活码，请粘贴 LPA:1$ 二维码内容，或包含 SM-DP+ 地址和激活码的文本")
+}
+
+func unmarshalActivationCode(code string) (ParsedActivationCode, error) {
 	var ac lpa.ActivationCode
 	if err := ac.UnmarshalText([]byte(code)); err != nil {
 		return ParsedActivationCode{}, fmt.Errorf("无效的 eSIM 激活码")
@@ -95,10 +100,29 @@ func ResolveDownloadAddress(smdpOrCode, matchingID string) (string, string, erro
 		return parsed.SMDP, matching, nil
 	}
 	host := stripDownloadScheme(raw)
-	if host == "" {
+	if !looksLikeHost(host) {
 		return "", "", fmt.Errorf("请提供激活码或 SM-DP+ 地址")
 	}
 	return host, strings.TrimSpace(matchingID), nil
+}
+
+// ResolveDownloadQuery prefers a parsed activation payload, then a bare SM-DP+ host.
+func ResolveDownloadQuery(activationCode, smdp, matchingID string) (string, string, error) {
+	activationCode = strings.TrimSpace(activationCode)
+	smdp = strings.TrimSpace(smdp)
+	if activationCode != "" {
+		host, matching, err := ResolveDownloadAddress(activationCode, matchingID)
+		if err == nil && looksLikeHost(host) {
+			return host, matching, nil
+		}
+		if smdp == "" {
+			if err != nil {
+				return "", "", err
+			}
+			return "", "", fmt.Errorf("请提供激活码或 SM-DP+ 地址")
+		}
+	}
+	return ResolveDownloadAddress(smdp, matchingID)
 }
 
 func parseLabeledActivation(raw string) (ParsedActivationCode, bool) {
@@ -107,6 +131,9 @@ func parseLabeledActivation(raw string) (ParsedActivationCode, bool) {
 		return ParsedActivationCode{}, false
 	}
 	matching := firstSubmatch(matchingFieldPattern, raw)
+	if !looksLikeMatchingID(matching) {
+		return ParsedActivationCode{}, false
+	}
 	confirmation := firstSubmatch(confirmFieldPattern, raw)
 	return ParsedActivationCode{
 		SMDP:                 stripDownloadScheme(smdp),

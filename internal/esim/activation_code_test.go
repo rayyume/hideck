@@ -46,6 +46,23 @@ func TestParseActivationCodeMarketFormats(t *testing.T) {
 	}
 }
 
+func TestParseActivationCodePrefersLPAOverLabeledHost(t *testing.T) {
+	parsed, err := ParseActivationCode("SM-DP+ Address: rsp.truphone.com\n\nScan this QR:\nLPA:1$rsp.truphone.com$GG-MATCH-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsed.SMDP != "rsp.truphone.com" || parsed.MatchingID != "GG-MATCH-1" {
+		t.Fatalf("mixed paste = %#v", parsed)
+	}
+	parsed, err = ParseActivationCode("SM-DP+ Address: rsp.truphone.com\nActivation Code: LPA:1$rsp.truphone.com$GG-MATCH-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsed.MatchingID != "GG-MATCH-1" {
+		t.Fatalf("activation code LPA matching = %q", parsed.MatchingID)
+	}
+}
+
 func TestResolveDownloadAddressAcceptsHostOrLPA(t *testing.T) {
 	host, matching, err := ResolveDownloadAddress("LPA:1$smdp.example.com$token", "")
 	if err != nil {
@@ -60,5 +77,29 @@ func TestResolveDownloadAddressAcceptsHostOrLPA(t *testing.T) {
 	}
 	if host != "rsp.truphone.com" || matching != "abc" {
 		t.Fatalf("host=%q matching=%q", host, matching)
+	}
+	host, matching, err = ResolveDownloadAddress("consumer.e-sim.global\nAIRALO-TOKEN", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if host != "consumer.e-sim.global" || matching != "AIRALO-TOKEN" {
+		t.Fatalf("two-line host=%q matching=%q", host, matching)
+	}
+	host, matching, err = ResolveDownloadAddress("SM-DP+ Address: smdp.esim.wo.com.cn\n激活码: CU-TOKEN-22", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if host != "smdp.esim.wo.com.cn" || matching != "CU-TOKEN-22" {
+		t.Fatalf("labeled host=%q matching=%q", host, matching)
+	}
+}
+
+func TestResolveDownloadQueryFallsBackToSMDP(t *testing.T) {
+	host, matching, err := ResolveDownloadQuery("use the SM-DP+ and Matching ID below", "rsp.truphone.com", "HAND-EDIT")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if host != "rsp.truphone.com" || matching != "HAND-EDIT" {
+		t.Fatalf("fallback host=%q matching=%q", host, matching)
 	}
 }

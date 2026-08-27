@@ -11,15 +11,43 @@ export function looksLikeEsimActivationCode(raw: string) {
   if (!value) return false
   const upper = value.toUpperCase()
   if (upper.includes('LPA:') || /^1\$/.test(value) || /(?:\?|&)carddata=/i.test(value)) return true
-  if (/SM-?DP\+?/i.test(value) && /激活码|匹配码|Matching|Activation Code/i.test(value)) return true
+  if (parseLabeledActivation(value) || parseTwoLineActivation(value)) return true
   return /^[A-Za-z0-9.-]+\.[A-Za-z0-9.-]+\$/.test(value.replace(/\s+/g, ''))
 }
 
 export function parseEsimActivationInput(raw: string): ParsedEsimActivation | null {
-  return parseLabeledActivation(raw) || parseTwoLineActivation(raw) || parseCompactActivation(raw)
+  return parseCompactActivation(raw) || parseLabeledActivation(raw) || parseTwoLineActivation(raw) || parseHostOnly(raw)
 }
 
-export async function readQrPayloadFromImageFile(file: File): Promise<string> {
+type TransferLike = {
+  files?: ArrayLike<File> | null
+  items?: ArrayLike<{ kind?: string; type?: string; getAsFile?: () => File | null }> | null
+  types?: ArrayLike<string> | null
+}
+
+export function transferLooksLikeImageDrop(data: TransferLike | null) {
+  if (!data) return false
+  if (pickClipboardOrDropImage(data)) return true
+  const types = data.types ? Array.from(data.types) : []
+  return types.some((type) => type === 'Files' || type.startsWith('image/'))
+}
+
+export function pickClipboardOrDropImage(data: TransferLike | null): File | null {
+  if (!data) return null
+  const files = data.files ? Array.from(data.files) : []
+  const fromFiles = files.find(isImageFile)
+  if (fromFiles) return fromFiles
+  const items = data.items ? Array.from(data.items) : []
+  for (const item of items) {
+    if (item.kind === 'file' && isImageType(item.type || '')) {
+      const file = item.getAsFile?.()
+      if (file) return file
+    }
+  }
+  return null
+}
+
+export async function readQrPayloadFromImageFile(image: Blob): Promise<string> {
   const Detector = (globalThis as typeof globalThis & {
     BarcodeDetector?: new (options?: { formats?: string[] }) => {
       detect(source: ImageBitmapSource): Promise<Array<{ rawValue?: string }>>
@@ -29,7 +57,7 @@ export async function readQrPayloadFromImageFile(file: File): Promise<string> {
     throw new Error('当前浏览器不能直接识别二维码图片，请把二维码扫出来，把 LPA:1$ 开头的激活码贴进来')
   }
   const detector = new Detector({ formats: ['qr_code'] })
-  const bitmap = await createImageBitmap(file)
+  const bitmap = await createImageBitmap(image)
   try {
     const codes = await detector.detect(bitmap)
     const value = codes.map((code) => (code.rawValue || '').trim()).find(Boolean)
@@ -40,6 +68,14 @@ export async function readQrPayloadFromImageFile(file: File): Promise<string> {
   } finally {
     bitmap.close()
   }
+}
+
+function isImageType(type: string) {
+  return type.startsWith('image/')
+}
+
+function isImageFile(file: File) {
+  return isImageType(file.type) || /\.(png|jpe?g|webp|gif|bmp|heic|heif)$/i.test(file.name)
 }
 
 function emptyActivation(): ParsedEsimActivation {
@@ -59,7 +95,8 @@ function parseLabeledActivation(raw: string): ParsedEsimActivation | null {
     /Activation\s*Code\s*[:：]\s*(\S+)/i,
     /AC(?:tivation)?\s*Token\s*[:：]\s*(\S+)/i,
     /(?:激活码|匹配码)\s*[:：]\s*(\S+)/
-  ]) || ''
+  ])
+  if (!looksLikeMatchingId(matchingId)) return null
   const confirmationCode = matchField(raw, [
     /Confirmation\s*Code\s*[:：]\s*(\S+)/i,
     /确认码\s*[:：]\s*(\S+)/
@@ -118,12 +155,15 @@ function extractActivationCode(raw: string): string | null {
   if (hostToken) {
     return ['LPA:1', stripScheme(hostToken[1]), hostToken[2], hostToken[3] || '', hostToken[4] || ''].join('$')
   }
-  if (value.includes('$')) return null
-  const host = stripScheme(value)
-  if (looksLikeHost(host)) {
-    return `LPA:1$${host}$`
-  }
   return null
+}
+
+function parseHostOnly(raw: string): ParsedEsimActivation | null {
+  const lines = raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+  if (lines.length !== 1) return null
+  const host = stripScheme(lines[0])
+  if (!looksLikeHost(host)) return null
+  return { ...emptyActivation(), smdp: host }
 }
 
 function activationFromQuery(value: string): string | null {
