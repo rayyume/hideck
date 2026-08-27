@@ -95,3 +95,15 @@ test('phone layout has responsive single-column and 44px touch targets', () => {
   assert.match(callBar, /width: 44px; height: 44px/)
   assert.match(shell, /repeat\(5, minmax\(44px, 1fr\)\)/)
 })
+
+test('wifi calling keeps a dedicated start switch under the mode control', () => {
+  assert.match(phoneView, /async function toggleWifiCalling/)
+  assert.match(phoneView, /v-show="selectedMode === 'wifi'"/)
+  assert.match(phoneView, /class="phone-wifi-calling-switch"/)
+  assert.match(phoneView, /disableVoWiFi\(selectedDevice\.value\)/)
+  assert.match(phoneView, /打开开关才会启动/)
+  assert.match(phoneView, /:disabled="!!call \|\| modePending"/)
+  assert.doesNotMatch(phoneView, /modePending \|\| !!selected\?\.rf_lock/)
+  assert.doesNotMatch(phoneView, /点 WiFi calling 即可拉起/)
+  assert.match(phoneCSS, /\.phone-wifi-calling-switch \{[\s\S]*min-height: 44px/)
+})

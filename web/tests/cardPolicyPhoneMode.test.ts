@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { readFile } from 'node:fs/promises'
 import { nextTick, ref } from 'vue'
 import { useCardPolicyToggles, type PolicyMirror } from '../src/composables/useCardPolicyToggles'
 
@@ -202,6 +203,41 @@ test('volte with software phone does not lock flight', async () => {
   assert.equal(toggles.wifiCallingLocksRadio.value, false)
   assert.equal(toggles.radioMode.value, 'camp')
   assert.equal(toggles.local.value.airplane_enabled, false)
+})
+
+test('card policy puts a start switch under wifi calling instead of only a mode picker', async () => {
+  const panel = await readFile(new URL('../src/components/CardPolicyPanel.vue', import.meta.url), 'utf8')
+  const inline = await readFile(new URL('../src/components/EsimCardPolicyInline.vue', import.meta.url), 'utf8')
+  assert.match(panel, /<strong>通话方式<\/strong>[\s\S]*phone_mode \?\? 'wifi'\) === 'wifi' \? '启动' : '软件电话'[\s\S]*onVoWiFiToggle/)
+  assert.match(inline, />通话方式</)
+  assert.match(inline, /phone_mode \?\? 'wifi'\) === 'wifi' \? '启动' : '软件电话'[\s\S]*onVoWiFiToggle/)
+})
+
+test('turning wifi calling off keeps the wifi path and only stops the service', async () => {
+  const source = ref<PolicyMirror | null>(mirror({
+    vowifi_enabled: true,
+    airplane_enabled: true,
+    phone_mode: 'wifi'
+  }))
+  let applied: PolicyMirror | null = null
+  const toggles = useCardPolicyToggles(source, {
+    applyNetwork: async () => ({ ok: true }),
+    applyVoWiFi: async (_enabled, next) => {
+      applied = next
+      return { ok: true }
+    },
+    applyAirplane: async () => ({ ok: true }),
+    applyPhoneMode: async () => ({ ok: true })
+  })
+  await nextTick()
+
+  await toggles.onVoWiFiToggle(false)
+
+  assert.equal(applied?.phone_mode, 'wifi')
+  assert.equal(applied?.vowifi_enabled, false)
+  assert.equal(applied?.airplane_enabled, true)
+  assert.equal(toggles.local.value.phone_mode, 'wifi')
+  assert.equal(toggles.local.value.vowifi_enabled, false)
 })
 
 test('wifi calling locks camp so radio cannot independently leave airplane', async () => {

@@ -100,17 +100,36 @@ const selectedMode = computed(() => {
 const selectedStrategy = computed(() => selected.value?.data_strategy === 'always' ? 'always' : 'on_demand')
 const modePending = ref(false)
 
+async function toggleWifiCalling(rawVal: string | number | boolean) {
+  const enabled = rawVal === true
+  if (!selectedDevice.value || !!call.value || modePending.value) return
+  if (enabled === (selected.value?.vowifi_enabled === true)) return
+  modePending.value = true
+  phone.clearError()
+  try {
+    const result = enabled
+      ? await devicesService.enableVoWiFi(selectedDevice.value, {
+          mode: 'wifi',
+          data_strategy: selectedStrategy.value
+        })
+      : await devicesService.disableVoWiFi(selectedDevice.value)
+    if (!result.ok) throw new Error(result.error?.message || (enabled ? '打开 WiFi calling 失败' : '关闭 WiFi calling 失败'))
+    await phone.refresh()
+    ElMessage.success(enabled ? 'WiFi calling 已打开' : 'WiFi calling 已关闭')
+  } catch (error) {
+    phone.error = phoneErrorMessage(error, enabled ? '打开 WiFi calling 失败' : '关闭 WiFi calling 失败')
+  } finally {
+    modePending.value = false
+  }
+}
+
 async function changePhoneMode(mode: string) {
   if (!selectedDevice.value || !!call.value || modePending.value) return
   if ((mode === 'cellular' || mode === 'volte') && selected.value?.rf_lock) {
     ElMessage.warning('这张 Lebara UK 分享卡不能切蜂窝或 VoLTE，驻国内网会切到 20404，WiFi calling 会废')
     return
   }
-  if (
-    mode === selectedMode.value
-    && selected.value
-    && (isDeviceReady(selected.value) || selected.value.vowifi_active)
-  ) {
+  if (mode === selectedMode.value) {
     return
   }
   modePending.value = true
@@ -336,16 +355,34 @@ async function sendDTMF(digit: string) {
                   ? (selectedStrategy === 'always' ? '网络已开，数据会保持连接。' : '网络已开，只有拨号时才连数据，挂断后关闭。')
                   : '会正常驻网，待机不走流量。打蜂窝电话会临时打开数据。' }}
               </p>
-              <p v-else-if="selectedMode === 'volte'" class="phone-mode-hint">
+              <p v-if="selectedMode === 'volte'" class="phone-mode-hint">
                 {{ selected?.native_volte?.reboot_required
                   ? '原生 IMS 已写入。UAC 声卡要重启模组后才出现，现在可以试信令，音频可能不可用。'
                   : '会驻网并用模组原生 IMS 打电话，不走软件 WiFi calling。打开「网络」才会用上网流量。' }}
               </p>
-              <p v-else-if="selected?.rf_lock" class="phone-mode-hint">
+              <div
+                v-show="selectedMode === 'wifi'"
+                class="phone-wifi-calling-switch"
+                :class="{ 'is-on': selected?.vowifi_enabled === true }"
+              >
+                <span>
+                  启动
+                  <small>{{
+                    selected?.vowifi_enabled
+                      ? (selected.vowifi_active || isDeviceReady(selected) ? '已启动，正在走 WiFi calling' : '已打开，正在注册')
+                      : '打开开关才会启动。关掉只停服务，不会改成蜂窝或 VoLTE'
+                  }}</small>
+                </span>
+                <el-switch
+                  :model-value="selected?.vowifi_enabled === true"
+                  :disabled="!!call || modePending"
+                  :loading="modePending"
+                  aria-label="启动 WiFi calling"
+                  @change="toggleWifiCalling"
+                />
+              </div>
+              <p v-if="selected?.rf_lock" class="phone-mode-hint is-warn">
                 这张分享卡不能驻国内网，否则 IMSI 会切到 20404，WiFi calling 会废
-              </p>
-              <p v-else-if="selected && !isDeviceReady(selected) && !selected.vowifi_active" class="phone-mode-hint">
-                软件电话未开启，点 WiFi calling 即可拉起
               </p>
             </div>
           </div>

@@ -248,24 +248,8 @@ const airplaneHint = computed(() => {
           </div>
         </div>
 
-        <div
-          class="policy-setting-row"
-          :class="{ 'is-active': local.vowifi_enabled }"
-        >
-          <span><strong>软件电话</strong><small>开启后可用浏览器/命令拨号。WiFi calling 会锁定飞行；蜂窝和 VoLTE 会退出飞行</small></span>
-            <div class="flex items-center gap-2">
-              <span v-if="vowifiFailed" class="text-xs text-orange-500 dark:text-orange-400">未生效</span>
-              <el-icon v-if="vowifiPending" class="animate-spin text-gray-400"><Loading /></el-icon>
-              <el-switch
-                v-model="local.vowifi_enabled"
-                :disabled="!canToggle || vowifiPending"
-                @change="onVoWiFiToggle"
-              />
-          </div>
-        </div>
-
         <div class="policy-setting-row" :class="{ 'is-active': local.phone_mode === 'cellular' || local.phone_mode === 'volte' }">
-          <span><strong>通话方式</strong><small>切换即开启电话。WiFi calling 开飞行；蜂窝走软件 IMS 数据；VoLTE 走模组原生 IMS</small></span>
+          <span><strong>通话方式</strong><small>只选路径。WiFi calling 开飞行；蜂窝走软件 IMS 数据；VoLTE 走模组原生 IMS</small></span>
           <div class="policy-field-control">
             <el-select
               :model-value="local.phone_mode ?? 'wifi'"
@@ -279,6 +263,28 @@ const airplaneHint = computed(() => {
             </el-select>
             <small v-if="phoneModePending">正在切换...</small>
             <div v-if="phoneModeFailed" class="text-xs text-orange-500 dark:text-orange-400">切换未生效</div>
+          </div>
+        </div>
+
+        <div
+          class="policy-setting-row"
+          :class="{ 'is-active': local.vowifi_enabled }"
+        >
+          <span>
+            <strong>{{ (local.phone_mode ?? 'wifi') === 'wifi' ? '启动' : '软件电话' }}</strong>
+            <small>{{ (local.phone_mode ?? 'wifi') === 'wifi'
+              ? '打开后开始注册。关掉只停服务，不会改成蜂窝或 VoLTE'
+              : '开启后可用浏览器/命令拨号。蜂窝和 VoLTE 会退出飞行' }}</small>
+          </span>
+            <div class="flex items-center gap-2">
+              <span v-if="vowifiFailed" class="text-xs text-orange-500 dark:text-orange-400">未生效</span>
+              <el-icon v-if="vowifiPending" class="animate-spin text-gray-400"><Loading /></el-icon>
+              <el-switch
+                v-model="local.vowifi_enabled"
+                :disabled="!canToggle || vowifiPending"
+                aria-label="启动 WiFi calling"
+                @change="onVoWiFiToggle"
+              />
           </div>
         </div>
 

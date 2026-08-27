@@ -138,7 +138,7 @@ const {
     </div>
     <template v-else>
       <div v-if="hint" class="text-xs text-amber-600 dark:text-amber-400">{{ hint }}</div>
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <div class="flex items-center justify-between rounded-lg px-3 py-2 bg-white dark:bg-white/5">
           <span class="text-sm text-gray-700 dark:text-gray-200">飞行<small class="block text-xs text-gray-400 font-normal">{{ wifiCallingLocksRadio ? 'WiFi calling 已锁定' : '关闭后注册运营商' }}</small></span>
           <div class="flex items-center gap-2">
@@ -160,18 +160,6 @@ const {
               v-model="local.network_enabled"
               :disabled="radioMode === 'airplane' || networkPending || wifiCallingLocksRadio"
               @change="onNetworkToggle"
-            />
-          </div>
-        </div>
-        <div class="flex items-center justify-between rounded-lg px-3 py-2 bg-white dark:bg-white/5">
-          <span class="text-sm text-gray-700 dark:text-gray-200">软件电话</span>
-          <div class="flex items-center gap-2">
-            <span v-if="vowifiFailed" class="text-xs text-orange-500">未生效</span>
-            <el-icon v-if="vowifiPending" class="animate-spin text-gray-400"><Loading /></el-icon>
-            <el-switch
-              v-model="local.vowifi_enabled"
-              :disabled="vowifiPending"
-              @change="onVoWiFiToggle"
             />
           </div>
         </div>
@@ -206,6 +194,24 @@ const {
             <el-option label="仅打电话时开启" value="on_demand" />
             <el-option label="长时间开启" value="always" />
           </el-select>
+        </div>
+      </div>
+      <div class="flex items-center justify-between rounded-lg px-3 py-2 bg-white dark:bg-white/5">
+        <span class="text-sm text-gray-700 dark:text-gray-200">
+          {{ (local.phone_mode ?? 'wifi') === 'wifi' ? '启动' : '软件电话' }}
+          <small class="block text-xs text-gray-400 font-normal">{{ (local.phone_mode ?? 'wifi') === 'wifi'
+            ? '打开才启动，关掉只停服务，不会改成蜂窝或 VoLTE'
+            : '开启后可拨号' }}</small>
+        </span>
+        <div class="flex items-center gap-2">
+          <span v-if="vowifiFailed" class="text-xs text-orange-500">未生效</span>
+          <el-icon v-if="vowifiPending" class="animate-spin text-gray-400"><Loading /></el-icon>
+          <el-switch
+            v-model="local.vowifi_enabled"
+            :disabled="vowifiPending"
+            aria-label="启动 WiFi calling"
+            @change="onVoWiFiToggle"
+          />
         </div>
       </div>
       <div class="text-xs leading-5 text-gray-500 dark:text-gray-400">

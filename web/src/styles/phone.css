@@ -16,6 +16,34 @@
 .device-selector :deep(.el-select) { width: 100%; }
 .device-selector :deep(.el-select__wrapper) { min-height: 44px; background: var(--ui-surface); }
 .phone-mode-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+.phone-wifi-calling-switch {
+  flex: 1 1 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 6px;
+  background: var(--ui-surface-muted);
+}
+.phone-wifi-calling-switch.is-on {
+  border-color: color-mix(in srgb, var(--ui-primary) 38%, var(--ui-border));
+}
+.phone-wifi-calling-switch span {
+  display: grid;
+  gap: 2px;
+  color: var(--ui-text);
+  font-size: 13px;
+  font-weight: 650;
+}
+.phone-wifi-calling-switch small {
+  color: var(--ui-text-muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+}
 .phone-mode-hint { flex: 1 1 100%; margin: 0; color: var(--ui-text-muted); font-size: 12px; line-height: 1.45; }
 .phone-mode-hint.is-warn { color: var(--ui-warning); }
 .console-loading { min-height: 560px; display: grid; place-items: center; color: var(--ui-text-muted); }
