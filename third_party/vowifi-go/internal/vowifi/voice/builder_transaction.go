@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/emiago/sipgo/sip"
+	"github.com/iniwex5/vowifi-go/internal/vowifi/emergency"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/sipkit"
 )
 
@@ -73,6 +74,9 @@ func voiceIMSRequestOptions(dialog voiceSIPDialog, input voiceInitialRequest) si
 	if strings.TrimSpace(dialog.sessionID) != "" {
 		headers = append(headers, sip.NewHeader("Session-ID", strings.TrimSpace(dialog.sessionID)))
 	}
+	if emergency.IsEmergencyDestination(dialog.remoteURI) {
+		headers = append(headers, sip.NewHeader("Priority", "emergency"))
+	}
 	contentType := ""
 	if input.sdp != "" {
 		contentType = "application/sdp"
@@ -93,8 +97,12 @@ func voiceIMSRequestOptions(dialog voiceSIPDialog, input voiceInitialRequest) si
 }
 
 func parseVoiceURI(value string) (sip.Uri, error) {
+	value = strings.TrimSpace(value)
+	if strings.HasPrefix(strings.ToLower(value), "urn:") {
+		return sip.Uri{Scheme: "urn", Host: strings.TrimSpace(value[4:])}, nil
+	}
 	var uri sip.Uri
-	if err := sip.ParseUri(strings.TrimSpace(value), &uri); err != nil {
+	if err := sip.ParseUri(value, &uri); err != nil {
 		return sip.Uri{}, err
 	}
 	return uri, nil

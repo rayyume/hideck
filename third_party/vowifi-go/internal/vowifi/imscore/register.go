@@ -11,6 +11,7 @@ import (
 
 	enginesim "github.com/iniwex5/vowifi-go/engine/sim"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/common"
+	"github.com/iniwex5/vowifi-go/internal/vowifi/emergency"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/imsheaders"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/logging"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/policy"
@@ -54,6 +55,8 @@ type registerAttemptError struct {
 type registerRequestOptions struct {
 	unregister bool
 	wildcard   bool
+	emergency  bool
+	anonymous  bool
 }
 
 func (e *registerAttemptError) Error() string { return e.err.Error() }
@@ -575,6 +578,9 @@ func (s *Service) buildRegisterRequest(
 	contact := registerContact(s.registerContactOptions(session), s.registerRequestTransport(
 		registerUsesProtectedTransport(session),
 	), int(expires.Seconds()))
+	if options.emergency {
+		contact = insertEmergencyContactParam(contact)
+	}
 	if options.wildcard {
 		contact = "*"
 	} else if options.unregister && !strings.Contains(strings.ToLower(contact), ";expires=") {
@@ -589,8 +595,14 @@ func (s *Service) buildRegisterRequest(
 	b.WriteString(fmt.Sprintf("Via: SIP/2.0/%s %s;rport;branch=%s%s\r\n",
 		transportUpper(transport), localAddress, session.branch, registerViaAlias(protected)))
 	publicIdentity := primaryPublicIdentity(cfg)
-	b.WriteString(fmt.Sprintf("From: <%s>;tag=%s\r\n", publicIdentity, session.fromTag))
-	b.WriteString(fmt.Sprintf("To: <%s>\r\n", publicIdentity))
+	if options.anonymous {
+		publicIdentity = emergency.AnonymousIMPU
+		b.WriteString(fmt.Sprintf("From: \"Anonymous\" <%s>;tag=%s\r\n", publicIdentity, session.fromTag))
+		b.WriteString(fmt.Sprintf("To: <%s>\r\n", publicIdentity))
+	} else {
+		b.WriteString(fmt.Sprintf("From: <%s>;tag=%s\r\n", publicIdentity, session.fromTag))
+		b.WriteString(fmt.Sprintf("To: <%s>\r\n", publicIdentity))
+	}
 	b.WriteString(fmt.Sprintf("Call-ID: %s\r\n", session.callID))
 	b.WriteString(fmt.Sprintf("CSeq: %d REGISTER\r\n", session.cseq))
 	b.WriteString("Contact: " + contact + "\r\n")
@@ -600,7 +612,7 @@ func (s *Service) buildRegisterRequest(
 	if allow := registerConfiguredAllowHeader(cfg); allow != "" {
 		b.WriteString("Allow: " + allow + "\r\n")
 	}
-	if registerIncludesPANI(cfg.RegisterTemplate, authenticated || protected) {
+	if options.emergency || registerIncludesPANI(cfg.RegisterTemplate, authenticated || protected) {
 		b.WriteString("P-Access-Network-Info: " +
 			imsheaders.PAccessNetworkInfo(s.GetPAccessNetworkInfo()) + "\r\n")
 	}
@@ -611,10 +623,12 @@ func (s *Service) buildRegisterRequest(
 	if route := strings.TrimSpace(session.serviceRoute); route != "" {
 		b.WriteString("Route: " + route + "\r\n")
 	}
-	if authHeader == "" {
-		authHeader = initialIMSAuthorization(cfg)
+	if !options.anonymous {
+		if authHeader == "" {
+			authHeader = initialIMSAuthorization(cfg)
+		}
+		b.WriteString("Authorization: " + authHeader + "\r\n")
 	}
-	b.WriteString("Authorization: " + authHeader + "\r\n")
 	if strings.TrimSpace(cfg.UserAgent) != "" {
 		b.WriteString("User-Agent: " + strings.TrimSpace(cfg.UserAgent) + "\r\n")
 	}

@@ -49,6 +49,7 @@ type Agent struct {
 	imsUnsubscribe  func()
 
 	outboundCancelSettle time.Duration
+	allowEmergencyCalls  bool
 }
 
 // Call is one voice call (inbound or outbound).

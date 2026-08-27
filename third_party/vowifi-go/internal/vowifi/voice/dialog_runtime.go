@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/iniwex5/vowifi-go/internal/vowifi/emergency"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/imscore"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/imsdialog"
 )
@@ -40,9 +41,9 @@ func (a *Agent) prepareVoiceDialog(call *Call, number string) error {
 		ctx := a.dialog.Context()
 		profile = applyControllerDialogContext(profile, ctx)
 	}
-	remoteURI := buildIMSCalledPartyURI(number, profile.LocalURI, profile.Domain)
-	if remoteURI == "" {
-		return errors.New("voice: callee is empty")
+	remoteURI, err := a.outboundRemoteURI(number, profile)
+	if err != nil {
+		return err
 	}
 	initialCSeq := profile.InitialCSeq
 	if initialCSeq <= 0 {
@@ -77,6 +78,42 @@ func applyControllerDialogContext(profile imscore.SIPDialogProfile, ctx imsdialo
 		profile.UserAgent = value
 	}
 	return profile
+}
+
+func (a *Agent) outboundRemoteURI(number string, profile imscore.SIPDialogProfile) (string, error) {
+	if emergency.IsEmergencyDestination(number) {
+		if a == nil || !a.emergencyOriginatingEnabled() {
+			return "", emergency.ErrOriginatingDisabled
+		}
+		if urn := emergency.ServiceURNFor(number); urn != "" {
+			return urn, nil
+		}
+	}
+	remoteURI := buildIMSCalledPartyURI(number, profile.LocalURI, profile.Domain)
+	if remoteURI == "" {
+		return "", errors.New("voice: callee is empty")
+	}
+	return remoteURI, nil
+}
+
+func (a *Agent) emergencyOriginatingEnabled() bool {
+	if a == nil {
+		return false
+	}
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.allowEmergencyCalls
+}
+
+// SetAllowEmergencyCalls enables packing and originating IMS emergency sessions.
+// Production VoWiFi leaves this off so 112/999/911 are never sent to a PSAP.
+func (a *Agent) SetAllowEmergencyCalls(allow bool) {
+	if a == nil {
+		return
+	}
+	a.mu.Lock()
+	a.allowEmergencyCalls = allow
+	a.mu.Unlock()
 }
 
 func (c *Call) setVoiceDialog(dialog *voiceSIPDialog) {

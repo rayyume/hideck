@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/iniwex5/vowifi-go/internal/vowifi/emergency"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/voice"
 )
 
@@ -35,6 +36,9 @@ type CallSnapshot struct {
 func (g *Gateway) BeginCall(ctx context.Context, request BeginCallRequest) (CallSnapshot, error) {
 	if g == nil {
 		return CallSnapshot{}, errors.New("voicehost: nil gateway")
+	}
+	if emergency.IsEmergencyDestination(request.Callee) {
+		return CallSnapshot{}, emergency.ErrOriginatingDisabled
 	}
 	deviceID := strings.TrimSpace(request.DeviceID)
 	agent := g.internalAgent(deviceID)

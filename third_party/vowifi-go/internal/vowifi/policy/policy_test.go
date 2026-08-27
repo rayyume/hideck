@@ -108,12 +108,13 @@ func TestResolveEmbeddedCarrierPresets(t *testing.T) {
 		!reflect.DeepEqual(cteUK.IMSRegisterTemplate.ContactParamOrder[:3], []string{
 			"access_type", "sip_instance", "reg_id",
 		}) || !reflect.DeepEqual(cteUK.IMSRegisterTemplate.ContactOrder,
-			cteUK.IMSRegisterTemplate.ContactParamOrder) {
+		cteUK.IMSRegisterTemplate.ContactParamOrder) {
 		t.Fatalf("CTEUK outbound registration = %+v", cteUK.IMSRegisterTemplate)
 	}
 	vodafoneUK := ResolveEffectiveCarrierConfig("234", "15")
 	if vodafoneUK.PresetID != "vodafone_uk_23415" || vodafoneUK.DeviceModel != "rmx3366" ||
 		vodafoneUK.EPDGAddr != "epdg.epc.mnc015.mcc234.pub.3gppnetwork.org" ||
+		DefaultCarrierEmergencyEPDGAddr("234", "15") != "sos.epdg.epc.mnc015.mcc234.pub.3gppnetwork.org" ||
 		vodafoneUK.EPDGAddrSource != "standard" ||
 		vodafoneUK.IMSRegisterTemplate.ID != "vodafone_uk_23415" {
 		t.Fatalf("vodafone uk = %+v", vodafoneUK)

@@ -67,6 +67,12 @@ func DefaultCarrierStandardEPDGAddr(mcc, mnc string) string {
 	return fmt.Sprintf("epdg.epc.mnc%s.mcc%s.pub.3gppnetwork.org", common.Plmn3(mnc), common.Plmn3(mcc))
 }
 
+// DefaultCarrierEmergencyEPDGAddr is the IR.51 emergency ePDG FQDN. It is not
+// used for ordinary VoWiFi tunnels.
+func DefaultCarrierEmergencyEPDGAddr(mcc, mnc string) string {
+	return fmt.Sprintf("sos.epdg.epc.mnc%s.mcc%s.pub.3gppnetwork.org", common.Plmn3(mnc), common.Plmn3(mcc))
+}
+
 func DefaultCarrierIMSDomain(mcc, mnc string) string {
 	return fmt.Sprintf("ims.mnc%s.mcc%s.3gppnetwork.org", common.Plmn3(mnc), common.Plmn3(mcc))
 }

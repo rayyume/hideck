@@ -199,6 +199,8 @@ func contactParam(name string, values contactParamValues) (ContactParam, bool) {
 		return ContactParam{Name: "audio"}, true
 	case "smsip":
 		return ContactParam{Name: "+g.3gpp.smsip"}, true
+	case "sos":
+		return ContactParam{Name: "sos"}, true
 	case "reg_id":
 		return ContactParam{Name: "reg-id", Value: "1"}, true
 	case "icsi_ref":

@@ -6,6 +6,8 @@ import (
 	"net"
 	"strings"
 	"time"
+
+	"github.com/iniwex5/vowifi-go/internal/vowifi/emergency"
 )
 
 const defaultVoiceRTPPort = 12000
@@ -130,6 +132,14 @@ func fallbackVoiceDialog(agent *Agent, call *Call) voiceSIPDialog {
 		localURI = identity
 	}
 	remoteURI := buildIMSCalledPartyURI(call.Peer(), localURI, domain)
+	if emergency.IsEmergencyDestination(call.Peer()) {
+		if agent == nil || !agent.emergencyOriginatingEnabled() {
+			return voiceSIPDialog{}
+		}
+		if urn := emergency.ServiceURNFor(call.Peer()); urn != "" {
+			remoteURI = urn
+		}
+	}
 	return voiceSIPDialog{
 		localURI: localURI, remoteURI: remoteURI, remoteTarget: remoteURI,
 		contactURI: localURI, contactHeader: "<" + localURI + ">",
