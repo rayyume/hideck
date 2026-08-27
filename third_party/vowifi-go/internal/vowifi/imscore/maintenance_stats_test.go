@@ -1,7 +1,6 @@
 package imscore
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"io"
@@ -75,40 +74,30 @@ func TestSendPingAllowsOnlyOneInFlightTransaction(t *testing.T) {
 	service := newProtectedKeepaliveTestService(t)
 	client, server := net.Pipe()
 	service.activateProtectedRegistrationTCP(client)
-	received := make(chan string, 1)
-	release := make(chan struct{})
-	go holdKeepaliveResponse(server, received, release)
+	t.Cleanup(func() { _ = client.Close(); _ = server.Close() })
 
 	firstDone := make(chan error, 1)
 	go func() {
 		_, err := service.sendPing()
 		firstDone <- err
 	}()
-	select {
-	case <-received:
-	case <-time.After(time.Second):
-		t.Fatal("first ping was not sent")
-	}
+	time.Sleep(20 * time.Millisecond)
 	if sent, err := service.sendPing(); sent || err != nil {
 		t.Fatalf("second ping = sent %v err %v, want skipped", sent, err)
 	}
-	close(release)
+	buf := make([]byte, 4)
+	if _, err := io.ReadFull(server, buf); err != nil {
+		t.Fatalf("read CRLF ping: %v", err)
+	}
+	if string(buf) != "\r\n\r\n" {
+		t.Fatalf("first ping = %q, want RFC 5626 double CRLF", buf)
+	}
+	if _, err := io.WriteString(server, "\r\n"); err != nil {
+		t.Fatalf("write CRLF pong: %v", err)
+	}
 	if err := <-firstDone; err != nil {
 		t.Fatal(err)
 	}
-	if reads := service.captureInboundStats().TCPSocketReads; reads == 0 {
-		t.Fatal("protected registration TCP response bypassed the production counting wrapper")
-	}
-}
-
-func holdKeepaliveResponse(conn net.Conn, received chan<- string, release <-chan struct{}) {
-	request, err := readSIPStreamMessage(bufio.NewReader(conn))
-	if err != nil {
-		return
-	}
-	received <- request
-	<-release
-	_, _ = io.WriteString(conn, registerWireResponse(request, 200, ""))
 }
 
 func TestInboundStatsLoggerStopsWithReceiverLifecycle(t *testing.T) {

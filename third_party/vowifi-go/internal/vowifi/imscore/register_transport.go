@@ -292,6 +292,7 @@ func (s *Service) clearClosedRegistrationTCP(conn net.Conn, readErr error) {
 	}
 	err := fmt.Errorf("imscore: registration SIP stream closed: %w", readErr)
 	logging.WarnRate("ims-registration-stream", "IMS registration SIP stream closed", "err", err)
+	s.failTCPKeepalivePong(errTCPCRLFStreamClosed)
 	_ = conn.Close()
 	stopped := s.stopped()
 	s.mu.Lock()
@@ -318,15 +319,16 @@ func (s *Service) clearClosedRegistrationTCP(conn net.Conn, readErr error) {
 
 func (s *Service) readRegistrationStreamSync(conn net.Conn) error {
 	decoder := newSIPStreamDecoder(conn)
+	decoder.onPong = s.signalTCPKeepalivePong
 	defer decoder.Close()
 	for {
 		message, err := decoder.ReadMessage()
 		if err != nil {
 			return err
 		}
-		if err := s.dispatchInboundSIPMessage(message, message.String(), func(response string) error {
+		if err := s.dispatchInboundSIPMessageWithPeer(message, message.String(), func(response string) error {
 			return s.writeSIPStream(conn, response)
-		}); err != nil {
+		}, conn); err != nil {
 			logging.WarnRate("ims-tcp-inbound", "IMS TCP inbound handling failed", "err", err)
 		}
 	}

@@ -3,6 +3,7 @@ package imscore
 import (
 	"bufio"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"strings"
@@ -121,11 +122,42 @@ func TestIMSKeepaliveUsesRegisteredProtectedProfile(t *testing.T) {
 		_, err = io.WriteString(server, registerWireResponse(request, 200, ""))
 		done <- err
 	}()
+	if err := service.sendOPTIONSKeepalive(); err != nil {
+		t.Fatalf("sendOPTIONSKeepalive: %v", err)
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestProtectedTCPKeepaliveSendsRFC5626CRLF(t *testing.T) {
+	service := newProtectedKeepaliveTestService(t)
+	client, server := net.Pipe()
+	defer server.Close()
+	service.activateProtectedRegistrationTCP(client)
+	done := make(chan error, 1)
+	go func() {
+		buf := make([]byte, 4)
+		n, err := io.ReadFull(server, buf)
+		if err != nil {
+			done <- err
+			return
+		}
+		if n != 4 || string(buf) != "\r\n\r\n" {
+			done <- errors.New("protected TCP keepalive did not send RFC 5626 double CRLF")
+			return
+		}
+		_, err = io.WriteString(server, "\r\n")
+		done <- err
+	}()
 	if err := service.sendIMSKeepalive(); err != nil {
 		t.Fatalf("sendIMSKeepalive: %v", err)
 	}
 	if err := <-done; err != nil {
 		t.Fatal(err)
+	}
+	if service.reRegisterPending.Load() {
+		t.Fatal("CRLF keepalive scheduled a REGISTER refresh")
 	}
 }
 
@@ -210,8 +242,9 @@ func TestThreeKeepaliveFailuresScheduleRegistrationRefresh(t *testing.T) {
 	service := newProtectedKeepaliveTestService(t)
 	service.mu.Lock()
 	service.registrationRefreshAt = time.Now().Add(time.Hour)
+	service.sipOutboundKeepalive = true
 	service.mu.Unlock()
-	keepaliveErr := errors.New("OPTIONS timeout")
+	keepaliveErr := errTCPCRLFPongTimeout
 	for attempt := 1; attempt <= imsKeepaliveFailureLimit; attempt++ {
 		service.recordIMSKeepaliveResult(keepaliveErr, time.Now())
 	}
@@ -228,6 +261,110 @@ func TestThreeKeepaliveFailuresScheduleRegistrationRefresh(t *testing.T) {
 	case err := <-service.RegistrationErrors():
 		t.Fatalf("keepalive failures tore down runtime before REGISTER refresh: %v", err)
 	default:
+	}
+}
+
+func TestOPTIONSKeepaliveFailuresDoNotScheduleRegistrationRefresh(t *testing.T) {
+	service := newProtectedKeepaliveTestService(t)
+	service.mu.Lock()
+	service.registrationRefreshAt = time.Now().Add(time.Hour)
+	service.mu.Unlock()
+	keepaliveErr := fmt.Errorf("%w: timeout", errOPTIONSKeepalive)
+	for attempt := 1; attempt <= imsKeepaliveFailureLimit; attempt++ {
+		service.recordIMSKeepaliveResult(keepaliveErr, time.Now())
+	}
+	if service.reRegisterPending.Load() {
+		t.Fatal("OPTIONS keepalive failures scheduled a REGISTER refresh")
+	}
+}
+
+func TestTCPCRLFKeepaliveDoesNotWaitForPongWithoutOutbound(t *testing.T) {
+	service := newProtectedKeepaliveTestService(t)
+	client, server := net.Pipe()
+	defer server.Close()
+	service.activateProtectedRegistrationTCP(client)
+	service.tcpCRLFPongWait = 30 * time.Millisecond
+	done := make(chan error, 1)
+	go func() {
+		buf := make([]byte, 4)
+		if _, err := io.ReadFull(server, buf); err != nil {
+			done <- err
+			return
+		}
+		if string(buf) != "\r\n\r\n" {
+			done <- fmt.Errorf("ping = %q", buf)
+			return
+		}
+		done <- nil
+	}()
+	if err := service.sendIMSKeepalive(); err != nil {
+		t.Fatalf("unnegotiated CRLF keepalive: %v", err)
+	}
+	if waitErr := <-done; waitErr != nil {
+		t.Fatal(waitErr)
+	}
+	if service.reRegisterPending.Load() {
+		t.Fatal("unnegotiated CRLF keepalive scheduled a REGISTER refresh")
+	}
+}
+
+func TestTCPCRLFKeepaliveWaitsForPongWhenOutboundNegotiated(t *testing.T) {
+	service := newProtectedKeepaliveTestService(t)
+	client, server := net.Pipe()
+	defer server.Close()
+	service.activateProtectedRegistrationTCP(client)
+	service.mu.Lock()
+	service.sipOutboundKeepalive = true
+	service.mu.Unlock()
+	service.tcpCRLFPongWait = 30 * time.Millisecond
+	done := make(chan error, 1)
+	go func() {
+		buf := make([]byte, 4)
+		if _, err := io.ReadFull(server, buf); err != nil {
+			done <- err
+			return
+		}
+		done <- nil
+	}()
+	err := service.sendIMSKeepalive()
+	if !errors.Is(err, errTCPCRLFPongTimeout) {
+		t.Fatalf("missing pong error = %v", err)
+	}
+	if waitErr := <-done; waitErr != nil {
+		t.Fatal(waitErr)
+	}
+}
+
+func TestUnnegotiatedPongTimeoutDoesNotScheduleRegistrationRefresh(t *testing.T) {
+	service := newProtectedKeepaliveTestService(t)
+	service.mu.Lock()
+	service.registrationRefreshAt = time.Now().Add(time.Hour)
+	service.mu.Unlock()
+	for attempt := 1; attempt <= imsKeepaliveFailureLimit; attempt++ {
+		service.recordIMSKeepaliveResult(errTCPCRLFPongTimeout, time.Now())
+	}
+	if service.reRegisterPending.Load() {
+		t.Fatal("unnegotiated pong timeout scheduled a REGISTER refresh")
+	}
+}
+
+func TestRegisterFlowNegotiationEnablesCRLFPong(t *testing.T) {
+	service := newProtectedKeepaliveTestService(t)
+	outbound := &sipResponse{
+		StatusCode: 200,
+		Headers: map[string]string{
+			"Require": "outbound",
+			"Via":     "SIP/2.0/TCP pcscf.example;branch=z9hG4bK;keep=120",
+		},
+	}
+	service.logRegisterFlowNegotiation(outbound)
+	if !service.expectsCRLFPong() {
+		t.Fatal("Require: outbound did not enable CRLF pong")
+	}
+	plain := &sipResponse{StatusCode: 200, Headers: map[string]string{"Via": "SIP/2.0/TCP pcscf.example;branch=z9hG4bK"}}
+	service.logRegisterFlowNegotiation(plain)
+	if service.expectsCRLFPong() {
+		t.Fatal("REGISTER without outbound still expected a CRLF pong")
 	}
 }
 

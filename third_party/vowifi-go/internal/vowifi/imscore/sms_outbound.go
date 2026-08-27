@@ -103,11 +103,10 @@ func (s *Service) prepareSendEnv(
 	}, nil
 }
 
-func (s *Service) resolveSendRoute(recipient string) (string, error) {
+func (s *Service) resolveSendRoute(_ string) (string, error) {
 	if s == nil || s.cfg == nil {
 		return "", errors.New("imscore: SMS route configuration is unavailable")
 	}
-	recipient = normalizeE164(recipient)
 	method := policy.NormalizeSMSRoutingMethod(s.cfg.SMSRoutingMethod)
 	if method == "ip_sm_gw" {
 		gateway := strings.TrimSpace(s.cfg.SMSRoutingGW)
@@ -116,17 +115,32 @@ func (s *Service) resolveSendRoute(recipient string) (string, error) {
 		}
 		return gateway, nil
 	}
+	smsc, err := s.smsServiceCenterAddress()
+	if err != nil {
+		return "", err
+	}
 	if method == "tel_uri_smsc" {
-		return "tel:" + recipient, nil
+		return "tel:" + smsc, nil
 	}
 	domain := strings.TrimSpace(s.cfg.Domain)
 	if domain == "" || strings.ContainsAny(domain, "\r\n") {
 		return "", errors.New("imscore: SMS route domain is unavailable")
 	}
 	if method == "sip_uri_no_user_phone" {
-		return fmt.Sprintf("sip:%s@%s", recipient, domain), nil
+		return fmt.Sprintf("sip:%s@%s", smsc, domain), nil
 	}
-	return fmt.Sprintf("sip:%s@%s;user=phone", recipient, domain), nil
+	return fmt.Sprintf("sip:%s@%s;user=phone", smsc, domain), nil
+}
+
+func (s *Service) smsServiceCenterAddress() (string, error) {
+	if s == nil || s.cfg == nil {
+		return "", errors.New("imscore: SMSC address is unavailable")
+	}
+	smsc := normalizeE164(strings.TrimSpace(s.cfg.SMSC))
+	if smsc == "" || strings.ContainsAny(smsc, "\r\n @") {
+		return "", errors.New("imscore: SMSC address is unavailable")
+	}
+	return smsc, nil
 }
 
 func (s *Service) executeSMSDelivery(

@@ -94,6 +94,7 @@ func (s *Service) Register(ctx context.Context) error {
 		s.lastRegisterErr = err.Error()
 		s.signalingReady = false
 		s.signalingFailureReason = err.Error()
+		s.sipOutboundKeepalive = false
 		s.mu.Unlock()
 		if !isRegisterOperationCanceled(err) {
 			s.applyRegistrationFailureStatus(err)

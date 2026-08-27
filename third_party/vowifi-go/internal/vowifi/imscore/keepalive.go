@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"net"
 	"strings"
 	"time"
 
@@ -17,7 +19,9 @@ import (
 
 const (
 	imsKeepaliveInterval           = 60 * time.Second
-	imsKeepaliveTransactionTimeout = 5 * time.Second
+	imsKeepaliveTransactionTimeout = 15 * time.Second
+	imsTCPCRLFWriteTimeout         = 2 * time.Second
+	imsTCPCRLFPongTimeout          = 10 * time.Second
 	imsKeepaliveFailureLimit       = 3
 	imsMaintenancePollInterval     = 5 * time.Second
 	imsMaintenanceMinimumDelay     = 100 * time.Millisecond
@@ -25,6 +29,12 @@ const (
 	imsKeepaliveFlow               = "options_keepalive"
 	imsKeepaliveSupported          = "path, 100rel, replaces, outbound, gruu"
 	imsProtectedKeepaliveSupported = "path, sec-agree, 100rel, replaces, outbound, gruu"
+)
+
+var (
+	errOPTIONSKeepalive    = errors.New("imscore: SIP OPTIONS keepalive")
+	errTCPCRLFPongTimeout  = errors.New("imscore: TCP CRLF keepalive pong timeout")
+	errTCPCRLFStreamClosed = errors.New("imscore: TCP CRLF keepalive stream closed")
 )
 
 type imsMaintenanceAction uint8
@@ -149,6 +159,11 @@ func (s *Service) sendPing() (bool, error) {
 }
 
 func (s *Service) recordIMSKeepaliveResult(err error, completedAt time.Time) {
+	if errors.Is(err, errTCPCRLFPongTimeout) && !s.expectsCRLFPong() {
+		logging.RunDebug("IMS TCP CRLF pong not required",
+			"device", s.DeviceID(), "err", err)
+		err = nil
+	}
 	s.mu.Lock()
 	s.lastPingAt = completedAt
 	limit := s.keepaliveFailureLimit
@@ -166,9 +181,28 @@ func (s *Service) recordIMSKeepaliveResult(err error, completedAt time.Time) {
 	s.mu.Unlock()
 	logging.WarnRate("ims-keepalive", "IMS SIP keepalive failed",
 		"device", s.DeviceID(), "attempt", failures, "err", err)
-	if failures == limit {
-		s.triggerRegisterImmediate(fmt.Sprintf("OPTIONS keepalive failed %d times: %v", failures, err))
+	if failures == limit && s.keepaliveFailureRequiresRefresh(err) {
+		s.triggerRegisterImmediate(fmt.Sprintf("SIP TCP keepalive failed %d times: %v", failures, err))
 	}
+}
+
+func (s *Service) keepaliveFailureRequiresRefresh(err error) bool {
+	if err == nil || errors.Is(err, errOPTIONSKeepalive) {
+		return false
+	}
+	if errors.Is(err, errTCPCRLFPongTimeout) && !s.expectsCRLFPong() {
+		return false
+	}
+	return true
+}
+
+func (s *Service) expectsCRLFPong() bool {
+	if s == nil {
+		return false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.sipOutboundKeepalive
 }
 
 func (s *Service) signalIMSMaintenance() {
@@ -211,6 +245,111 @@ func registrationRefreshDelay(expires time.Duration) time.Duration {
 }
 
 func (s *Service) sendIMSKeepalive() error {
+	if conn := s.liveRegistrationTCP(); conn != nil {
+		return s.sendTCPCRLFKeepalive(conn)
+	}
+	return s.sendOPTIONSKeepalive()
+}
+
+func (s *Service) liveRegistrationTCP() net.Conn {
+	if s == nil || s.stopped() {
+		return nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.registrationTCP
+}
+
+func (s *Service) sendTCPCRLFKeepalive(conn net.Conn) error {
+	if conn == nil {
+		return errors.New("imscore: SIP TCP keepalive has no registration stream")
+	}
+	wait := make(chan error, 1)
+	s.mu.Lock()
+	s.tcpKeepalivePong = wait
+	s.mu.Unlock()
+	defer s.clearTCPKeepalivePong(wait)
+
+	s.sipWriteMu.Lock()
+	writeErr := func() error {
+		if err := conn.SetWriteDeadline(time.Now().Add(imsTCPCRLFWriteTimeout)); err != nil {
+			return err
+		}
+		defer func() { _ = conn.SetWriteDeadline(time.Time{}) }()
+		_, err := io.WriteString(conn, "\r\n\r\n")
+		return err
+	}()
+	s.sipWriteMu.Unlock()
+	if writeErr != nil {
+		return fmt.Errorf("TCP CRLF keepalive: %w", writeErr)
+	}
+	if !s.expectsCRLFPong() {
+		s.clearTCPKeepalivePong(wait)
+		return nil
+	}
+
+	timer := time.NewTimer(s.tcpCRLFPongTimeout())
+	defer timer.Stop()
+	select {
+	case err := <-wait:
+		if err != nil {
+			return fmt.Errorf("TCP CRLF keepalive: %w", err)
+		}
+		return nil
+	case <-timer.C:
+		return errTCPCRLFPongTimeout
+	case <-s.stop:
+		return errors.New("imscore: TCP CRLF keepalive aborted")
+	}
+}
+
+func (s *Service) tcpCRLFPongTimeout() time.Duration {
+	if s != nil && s.tcpCRLFPongWait > 0 {
+		return s.tcpCRLFPongWait
+	}
+	return imsTCPCRLFPongTimeout
+}
+
+func (s *Service) signalTCPKeepalivePong() {
+	s.completeTCPKeepalivePong(nil)
+}
+
+func (s *Service) failTCPKeepalivePong(err error) {
+	if err == nil {
+		err = errTCPCRLFStreamClosed
+	}
+	s.completeTCPKeepalivePong(err)
+}
+
+func (s *Service) completeTCPKeepalivePong(err error) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	wait := s.tcpKeepalivePong
+	s.tcpKeepalivePong = nil
+	s.mu.Unlock()
+	if wait == nil {
+		return
+	}
+	select {
+	case wait <- err:
+	default:
+	}
+}
+
+func (s *Service) clearTCPKeepalivePong(wait chan error) {
+	if s == nil || wait == nil {
+		return
+	}
+	s.mu.Lock()
+	if s.tcpKeepalivePong == wait {
+		s.tcpKeepalivePong = nil
+	}
+	s.mu.Unlock()
+}
+
+func (s *Service) sendOPTIONSKeepalive() error {
 	request, err := s.buildIMSKeepaliveOPTIONS()
 	if err != nil {
 		return err
@@ -223,10 +362,10 @@ func (s *Service) sendIMSKeepalive() error {
 		context.Background(), imsKeepaliveFlow, request, timeout, true,
 	)
 	if err != nil {
-		return fmt.Errorf("OPTIONS transaction: %w", err)
+		return fmt.Errorf("%w: %w", errOPTIONSKeepalive, err)
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return fmt.Errorf("OPTIONS rejected with status %d (%s)", response.StatusCode, response.Reason)
+		return fmt.Errorf("%w: rejected with status %d (%s)", errOPTIONSKeepalive, response.StatusCode, response.Reason)
 	}
 	return nil
 }

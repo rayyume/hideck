@@ -205,6 +205,9 @@ type Service struct {
 	keepaliveInterval         time.Duration
 	keepaliveTimeout          time.Duration
 	keepaliveFailureLimit     int
+	tcpKeepalivePong          chan error
+	tcpCRLFPongWait           time.Duration
+	sipOutboundKeepalive      bool
 
 	// Dialogs.
 	dialogRegistry *dialogRegistry

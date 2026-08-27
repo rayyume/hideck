@@ -473,18 +473,19 @@ func TestSendOutboundSMSFailsWhenRPMRRandomnessFails(t *testing.T) {
 }
 
 func TestResolveSendRouteUsesCarrierRoutingPolicy(t *testing.T) {
+	const smsc = "+447802002606"
 	tests := []struct {
 		name, method, gateway, recipient, want string
 	}{
-		{name: "default SIP URI", recipient: "85075", want: "sip:85075@ims.example;user=phone"},
-		{name: "SIP URI without user phone", method: "sip_uri_no_user_phone", recipient: "447700900123", want: "sip:+447700900123@ims.example"},
-		{name: "TEL URI", method: "tel_uri_smsc", recipient: "85075", want: "tel:85075"},
+		{name: "default SIP URI", recipient: "85075", want: "sip:+447802002606@ims.example;user=phone"},
+		{name: "SIP URI without user phone", method: "sip_uri_no_user_phone", recipient: "447700900123", want: "sip:+447802002606@ims.example"},
+		{name: "TEL URI", method: "tel_uri_smsc", recipient: "85075", want: "tel:+447802002606"},
 		{name: "IP-SM-GW", method: "ip_sm_gw", gateway: "sip:sms-gw.example;transport=tcp", recipient: "85075", want: "sip:sms-gw.example;transport=tcp"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			service := &Service{cfg: &IMSConfig{
-				Domain: "ims.example", SMSRoutingMethod: test.method, SMSRoutingGW: test.gateway,
+				Domain: "ims.example", SMSC: smsc, SMSRoutingMethod: test.method, SMSRoutingGW: test.gateway,
 			}}
 			got, err := service.resolveSendRoute(test.recipient)
 			if err != nil {
@@ -505,6 +506,7 @@ func TestResolveSendRouteRejectsMissingCarrierRoute(t *testing.T) {
 		{name: "nil config"},
 		{name: "missing domain", cfg: &IMSConfig{}},
 		{name: "missing IP-SM-GW", cfg: &IMSConfig{Domain: "ims.example", SMSRoutingMethod: "ip_sm_gw"}},
+		{name: "missing SMSC", cfg: &IMSConfig{Domain: "ims.example"}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -547,7 +549,7 @@ func newOutboundSMSTestService(t *testing.T) (*Service, *captureIMSEventSubscrib
 
 func assertOutboundSMSRequest(t *testing.T, request, recipient, smsc string) {
 	t.Helper()
-	if !strings.HasPrefix(request, "MESSAGE sip:"+recipient+"@ims.example;user=phone SIP/2.0") {
+	if !strings.HasPrefix(request, "MESSAGE sip:"+smsc+"@ims.example;user=phone SIP/2.0") {
 		t.Fatalf("request URI = %q", strings.SplitN(request, "\r\n", 2)[0])
 	}
 	if got := rawSIPHeaderValue(request, "Content-Type"); got != imsSMSContentType {
@@ -560,7 +562,6 @@ func assertOutboundSMSRequest(t *testing.T, request, recipient, smsc string) {
 		"P-Preferred-Identity": "<sip:+447840844894@o2.co.uk>",
 		"Security-Verify":      "ipsec-3gpp;alg=hmac-sha-1-96",
 		"Supported":            smsSupportedHeader + ", sec-agree",
-		"Request-Disposition":  "no-fork",
 	}
 	for name, want := range wantHeaders {
 		got := rawSIPHeaderValue(request, name)
@@ -576,6 +577,11 @@ func assertOutboundSMSRequest(t *testing.T, request, recipient, smsc string) {
 	}
 	if strings.Contains(request, "\r\nRequire: sec-agree\r\n") || strings.Contains(request, "\r\nProxy-Require: sec-agree\r\n") {
 		t.Fatalf("MESSAGE unexpectedly requires sec-agree: %q", request)
+	}
+	for _, name := range []string{"Accept-Contact", "P-Preferred-Service", "Request-Disposition"} {
+		if got := rawSIPHeaderValue(request, name); got != "" {
+			t.Fatalf("%s = %q", name, got)
+		}
 	}
 	body, err := rawSIPBody(request)
 	if err != nil {

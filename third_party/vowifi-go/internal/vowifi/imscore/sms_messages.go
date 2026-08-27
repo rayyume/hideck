@@ -58,15 +58,12 @@ func (s *Service) buildSMSMESSAGEWithOptions(options smsMESSAGEOptions) (string,
 	request.WriteString("Contact: " + profile.ContactHeader + "\r\n")
 	request.WriteString("Max-Forwards: 70\r\n")
 	request.WriteString("P-Preferred-Identity: <" + profile.LocalURI + ">\r\n")
-	request.WriteString("P-Preferred-Service: urn:urn-7:3gpp-service.ims.icsi.sms\r\n")
-	request.WriteString("Accept-Contact: *;+g.3gpp.smsip\r\n")
 	supported := smsSupportedHeader
 	if profile.SecurityVerify != "" {
 		supported += ", sec-agree"
 		request.WriteString("Security-Verify: " + profile.SecurityVerify + "\r\n")
 	}
 	request.WriteString("Supported: " + supported + "\r\n")
-	request.WriteString("Request-Disposition: no-fork\r\n")
 	if pani := strings.TrimSpace(profile.PANI); pani != "" {
 		request.WriteString("P-Access-Network-Info: " + pani + "\r\n")
 	}
@@ -96,8 +93,8 @@ func (s *Service) buildOutboundMESSAGE(remoteURI string, body []byte) (*sip.Requ
 	return request, nil
 }
 
-func (s *Service) buildRPAckMESSAGE(inbound string, body []byte) (*sip.Request, error) {
-	raw, err := s.buildInboundSMSControlRequest(inbound, body)
+func (s *Service) buildRPAckMESSAGE(inbound string, body []byte, remoteURI string) (*sip.Request, error) {
+	raw, err := s.buildInboundSMSControlRequest(inbound, body, remoteURI)
 	if err != nil {
 		return nil, err
 	}

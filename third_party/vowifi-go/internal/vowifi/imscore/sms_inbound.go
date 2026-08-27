@@ -327,15 +327,24 @@ func (s *Service) publishInboundSMSWithFragment(
 	})
 }
 
-func (s *Service) buildInboundSMSControlRequest(inbound string, body []byte) (string, error) {
-	remoteURI, err := resolveRpAckTarget(
-		rawSIPHeaderValue(inbound, "P-Asserted-Identity"), rawSIPHeaderValue(inbound, "From"),
-	)
-	if err != nil {
-		return "", err
+func (s *Service) buildInboundSMSControlRequest(inbound string, body []byte, remoteURI string) (string, error) {
+	remoteURI = strings.TrimSpace(remoteURI)
+	if remoteURI == "" {
+		targets := resolveRpAckTargets(
+			rawSIPHeaderValue(inbound, "P-Asserted-Identity"),
+			rawSIPHeaderValue(inbound, "From"),
+			rawSIPHeaderValue(inbound, "Contact"),
+		)
+		if len(targets) == 0 {
+			return "", errors.New("IMS RP-ACK target is unavailable")
+		}
+		remoteURI = targets[0]
 	}
-	callID := strings.TrimSpace(rawSIPHeaderValue(inbound, "Call-ID"))
-	if callID == "" || strings.ContainsAny(callID, "\r\n") {
+	if strings.ContainsAny(remoteURI, "\r\n") {
+		return "", errors.New("IMS RP-ACK target is unavailable")
+	}
+	callID := inboundCallIDForReply(inbound)
+	if callID == "" {
 		return "", errors.New("IMS RP-ACK In-Reply-To is unavailable")
 	}
 	return s.buildSMSMESSAGEWithOptions(smsMESSAGEOptions{
@@ -343,6 +352,15 @@ func (s *Service) buildInboundSMSControlRequest(inbound string, body []byte) (st
 		Body:      body,
 		InReplyTo: callID,
 	})
+}
+
+func inboundCallIDForReply(inbound string) string {
+	callID := strings.TrimSpace(rawSIPHeaderValue(inbound, "Call-ID"))
+	callID = strings.Trim(callID, `"'`)
+	if callID == "" || strings.ContainsAny(callID, "\r\n") {
+		return ""
+	}
+	return callID
 }
 
 func normalizedContentType(value string) string {

@@ -221,6 +221,30 @@ func TestRPReportWaitsForFinalResponse(t *testing.T) {
 	}
 }
 
+func TestRPReportAbortOnStopReturnsError(t *testing.T) {
+	service, _, _ := newInboundSMSTestService(t)
+	service.StopCurrent()
+	err := service.sendRPReportWithRetryPolicy(rpReportRequest{
+		Inbound: inboundSMSRequest(t, imsSMSContentType, inboundRPData(t, 0x34, "+447700900123", "ack")),
+		Body:    smscodec.BuildRPAck(0x34), RPMR: 0x34,
+	}, 5*time.Millisecond, 0)
+	if !errors.Is(err, errRPReportAborted) {
+		t.Fatalf("stop abort error = %v", err)
+	}
+}
+
+func TestResolveRpAckTargetsPrefersAssertedIdentity(t *testing.T) {
+	got := resolveRpAckTargets(
+		"<tel:+447802002606>",
+		"<sip:+447802002606@ims.example>",
+		"<sip:ipsmgw@ims.example;transport=tcp>",
+	)
+	want := []string{"tel:+447802002606"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("targets = %v, want %v", got, want)
+	}
+}
+
 func TestRPReportRetriesRejectedFinalResponses(t *testing.T) {
 	service, _, _ := newInboundSMSTestService(t)
 	attempts := 0

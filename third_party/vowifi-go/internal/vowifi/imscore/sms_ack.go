@@ -17,10 +17,25 @@ type rpReportRequest struct {
 	Body        []byte
 	RPMR        byte
 	Fingerprint string
+	RemoteURI   string
 }
 
+type rpReportRejectError struct {
+	Status int
+}
+
+func (e *rpReportRejectError) Error() string {
+	if e == nil {
+		return "imscore: RP report rejected"
+	}
+	return fmt.Sprintf("imscore: RP report rejected with SIP status %d %s",
+		e.Status, SIPStatusText(e.Status))
+}
+
+var errRPReportAborted = errors.New("imscore: RP report aborted because IMS is stopping")
+
 const (
-	rpReportInitialDelay = 100 * time.Millisecond
+	rpReportInitialDelay = 0
 	rpReportRetryDelay   = time.Second
 	rpReportMaxAttempts  = 4
 )
@@ -52,15 +67,15 @@ func (s *Service) recordMTAckAudit(audit mtAckAudit, err error) {
 }
 
 func (s *Service) sendRPReport(report rpReportRequest) error {
-	request, err := s.buildRPAckMESSAGE(report.Inbound, report.Body)
+	request, err := s.buildRPAckMESSAGE(report.Inbound, report.Body, report.RemoteURI)
 	if err != nil {
 		s.mtAckSendErr.Add(1)
 		return err
 	}
-	modeCtx, err := s.resolveOutboundModeContext("mt-rp-ack", request)
-	if err != nil {
+	modeCtx, resolveErr := s.resolveOutboundModeContext("mt-rp-ack", request)
+	if resolveErr != nil {
 		s.mtAckSendErr.Add(1)
-		return err
+		return resolveErr
 	}
 	traceID := common.NewTraceID()
 	audit := mtAckAudit{
@@ -73,7 +88,10 @@ func (s *Service) sendRPReport(report rpReportRequest) error {
 		"transport", audit.transport, "call_id", audit.callID, "rp_mr", audit.rpMR)
 	ctx, cancel := context.WithTimeout(common.WithTraceID(context.Background(), traceID), inboundSMSAckTimeout)
 	defer cancel()
-	result, dispatchErr := s.dispatchOutboundMESSAGE(ctx, "mt-rp-ack", request, inboundSMSAckTimeout)
+	result, dispatchErr := s.dispatchOutboundMESSAGEWithCallbacks(outboundDispatchOptions{
+		Context: ctx, Flow: "mt-rp-ack", Request: request,
+		Timeout: inboundSMSAckTimeout,
+	})
 	err = rpReportTransactionError(result.SIPCode, dispatchErr)
 	s.logRPReportProtocolTrace(request, modeCtx, report, result.SIPCode, err)
 	if err != nil {
@@ -94,10 +112,17 @@ func rpReportTransactionError(status int, dispatchErr error) error {
 		return errors.New("imscore: RP report transaction completed without a final response")
 	}
 	if status < 200 || status >= 300 {
-		return fmt.Errorf("imscore: RP report rejected with SIP status %d %s",
-			status, SIPStatusText(status))
+		return &rpReportRejectError{Status: status}
 	}
 	return nil
+}
+
+func rpReportRejectStatus(err error) int {
+	var rejected *rpReportRejectError
+	if errors.As(err, &rejected) && rejected != nil {
+		return rejected.Status
+	}
+	return 0
 }
 
 func (s *Service) sendRPReportWithRetry(report rpReportRequest) {
@@ -105,9 +130,13 @@ func (s *Service) sendRPReportWithRetry(report rpReportRequest) {
 		report, rpReportInitialDelay, rpReportRetryDelay,
 	)
 	if err != nil {
-		logging.WarnRate("smsip-rp-report-retry-exhausted:"+s.cfg.DeviceID, 30*time.Second,
+		deviceID := ""
+		if s != nil && s.cfg != nil {
+			deviceID = s.cfg.DeviceID
+		}
+		logging.WarnRate("smsip-rp-report-retry-exhausted:"+deviceID, 30*time.Second,
 			"IMS RP report delivery failed after retries",
-			"device", s.cfg.DeviceID, "attempts", rpReportMaxAttempts,
+			"device", deviceID, "attempts", rpReportMaxAttempts,
 			"rp_mr", int(report.RPMR), "error", err)
 	}
 }
@@ -118,24 +147,54 @@ func (s *Service) sendRPReportWithRetryPolicy(
 	retryDelay time.Duration,
 ) error {
 	if !s.waitSMSRetryDelay(initialDelay) {
-		return nil
+		return errRPReportAborted
+	}
+	current := report
+	if targets := report.ackTargets(); len(targets) > 0 {
+		current.RemoteURI = targets[0]
 	}
 	delay := retryDelay
 	var lastErr error
 	for attempt := 0; attempt < rpReportMaxAttempts; attempt++ {
-		if attempt > 0 && !s.waitSMSRetryDelay(delay) {
-			return nil
+		if attempt > 0 && delay > 0 && !s.waitSMSRetryDelay(delay) {
+			if lastErr != nil {
+				return lastErr
+			}
+			return errRPReportAborted
 		}
-		lastErr = s.sendRPReport(report)
+		lastErr = s.sendRPReport(current)
 		if lastErr == nil {
 			return nil
 		}
-		delay *= 2
+		if delay <= 0 {
+			delay = retryDelay
+		} else {
+			delay *= 2
+		}
 	}
 	return lastErr
 }
 
+func (report rpReportRequest) ackTargets() []string {
+	if strings.TrimSpace(report.RemoteURI) != "" {
+		return []string{strings.TrimSpace(report.RemoteURI)}
+	}
+	return resolveRpAckTargets(
+		rawSIPHeaderValue(report.Inbound, "P-Asserted-Identity"),
+		rawSIPHeaderValue(report.Inbound, "From"),
+		rawSIPHeaderValue(report.Inbound, "Contact"),
+	)
+}
+
 func (s *Service) waitSMSRetryDelay(delay time.Duration) bool {
+	if delay <= 0 {
+		select {
+		case <-s.stop:
+			return false
+		default:
+			return true
+		}
+	}
 	timer := time.NewTimer(delay)
 	defer timer.Stop()
 	select {
@@ -147,13 +206,22 @@ func (s *Service) waitSMSRetryDelay(delay time.Duration) bool {
 }
 
 func resolveRpAckTarget(assertedIdentity, from string) (string, error) {
-	if target := firstSIPHeaderURI(assertedIdentity); target != "" {
-		return target, nil
+	targets := resolveRpAckTargets(assertedIdentity, from, "")
+	if len(targets) == 0 {
+		return "", errors.New("IMS RP-ACK target is unavailable")
 	}
-	if target := firstSIPHeaderURI(from); target != "" {
-		return target, nil
+	return targets[0], nil
+}
+
+func resolveRpAckTargets(assertedIdentity, from, contact string) []string {
+	for _, value := range []string{assertedIdentity, contact, from} {
+		target := firstSIPHeaderURI(value)
+		if target == "" || strings.ContainsAny(target, "\r\n") {
+			continue
+		}
+		return []string{target}
 	}
-	return "", errors.New("IMS RP-ACK target is unavailable")
+	return nil
 }
 
 func routeFromRemoteEndpoint(host string, port int) string {

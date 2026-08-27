@@ -28,6 +28,7 @@ type inboundSIPDispatch struct {
 	reply       func(string) error
 	transaction *serverSIPTransaction
 	events      imsEventPublishReceipt
+	peerConn    net.Conn
 }
 
 func (s *Service) receiverStarted() {
@@ -153,7 +154,17 @@ func (s *Service) dispatchInboundSIP(raw string, reply func(string) error) error
 }
 
 func (s *Service) dispatchInboundSIPMessage(message sip.Message, raw string, reply func(string) error) error {
+	return s.dispatchInboundSIPMessageWithPeer(message, raw, reply, nil)
+}
+
+func (s *Service) dispatchInboundSIPMessageWithPeer(
+	message sip.Message,
+	raw string,
+	reply func(string) error,
+	peer net.Conn,
+) error {
 	s.UpdateLastPingAt()
+	s.signalTCPKeepalivePong()
 	s.inboundSIPParsedMessage.Add(1)
 	switch parsed := message.(type) {
 	case *sip.Response:
@@ -163,7 +174,7 @@ func (s *Service) dispatchInboundSIPMessage(message sip.Message, raw string, rep
 		return nil
 	case *sip.Request:
 		s.inboundSIPParsedRequest.Add(1)
-		return s.dispatchInboundSIPRequest(parsed, raw, reply)
+		return s.dispatchInboundSIPRequest(parsed, raw, reply, peer)
 	default:
 		return errors.New("imscore: unsupported inbound SIP message")
 	}
@@ -173,6 +184,7 @@ func (s *Service) dispatchInboundSIPRequest(
 	request *sip.Request,
 	raw string,
 	reply func(string) error,
+	peer net.Conn,
 ) error {
 	s.transport.DeliverRequest(raw)
 	transaction, handled, err := s.acceptServerRequest(request, raw, reply)
@@ -188,7 +200,7 @@ func (s *Service) dispatchInboundSIPRequest(
 		responseWriter = transaction.respondRaw
 	}
 	result, err := s.handleInboundSIPDispatch(context.Background(), inboundSIPDispatch{
-		raw: raw, reply: responseWriter, transaction: transaction, events: events,
+		raw: raw, reply: responseWriter, transaction: transaction, events: events, peerConn: peer,
 	})
 	if result.response == "" {
 		if err != nil && transaction != nil {

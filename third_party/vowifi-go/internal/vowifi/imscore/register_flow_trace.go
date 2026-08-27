@@ -14,13 +14,31 @@ func (s *Service) logRegisterFlowNegotiation(response *sipResponse) {
 	require := strings.ToLower(strings.Join(response.HeaderValues("Require"), ","))
 	path := strings.ToLower(strings.Join(response.HeaderValues("Path"), ","))
 	contact := strings.ToLower(strings.Join(response.HeaderValues("Contact"), ","))
+	requiredOutbound := containsHeaderToken(require, "outbound")
+	viaKeep := viaHasKeepParameter(response.HeaderValues("Via"))
+	s.mu.Lock()
+	s.sipOutboundKeepalive = requiredOutbound || viaKeep
+	s.mu.Unlock()
 	logging.Info("IMS REGISTER flow negotiation",
 		"device", s.DeviceID(),
 		"supported_outbound", containsHeaderToken(supported, "outbound"),
-		"required_outbound", containsHeaderToken(require, "outbound"),
+		"required_outbound", requiredOutbound,
+		"via_keep", viaKeep,
 		"path_present", strings.TrimSpace(path) != "",
 		"path_ob", containsSIPParameter(path, "ob"),
 		"contact_reg_id", containsSIPParameter(contact, "reg-id"))
+}
+
+func viaHasKeepParameter(values []string) bool {
+	for _, value := range values {
+		for _, part := range strings.Split(value, ";") {
+			name, _, _ := strings.Cut(strings.TrimSpace(part), "=")
+			if strings.EqualFold(name, "keep") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func containsHeaderToken(value, target string) bool {

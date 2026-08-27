@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"strings"
 	"testing"
@@ -48,7 +49,7 @@ func TestProtectedRegistrationResetRequestsFreshRuntime(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("initial protected registration did not complete")
 	}
-	if sent, pingErr := svc.sendPing(); !sent || pingErr == nil {
+	if sent, pingErr := svc.sendPing(); !sent {
 		t.Fatalf("keepalive during TCP reset = sent %t, err %v", sent, pingErr)
 	}
 	select {
@@ -146,12 +147,12 @@ func serveInitialProtectedRegistration(
 		return "", err
 	}
 	close(ready)
-	keepalive, err := readSIPStreamMessage(reader)
-	if err != nil {
+	probe := make([]byte, 4)
+	if _, err := io.ReadFull(reader, probe); err != nil {
 		return "", err
 	}
-	if !strings.HasPrefix(keepalive, "OPTIONS ") {
-		return "", fmt.Errorf("request during reset = %q, want OPTIONS", sipRequestMethod(keepalive))
+	if string(probe) != "\r\n\r\n" {
+		return "", fmt.Errorf("request during reset = %q, want RFC 5626 CRLF ping", string(probe))
 	}
 	return sipHeaderValue(registered, "Authorization"), nil
 }

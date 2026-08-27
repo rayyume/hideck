@@ -143,6 +143,7 @@ func newSIPResponse(response *sip.Response) *sipResponse {
 type sipStreamDecoder struct {
 	reader    *bufio.Reader
 	keepalive io.Writer
+	onPong    func()
 }
 
 func newSIPStreamDecoder(reader io.Reader) *sipStreamDecoder {
@@ -159,7 +160,7 @@ func (d *sipStreamDecoder) ReadMessage() (sip.Message, error) {
 	if d == nil || d.reader == nil {
 		return nil, errors.New("imscore: nil SIP stream decoder")
 	}
-	message, _, err := readSIPStreamFrame(d.reader, d.keepalive)
+	message, _, err := readSIPStreamFrame(d.reader, d.keepalive, d.onPong)
 	return message, err
 }
 
@@ -182,15 +183,15 @@ func readSIPStreamMessage(reader *bufio.Reader) (string, error) {
 }
 
 func readSIPStreamMessageWithKeepalive(reader *bufio.Reader, keepalive io.Writer) (string, error) {
-	_, wire, err := readSIPStreamFrame(reader, keepalive)
+	_, wire, err := readSIPStreamFrame(reader, keepalive, nil)
 	return wire, err
 }
 
-func readSIPStreamFrame(reader *bufio.Reader, keepalive io.Writer) (sip.Message, string, error) {
+func readSIPStreamFrame(reader *bufio.Reader, keepalive io.Writer, onPong func()) (sip.Message, string, error) {
 	if reader == nil {
 		return nil, "", errors.New("imscore: nil SIP stream reader")
 	}
-	header, err := readSIPStreamHeaderWithKeepalive(reader, keepalive)
+	header, err := readSIPStreamHeaderWithKeepalive(reader, keepalive, onPong)
 	if err != nil {
 		return nil, "", err
 	}
@@ -240,10 +241,10 @@ func summarizeSIPHeaderFrame(header []byte) string {
 }
 
 func readSIPStreamHeader(reader *bufio.Reader) ([]byte, error) {
-	return readSIPStreamHeaderWithKeepalive(reader, nil)
+	return readSIPStreamHeaderWithKeepalive(reader, nil, nil)
 }
 
-func readSIPStreamHeaderWithKeepalive(reader *bufio.Reader, keepalive io.Writer) ([]byte, error) {
+func readSIPStreamHeaderWithKeepalive(reader *bufio.Reader, keepalive io.Writer, onPong func()) ([]byte, error) {
 	var header []byte
 	blankLines := 0
 	for {
@@ -255,6 +256,9 @@ func readSIPStreamHeaderWithKeepalive(reader *bufio.Reader, keepalive io.Writer)
 			return nil, sip.ErrParseLineNoCRLF
 		}
 		if len(header) == 0 && len(line) == 2 {
+			if onPong != nil {
+				onPong()
+			}
 			blankLines++
 			if blankLines == 2 && keepalive != nil {
 				if _, err := io.WriteString(keepalive, "\r\n"); err != nil {
