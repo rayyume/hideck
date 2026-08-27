@@ -130,7 +130,8 @@ async function changePhoneMode(mode: string) {
     return
   }
   if (mode === selectedMode.value) {
-    return
+    if (mode === 'wifi') return
+    if (selected.value && (isDeviceReady(selected.value) || selected.value.vowifi_active)) return
   }
   modePending.value = true
   phone.clearError()
@@ -370,7 +371,7 @@ async function sendDTMF(digit: string) {
                   <small>{{
                     selected?.vowifi_enabled
                       ? (selected.vowifi_active || isDeviceReady(selected) ? '已启动，正在走 WiFi calling' : '已打开，正在注册')
-                      : '打开开关才会启动。关掉只停服务，不会改成蜂窝或 VoLTE'
+                      : '打开后开始注册。关掉只停服务，仍是 WiFi calling'
                   }}</small>
                 </span>
                 <el-switch

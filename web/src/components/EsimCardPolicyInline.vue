@@ -200,8 +200,8 @@ const {
         <span class="text-sm text-gray-700 dark:text-gray-200">
           {{ (local.phone_mode ?? 'wifi') === 'wifi' ? '启动' : '软件电话' }}
           <small class="block text-xs text-gray-400 font-normal">{{ (local.phone_mode ?? 'wifi') === 'wifi'
-            ? '打开才启动，关掉只停服务，不会改成蜂窝或 VoLTE'
-            : '开启后可拨号' }}</small>
+            ? '打开后开始注册。关掉只停服务，仍是 WiFi calling'
+            : '开启后可拨号。关掉只停服务，通话方式不变' }}</small>
         </span>
         <div class="flex items-center gap-2">
           <span v-if="vowifiFailed" class="text-xs text-orange-500">未生效</span>

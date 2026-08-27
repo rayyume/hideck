@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue'
 import type { DeviceOverviewItem } from '../types/api'
 import { isControlOnline, isRadioRegistered, isRecoveryPhase, lifecycleStatusLabel } from '../utils/deviceLifecycle'
-import { isWifiCallingEnabled } from '../utils/phoneMode'
+import { phoneModeCampsOnCell } from '../utils/phoneMode'
 import StatusLight from './StatusLight.vue'
 import OperatorSelectionDialog from './OperatorSelectionDialog.vue'
 import { Settings24Regular } from '@vicons/fluent'
@@ -115,12 +115,12 @@ const cellularStatusText = computed(() => {
   return '未驻网'
 })
 
-const isWifiCalling = computed(() =>
-  isWifiCallingEnabled(props.device?.phone_mode, props.device?.vowifi_enabled)
-)
+const isWifiPath = computed(() => !phoneModeCampsOnCell(props.device?.phone_mode))
 
 const networkPanelMessage = computed(() => {
-  if (isWifiCalling.value) return 'WiFi calling 不使用蜂窝数据地址'
+  if (isWifiPath.value) {
+    return props.device?.vowifi_enabled ? 'WiFi calling 不使用蜂窝数据地址' : 'WiFi calling 未开启，不走蜂窝数据'
+  }
   if (!props.device?.network_enabled) return '数据未开启（仍可驻网）'
   if (!props.device?.network_connected) return '数据网络未连接'
   return ''
@@ -135,7 +135,7 @@ const networkPanelMessage = computed(() => {
     <div class="device-overview-facts">
 
     <!-- ===== 蜂窝运行状态面板；VoWiFi 诊断已合并到主舞台 ===== -->
-    <section v-if="!isWifiCalling" class="overview-fact-panel ui-panel-muted p-4">
+    <section v-if="!isWifiPath" class="overview-fact-panel ui-panel-muted p-4">
       <div class="overview-panel-title">蜂窝运行时</div>
         <!-- 运营商 hero（与 VoWiFi pill 统一样式） -->
         <div class="flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 mb-3 border"
@@ -211,7 +211,7 @@ const networkPanelMessage = computed(() => {
     </section>
 
     <DeviceOverviewIdentityPanel
-      :class="{ 'is-wide': isWifiCalling }"
+      :class="{ 'is-wide': isWifiPath }"
       :device="device"
       :sim-operator-display="simOperatorDisplay"
       :sim-operator-country-code="simOperatorCountryCode"

@@ -4,7 +4,7 @@ import {
   formatDashboardSignal,
   hasDashboardSignal
 } from './dashboardPresentation'
-import { isNativeVoLTEMode } from './phoneMode'
+import { isNativeVoLTEMode, phoneModeCampsOnCell } from './phoneMode'
 
 export type OverviewConnectionKind = 'wifi' | 'volte' | 'cellular'
 
@@ -76,12 +76,28 @@ function createVoWiFiOrCellularPresentation(
   const deviceInterface = metric('接口', device?.interface)
 
   if (!device?.vowifi_enabled) {
+    if (!phoneModeCampsOnCell(device?.phone_mode)) {
+      return Object.freeze({
+        kind: 'wifi',
+        eyebrow: 'WI-FI CALLING',
+        title: 'WiFi calling 未开启',
+        detail: '打开启动开关后才会注册',
+        tone: 'is-idle',
+        pathIsFlowing: false,
+        stages,
+        metrics: Object.freeze([
+          metric('接入方式', 'Wi-Fi Calling', 'Wi-Fi Calling'),
+          protocol,
+          deviceInterface
+        ])
+      })
+    }
     const signal = device?.modem?.signal_dbm
     return Object.freeze({
       kind: 'cellular',
       eyebrow: 'CELLULAR',
-      title: 'VoWiFi 未启用',
-      detail: '当前设备使用蜂窝网络',
+      title: '软件电话未开启',
+      detail: '设备在蜂窝驻网。打开软件电话后才能拨号',
       tone: 'is-idle',
       pathIsFlowing: false,
       stages,

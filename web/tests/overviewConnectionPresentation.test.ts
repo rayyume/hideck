@@ -85,3 +85,27 @@ test('wifi calling presentation stays on the ePDG path', () => {
   assert.equal(presentation.title, 'VoWiFi 等待连接')
   assert.equal(presentation.metrics.find((item) => item.label === '接入方式')?.value, 'Wi-Fi Calling')
 })
+
+test('wifi calling stays on the wifi path when the service is off', () => {
+  const presentation = createOverviewConnectionPresentation(device({
+    phone_mode: 'wifi',
+    vowifi_enabled: false
+  }))
+
+  assert.equal(presentation.kind, 'wifi')
+  assert.equal(presentation.eyebrow, 'WI-FI CALLING')
+  assert.equal(presentation.title, 'WiFi calling 未开启')
+  assert.equal(presentation.detail, '打开启动开关后才会注册')
+  assert.doesNotMatch(presentation.detail, /蜂窝网络/)
+})
+
+test('cellular with software phone off does not claim wifi calling', () => {
+  const presentation = createOverviewConnectionPresentation(device({
+    phone_mode: 'cellular',
+    vowifi_enabled: false
+  }))
+
+  assert.equal(presentation.kind, 'cellular')
+  assert.equal(presentation.title, '软件电话未开启')
+  assert.match(presentation.detail, /蜂窝驻网/)
+})
