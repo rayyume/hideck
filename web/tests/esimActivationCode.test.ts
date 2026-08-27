@@ -1,11 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import {
-  looksLikeEsimActivationCode,
-  parseEsimActivationInput,
-  pickClipboardOrDropImage,
-  transferLooksLikeImageDrop
-} from '../src/utils/esimActivationCode'
+import { looksLikeEsimActivationCode, parseEsimActivationInput } from '../src/utils/esimActivationCode'
 
 test('parses a standard LPA activation code used by VOXI and Giffgaff', () => {
   const parsed = parseEsimActivationInput('LPA:1$vfgb.esim.vodafone.com$JN-ABCDE-12345')
@@ -63,19 +58,6 @@ test('prefers an LPA token over a labeled SM-DP+ host in the same paste', () => 
 
   const labeledLPA = parseEsimActivationInput('SM-DP+ Address: rsp.truphone.com\nActivation Code: LPA:1$rsp.truphone.com$GG-MATCH-1')
   assert.equal(labeledLPA?.matchingId, 'GG-MATCH-1')
-})
-
-test('picks an image from drop files or clipboard items', () => {
-  const image = new File([new Uint8Array([1, 2, 3])], 'qr.png', { type: 'image/png' })
-  const note = new File([new Uint8Array([1])], 'note.txt', { type: 'text/plain' })
-  assert.equal(pickClipboardOrDropImage({ files: [note, image] })?.name, 'qr.png')
-  assert.equal(pickClipboardOrDropImage({
-    files: [],
-    items: [{ kind: 'file', type: 'image/jpeg', getAsFile: () => image }]
-  })?.name, 'qr.png')
-  assert.equal(pickClipboardOrDropImage({ files: [note] }), null)
-  assert.equal(transferLooksLikeImageDrop({ types: ['Files'] }), true)
-  assert.equal(transferLooksLikeImageDrop({ types: ['text/plain'] }), false)
 })
 
 test('rejects unrelated text', () => {

@@ -34,6 +34,7 @@ func TestOpenAPIHiDeckYAMLValid(t *testing.T) {
 		"/commands/events/stream", "/commands/history", "/balance/queries",
 		"/balance/queries/{query_id}", "/balance/rules", "/balance/rules/{rule_id}",
 		"/devices/{device_id}/esim/actions/disable",
+		"/devices/{device_id}/esim/actions/decode-activation",
 		"/settings/notifications/wecom/test",
 		"/settings/notifications/weixin/qr/start", "/settings/notifications/weixin/qr/status",
 		"/settings/notifications/weixin/qr/cancel", "/settings/notifications/wecom-bot/qr/start",

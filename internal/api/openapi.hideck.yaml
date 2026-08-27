@@ -1802,6 +1802,47 @@ paths:
         '500':
           $ref: '#/components/responses/ErrorMessage'
 
+  /devices/{device_id}/esim/actions/decode-activation:
+    post:
+      tags: [esim]
+      summary: 从图片或 PDF 识别 eSIM 激活码
+      parameters:
+        - $ref: '#/components/parameters/DeviceIDPath'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: 二维码截图、照片或运营商 PDF
+      responses:
+        '200':
+          description: 识别到的激活码
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  text:
+                    type: string
+                  smdp:
+                    type: string
+                  matching_id:
+                    type: string
+                  confirmation_required:
+                    type: boolean
+                  confirmation_code:
+                    type: string
+        '400':
+          $ref: '#/components/responses/ErrorMessage'
+        '404':
+          $ref: '#/components/responses/ErrorMessage'
+
   /devices/{device_id}/esim/actions/download:
     get:
       tags: [esim]

@@ -388,6 +388,30 @@ export const devicesService = {
       }
     })
   },
+  decodeEsimActivation(id: string, file: File) {
+    return callService(async () => {
+      const form = new FormData()
+      form.append('file', file)
+      const res = await api.post<{
+        text?: string
+        smdp?: string
+        matching_id?: string
+        confirmation_required?: boolean
+        confirmation_code?: string
+      }>(`/devices/${id}/esim/actions/decode-activation`, form)
+      const text = typeof res.data?.text === 'string' ? res.data.text.trim() : ''
+      if (!text) {
+        throw new Error('没有识别到二维码')
+      }
+      return {
+        text,
+        smdp: typeof res.data?.smdp === 'string' ? res.data.smdp : '',
+        matchingId: typeof res.data?.matching_id === 'string' ? res.data.matching_id : '',
+        confirmationRequired: res.data?.confirmation_required === true,
+        confirmationCode: typeof res.data?.confirmation_code === 'string' ? res.data.confirmation_code : ''
+      }
+    })
+  },
   downloadEsimProfile(id: string, payload: { smdp: string; matching_id?: string; confirmation_code?: string; aid_hex?: string; imei?: string }) {
     return callService(async () => {
       await api.get(`/devices/${id}/esim/actions/download`, { params: payload })

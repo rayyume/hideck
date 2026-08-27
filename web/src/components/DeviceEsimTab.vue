@@ -11,13 +11,13 @@ import { applyOptimisticActiveState } from './deviceEsimOptimistic'
 import { esimProfileActionForState } from './deviceEsimProfileAction'
 import { pickNextDownloadAid } from './deviceEsimOverviewRefresh'
 import { describeDeleteResultNotice, describeDownloadTerminalNotice, describeSpaceDelta } from './deviceEsimOperationNotice'
+import { looksLikeEsimActivationCode, parseEsimActivationInput } from '../utils/esimActivationCode'
 import {
-  looksLikeEsimActivationCode,
-  parseEsimActivationInput,
   pickClipboardOrDropImage,
-  readQrPayloadFromImageFile,
+  pickImageFromClipboardData,
+  readImageFromSystemClipboard,
   transferLooksLikeImageDrop
-} from '../utils/esimActivationCode'
+} from '../utils/esimQrImage'
 import {
   formatEsimNotificationEvent,
   notificationDialogWidth,
@@ -163,7 +163,13 @@ async function onQrDrop(event: DragEvent) {
 }
 
 async function onQrPaste(event: ClipboardEvent) {
-  const image = pickClipboardOrDropImage(event.clipboardData)
+  const syncImage = pickClipboardOrDropImage(event.clipboardData)
+  if (syncImage) {
+    event.preventDefault()
+    await decodeQrImage(syncImage)
+    return
+  }
+  const image = await pickImageFromClipboardData(event.clipboardData) || await readImageFromSystemClipboard()
   if (!image) return
   event.preventDefault()
   await decodeQrImage(image)
@@ -178,13 +184,14 @@ async function onQrFileChange(event: Event) {
 
 async function decodeQrImage(file: File | null) {
   if (!file) {
-    ElMessage.warning('请放入二维码图片')
+    ElMessage.warning('请放入二维码图片或 PDF')
     return
   }
   qrReading.value = true
   try {
-    const payload = await readQrPayloadFromImageFile(file)
-    applyActivationInput(payload, true)
+    const result = await devicesService.decodeEsimActivation(props.deviceId, file)
+    if (!result.ok) throw result.error
+    applyActivationInput(result.data.text, true)
   } catch (e: unknown) {
     ElMessage.error(errorMessage(e, '识别二维码失败'))
   } finally {
@@ -871,7 +878,7 @@ onBeforeUnmount(() => {
       <p class="esim-install-copy">
         市面常见 eSIM（VOXI、Giffgaff、Airalo、联通等）给的是一张二维码，或一行
         <span class="esim-install-code">LPA:1$</span>
-        激活码。可以把二维码图片拖进来，或复制后在这里粘贴。邮件里如果是分开的 SM-DP+ 地址和激活码，整段贴进来也可以。
+        激活码。可以把二维码图片或 PDF 拖进来、粘贴或上传，由服务器识别。邮件里如果是分开的 SM-DP+ 地址和激活码，整段贴进来也可以。
       </p>
       <div class="space-y-3">
         <div class="space-y-1">
@@ -890,22 +897,22 @@ onBeforeUnmount(() => {
               v-model="downloadForm.activationCode"
               type="textarea"
               :autosize="{ minRows: 3, maxRows: 5 }"
-              placeholder="LPA:1$smdp.example.com$匹配码，或把二维码图片拖到这里 / Ctrl+V 粘贴"
+              placeholder="LPA:1$smdp.example.com$匹配码，或把二维码图片 / PDF 拖到这里"
               @update:model-value="applyActivationInput"
             />
             <div class="flex flex-wrap items-center gap-2">
               <input
                 ref="qrFileInput"
                 type="file"
-                accept="image/*"
+                accept="image/*,application/pdf,.pdf"
                 class="esim-qr-file"
                 @change="onQrFileChange"
               >
               <el-button :loading="qrReading" @click="openQrFilePicker">
                 <el-icon><Image24Regular /></el-icon>
-                识别二维码图片
+                识别图片 / PDF
               </el-button>
-              <span class="esim-activation-hint">{{ qrDropActive ? '放开即可识别二维码' : (activationHint || '支持拖入图片，或复制截图后粘贴') }}</span>
+              <span class="esim-activation-hint">{{ qrDropActive ? '放开即可识别二维码' : (activationHint || '支持图片、PDF，可拖入或粘贴') }}</span>
             </div>
           </div>
         </div>
