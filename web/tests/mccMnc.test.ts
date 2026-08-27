@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   buildMccMncIndex,
+  formatPlmnOperatorLabel,
   lookupMccMncRow,
   mccMncCountryCode
 } from '../src/utils/mcc-mnc.ts'
@@ -49,6 +50,23 @@ test('prefers an exact operator row over the MCC country fallback', () => {
   ])
 
   assert.equal(lookupMccMncRow(index, '23410')?.network, 'O2 UK')
+})
+
+test('formats a numeric PLMN with the operator name when the table has a network row', () => {
+  const index = buildMccMncIndex([
+    {
+      mcc: '234',
+      mnc: '15',
+      iso: 'gb',
+      country: 'United Kingdom',
+      country_code: 'gb',
+      network: 'Vodafone'
+    }
+  ])
+
+  assert.equal(formatPlmnOperatorLabel('23415', index), 'Vodafone (23415)')
+  assert.equal(formatPlmnOperatorLabel('CTExcel', index), 'CTExcel')
+  assert.equal(formatPlmnOperatorLabel('', index), '')
 })
 
 test('maps legacy MCC table country codes to available ISO flag codes', () => {

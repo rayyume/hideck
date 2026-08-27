@@ -150,6 +150,15 @@ test('fills a missing dashboard operator from the real managed device identity',
   assert.equal(devices[0]?.operator, '')
 })
 
+test('fills a missing dashboard operator from the SIM PLMN when serving and SPN are empty', () => {
+  const merged = mergeDashboardDeviceOperators([createDevice({ operator: '' })], [{
+    id: 'modem-1',
+    modem: { native_mcc: '234', native_mnc: '15' }
+  }])
+
+  assert.equal(merged[0]?.operator, '23415')
+})
+
 test('keeps the dashboard serving operator when both real sources are present', () => {
   const merged = mergeDashboardDeviceOperators([createDevice()], [{
     id: 'modem-1',

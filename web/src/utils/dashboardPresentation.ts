@@ -32,6 +32,8 @@ export type DashboardOperatorSource = Readonly<{
   modem?: Readonly<{
     operator?: string
     native_spn?: string
+    native_mcc?: string
+    native_mnc?: string
   }>
 }>
 
@@ -94,13 +96,23 @@ export function mergeDashboardDeviceOperators(
 ): DashboardDevice[] {
   const operators = new Map(managedDevices.map((device) => [
     device.id,
-    String(device.modem?.operator || device.modem?.native_spn || '').trim()
+    managedOperatorFallback(device.modem)
   ]))
   return devices.map((device) => {
     if (String(device.operator || '').trim()) return device
     const operator = operators.get(device.id)
     return operator ? { ...device, operator } : device
   })
+}
+
+function managedOperatorFallback(modem?: DashboardOperatorSource['modem']): string {
+  const serving = String(modem?.operator || '').trim()
+  if (serving) return serving
+  const spn = String(modem?.native_spn || '').trim()
+  if (spn) return spn
+  const mcc = String(modem?.native_mcc || '').trim()
+  const mnc = String(modem?.native_mnc || '').trim()
+  return mcc && mnc ? `${mcc}${mnc}` : ''
 }
 
 export function createDashboardDevicePresentation(

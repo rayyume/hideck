@@ -16,6 +16,7 @@ import type { TrafficRange } from '../services/traffic'
 import type { DashboardDevice } from '../types/api'
 import { formatDeviceTime } from '../utils/deviceTime'
 import { filterDashboardDevices } from '../utils/dashboardPresentation'
+import { formatPlmnOperatorLabel, getMccMncIndex, type MccMncRow } from '../utils/mcc-mnc'
 import { Search } from '@element-plus/icons-vue'
 import { Add24Regular, ArrowRight24Regular } from '@vicons/fluent'
 
@@ -36,11 +37,17 @@ const analysisRange = ref<TrafficRange>('day')
 const searchQuery = ref('')
 const statusFilter = ref<'all' | 'online' | 'offline'>('all')
 const selectedDeviceID = ref('')
+const mccMncIndex = ref<Map<string, MccMncRow> | null>(null)
 
+const labeledDevices = computed(() => devices.value.map((device) => {
+  const operator = formatPlmnOperatorLabel(device.operator || '', mccMncIndex.value)
+  if (!operator || operator === (device.operator || '')) return device
+  return { ...device, operator }
+}))
 const totalCount = computed(() => devices.value.length)
 const onlineCount = computed(() => devices.value.filter(d => d?.healthy).length)
 const offlineCount = computed(() => Math.max(0, totalCount.value - onlineCount.value))
-const filteredDevices = computed(() => filterDashboardDevices(devices.value, {
+const filteredDevices = computed(() => filterDashboardDevices(labeledDevices.value, {
   query: searchQuery.value,
   status: statusFilter.value
 }))
@@ -50,9 +57,9 @@ const deviceGridKey = computed(() => [
   filteredDevices.value.map(device => device.id).join(',')
 ].join(':'))
 const selectedDevice = computed(() => {
-  return devices.value.find((device) => device.id === selectedDeviceID.value)
-    || devices.value.find((device) => device.healthy)
-    || devices.value[0]
+  return labeledDevices.value.find((device) => device.id === selectedDeviceID.value)
+    || labeledDevices.value.find((device) => device.healthy)
+    || labeledDevices.value[0]
 })
 
 async function fetchDevices() {
@@ -100,6 +107,9 @@ usePollingScheduler(fetchTrafficAnalysis, 60000, {
 })
 
 onMounted(() => {
+  void getMccMncIndex().then((index) => {
+    mccMncIndex.value = index
+  })
   const win = window as Window & {
     requestIdleCallback?: (cb: IdleRequestCallback, opts?: IdleRequestOptions) => number
   }

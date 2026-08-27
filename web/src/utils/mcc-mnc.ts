@@ -186,6 +186,15 @@ export function lookupMccMncRow(index: Map<string, MccMncRow> | null, code: stri
   return index.get(normalized) || index.get(normalized.slice(0, 3)) || null
 }
 
+export function formatPlmnOperatorLabel(value: string, index: Map<string, MccMncRow> | null): string {
+  const raw = normalizeCode(value)
+  if (!raw) return ''
+  if (!/^\d{5,6}$/.test(raw)) return raw
+  const row = lookupMccMncRow(index, raw)
+  const name = normalizeCode(row?.network || row?.country)
+  return name ? `${name} (${raw})` : raw
+}
+
 export function mccMncCountryCode(index: Map<string, MccMncRow> | null, code: string): string {
   const row = lookupMccMncRow(index, code)
   return normalizeCountryCode(row?.iso || row?.country_code)
