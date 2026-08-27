@@ -32,8 +32,21 @@ func (s *Service) logRegisterFlowNegotiation(response *sipResponse) {
 func viaHasKeepParameter(values []string) bool {
 	for _, value := range values {
 		for _, part := range strings.Split(value, ";") {
-			name, _, _ := strings.Cut(strings.TrimSpace(part), "=")
-			if strings.EqualFold(name, "keep") {
+			name, interval, found := strings.Cut(strings.TrimSpace(part), "=")
+			if !strings.EqualFold(name, "keep") || !found {
+				continue
+			}
+			interval = strings.TrimSpace(interval)
+			if interval == "" || interval == "0" {
+				continue
+			}
+			for _, character := range interval {
+				if character < '0' || character > '9' {
+					interval = ""
+					break
+				}
+			}
+			if interval != "" {
 				return true
 			}
 		}

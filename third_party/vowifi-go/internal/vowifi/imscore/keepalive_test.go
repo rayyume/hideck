@@ -366,6 +366,22 @@ func TestRegisterFlowNegotiationEnablesCRLFPong(t *testing.T) {
 	if service.expectsCRLFPong() {
 		t.Fatal("REGISTER without outbound still expected a CRLF pong")
 	}
+	unvalued := &sipResponse{
+		StatusCode: 200,
+		Headers:    map[string]string{"Via": "SIP/2.0/TCP pcscf.example;branch=z9hG4bK;keep"},
+	}
+	service.logRegisterFlowNegotiation(unvalued)
+	if service.expectsCRLFPong() {
+		t.Fatal("RFC 6223 unvalued Via keep expected a CRLF pong")
+	}
+	valued := &sipResponse{
+		StatusCode: 200,
+		Headers:    map[string]string{"Via": "SIP/2.0/TCP pcscf.example;branch=z9hG4bK;keep=120"},
+	}
+	service.logRegisterFlowNegotiation(valued)
+	if !service.expectsCRLFPong() {
+		t.Fatal("RFC 6223 keep interval did not enable CRLF pong")
+	}
 }
 
 func TestRegistrationRefreshDelayMatchesRecoveredClient(t *testing.T) {
