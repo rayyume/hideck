@@ -11,6 +11,8 @@ const props = defineProps<{
   rotating: boolean
   rebooting: boolean
   reconnecting: boolean
+  simOperatorDisplay?: string
+  simOperatorCountryCode?: string
 }>()
 
 const emit = defineEmits<{
@@ -23,9 +25,13 @@ const emit = defineEmits<{
 const status = computed(() => primaryLifecycleStatus(props.device))
 const showSensitive = useSensitiveVisibility()
 
-const operatorName = computed(() => {
-  return props.device.modem?.operator || props.device.modem?.native_spn || '运营商不可用'
+const servingOperator = computed(() => String(props.device.modem?.operator || '').trim())
+const simOperator = computed(() => {
+  const value = String(props.simOperatorDisplay || '').trim()
+  return value && value !== '--' ? value : ''
 })
+const operatorName = computed(() => servingOperator.value || simOperator.value || '运营商不可用')
+const operatorFlag = computed(() => servingOperator.value ? '' : (props.simOperatorCountryCode || ''))
 
 const identityItems = computed(() => [
   { label: 'IMEI', value: props.device.modem?.imei || '不可用', sensitive: true },
@@ -50,7 +56,16 @@ const identityItems = computed(() => [
             {{ lifecycleStatusLabel(device.lifecycle_phase) || status.label }}
           </span>
         </div>
-        <p class="device-operator"><span>运营商</span>{{ operatorName }}</p>
+        <p class="device-operator">
+          <span class="device-operator-label">运营商</span>
+          <span
+            v-if="operatorFlag"
+            class="fi device-operator-flag"
+            :class="`fi-${operatorFlag}`"
+            aria-hidden="true"
+          />
+          {{ operatorName }}
+        </p>
         <dl class="device-workspace-meta">
           <div v-for="item in identityItems" :key="item.label">
             <dt>{{ item.label }}</dt>
@@ -156,12 +171,22 @@ const identityItems = computed(() => [
 
 .device-operator {
   margin: 3px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   color: var(--ui-text-muted);
   font-size: var(--ui-font-body-sm);
 }
 
-.device-operator span {
-  margin-right: 10px;
+.device-operator-label {
+  flex: 0 0 auto;
+}
+
+.device-operator-flag {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 12px;
+  border-radius: 2px;
 }
 
 .device-workspace-meta {

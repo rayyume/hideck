@@ -2,6 +2,10 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
+const devicesView = await readFile(
+  new URL('../src/views/Devices.vue', import.meta.url),
+  'utf8'
+)
 const overviewTab = await readFile(
   new URL('../src/components/DeviceOverviewTab.vue', import.meta.url),
   'utf8'
@@ -57,6 +61,10 @@ test('identity panel keeps production facts and existing operations', () => {
   assert.match(detailHeader, /useSensitiveVisibility/)
   assert.match(detailHeader, /sensitive: true/)
   assert.match(detailHeader, /is-sensitive/)
+  assert.match(detailHeader, /simOperatorDisplay/)
+  assert.match(detailHeader, /servingOperator\.value \|\| simOperator\.value/)
+  assert.doesNotMatch(detailHeader, /modem\?\.operator \|\| props\.device\.modem\?\.native_spn/)
+  assert.match(devicesView, /:sim-operator-display="selectedSimOperatorDisplay"/)
   assert.match(identityPanel, /device\?\.e911_setup_available/)
   assert.match(identityPanel, /emit\('setup-e911'\)/)
 })
