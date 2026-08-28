@@ -2969,6 +2969,44 @@ paths:
         '404':
           $ref: '#/components/responses/PhoneError'
 
+  /phone/calls/{call_id}/hold:
+    post:
+      tags: [phone]
+      summary: 对已接通电话发送 IMS hold（sendonly re-INVITE）
+      parameters:
+        - $ref: '#/components/parameters/PhoneCallID'
+        - $ref: '#/components/parameters/PhoneLease'
+      responses:
+        '204':
+          description: 已开始保持
+        '400':
+          $ref: '#/components/responses/PhoneError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/PhoneError'
+        '404':
+          $ref: '#/components/responses/PhoneError'
+
+  /phone/calls/{call_id}/resume:
+    post:
+      tags: [phone]
+      summary: 恢复本端保持的电话（sendrecv re-INVITE）
+      parameters:
+        - $ref: '#/components/parameters/PhoneCallID'
+        - $ref: '#/components/parameters/PhoneLease'
+      responses:
+        '204':
+          description: 已开始恢复
+        '400':
+          $ref: '#/components/responses/PhoneError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/PhoneError'
+        '404':
+          $ref: '#/components/responses/PhoneError'
+
   /phone/calls/{call_id}:
     delete:
       tags: [phone]
@@ -3384,6 +3422,8 @@ components:
         recording_error:
           type: string
         read_only:
+          type: boolean
+        held:
           type: boolean
 
     PhoneCallRecord:

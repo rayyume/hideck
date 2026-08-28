@@ -1172,17 +1172,16 @@ func (s *Server) handleSendSMS(c *gin.Context) {
 	partsTotal := 1
 	deliveryState := "acked"
 
-	if s.pool.ShouldRouteSMSViaVoWiFi(deviceID) {
-		// VoWiFi 模式下使用 IMS Core 发送；短信历史由宿主侧 runtime event / failure recorder 入库。
-		outcome, err := s.pool.SendVoWiFiSMSWithOptions(c.Request.Context(), deviceID, req.Phone, req.Message, sendOpts)
-		if outcome.PartsTotal > 0 {
-			partsTotal = outcome.PartsTotal
-		}
-		if strings.TrimSpace(outcome.DeliveryState) != "" {
-			deliveryState = strings.TrimSpace(outcome.DeliveryState)
-		}
-		messageID = strings.TrimSpace(outcome.MessageID)
-		if err != nil {
+	routed, err := s.pool.SendRoutedSMS(c.Request.Context(), worker, req.Phone, req.Message, sendOpts)
+	if routed.Outcome.PartsTotal > 0 {
+		partsTotal = routed.Outcome.PartsTotal
+	}
+	if strings.TrimSpace(routed.Outcome.DeliveryState) != "" {
+		deliveryState = strings.TrimSpace(routed.Outcome.DeliveryState)
+	}
+	messageID = strings.TrimSpace(routed.Outcome.MessageID)
+	if err != nil {
+		if routed.Via == device.RoutedSMSViaVoWiFi || routed.FellBackToCS {
 			deliveryState = "failed"
 			_ = device.RecordVoWiFiSMSSendFailure(s.pool, deviceID, req.Phone, req.Message, time.Now())
 			c.JSON(http.StatusInternalServerError, gin.H{
@@ -1196,27 +1195,26 @@ func (s *Server) handleSendSMS(c *gin.Context) {
 			})
 			return
 		}
-	} else {
-		// 普通模式使用 AT 发送
-		if err := worker.SendSMSWithOptions(req.Phone, req.Message, sendOpts); err != nil {
-			// 发送失败，入库记录（status=3）
-			if imsi != "" {
-				if err := db.SaveSMS(imsi, worker.ID, req.Phone, req.Message, 2, 3, time.Now()); err != nil {
-					logger.Warn("短信发送失败记录入库失败", "device", deviceID, "err", err)
-				}
-			}
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"status":  "error",
-				"message": "发送失败: " + err.Error(),
-				"device":  deviceID,
-				"phone":   req.Phone,
-			})
-			return
-		}
-		// 发送成功，入库记录（status=2）
 		if imsi != "" {
-			if err := db.SaveSMS(imsi, worker.ID, req.Phone, req.Message, 2, 2, time.Now()); err != nil {
-				logger.Warn("短信发送成功但入库失败", "device", deviceID, "err", err)
+			if persistErr := db.SaveSMS(imsi, worker.ID, req.Phone, req.Message, 2, 3, time.Now()); persistErr != nil {
+				logger.Warn("短信发送失败记录入库失败", "device", deviceID, "err", persistErr)
+			}
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"status":  "error",
+			"message": "发送失败: " + err.Error(),
+			"device":  deviceID,
+			"phone":   req.Phone,
+		})
+		return
+	}
+	if routed.Via == device.RoutedSMSViaCS {
+		if routed.FellBackToCS {
+			deliveryState = "acked"
+		}
+		if imsi != "" {
+			if persistErr := db.SaveSMS(imsi, worker.ID, req.Phone, req.Message, 2, 2, time.Now()); persistErr != nil {
+				logger.Warn("短信发送成功但入库失败", "device", deviceID, "err", persistErr)
 			}
 		}
 	}

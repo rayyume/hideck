@@ -7,6 +7,8 @@ import {
   Dialpad24Regular,
   Mic24Regular,
   MicOff24Regular,
+  Pause24Regular,
+  Play24Regular,
   Speaker224Regular
 } from '@vicons/fluent'
 import { usePhoneStore } from '../stores/phone'
@@ -42,6 +44,15 @@ async function hangup() {
     ElMessage.error(phone.error)
   } finally {
     ending.value = false
+  }
+}
+
+async function toggleHold() {
+  try {
+    await phone.toggleHold()
+  } catch (error) {
+    phone.error = phoneErrorMessage(error, '保持失败')
+    ElMessage.error(phone.error)
   }
 }
 
@@ -85,6 +96,20 @@ async function sendDigit(digit: string) {
             <Speaker224Regular v-if="phone.mediaMode === 'listen-only'" />
             <MicOff24Regular v-else-if="phone.muted" />
             <Mic24Regular v-else />
+          </el-icon>
+        </button>
+        <button
+          v-if="canControl"
+          type="button"
+          class="call-action"
+          :disabled="!connected || callEnding"
+          :aria-label="call.held ? '恢复通话' : '保持通话'"
+          :aria-pressed="!!call.held"
+          @click="toggleHold"
+        >
+          <el-icon>
+            <Play24Regular v-if="call.held" />
+            <Pause24Regular v-else />
           </el-icon>
         </button>
         <button

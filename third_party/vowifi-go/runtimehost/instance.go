@@ -378,6 +378,17 @@ func (i *Instance) publish(ctx context.Context, ev Event) {
 
 // --- SMS/USSD service delegation ---
 
+// SetSMSMemoryFull tells the IMS SMS receiver whether the host can store MT SMS.
+func (i *Instance) SetSMSMemoryFull(full bool) {
+	if i == nil {
+		return
+	}
+	svc := i.Service()
+	if setter, ok := svc.(interface{ SetSMSMemoryFull(bool) }); ok {
+		setter.SetSMSMemoryFull(full)
+	}
+}
+
 // SendSMSWithResult sends an SMS and returns the delivery outcome.
 func (i *Instance) SendSMSWithResult(ctx context.Context, to, text string) (messaging.SendOutcome, error) {
 	svc := i.Service()

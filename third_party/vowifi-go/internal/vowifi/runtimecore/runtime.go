@@ -49,14 +49,13 @@ func runReconnectLoop(
 		func(runCtx context.Context) error {
 			started, err := (Runtime{}).startOnce(runCtx, req)
 			if err != nil {
-				applyRedirectOverride(req, err)
-				return err
+				return applyRedirectOverride(req, err)
 			}
 			result = started
 			if started.Session == nil {
 				return nil
 			}
-			return runUntilInterrupted(runCtx, req, started.Session)
+			return applyRedirectOverride(req, runUntilInterrupted(runCtx, req, started.Session))
 		},
 	)
 	return result, err

@@ -165,11 +165,33 @@ func sendOutcome(ch chan<- InterruptOutcome, outcome InterruptOutcome) {
 	}
 }
 
-func applyRedirectOverride(req *RuntimeStartRequest, err error) {
+func applyRedirectOverride(req *RuntimeStartRequest, err error) error {
+	target := redirectTarget(err)
+	if req == nil || target == "" {
+		return err
+	}
+	if containsRedirectTarget(req.redirectSeen, target) || req.redirectHops >= maxSWuRedirects {
+		return ErrTooManyRedirects
+	}
+	req.redirectHops++
+	req.redirectSeen = append(req.redirectSeen, target)
+	req.RuntimeEPDGOverride = target
+	return err
+}
+
+func redirectTarget(err error) string {
 	var redirect *ErrRedirect
-	if req != nil && errors.As(err, &redirect) {
-		if value := firstNonEmpty(redirect.NewEPDG, redirect.Target); value != "" {
-			req.RuntimeEPDGOverride = value
+	if errors.As(err, &redirect) {
+		return firstNonEmpty(redirect.NewEPDG, redirect.Target)
+	}
+	return ""
+}
+
+func containsRedirectTarget(seen []string, target string) bool {
+	for _, value := range seen {
+		if value == target {
+			return true
 		}
 	}
+	return false
 }

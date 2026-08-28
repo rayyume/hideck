@@ -122,6 +122,11 @@ type Call struct {
 	cleanupOnce          sync.Once
 	finalizedEventOnce   sync.Once
 	cleanupErr           error
+
+	sessionRefresher string
+	sessionMinSE     int
+	localHold        bool
+	remoteHold       bool
 }
 
 // Gateway bridges the local client (LAN side) to the IMS network. It owns
@@ -223,6 +228,7 @@ type CallSnapshot struct {
 	EndTime   time.Time
 	Duration  time.Duration
 	ClientSDP string
+	Held      bool
 }
 
 // AgentSnapshot is a point-in-time view of the agent.

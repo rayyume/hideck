@@ -658,6 +658,9 @@ func (m *Manager) handleCmdCall(cmdCtx CommandContext, args []string) string {
 			HoldSeconds: holdSeconds,
 			OnConnected: func() {
 				reportProgress(cmdCtx, fmt.Sprintf("发起 VoWiFi 呼叫 / 已接通\n设备    %s\n主叫    %s\n被叫    %s\n保持    %d 秒", displayName, caller, callee, holdSeconds))
+				if holdSeconds >= 12 {
+					go exerciseVocallHold(m.pool.GetVoiceGateway(), deviceID)
+				}
 			},
 		}
 
@@ -680,6 +683,31 @@ func (m *Manager) handleCmdCall(cmdCtx CommandContext, args []string) string {
 	}()
 
 	return fmt.Sprintf("发起 VoWiFi 呼叫 / 已受理\n设备    %s\n主叫    %s\n被叫    %s\n保持    %d 秒", displayName, caller, callee, holdSeconds)
+}
+
+func exerciseVocallHold(gw *voicehost.Gateway, deviceID string) {
+	if gw == nil {
+		return
+	}
+	time.Sleep(2 * time.Second)
+	snap := gw.ActiveCall(deviceID)
+	if snap == nil || strings.TrimSpace(snap.CallID) == "" {
+		logger.Warn("vocall 保持跳过：没有活动通话", "device", deviceID)
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	if err := gw.HoldCall(ctx, deviceID, snap.CallID); err != nil {
+		logger.Warn("vocall 保持失败", "device", deviceID, "call_id", snap.CallID, "err", err)
+		return
+	}
+	logger.Info("vocall 已保持", "device", deviceID, "call_id", snap.CallID)
+	time.Sleep(3 * time.Second)
+	if err := gw.ResumeCall(ctx, deviceID, snap.CallID); err != nil {
+		logger.Warn("vocall 恢复失败", "device", deviceID, "call_id", snap.CallID, "err", err)
+		return
+	}
+	logger.Info("vocall 已恢复", "device", deviceID, "call_id", snap.CallID)
 }
 
 func replyVoiceCallCompletion(cmdCtx CommandContext, message string, result *voicehost.SimulateCallResult) {

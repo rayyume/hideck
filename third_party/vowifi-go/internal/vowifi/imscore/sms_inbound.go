@@ -230,6 +230,13 @@ func (s *Service) finalizeInboundSMSData(
 			if fragmentKey != "" {
 				s.markFragmentAcked(fragmentKey, message.partNo)
 			}
+			if s.smsMemoryIsFull() {
+				s.rememberSMSMemoryDenied(raw)
+				s.sendRPReportWithRetry(s.rpReportForInbound(
+					raw, message, smscodec.BuildRPError(message.rpMR, smscodec.RPCauseMemoryCapacityExceeded),
+				))
+				return
+			}
 			report := s.rpReportForInbound(raw, message, smscodec.BuildRPAck(message.rpMR))
 			report.Fingerprint = fingerprint
 			s.sendRPReportWithRetry(report)

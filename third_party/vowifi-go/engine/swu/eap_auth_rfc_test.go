@@ -162,6 +162,34 @@ func TestGenericEAPIdentityIsExcludedFromCheckcodeTranscript(t *testing.T) {
 	}
 }
 
+func TestAKAIdentityIncludesBiddingWhenAKAPrimePreferred(t *testing.T) {
+	session := NewSession(&Config{IMSI: "234102356143376", AKAPrimePreferred: true})
+	request := eapaka.Packet{
+		Code: eapaka.CodeRequest, Identifier: 9, Type: eapaka.TypeAKA,
+		Subtype:    eapaka.SubtypeIdentity,
+		Attributes: []eapaka.Attribute{eapaka.PermanentIDReqAttribute()},
+	}
+	raw, err := request.MarshalBinary()
+	if err != nil {
+		t.Fatalf("marshal AKA Identity: %v", err)
+	}
+	payloads, err := session.handleEAP(raw)
+	if err != nil {
+		t.Fatalf("handleEAP: %v", err)
+	}
+	response, err := eapaka.ParsePacket(payloads[0].(*ikev2.EncryptedPayloadEAP).EAPMessage)
+	if err != nil {
+		t.Fatalf("parse response: %v", err)
+	}
+	if _, ok := eapaka.FindAttribute(response.Attributes, eapaka.AttributeIdentity); !ok {
+		t.Fatalf("missing AT_IDENTITY: %#v", response.Attributes)
+	}
+	bidding, ok := eapaka.FindAttribute(response.Attributes, eapaka.AttributeBidding)
+	if !ok || !bidding.BiddingPrefersPrime() {
+		t.Fatalf("AT_BIDDING = %#v ok=%t", bidding, ok)
+	}
+}
+
 func TestAKAIdentityCheckcodeTranscriptDeduplicatesRetransmission(t *testing.T) {
 	session := NewSession(&Config{IMSI: "234102356143376"})
 	session.socket = newTestIKETransport()

@@ -30,6 +30,12 @@ func (adapter lifecycleServiceAdapter) GetSMSDeliveryStatus(
 	return adapter.lifecycle.GetSMSDeliveryStatus(context.Background(), messageID)
 }
 
+func (adapter lifecycleServiceAdapter) SetSMSMemoryFull(full bool) {
+	if setter, ok := adapter.lifecycle.(interface{ SetSMSMemoryFull(bool) }); ok {
+		setter.SetSMSMemoryFull(full)
+	}
+}
+
 func (adapter lifecycleServiceAdapter) SendSMSWithOptions(
 	ctx context.Context,
 	to, text string,
@@ -112,6 +118,12 @@ func (adapter *imscoreLifecycleAdapter) SetOnSMSReadinessChanged(fn func(SMSRead
 			fn(adaptSMSReadiness(value))
 		}
 	})
+}
+
+func (adapter *imscoreLifecycleAdapter) SetSMSMemoryFull(full bool) {
+	if adapter != nil && adapter.svc != nil {
+		adapter.svc.SetSMSMemoryFull(full)
+	}
 }
 
 func (adapter *imscoreLifecycleAdapter) SendSMSWithOptions(

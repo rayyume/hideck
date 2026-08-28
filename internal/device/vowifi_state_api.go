@@ -55,6 +55,16 @@ func (p *Pool) IsVoWiFiActive(deviceID string) bool {
 	return p.voWiFiHost().Active(deviceID)
 }
 
+// SetVoWiFiSMSMemoryFull tells the IMS receiver whether the host can store MT SMS.
+func (p *Pool) SetVoWiFiSMSMemoryFull(deviceID string, full bool) {
+	if p == nil {
+		return
+	}
+	if inst := p.voWiFiHost().Instance(deviceID); inst != nil {
+		inst.SetSMSMemoryFull(full)
+	}
+}
+
 func (p *Pool) ShouldRouteSMSViaVoWiFi(deviceID string) bool {
 	if p == nil {
 		return false

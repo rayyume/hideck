@@ -39,10 +39,17 @@ func (s *Service) NotifySMSMemoryAvailable() error {
 	}
 	s.smsSendMu.Lock()
 	defer s.smsSendMu.Unlock()
-	return s.sendRPSMMA()
+	return s.sendRPSMMAWithRetryPolicy(rpReportInitialDelay, rpReportRetryDelay)
 }
 
 func (s *Service) sendRPSMMA() error {
+	return s.sendRPSMMAWithRetryPolicy(rpReportInitialDelay, rpReportRetryDelay)
+}
+
+func (s *Service) sendRPSMMAWithRetryPolicy(initialDelay, retryDelay time.Duration) error {
+	if !s.waitSMSRetryDelay(initialDelay) {
+		return errRPReportAborted
+	}
 	target, err := s.rpSMMATarget()
 	if err != nil {
 		return err
@@ -51,6 +58,30 @@ func (s *Service) sendRPSMMA() error {
 	if err != nil {
 		return fmt.Errorf("imscore: allocate RP-MR for RP-SMMA: %w", err)
 	}
+	delay := retryDelay
+	var lastErr error
+	for attempt := 0; attempt < rpReportMaxAttempts; attempt++ {
+		if attempt > 0 && delay > 0 && !s.waitSMSRetryDelay(delay) {
+			if lastErr != nil {
+				return lastErr
+			}
+			return errRPReportAborted
+		}
+		lastErr = s.dispatchRPSMMA(target, rpMR)
+		if lastErr == nil {
+			s.clearSMSMemoryDenied()
+			return nil
+		}
+		if delay <= 0 {
+			delay = retryDelay
+		} else {
+			delay *= 2
+		}
+	}
+	return lastErr
+}
+
+func (s *Service) dispatchRPSMMA(target string, rpMR byte) error {
 	request, err := s.buildOutboundMESSAGEWithOptions(smsMESSAGEOptions{
 		RemoteURI: target,
 		Body:      smscodec.BuildRPSMMA(rpMR),
@@ -67,11 +98,7 @@ func (s *Service) sendRPSMMA() error {
 		Context: ctx, Flow: "mt-rp-smma", Request: request,
 		Timeout: inboundSMSAckTimeout,
 	})
-	if err = rpReportTransactionError(result.SIPCode, dispatchErr); err != nil {
-		return err
-	}
-	s.clearSMSMemoryDenied()
-	return nil
+	return rpReportTransactionError(result.SIPCode, dispatchErr)
 }
 
 func (s *Service) rpSMMATarget() (string, error) {

@@ -28,6 +28,8 @@ type VoiceGateway interface {
 	RejectIncomingCall(voicehost.RejectRequest) error
 	HangupCall(context.Context, string, string) error
 	SendCallDTMF(string, string, string) error
+	HoldCall(context.Context, string, string) error
+	ResumeCall(context.Context, string, string) error
 	StartCallCapture(string, string, string) error
 }
 
@@ -103,6 +105,7 @@ type CallView struct {
 	Codec          string     `json:"codec,omitempty"`
 	RecordingError string     `json:"recording_error,omitempty"`
 	ReadOnly       bool       `json:"read_only"`
+	Held           bool       `json:"held"`
 }
 
 type StartCallRequest struct {

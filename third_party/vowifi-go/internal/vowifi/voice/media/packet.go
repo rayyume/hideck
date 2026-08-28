@@ -49,6 +49,9 @@ func (r *RTPRelay) handleLANPacket(packet []byte, source *net.UDPAddr) {
 	if r.clientAddrRTCP.Load() == nil {
 		r.clientAddrRTCP.Store(offsetUDPAddr(source, 1))
 	}
+	if !r.SendEnabled() {
+		return
+	}
 	remote := r.remoteAddr.Load()
 	if remote == nil {
 		deviceID, _ := r.logContext()

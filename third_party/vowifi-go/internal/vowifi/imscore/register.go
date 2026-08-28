@@ -98,6 +98,7 @@ func (s *Service) Register(ctx context.Context) error {
 		s.signalingReady = false
 		s.signalingFailureReason = err.Error()
 		s.sipOutboundKeepalive = false
+		s.sipOutbound = false
 		s.flowTimer = 0
 		s.stunMappedAddr = nil
 		s.mu.Unlock()
@@ -620,7 +621,7 @@ func (s *Service) buildRegisterRequest(
 		b.WriteString("Cellular-Network-Info: " + cellular + "\r\n")
 	}
 	b.WriteString(registerSecurityHeaders(session))
-	if route := strings.TrimSpace(session.serviceRoute); route != "" {
+	if route := registerRequestRoute(session); route != "" {
 		b.WriteString("Route: " + route + "\r\n")
 	}
 	if !options.anonymous {
@@ -652,7 +653,65 @@ func (s *Service) registerContactOptions(session *registerSession) imsheaders.Co
 		options.LocalPortC = int(session.security.client.PortC)
 		options.LocalPortS = int(session.security.client.PortS)
 	}
+	if s.outboundContactEnabled() {
+		options.ContactParamOrder = withOutboundContactParams(options.ContactParamOrder)
+	}
 	return options
+}
+
+func (s *Service) outboundContactEnabled() bool {
+	if s == nil {
+		return false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.sipOutbound
+}
+
+func withOutboundContactParams(order []string) []string {
+	result := append([]string(nil), order...)
+	if !containsContactParamName(result, "reg_id") {
+		result = insertContactParamAfter(result, "sip_instance", "reg_id")
+	}
+	if !containsContactParamName(result, "ob") {
+		result = insertContactParamAfter(result, "reg_id", "ob")
+	}
+	return result
+}
+
+func containsContactParamName(order []string, name string) bool {
+	for _, item := range order {
+		if item == name {
+			return true
+		}
+	}
+	return false
+}
+
+func insertContactParamAfter(order []string, after, name string) []string {
+	if containsContactParamName(order, name) {
+		return order
+	}
+	result := make([]string, 0, len(order)+1)
+	inserted := false
+	for _, item := range order {
+		result = append(result, item)
+		if !inserted && item == after {
+			result = append(result, name)
+			inserted = true
+		}
+	}
+	if !inserted {
+		result = append(result, name)
+	}
+	return result
+}
+
+func registerRequestRoute(session *registerSession) string {
+	if session == nil {
+		return ""
+	}
+	return imsheaders.EffectiveRoute(session.serviceRoute, session.path)
 }
 
 func registerContact(options imsheaders.ContactOptions, transport string, expires int) string {

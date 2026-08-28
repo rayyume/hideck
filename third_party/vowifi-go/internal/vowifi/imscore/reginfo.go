@@ -50,6 +50,10 @@ func (s *Service) handleRegistrationNotification(raw string) {
 	if !isRegistrationNotification(raw) {
 		return
 	}
+	s.learnSubscriptionDialogFromNotify(raw)
+	if subscriptionStateTerminated(raw) {
+		s.closeRegistrationSubscription()
+	}
 	body, err := rawSIPBody(raw)
 	if err != nil {
 		logging.WarnRate("ims-reginfo-body", "IMS reginfo body is invalid", "err", err)

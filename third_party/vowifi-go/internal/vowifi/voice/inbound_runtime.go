@@ -202,11 +202,10 @@ func (a *Agent) handleInboundUpdate(request imscore.InboundVoiceRequest, call *C
 		return voiceResult(491), nil
 	}
 	call.applyVoiceSessionExpires(request.SessionExpires)
-	if err := a.applyIMSUpdate(call); err != nil {
-		return voiceResult(200), err
-	}
+	err := a.applyIMSUpdate(call)
 	a.startVoiceSessionTimer(call)
-	return voiceResult(200), nil
+	result, respondErr := a.respondSessionTimerOK(request, call)
+	return result, errors.Join(err, respondErr)
 }
 
 func (a *Agent) handleReinvite(request imscore.InboundVoiceRequest, call *Call) (imscore.InboundVoiceResult, error) {
@@ -217,11 +216,10 @@ func (a *Agent) handleReinvite(request imscore.InboundVoiceRequest, call *Call) 
 	}
 	call.applyVoiceSessionExpires(request.SessionExpires)
 	if len(request.Body) == 0 {
-		if err := a.applyIMSUpdate(call); err != nil {
-			return voiceResult(200), err
-		}
+		err := a.applyIMSUpdate(call)
 		a.startVoiceSessionTimer(call)
-		return voiceResult(200), nil
+		result, respondErr := a.respondSessionTimerOK(request, call)
+		return result, errors.Join(err, respondErr)
 	}
 	if request.Responder == nil || !isVoiceSDPContentType(request.ContentType) {
 		return voiceResult(488), nil
@@ -238,7 +236,13 @@ func (a *Agent) handleReinvite(request imscore.InboundVoiceRequest, call *Call) 
 	if err != nil {
 		return voiceResult(488), nil
 	}
+	answerDir := negotiateAnswerDirection(sdpMediaDirection(string(request.Body)), call.localHoldValue())
+	rewritten = []byte(rewriteSDPDirection(string(rewritten), answerDir))
+	imsAnswer = rewriteSDPDirection(bumpSDPOriginVersion(imsAnswer), answerDir)
+	call.setRemoteHold(remoteHoldFromDirection(sdpMediaDirection(string(request.Body))))
+	call.setLocalSDP(clientAnswer, imsAnswer)
 	call.setRemoteSDP(string(request.Body), string(rewritten))
+	a.applyCallMediaDirection(call)
 	if err := request.Responder.Respond(a.voiceSDPResponse(call, 200, imsAnswer)); err != nil {
 		return voiceResult(0), err
 	}
@@ -246,7 +250,22 @@ func (a *Agent) handleReinvite(request imscore.InboundVoiceRequest, call *Call) 
 		return voiceResult(0), err
 	}
 	a.startVoiceSessionTimer(call)
+	a.emitCallMediaUpdated(call)
 	a.notifyIncomingCall(call)
+	return voiceResult(0), nil
+}
+
+func (a *Agent) respondSessionTimerOK(request imscore.InboundVoiceRequest, call *Call) (imscore.InboundVoiceResult, error) {
+	if request.Responder == nil {
+		return voiceResult(200), nil
+	}
+	response := imscore.InboundVoiceResponse{StatusCode: 200}
+	if expires := formatSessionExpiresHeader(call); expires != "" {
+		response.SessionExpires = expires
+	}
+	if err := request.Responder.Respond(response); err != nil {
+		return voiceResult(0), err
+	}
 	return voiceResult(0), nil
 }
 

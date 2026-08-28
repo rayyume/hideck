@@ -16,6 +16,9 @@ type SendOutcome struct {
 	MessageID     string `json:"message_id"`
 	PartsTotal    int    `json:"parts_total"`
 	DeliveryState string `json:"delivery_state"`
+	SIPCode       int    `json:"sip_code,omitempty"`
+	// RecommendCSFallback is set when IMS never accepted the MESSAGE.
+	RecommendCSFallback bool `json:"recommend_cs_fallback,omitempty"`
 }
 
 type DeliveryPartMatch struct {

@@ -283,8 +283,8 @@ func BuildSynchronizationFailureResponse(request Packet, auts []byte) (Packet, e
 	if request.Code != CodeRequest || request.Subtype != SubtypeChallenge {
 		return Packet{}, fmt.Errorf("%w: not an AKA challenge", ErrInvalidAKAChallenge)
 	}
-	if len(auts) == 0 {
-		return Packet{}, fmt.Errorf("%w: AUTS is empty", ErrInvalidAKAChallenge)
+	if len(auts) != 14 {
+		return Packet{}, fmt.Errorf("%w: AUTS length %d, want 14", ErrInvalidAKAChallenge, len(auts))
 	}
 	attrs := []Attribute{AUTSAttribute(auts)}
 	if request.Type == TypeAKAPrime {

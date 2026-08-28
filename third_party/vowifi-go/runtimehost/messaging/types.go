@@ -77,6 +77,9 @@ type SendOutcome struct {
 	// Ref and Err preserve the current Go API without changing the recovered wire shape.
 	Ref string `json:"-"`
 	Err error  `json:"-"`
+
+	SIPCode             int  `json:"sip_code,omitempty"`
+	RecommendCSFallback bool `json:"recommend_cs_fallback,omitempty"`
 }
 
 // USSDResult is the result of a USSD operation.

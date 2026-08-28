@@ -10,6 +10,8 @@ import {
   LockClosed24Regular,
   Mic24Regular,
   MicOff24Regular,
+  Pause24Regular,
+  Play24Regular,
   Speaker224Regular
 } from '@vicons/fluent'
 import PageHeader from '../components/PageHeader.vue'
@@ -263,6 +265,10 @@ function hangup(current: PhoneCall) {
   return runAction('挂断', () => phone.hangup(current), '已发送挂断请求')
 }
 
+function toggleHold() {
+  return runAction(call.value?.held ? '恢复通话' : '保持', () => phone.toggleHold())
+}
+
 function takeOver(current: PhoneCall) {
   return runAction('接管', () => phone.takeOver(current), '已接管这通电话')
 }
@@ -495,6 +501,19 @@ async function sendDTMF(digit: string) {
                   <Mic24Regular v-else />
                 </el-icon>
                 <span>{{ phone.mediaMode === 'listen-only' ? '仅听模式' : phone.muted ? '取消静音' : '静音' }}</span>
+              </button>
+              <button
+                type="button"
+                class="control-button"
+                :disabled="!!action || callEnding || !connected || call.read_only"
+                :aria-pressed="!!call.held"
+                @click="toggleHold"
+              >
+                <el-icon>
+                  <Play24Regular v-if="call.held" />
+                  <Pause24Regular v-else />
+                </el-icon>
+                <span>{{ call.held ? '恢复' : '保持' }}</span>
               </button>
               <button
                 type="button"

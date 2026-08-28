@@ -547,15 +547,46 @@ func (a *Agent) forceReleaseCall(call *Call, cause error) error {
 }
 
 func (a *Agent) refreshVoiceSession(ctx context.Context, call *Call) error {
-	response, err := a.sendCallDialogRequest(ctx, call, buildIMSSessionUpdate(a, call))
+	return a.sendSessionRefresh(ctx, call, false, false)
+}
+
+func (a *Agent) sendSessionRefresh(ctx context.Context, call *Call, useInvite, retried422 bool) error {
+	raw := buildIMSSessionUpdate(a, call)
+	if useInvite {
+		raw = buildIMSReinvite(a, call, bumpSDPOriginVersion(call.imsLocalSDPValue()))
+	}
+	response, err := a.sendCallDialogRequest(ctx, call, raw)
 	if err != nil {
 		return fmt.Errorf("voice: session refresh failed: %w", err)
 	}
 	call.learnVoiceDialog(response)
+	if response.StatusCode == 422 && !retried422 {
+		if useInvite {
+			if _, ackErr := a.sendCallDialogRequest(ctx, call, buildIMSACKForStatus(a, call, response.StatusCode)); ackErr != nil {
+				return fmt.Errorf("voice: ACK 422 session refresh: %w", ackErr)
+			}
+		}
+		minSE := parseMinSEHeader(voiceResponseHeader(response.Headers, "Min-SE"))
+		if minSE <= 0 {
+			return fmt.Errorf("voice: session refresh rejected: 422 %s", response.Reason)
+		}
+		call.applySessionMinSE(minSE)
+		return a.sendSessionRefresh(ctx, call, useInvite, true)
+	}
+	if !useInvite && (response.StatusCode == 405 || response.StatusCode == 501) {
+		return a.sendSessionRefresh(ctx, call, true, retried422)
+	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return fmt.Errorf("voice: session refresh rejected: %d %s", response.StatusCode, response.Reason)
 	}
+	if useInvite {
+		if _, ackErr := a.sendCallDialogRequest(ctx, call, BuildIMSACK(a, call)); ackErr != nil {
+			return fmt.Errorf("voice: ACK session re-INVITE: %w", ackErr)
+		}
+		call.MarkACKSent()
+	}
 	call.applyVoiceSessionExpires(voiceResponseHeader(response.Headers, "Session-Expires"))
+	call.applySessionMinSE(parseMinSEHeader(voiceResponseHeader(response.Headers, "Min-SE")))
 	return nil
 }
 
@@ -724,7 +755,7 @@ func (a *Agent) emitCallMediaUpdated(c *Call) {
 	}
 	a.emit(events.EventCallMediaUpdated{
 		DevID: a.deviceID, CallID: c.CallID(), Direction: c.CallDirection().String(),
-		State: c.CallState().String(), Time: time.Now(),
+		State: c.CallState().String(), Time: time.Now(), Held: c.Held(),
 	})
 }
 

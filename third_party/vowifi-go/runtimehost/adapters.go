@@ -90,6 +90,12 @@ func adaptSMSReadiness(readiness imscore.SMSReadiness) SMSReadiness {
 	}
 }
 
+func (a serviceAdapter) SetSMSMemoryFull(full bool) {
+	if a.svc != nil {
+		a.svc.SetSMSMemoryFull(full)
+	}
+}
+
 // SendSMSWithOptions sends an SMS with options.
 func (a serviceAdapter) SendSMSWithOptions(ctx context.Context, to, text string, opts messaging.SendOptions) (messaging.SendOutcome, error) {
 	if a.svc == nil {
@@ -113,10 +119,12 @@ func (a serviceAdapter) SendSMSWithResult(ctx context.Context, to, text string) 
 
 func adaptSMSSendOutcome(out imscore.SendOutcome) messaging.SendOutcome {
 	return messaging.SendOutcome{
-		Ref:           out.MessageID,
-		MessageID:     out.MessageID,
-		PartsTotal:    out.PartsTotal,
-		DeliveryState: out.DeliveryState,
+		Ref:                 out.MessageID,
+		MessageID:           out.MessageID,
+		PartsTotal:          out.PartsTotal,
+		DeliveryState:       out.DeliveryState,
+		SIPCode:             out.SIPCode,
+		RecommendCSFallback: out.RecommendCSFallback,
 	}
 }
 

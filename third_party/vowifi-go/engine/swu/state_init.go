@@ -115,6 +115,7 @@ func (s *Session) buildIKESAInitPacketObject() (*ikev2.IKEPacket, error) {
 	)
 	payloads = append(payloads, s.ikeInitNetworkNotifies()...)
 	payloads = append(payloads, &ikev2.EncryptedPayloadNotify{NotifyType: notifyFragmentation})
+	payloads = append(payloads, &ikev2.EncryptedPayloadNotify{NotifyType: ikev2.NON_FIRST_FRAGMENTS_ALSO})
 	return &ikev2.IKEPacket{
 		Header:   newIKEHeader(s.spiI, [8]byte{}, ikev2.IKE_SA_INIT, ikev2.FlagInitiator, 0),
 		Payloads: payloads,

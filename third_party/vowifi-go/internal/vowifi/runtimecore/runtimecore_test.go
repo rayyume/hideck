@@ -208,6 +208,10 @@ func TestBuildSWUConfigCarriesRuntimeState(t *testing.T) {
 	if config.ReauthSeconds != 180*time.Second || config.DataplaneMode != swu.DataplaneModeUserspace {
 		t.Fatalf("SWu timers/dataplane = %+v", config)
 	}
+	prepared.CarrierPlan.IKE.AKAPrimePreferred = true
+	if !BuildSWUConfig(SessionConfig{Prepared: prepared, SIM: testSIMAdapter{aka: provider}}).AKAPrimePreferred {
+		t.Fatal("BuildSWUConfig() dropped AKAPrimePreferred")
+	}
 	prepared.CarrierPlan.IKE.IKEProposals[0] = "changed"
 	if config.IKEProposals[0] == "changed" {
 		t.Fatal("BuildSWUConfig() retained proposal slice alias")
@@ -307,6 +311,44 @@ func TestRunLoopRetriesAndReportsDelay(t *testing.T) {
 	)
 	if !errors.Is(err, context.Canceled) || calls != 2 || before != 2 || !reflect.DeepEqual(retries, []int{1}) {
 		t.Fatalf("RunLoop() err=%v calls=%d before=%d retries=%v", err, calls, before, retries)
+	}
+}
+
+func TestApplyRedirectOverrideUsesNewAddressAndCapsHops(t *testing.T) {
+	req := &RuntimeStartRequest{}
+	if err := applyRedirectOverride(req, &ErrRedirect{NewEPDG: "epdg-a.example"}); err == nil {
+		t.Fatal("first redirect should stay retryable")
+	}
+	if req.RuntimeEPDGOverride != "epdg-a.example" || req.redirectHops != 1 {
+		t.Fatalf("first override = %+v hops=%d", req, req.redirectHops)
+	}
+	if err := applyRedirectOverride(req, &ErrRedirect{NewEPDG: "epdg-b.example"}); err == nil {
+		t.Fatal("second redirect should stay retryable")
+	}
+	if req.RuntimeEPDGOverride != "epdg-b.example" || req.redirectHops != 2 {
+		t.Fatalf("second override = %q hops=%d", req.RuntimeEPDGOverride, req.redirectHops)
+	}
+	if err := applyRedirectOverride(req, &ErrRedirect{NewEPDG: "epdg-a.example"}); !errors.Is(err, ErrTooManyRedirects) {
+		t.Fatalf("redirect loop err = %v", err)
+	}
+	req = &RuntimeStartRequest{}
+	for i := 0; i < maxSWuRedirects; i++ {
+		target := "epdg-" + string(rune('a'+i)) + ".example"
+		if err := applyRedirectOverride(req, &ErrRedirect{NewEPDG: target}); errors.Is(err, ErrTooManyRedirects) {
+			t.Fatalf("hop %d stopped early: %v", i+1, err)
+		}
+	}
+	if err := applyRedirectOverride(req, &ErrRedirect{NewEPDG: "epdg-z.example"}); !errors.Is(err, ErrTooManyRedirects) {
+		t.Fatalf("hop limit err = %v", err)
+	}
+}
+
+func TestRunLoopStopsAfterTooManyRedirects(t *testing.T) {
+	err := RunLoop(context.Background(), nil, nil, nil, func(context.Context) error {
+		return ErrTooManyRedirects
+	})
+	if !errors.Is(err, ErrTooManyRedirects) {
+		t.Fatalf("RunLoop() = %v", err)
 	}
 }
 

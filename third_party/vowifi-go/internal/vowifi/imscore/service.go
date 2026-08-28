@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/iniwex5/vowifi-go/internal/vowifi/imsheaders"
 	"github.com/iniwex5/vowifi-go/runtimehost/identity"
 )
 
@@ -167,6 +168,19 @@ func currentServiceRoute(session *registerSession) string {
 	return session.serviceRoute
 }
 
+func currentPath(session *registerSession, fallback string) string {
+	if session != nil {
+		if path := strings.TrimSpace(session.path); path != "" {
+			return path
+		}
+	}
+	return strings.TrimSpace(fallback)
+}
+
+func effectiveIMSRoute(session *registerSession, fallbackPath string) string {
+	return imsheaders.EffectiveRoute(currentServiceRoute(session), currentPath(session, fallbackPath))
+}
+
 // StatusSnapshotCurrent retains the additive pointer snapshot API.
 func (s *Service) StatusSnapshotCurrent() *ServiceStatus {
 	return s.StatusCurrent()
@@ -322,10 +336,10 @@ func (s *Service) GetServiceRoutes() []string {
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	if s.regSession == nil || strings.TrimSpace(s.regSession.serviceRoute) == "" {
-		return nil
+	if route := effectiveIMSRoute(s.regSession, s.path); route != "" {
+		return splitSIPHeaderValues(route)
 	}
-	return splitSIPHeaderValues(s.regSession.serviceRoute)
+	return nil
 }
 
 // GetSpiPairs returns the IPsec SPI pairs.
@@ -397,6 +411,8 @@ func (s *Service) StopCurrent() {
 	s.registrationTransport = ""
 	s.registrationRefreshAt = time.Time{}
 	s.subscriptionRefreshAt = time.Time{}
+	s.subscriptionClosed = true
+	s.subscriptionDialog = registrationSubscriptionDialog{}
 	s.signalingReady = false
 	s.securityServerIO = nil
 	s.clientPortReserve = nil

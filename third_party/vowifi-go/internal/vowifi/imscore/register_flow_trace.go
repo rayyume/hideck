@@ -18,19 +18,23 @@ func (s *Service) logRegisterFlowNegotiation(response *sipResponse) {
 	contact := strings.ToLower(strings.Join(response.HeaderValues("Contact"), ","))
 	requiredOutbound := containsHeaderToken(require, "outbound")
 	viaKeep := viaHasKeepParameter(response.HeaderValues("Via"))
+	supportedOutbound := containsHeaderToken(supported, "outbound")
+	pathOB := containsSIPParameter(path, "ob")
+	contactRegID := containsSIPParameter(contact, "reg-id")
 	s.mu.Lock()
 	s.sipOutboundKeepalive = requiredOutbound || viaKeep
+	s.sipOutbound = supportedOutbound || requiredOutbound || pathOB || contactRegID
 	s.flowTimer = parseFlowTimerHeader(response.HeaderValues("Flow-Timer"))
 	s.stunMappedAddr = nil
 	s.mu.Unlock()
 	logging.Info("IMS REGISTER flow negotiation",
 		"device", s.DeviceID(),
-		"supported_outbound", containsHeaderToken(supported, "outbound"),
+		"supported_outbound", supportedOutbound,
 		"required_outbound", requiredOutbound,
 		"via_keep", viaKeep,
 		"path_present", strings.TrimSpace(path) != "",
-		"path_ob", containsSIPParameter(path, "ob"),
-		"contact_reg_id", containsSIPParameter(contact, "reg-id"))
+		"path_ob", pathOB,
+		"contact_reg_id", contactRegID)
 }
 
 func parseFlowTimerHeader(values []string) time.Duration {

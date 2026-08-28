@@ -16,6 +16,8 @@ type VoiceBackend interface {
 	RejectIncomingCall(voicehost.RejectRequest) error
 	HangupCall(context.Context, string, string) error
 	SendCallDTMF(string, string, string) error
+	HoldCall(context.Context, string, string) error
+	ResumeCall(context.Context, string, string) error
 	StartCallCapture(string, string, string) error
 	DeviceStatus(deviceID string) map[string]interface{}
 }
@@ -96,6 +98,14 @@ func (m *Mux) HangupCall(ctx context.Context, deviceID, callID string) error {
 
 func (m *Mux) SendCallDTMF(deviceID, callID, digit string) error {
 	return m.pick(deviceID).SendCallDTMF(deviceID, callID, digit)
+}
+
+func (m *Mux) HoldCall(ctx context.Context, deviceID, callID string) error {
+	return m.pick(deviceID).HoldCall(ctx, deviceID, callID)
+}
+
+func (m *Mux) ResumeCall(ctx context.Context, deviceID, callID string) error {
+	return m.pick(deviceID).ResumeCall(ctx, deviceID, callID)
 }
 
 func (m *Mux) StartCallCapture(deviceID, callID, basePath string) error {

@@ -250,6 +250,18 @@ func recommendCSFallback(sipCode int) bool {
 	return sipCode == 408 || sipCode == 480 || sipCode == 503
 }
 
+func recommendCSFallbackForSend(sipCode int, accepted bool) bool {
+	if accepted || sipCode < 0 {
+		return false
+	}
+	switch sipCode {
+	case 0, 408, 480, 481, 500, 502, 503, 504:
+		return true
+	default:
+		return false
+	}
+}
+
 func unmatchedSMSDeliveryReport(err error) bool {
 	if err == nil {
 		return false

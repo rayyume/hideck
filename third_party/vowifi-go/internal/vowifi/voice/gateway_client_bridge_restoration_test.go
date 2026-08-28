@@ -204,7 +204,7 @@ func TestGatewayProjectsAgentEventsToBothLegacySinks(t *testing.T) {
 	agent := NewAgent("event-device", nil, nil)
 	gateway := NewGateway(agent)
 	notifier := &capturedCallNotifier{calls: make(chan [3]string, 1)}
-	dispatcher := &capturedEventDispatcher{events: make(chan events.Event, 1)}
+	dispatcher := &capturedEventDispatcher{events: make(chan events.Event, 8)}
 	gateway.SetNotifier(notifier)
 	gateway.SetEventDispatcher(dispatcher)
 	if err := gateway.Start(context.Background()); err != nil {

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	swusim "github.com/iniwex5/vowifi-go/engine/sim"
 	"github.com/yibaiba/hideck/pkg/logger"
 )
 
@@ -90,7 +91,9 @@ func ParseUSIMAuthResponse(deviceID string, resp []byte) (AKAResult, error) {
 			"device", deviceID,
 			"auts_len", len(auts),
 			"auts", maskHexBytes(auts))
-		return AKAResult{AUTS: auts}, nil
+		// EAP-AKA / IMS AKA only emit AT_AUTS when err is ErrSyncFailure and AUTS is present.
+		// Returning nil here makes the engine treat an empty RES as success ("RES is empty").
+		return AKAResult{AUTS: auts}, swusim.ErrSyncFailure
 
 	case 0xDD:
 		return AKAResult{}, errors.New("AKA MAC 校验失败")

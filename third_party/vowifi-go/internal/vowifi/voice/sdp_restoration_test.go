@@ -2,6 +2,7 @@ package voice
 
 import (
 	"net"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
@@ -166,6 +167,24 @@ func TestRecoveredSDPFlowErrorSurface(t *testing.T) {
 	if _, err := ProcessIncomingIMSSDP(call, invalidDTMF, "127.0.0.1"); err == nil ||
 		!strings.Contains(err.Error(), "invalid DTMF clock rate") {
 		t.Fatalf("invalid negotiated DTMF error=%v", err)
+	}
+}
+
+func TestProcessIncomingIMSSDPKeepsCallWhenCaptureCodecUnsupported(t *testing.T) {
+	imsRelay := listenVoiceMediaUDP(t)
+	lanRelay := listenVoiceMediaUDP(t)
+	relay := media.NewRTPRelay(imsRelay, lanRelay)
+	t.Cleanup(relay.Stop)
+	call := NewCall(NewAgent("sdp-capture", nil, nil), callstate.DirectionOutbound, "sdp-capture", "43430")
+	t.Cleanup(func() { call.Cancel(); call.CloseDone() })
+	call.SetRTPRelay(relay)
+	if err := relay.StartCallCapture(filepath.Join(t.TempDir(), "call")); err != nil {
+		t.Fatal(err)
+	}
+	ims := []byte("v=0\r\nc=IN IP4 127.0.0.1\r\nm=audio 23000 RTP/AVP 102\r\n" +
+		"a=rtpmap:102 AMR/8000\r\na=fmtp:102 mode-change-capability=2;max-red=0\r\n")
+	if _, err := ProcessIncomingIMSSDP(call, ims, "127.0.0.1"); err != nil {
+		t.Fatalf("unrecordable AMR must not tear down the call: %v", err)
 	}
 }
 

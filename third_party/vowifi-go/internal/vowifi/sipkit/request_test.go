@@ -61,6 +61,43 @@ func TestBuildIMSRequestUsesRuntimeRouteAndTransport(t *testing.T) {
 	}
 }
 
+func TestBuildIMSRequestFallsBackToPathWhenServiceRouteMissing(t *testing.T) {
+	request, err := BuildIMSRequest(sip.OPTIONS, mustURI(t, "sip:service@ims.example"), IMSRequestOptions{
+		FromURI: mustURI(t, "sip:user@ims.example"), ToURI: mustURI(t, "sip:service@ims.example"),
+		CallID: "call-path", CSeq: 1, SecurityMode: "disabled", RequireRoute: true,
+		Runtime: IMSRuntimeSnapshot{
+			Path: "<sip:pcscf.example;lr;ob>", LocalAddr: "10.0.0.2:5070", Transport: "udp",
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildIMSRequest: %v", err)
+	}
+	if got := FirstHeaderValue(request, "Route", true); got != "<sip:pcscf.example;lr;ob>" {
+		t.Fatalf("Path Route = %q", got)
+	}
+}
+
+func TestBuildIMSRequestPrefersServiceRouteOverPath(t *testing.T) {
+	request, err := BuildIMSRequest(sip.OPTIONS, mustURI(t, "sip:service@ims.example"), IMSRequestOptions{
+		FromURI: mustURI(t, "sip:user@ims.example"), ToURI: mustURI(t, "sip:service@ims.example"),
+		CallID: "call-sr", CSeq: 1, SecurityMode: "disabled",
+		Runtime: IMSRuntimeSnapshot{
+			ServiceRoute: "<sip:scscf.example;lr>",
+			Path:         "<sip:pcscf.example;lr;ob>",
+			LocalAddr:    "10.0.0.2:5070",
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildIMSRequest: %v", err)
+	}
+	if got := FirstHeaderValue(request, "Route", true); got != "<sip:scscf.example;lr>" {
+		t.Fatalf("Service-Route = %q", got)
+	}
+	if len(request.GetHeaders("Route")) != 1 {
+		t.Fatalf("stacked Route headers = %v", request.GetHeaders("Route"))
+	}
+}
+
 func TestBuildIMSRequestRejectsIncompleteTransaction(t *testing.T) {
 	options := IMSRequestOptions{ViaHost: "127.0.0.1", FromURI: mustURI(t, "sip:a@b"), ToURI: mustURI(t, "sip:c@d")}
 	if _, err := BuildIMSRequest(sip.INVITE, mustURI(t, "sip:c@d"), options); err == nil {

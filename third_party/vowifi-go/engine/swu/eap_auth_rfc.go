@@ -99,6 +99,9 @@ func (s *Session) buildAKAIdentityResponse(request eapaka.Packet) (eapaka.Packet
 	if include {
 		response.Attributes = []eapaka.Attribute{eapaka.IdentityAttribute(identity)}
 	}
+	if s.cfg != nil && s.cfg.AKAPrimePreferred {
+		response.Attributes = append(response.Attributes, eapaka.BiddingAttribute(true))
+	}
 	return response, nil
 }
 

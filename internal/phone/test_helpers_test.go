@@ -21,6 +21,7 @@ type fakeVoiceGateway struct {
 	rejectEmits     bool
 	hangupCalls     chan string
 	dtmfCalls       chan string
+	holdCalls       chan string
 	rejectCalls     chan voicehost.RejectRequest
 	captureError    error
 	activeSnapshots map[string]voicehost.CallSnapshot
@@ -32,6 +33,7 @@ func newFakeVoiceGateway() *fakeVoiceGateway {
 	return &fakeVoiceGateway{
 		beginSnapshot: voicehost.CallSnapshot{CallID: "outbound-1", DeviceID: "dev-1"},
 		hangupCalls:   make(chan string, 8), dtmfCalls: make(chan string, 8),
+		holdCalls:     make(chan string, 8),
 		rejectCalls:     make(chan voicehost.RejectRequest, 8),
 		activeSnapshots: make(map[string]voicehost.CallSnapshot),
 	}
@@ -105,6 +107,22 @@ func (g *fakeVoiceGateway) HangupCall(_ context.Context, deviceID, callID string
 
 func (g *fakeVoiceGateway) SendCallDTMF(_, callID, digit string) error {
 	g.dtmfCalls <- callID + ":" + digit
+	return nil
+}
+
+func (g *fakeVoiceGateway) HoldCall(_ context.Context, _, callID string) error {
+	g.holdCalls <- callID + ":hold"
+	g.emitEvent(voicehost.CallEvent{
+		Type: "CallMediaUpdated", DeviceID: "dev-1", CallID: callID, State: "connected", Held: true, Time: time.Now(),
+	})
+	return nil
+}
+
+func (g *fakeVoiceGateway) ResumeCall(_ context.Context, _, callID string) error {
+	g.holdCalls <- callID + ":resume"
+	g.emitEvent(voicehost.CallEvent{
+		Type: "CallMediaUpdated", DeviceID: "dev-1", CallID: callID, State: "connected", Held: false, Time: time.Now(),
+	})
 	return nil
 }
 

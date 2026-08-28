@@ -3,6 +3,7 @@ package runtimecore
 
 import (
 	"context"
+	"errors"
 
 	"github.com/iniwex5/vowifi-go/engine/swu"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/access"
@@ -25,6 +26,10 @@ type ErrRedirect struct {
 func (err ErrRedirect) Error() string {
 	return "redirect to " + firstNonEmpty(err.NewEPDG, err.Target)
 }
+
+const maxSWuRedirects = 3
+
+var ErrTooManyRedirects = errors.New("runtimecore: too many ePDG redirects")
 
 type InterruptOutcome struct {
 	Kind         string
@@ -163,6 +168,8 @@ type RuntimeStartRequest struct {
 	ShouldRun           func() bool
 	DryRun              bool
 	voiceBinding        *voiceLifecycleBinding
+	redirectHops        int
+	redirectSeen        []string
 }
 
 type VoiceLifecycle interface {

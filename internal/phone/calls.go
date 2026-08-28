@@ -165,6 +165,44 @@ func (s *Service) DTMF(owner, callID, lease, digit string) error {
 	return s.gateway.SendCallDTMF(deviceID, resolvedCallID, digit)
 }
 
+func (s *Service) Hold(ctx context.Context, owner, callID, lease string) error {
+	return s.setCallHold(ctx, owner, callID, lease, true)
+}
+
+func (s *Service) Resume(ctx context.Context, owner, callID, lease string) error {
+	return s.setCallHold(ctx, owner, callID, lease, false)
+}
+
+func (s *Service) setCallHold(ctx context.Context, owner, callID, lease string, hold bool) error {
+	call, err := s.controlledCall(owner, callID, lease)
+	if err != nil {
+		return err
+	}
+	s.mu.RLock()
+	status, deviceID, resolvedCallID := call.view.Status, call.view.DeviceID, call.view.CallID
+	s.mu.RUnlock()
+	if status != StatusConnected {
+		return errors.New("phone: hold requires a connected call")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if hold {
+		err = s.gateway.HoldCall(ctx, deviceID, resolvedCallID)
+	} else {
+		err = s.gateway.ResumeCall(ctx, deviceID, resolvedCallID)
+	}
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	if current := s.calls[resolvedCallID]; current != nil && !current.terminal {
+		current.view.Held = hold
+	}
+	s.mu.Unlock()
+	return nil
+}
+
 func (s *Service) RefreshMedia(request RefreshRequest) (CallView, string, error) {
 	media := s.media.Get(request.MediaID)
 	if media == nil || media.Owner != request.Owner {

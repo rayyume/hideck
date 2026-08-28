@@ -789,6 +789,26 @@ func TestBuildSynchronizationFailureResponse(t *testing.T) {
 	if !bytes.Equal(auts, wantAUTS) {
 		t.Fatalf("AUTS=%x", auts)
 	}
+	encoded, err := attr.MarshalBinary()
+	if err != nil {
+		t.Fatalf("MarshalBinary() error = %v", err)
+	}
+	wantWire := append([]byte{AttributeAUTS, 4}, wantAUTS...)
+	if !bytes.Equal(encoded, wantWire) {
+		t.Fatalf("AT_AUTS wire=%x want RFC 4187 %x", encoded, wantWire)
+	}
+}
+
+func TestAUTSAttributeRFC4187WireFormat(t *testing.T) {
+	auts := bytes.Repeat([]byte{0xab}, 14)
+	encoded, err := AUTSAttribute(auts).MarshalBinary()
+	if err != nil {
+		t.Fatalf("MarshalBinary() error = %v", err)
+	}
+	want := append([]byte{AttributeAUTS, 4}, auts...)
+	if !bytes.Equal(encoded, want) {
+		t.Fatalf("AT_AUTS wire=%x want=%x", encoded, want)
+	}
 }
 
 func TestBuildAuthenticationRejectResponse(t *testing.T) {

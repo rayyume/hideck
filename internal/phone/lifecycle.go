@@ -268,9 +268,12 @@ func callDurationSeconds(record CallRecord, endedAt time.Time) int64 {
 }
 
 func (s *Service) publishMediaUpdate(event voicehost.CallEvent) {
-	s.mu.RLock()
+	s.mu.Lock()
 	call := s.calls[event.CallID]
-	s.mu.RUnlock()
+	if call != nil && !call.terminal {
+		call.view.Held = event.Held
+	}
+	s.mu.Unlock()
 	if call != nil && !call.terminal {
 		s.publish("media_updated", call)
 	}

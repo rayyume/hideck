@@ -58,7 +58,7 @@ func TestContactParamsRecoveredOrderAndValues(t *testing.T) {
 	options := ContactOptions{
 		AccessType: " IEEE-802.11 ", IMEI: "356938035643809",
 		ContactParamOrder: []string{
-			"access_type", "sip_instance", "audio", "smsip", "smsip_msisdn_less", "sos", "reg_id",
+			"access_type", "sip_instance", "audio", "smsip", "smsip_msisdn_less", "sos", "reg_id", "ob",
 			"icsi_ref", "mid_call", "srvcc_alerting",
 			"ps2cs_srvcc_orig_pre_alerting", "UNKNOWN", " audio ",
 		},
@@ -67,7 +67,7 @@ func TestContactParamsRecoveredOrderAndValues(t *testing.T) {
 		{Name: "+g.3gpp.accesstype", Value: `"IEEE-802.11"`},
 		{Name: "+sip.instance", Value: `"<urn:gsma:imei:35693803-564380-9>"`},
 		{Name: "audio"}, {Name: "+g.3gpp.smsip"}, {Name: "+g.3gpp.smsip-msisdn-less"}, {Name: "sos"},
-		{Name: "reg-id", Value: "1"},
+		{Name: "reg-id", Value: "1"}, {Name: "ob"},
 		{Name: "+g.3gpp.icsi-ref", Value: `"` + defaultICSIRef + `"`},
 		{Name: "+g.3gpp.mid-call"}, {Name: "+g.3gpp.srvcc-alerting"},
 		{Name: "+g.3gpp.ps2cs-srvcc-orig-pre-alerting"},

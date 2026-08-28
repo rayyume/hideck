@@ -136,9 +136,9 @@ func applyCallTerminalEvent(result *CallEvent, event events.Event) bool {
 func applyCallAuxiliaryEvent(result *CallEvent, event events.Event) bool {
 	switch value := event.(type) {
 	case events.EventCallMediaUpdated:
-		result.CallID, result.Direction, result.State, result.Time = value.CallID, value.Direction, value.State, eventTime(value.Time)
+		result.CallID, result.Direction, result.State, result.Time, result.Held = value.CallID, value.Direction, value.State, eventTime(value.Time), value.Held
 	case *events.EventCallMediaUpdated:
-		result.CallID, result.Direction, result.State, result.Time = value.CallID, value.Direction, value.State, eventTime(value.Time)
+		result.CallID, result.Direction, result.State, result.Time, result.Held = value.CallID, value.Direction, value.State, eventTime(value.Time), value.Held
 	case events.EventCallBusy:
 		result.CallID, result.Caller, result.Callee, result.Time = value.CallID, value.Caller, value.Callee, eventTime(value.Time)
 	case *events.EventCallBusy:

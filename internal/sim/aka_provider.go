@@ -2,13 +2,14 @@ package sim
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/yibaiba/hideck/pkg/logger"
 	swusim "github.com/iniwex5/vowifi-go/engine/sim"
+	"github.com/yibaiba/hideck/pkg/logger"
 )
 
 // ATModem 定义 simauth 所需的 Modem 能力接口。
@@ -109,8 +110,12 @@ func (d *ATAKAProvider) CalculateAKAWithPreference(rand16, autn16 []byte, prefer
 	if pref == AKAAppPreferenceUSIM || pref == AKAAppPreferenceUSIMStrict {
 		res, err := d.calculateAKAOnUSIM(rand16, autn16)
 		if err != nil {
-			logger.Error("AKA 计算失败：USIM 模式失败", d.withDevice("err", err)...)
-			return AKAResult{}, err
+			if errors.Is(err, swusim.ErrSyncFailure) {
+				logger.Warn("AKA 同步失败，上送 AUTS", d.withDevice("err", err, "auts_len", len(res.AUTS))...)
+			} else {
+				logger.Error("AKA 计算失败：USIM 模式失败", d.withDevice("err", err)...)
+			}
+			return res, err
 		}
 		d.recordAKAProfile("USIM", pref, false)
 		logger.Debug("AKA 路径画像", d.withDevice("selected_app", "USIM", "preference", pref, "fallback", false)...)
@@ -128,15 +133,15 @@ func (d *ATAKAProvider) CalculateAKAWithPreference(rand16, autn16 []byte, prefer
 			)...)
 		return res, nil
 	} else {
-		if pref == AKAAppPreferenceISIMStrict {
-			return AKAResult{}, err
+		if errors.Is(err, swusim.ErrSyncFailure) || pref == AKAAppPreferenceISIMStrict {
+			return res, err
 		}
 		logger.Warn("ISIM 逻辑通道 AKA 失败，回退 USIM 逻辑通道", d.withDevice("err", err)...)
 	}
 
 	res, err := d.calculateAKAOnUSIM(rand16, autn16)
 	if err != nil {
-		return AKAResult{}, err
+		return res, err
 	}
 	d.recordAKAProfile("USIM", pref, true)
 	logger.Debug("AKA 路径画像", d.withDevice("selected_app", "USIM", "preference", pref, "fallback", true)...)
@@ -232,6 +237,9 @@ func (d *ATAKAProvider) calculateAKAOnUSIM(rand16, autn16 []byte) (AKAResult, er
 		logger.Debug("AKA 使用的 SIM 应用", d.withDevice("app", "USIM", "channel", ch)...)
 		return res, nil
 	}
+	if errors.Is(err, swusim.ErrSyncFailure) {
+		return res, err
+	}
 	logger.Warn("USIM 逻辑通道首选 APDU 失败，尝试带 Le 变体", d.withDevice("err", err)...)
 
 	apdu2, err2 := BuildUSIMAuthAPDU(rand16, autn16, true)
@@ -239,9 +247,11 @@ func (d *ATAKAProvider) calculateAKAOnUSIM(rand16, autn16 []byte) (AKAResult, er
 		return AKAResult{}, err2
 	}
 	res2, err2 := d.sendLogicalAuth(ch, apdu2)
-	if err2 == nil {
-		logger.Debug("AKA 使用的 SIM 应用", d.withDevice("app", "USIM", "channel", ch)...)
-		return res2, nil
+	if err2 == nil || errors.Is(err2, swusim.ErrSyncFailure) {
+		if err2 == nil {
+			logger.Debug("AKA 使用的 SIM 应用", d.withDevice("app", "USIM", "channel", ch)...)
+		}
+		return res2, err2
 	}
 	return AKAResult{}, fmt.Errorf("USIM 逻辑通道 AKA 失败: first=%v second=%v", err, err2)
 }
@@ -268,8 +278,8 @@ func (d *ATAKAProvider) calculateAKAOnISIMLogicalChannel(rand16, autn16 []byte) 
 		return AKAResult{}, err
 	}
 	res, err := d.sendLogicalAuth(ch, apdu)
-	if err == nil {
-		return res, nil
+	if err == nil || errors.Is(err, swusim.ErrSyncFailure) {
+		return res, err
 	}
 	logger.Warn("ISIM 逻辑通道首选 APDU 失败，尝试带 Le 变体", d.withDevice("err", err)...)
 
@@ -278,8 +288,8 @@ func (d *ATAKAProvider) calculateAKAOnISIMLogicalChannel(rand16, autn16 []byte) 
 		return AKAResult{}, err2
 	}
 	res2, err2 := d.sendLogicalAuth(ch, apdu2)
-	if err2 == nil {
-		return res2, nil
+	if err2 == nil || errors.Is(err2, swusim.ErrSyncFailure) {
+		return res2, err2
 	}
 	return AKAResult{}, fmt.Errorf("ISIM 逻辑通道 AKA 失败: first=%v second=%v", err, err2)
 }

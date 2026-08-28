@@ -3,9 +3,7 @@ package voice
 import (
 	"context"
 	"errors"
-	"strconv"
 	"strings"
-	"time"
 
 	"github.com/emiago/sipgo/sip"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/imscore"
@@ -40,8 +38,8 @@ func (a *Agent) answerStoredServerInviteResult(
 		return true, errors.New("voice: inbound answer Contact is unavailable")
 	}
 	response := call.BuildResponseWithSDP(answer.status, answer.reason, []byte(answer.sdp))
-	if expires := call.voiceSessionExpires(); expires > 0 {
-		response.AppendHeader(sip.NewHeader("Session-Expires", strconv.FormatInt(int64(expires/time.Second), 10)))
+	if expires := formatSessionExpiresHeader(call); expires != "" {
+		response.AppendHeader(sip.NewHeader("Session-Expires", expires))
 	}
 	dialog, err := a.dialog.AnswerServerInvite(
 		context.Background(), a.deviceID, invite,

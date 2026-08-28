@@ -205,6 +205,8 @@ func contactParam(name string, values contactParamValues) (ContactParam, bool) {
 		return ContactParam{Name: "sos"}, true
 	case "reg_id":
 		return ContactParam{Name: "reg-id", Value: "1"}, true
+	case "ob":
+		return ContactParam{Name: "ob"}, true
 	case "icsi_ref":
 		return ContactParam{Name: "+g.3gpp.icsi-ref", Value: values.icsiRef}, true
 	case "mid_call":

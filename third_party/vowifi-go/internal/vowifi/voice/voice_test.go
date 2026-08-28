@@ -58,6 +58,20 @@ func startVoiceTestRegistrarWithInviteStatus(t *testing.T, inviteStatus int) *ne
 
 func startVoiceTestRegistrarWithAnswer(t *testing.T, inviteStatus int, answerSDP string) *net.UDPConn {
 	t.Helper()
+	return startScriptedVoiceRegistrar(t, func(request string) (int, string, string) {
+		if strings.HasPrefix(request, "INVITE ") {
+			extra := "To: <sip:callee@ims.example.com>;tag=remote\r\nContact: <sip:callee@ims.example.com>\r\n"
+			if inviteStatus >= 200 && inviteStatus < 300 {
+				return inviteStatus, extra + "Content-Type: application/sdp\r\n", answerSDP
+			}
+			return inviteStatus, extra, ""
+		}
+		return 200, "", ""
+	})
+}
+
+func startScriptedVoiceRegistrar(t *testing.T, respond func(string) (int, string, string)) *net.UDPConn {
+	t.Helper()
 	conn, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
 	if err != nil {
 		t.Fatalf("ListenUDP: %v", err)
@@ -80,13 +94,10 @@ func startVoiceTestRegistrarWithAnswer(t *testing.T, inviteStatus int, answerSDP
 			if strings.HasPrefix(request, "REGISTER ") {
 				extra = "P-Associated-URI: <sip:+15551234567@ims.example.com>\r\n"
 			}
-			if strings.HasPrefix(request, "INVITE ") {
-				status = inviteStatus
-				extra = "To: <sip:callee@ims.example.com>;tag=remote\r\n" +
-					"Contact: <sip:callee@ims.example.com>\r\n"
-				if status >= 200 && status < 300 {
-					body = answerSDP
-					extra += "Content-Type: application/sdp\r\n"
+			if respond != nil {
+				status, extra, body = respond(request)
+				if strings.HasPrefix(request, "REGISTER ") && !strings.Contains(extra, "P-Associated-URI:") {
+					extra = "P-Associated-URI: <sip:+15551234567@ims.example.com>\r\n" + extra
 				}
 			}
 			response := fmt.Sprintf("SIP/2.0 %d %s\r\nVia: %s\r\nCall-ID: %s\r\nCSeq: %s\r\n%sContent-Length: %d\r\n\r\n%s",
@@ -454,7 +465,7 @@ func TestBuildIMSSessionUpdateUsesNegotiatedExpiry(t *testing.T) {
 	if !strings.HasPrefix(request, "UPDATE sip:peer@edge.example SIP/2.0") {
 		t.Fatalf("session refresh request line = %q", strings.Split(request, "\r\n")[0])
 	}
-	if voiceTestHeader(request, "CSeq") != "8 UPDATE" || voiceTestHeader(request, "Session-Expires") != "120" {
+	if voiceTestHeader(request, "CSeq") != "8 UPDATE" || voiceTestHeader(request, "Session-Expires") != "120;refresher=uac" {
 		t.Fatalf("session refresh headers = CSeq %q Session-Expires %q", voiceTestHeader(request, "CSeq"), voiceTestHeader(request, "Session-Expires"))
 	}
 	if voiceTestHeader(request, "Content-Type") != "" || !strings.HasSuffix(request, "Content-Length: 0\r\n\r\n") {

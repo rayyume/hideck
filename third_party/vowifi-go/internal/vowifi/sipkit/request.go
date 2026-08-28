@@ -84,7 +84,7 @@ func buildViaHeader(transport string, options IMSRequestOptions) (*sip.ViaHeader
 }
 
 func appendRouteSet(request *sip.Request, options IMSRequestOptions) error {
-	routes := chooseRouteSet(options.Routes, options.Runtime.ServiceRoute)
+	routes := chooseRouteSet(options.Routes, options.Runtime.ServiceRoute, options.Runtime.Path)
 	if options.RequireRoute && len(routes) == 0 {
 		return fmt.Errorf("route is required for %s request", options.Kind)
 	}
@@ -96,11 +96,11 @@ func appendRouteSet(request *sip.Request, options IMSRequestOptions) error {
 	return nil
 }
 
-func chooseRouteSet(explicit []string, serviceRoute string) []string {
+func chooseRouteSet(explicit []string, serviceRoute, path string) []string {
 	if len(explicit) > 0 {
 		return explicit
 	}
-	return imsheaders.RouteSet(serviceRoute, "")
+	return imsheaders.RouteSet(imsheaders.EffectiveRoute(serviceRoute, path), "")
 }
 
 func appendTransactionHeaders(request *sip.Request, method sip.RequestMethod, options IMSRequestOptions) error {

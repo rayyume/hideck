@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/emiago/sipgo/sip"
+	"github.com/iniwex5/vowifi-go/internal/vowifi/imsheaders"
 )
 
 const smsSupportedHeader = "path, 100rel, replaces, gruu"
@@ -153,10 +154,15 @@ func (s *Service) registeredSIPRouteLocked() registeredSIPRoute {
 	}
 	route.remoteAddress = s.registeredRemoteAddressLocked()
 	if s.regSession != nil {
-		route.serviceRoute = strings.TrimSpace(s.regSession.serviceRoute)
+		route.serviceRoute = imsheaders.EffectiveRoute(s.regSession.serviceRoute, s.regSession.path)
+		if route.serviceRoute == "" {
+			route.serviceRoute = strings.TrimSpace(s.path)
+		}
 		if s.regSession.security != nil {
 			route.securityVerify = strings.TrimSpace(s.regSession.security.verifyHeader)
 		}
+	} else if path := strings.TrimSpace(s.path); path != "" {
+		route.serviceRoute = path
 	}
 	route.live = s.registeredSIPTransportReadyLocked()
 	return route

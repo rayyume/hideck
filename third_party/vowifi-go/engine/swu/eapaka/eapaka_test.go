@@ -118,6 +118,16 @@ func TestAKAPrimeKDFAttributes(t *testing.T) {
 	}
 }
 
+func TestBiddingAttributePrefersAKAPrime(t *testing.T) {
+	attr := BiddingAttribute(true)
+	if attr.Type != AttributeBidding || !attr.BiddingPrefersPrime() || len(attr.Data) != 2 || attr.Data[0] != 0x80 {
+		t.Fatalf("prefer-prime bidding = %#v", attr)
+	}
+	if BiddingAttribute(false).BiddingPrefersPrime() {
+		t.Fatal("cleared D flag still prefers AKA'")
+	}
+}
+
 func TestNotificationAndClientErrorAttributes(t *testing.T) {
 	raw, err := (Packet{
 		Code:       CodeRequest,

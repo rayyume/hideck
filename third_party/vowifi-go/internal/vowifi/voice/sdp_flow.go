@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/iniwex5/vowifi-go/internal/vowifi/logging"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/voice/media"
 )
 
@@ -32,7 +33,8 @@ func ProcessIncomingIMSSDP(call *Call, raw []byte, localIP string) ([]byte, erro
 		return nil, fmt.Errorf("配置 IMS DTMF 失败: %w", err)
 	}
 	if err := relay.ConfigureAudioCapture(audioCaptureCodecs(info)); err != nil {
-		return nil, fmt.Errorf("配置通话录音失败: %w", err)
+		// Bandwidth-efficient AMR is common on UK IMS. Keep the call up; PCAP still records.
+		logging.Info("通话录音不可用，继续通话", "err", err)
 	}
 	_ = relay.SetRemoteAddr(info.ConnectionIP, info.MediaPort)
 	relay.Start()

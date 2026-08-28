@@ -186,6 +186,7 @@ type EventCallMediaUpdated struct {
 	Direction string
 	State     string
 	Time      time.Time
+	Held      bool
 }
 
 // EventCallBusy is published when an inbound INVITE cannot reserve its device.

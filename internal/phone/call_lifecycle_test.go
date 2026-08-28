@@ -58,10 +58,17 @@ func TestIncomingTerminalClassificationsAndDeduplication(t *testing.T) {
 			if notification.status != test.status {
 				t.Fatalf("notification status = %q, want %q", notification.status, test.status)
 			}
-			select {
-			case duplicate := <-notifications:
-				t.Fatalf("duplicate terminal notification: %+v", duplicate)
-			case <-time.After(30 * time.Millisecond):
+			deadline := time.After(30 * time.Millisecond)
+			for {
+				select {
+				case duplicate := <-notifications:
+					if duplicate.incoming {
+						continue
+					}
+					t.Fatalf("duplicate terminal notification: %+v", duplicate)
+				case <-deadline:
+					return
+				}
 			}
 		})
 	}
@@ -290,6 +297,38 @@ func TestControlLeaseProtectsDTMFAndHangup(t *testing.T) {
 	cancel()
 	if len(backlog) != 1 || !backlog[0].Call.ReadOnly {
 		t.Fatalf("shared event exposed writable view = %+v", backlog)
+	}
+}
+
+func TestControlLeaseProtectsHoldAndResume(t *testing.T) {
+	gateway, store := newFakeVoiceGateway(), newMemoryCallStore()
+	service := newPhoneTestService(t, gateway, store, time.Second)
+	call := &activeCall{
+		view:   CallView{CallID: "call-1", DeviceID: "dev-1", Status: StatusConnected, MediaID: "media-1"},
+		record: CallRecord{CallID: "call-1", DeviceID: "dev-1", Status: StatusConnected},
+		owner:  "admin", lease: "lease-1", mediaID: "media-1", terminalDone: make(chan struct{}),
+	}
+	service.mu.Lock()
+	service.calls[call.view.CallID] = call
+	service.deviceCalls[call.view.DeviceID] = call.view.CallID
+	service.mu.Unlock()
+	if err := service.Hold(context.Background(), "admin", call.view.CallID, "wrong"); err == nil {
+		t.Fatal("hold accepted a foreign lease")
+	}
+	if err := service.Hold(context.Background(), "admin", call.view.CallID, "lease-1"); err != nil {
+		t.Fatal(err)
+	}
+	if value := <-gateway.holdCalls; value != "call-1:hold" {
+		t.Fatalf("hold call = %q", value)
+	}
+	if !service.callView(call.view.CallID, "lease-1").Held {
+		t.Fatal("hold did not mark the call held")
+	}
+	if err := service.Resume(context.Background(), "admin", call.view.CallID, "lease-1"); err != nil {
+		t.Fatal(err)
+	}
+	if value := <-gateway.holdCalls; value != "call-1:resume" {
+		t.Fatalf("resume call = %q", value)
 	}
 }
 

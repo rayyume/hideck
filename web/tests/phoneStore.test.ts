@@ -65,6 +65,33 @@ test('applies call_ended after the event stream restarts with lower ids', () => 
   assert.equal(store.isCallEnding('call-1'), false)
 })
 
+test('toggleHold keeps mute local and only talks to IMS hold APIs', async () => {
+  const originalHold = phoneService.hold
+  const originalResume = phoneService.resume
+  const calls: string[] = []
+  phoneService.hold = async (callId) => { calls.push(`hold:${callId}`) }
+  phoneService.resume = async (callId) => { calls.push(`resume:${callId}`) }
+  try {
+    setActivePinia(createPinia())
+    const store = usePhoneStore()
+    store.lease = 'lease-1'
+    store.mediaId = 'media-1'
+    store.mediaMode = 'two-way'
+    store.calls = [call('media-1')]
+    await store.toggleHold()
+    assert.equal(store.currentCall?.held, true)
+    assert.deepEqual(calls, ['hold:call-1'])
+    await store.toggleHold()
+    assert.equal(store.currentCall?.held, false)
+    assert.deepEqual(calls, ['hold:call-1', 'resume:call-1'])
+    store.toggleMute()
+    assert.equal(store.muted, true)
+  } finally {
+    phoneService.hold = originalHold
+    phoneService.resume = originalResume
+  }
+})
+
 test('listen-only mode cannot be presented as a muteable microphone', () => {
   setActivePinia(createPinia())
   const store = usePhoneStore()
@@ -229,6 +256,7 @@ test('labels pending and ended calls from their real lifecycle data', () => {
   })
 
   assert.equal(phoneCallStatusLabel(active), '通话中')
+  assert.equal(phoneCallStatusLabel({ ...active, held: true }), '保持中')
   assert.equal(phoneCallStatusLabel(active, true), '挂断中')
   assert.equal(phoneRecordStatusLabel(record('local_hangup')), '已挂断')
   assert.equal(phoneRecordStatusLabel(record('remote_bye')), '对方已挂断')

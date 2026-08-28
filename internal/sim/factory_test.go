@@ -174,6 +174,33 @@ func TestBuildAKAProviderMBIMForwardsISIMStrictPreference(t *testing.T) {
 	}
 }
 
+type factorySyncFailChannelStub struct {
+	auts []byte
+}
+
+func (s factorySyncFailChannelStub) CalculateAKA(rand16, autn16 []byte) (swusim.AKAResult, error) {
+	return swusim.AKAResult{AUTS: append([]byte(nil), s.auts...)}, swusim.ErrSyncFailure
+}
+
+func TestChannelOrAuthPreservesAUTSOnSyncFailure(t *testing.T) {
+	wantAUTS := []byte{0xAA, 0xBB, 0xCC}
+	p := &channelOrAuthAKAProvider{
+		channel: factorySyncFailChannelStub{auts: wantAUTS},
+		auth: backendAKAProvider{backend: factoryMBIMBackendStub{
+			res: []byte{0xFF},
+			ik:  make([]byte, 16),
+			ck:  make([]byte, 16),
+		}},
+	}
+	got, err := p.CalculateAKA(bytes16(0x10), bytes16(0x20))
+	if !errors.Is(err, swusim.ErrSyncFailure) {
+		t.Fatalf("err = %v, want ErrSyncFailure", err)
+	}
+	if !reflect.DeepEqual(got.AUTS, wantAUTS) {
+		t.Fatalf("AUTS = % X, want % X", got.AUTS, wantAUTS)
+	}
+}
+
 // MBIM Auth service 返回 AUTH_SYNC_FAILURE (status=35) 并附带 AUTS 时，
 // backendAKAProvider 应将其转换为 (AKAResult{AUTS:...}, ErrSyncFailure)，
 // 使 EAP-AKA 引擎能发出 AT_AUTS 重同步消息。

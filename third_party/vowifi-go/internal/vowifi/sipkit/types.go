@@ -32,6 +32,7 @@ type IMSRuntimeSnapshot struct {
 	RemoteSpiC         uint32
 	RemoteSpiS         uint32
 	Transport          string
+	Path               string
 }
 
 // DialogRequestOptions contains the headers owned by an in-dialog request.

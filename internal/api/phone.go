@@ -44,6 +44,8 @@ func (s *Server) registerPhoneRoutes(api *gin.RouterGroup) {
 	api.POST("/phone/calls/:call_id/answer", s.handlePhoneAnswer)
 	api.POST("/phone/calls/:call_id/reject", s.handlePhoneReject)
 	api.POST("/phone/calls/:call_id/dtmf", s.handlePhoneDTMF)
+	api.POST("/phone/calls/:call_id/hold", s.handlePhoneHold)
+	api.POST("/phone/calls/:call_id/resume", s.handlePhoneResume)
 	api.DELETE("/phone/calls/:call_id", s.handlePhoneHangup)
 	api.PUT("/phone/calls/:call_id/media", s.handlePhoneRefreshMedia)
 	api.GET("/phone/events", s.handlePhoneEvents)
@@ -183,6 +185,30 @@ func (s *Server) handlePhoneDTMF(c *gin.Context) {
 		return
 	}
 	err := s.phone.DTMF(s.auth.Username, c.Param("call_id"), phoneLease(c), request.Digit)
+	if err != nil {
+		s.respondPhoneError(c, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+func (s *Server) handlePhoneHold(c *gin.Context) {
+	if !s.requirePhone(c) {
+		return
+	}
+	err := s.phone.Hold(c.Request.Context(), s.auth.Username, c.Param("call_id"), phoneLease(c))
+	if err != nil {
+		s.respondPhoneError(c, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+func (s *Server) handlePhoneResume(c *gin.Context) {
+	if !s.requirePhone(c) {
+		return
+	}
+	err := s.phone.Resume(c.Request.Context(), s.auth.Username, c.Param("call_id"), phoneLease(c))
 	if err != nil {
 		s.respondPhoneError(c, err)
 		return

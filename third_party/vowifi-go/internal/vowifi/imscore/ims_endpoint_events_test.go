@@ -52,7 +52,7 @@ func TestIMSEndpointRecoveredTypeFieldOrder(t *testing.T) {
 		"IMPU", "Realm", "ContactID", "ServiceRoute", "SecVerify", "EffectiveSecMode",
 		"PAccessNetworkInfo", "UserAgent", "LocalAddr", "LocalPortC", "LocalPortS",
 		"RemotePortC", "RemotePortS", "LocalSpiC", "LocalSpiS", "RemoteSpiC", "RemoteSpiS",
-		"Transport", "IMEI", "PubGRUU", "Voice",
+		"Transport", "IMEI", "PubGRUU", "Voice", "Path",
 	})
 	assertStructFields(t, reflect.TypeOf(imsendpoint.VoiceProfile{}), []string{
 		"SupportedHeader", "AllowHeader", "AcceptContact", "PPreferredService", "AccessType",

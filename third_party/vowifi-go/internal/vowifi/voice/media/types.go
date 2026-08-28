@@ -95,6 +95,7 @@ type RTPRelay struct {
 	dtmfRewritePending  bool
 	dtmfSequenceOffset  uint16
 	dtmfLastRTPPacketAt time.Time
+	sendPaused          uint32
 }
 
 // RTPMonitor stores monotonic media activity timestamps as Unix nanoseconds.

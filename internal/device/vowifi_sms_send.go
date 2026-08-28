@@ -9,9 +9,87 @@ import (
 
 	"github.com/iniwex5/vowifi-go/runtimehost"
 	"github.com/iniwex5/vowifi-go/runtimehost/messaging"
+	"github.com/yibaiba/hideck/pkg/smscodec"
 )
 
-const voWiFiSMSSendRecoveryTimeout = 90 * time.Second
+const (
+	voWiFiSMSSendRecoveryTimeout = 90 * time.Second
+	RoutedSMSViaVoWiFi           = "vowifi"
+	RoutedSMSViaCS               = "cs"
+)
+
+type routedSMSSendResult struct {
+	Via          string
+	Outcome      messaging.SendOutcome
+	FellBackToCS bool
+}
+
+// ShouldFallbackVoWiFiSMSToCS reports whether IMS never accepted the MESSAGE.
+func ShouldFallbackVoWiFiSMSToCS(outcome messaging.SendOutcome, err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, messaging.ErrSMSNotReady) {
+		return true
+	}
+	return outcome.RecommendCSFallback
+}
+
+func sendRoutedSMS(
+	viaVoWiFi bool,
+	sendVoWiFi func() (messaging.SendOutcome, error),
+	sendCS func() error,
+) (routedSMSSendResult, error) {
+	if viaVoWiFi {
+		if sendVoWiFi == nil {
+			return routedSMSSendResult{Via: RoutedSMSViaVoWiFi}, errors.New("sms route: VoWiFi sender is unavailable")
+		}
+		outcome, err := sendVoWiFi()
+		if err == nil {
+			return routedSMSSendResult{Via: RoutedSMSViaVoWiFi, Outcome: outcome}, nil
+		}
+		if !ShouldFallbackVoWiFiSMSToCS(outcome, err) || sendCS == nil {
+			return routedSMSSendResult{Via: RoutedSMSViaVoWiFi, Outcome: outcome}, err
+		}
+		if csErr := sendCS(); csErr != nil {
+			return routedSMSSendResult{Via: RoutedSMSViaVoWiFi, Outcome: outcome, FellBackToCS: true}, err
+		}
+		return routedSMSSendResult{Via: RoutedSMSViaCS, Outcome: outcome, FellBackToCS: true}, nil
+	}
+	if sendCS == nil {
+		return routedSMSSendResult{Via: RoutedSMSViaCS}, errors.New("sms route: CS sender is unavailable")
+	}
+	if err := sendCS(); err != nil {
+		return routedSMSSendResult{Via: RoutedSMSViaCS}, err
+	}
+	return routedSMSSendResult{Via: RoutedSMSViaCS}, nil
+}
+
+// SendRoutedSMS sends via VoWiFi when that path is selected, and falls back to
+// CS only when IMS never accepted the MESSAGE.
+func (p *Pool) SendRoutedSMS(
+	ctx context.Context,
+	worker *Worker,
+	phone, message string,
+	opts smscodec.SubmitOptions,
+) (routedSMSSendResult, error) {
+	if p == nil {
+		return routedSMSSendResult{}, errors.New("sms route: pool is nil")
+	}
+	if worker == nil {
+		return routedSMSSendResult{}, errors.New("sms route: worker is nil")
+	}
+	deviceID := worker.ID
+	return sendRoutedSMS(
+		p.ShouldRouteSMSViaVoWiFi(deviceID),
+		func() (messaging.SendOutcome, error) {
+			return p.SendVoWiFiSMSWithOptions(ctx, deviceID, phone, message, opts)
+		},
+		func() error {
+			return worker.SendSMSWithOptions(phone, message, opts)
+		},
+	)
+}
 
 type voWiFiSMSRuntime interface {
 	State() runtimehost.State

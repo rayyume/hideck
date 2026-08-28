@@ -27,13 +27,39 @@ func buildIMSSessionUpdate(agent *Agent, call *Call) string {
 		return ""
 	}
 	dialog := call.advanceVoiceCSeq()
-	request := buildVoiceRequest(dialog, call.CallID(), "UPDATE", voiceBranch(), "")
-	expires := call.voiceSessionExpires()
-	if expires <= 0 {
+	return attachSessionTimerHeaders(call, buildVoiceRequest(dialog, call.CallID(), "UPDATE", voiceBranch(), ""))
+}
+
+func buildIMSReinvite(agent *Agent, call *Call, sdp string) string {
+	if agent == nil || call == nil {
+		return ""
+	}
+	dialog := call.advanceVoiceInviteCSeq()
+	return attachSessionTimerHeaders(call, buildVoiceRequest(dialog, call.CallID(), "INVITE", voiceBranch(), sdp))
+}
+
+func attachSessionTimerHeaders(call *Call, request string) string {
+	header := formatSessionTimerHeaders(call)
+	if header == "" {
 		return request
 	}
-	header := fmt.Sprintf("Session-Expires: %d\r\n", int64(expires/time.Second))
-	return strings.Replace(request, "Content-Length: 0\r\n", header+"Content-Length: 0\r\n", 1)
+	return strings.Replace(request, "Content-Length:", header+"Content-Length:", 1)
+}
+
+func formatSessionTimerHeaders(call *Call) string {
+	expires := formatSessionExpiresHeader(call)
+	if expires == "" {
+		return ""
+	}
+	var header strings.Builder
+	header.WriteString("Supported: timer\r\n")
+	header.WriteString("Session-Expires: ")
+	header.WriteString(expires)
+	header.WriteString("\r\n")
+	if minSE := call.sessionMinSEValue(); minSE > 0 {
+		fmt.Fprintf(&header, "Min-SE: %d\r\n", int64(minSE/time.Second))
+	}
+	return header.String()
 }
 
 // BuildIMSACK builds the ACK for the final INVITE response.
@@ -144,7 +170,7 @@ func fallbackVoiceDialog(agent *Agent, call *Call) voiceSIPDialog {
 		localURI: localURI, remoteURI: remoteURI, remoteTarget: remoteURI,
 		contactURI: localURI, contactHeader: "<" + localURI + ">",
 		localAddress: agent.localAddr(), transport: "udp",
-		serviceRoute: splitVoiceHeaderValues(snapshot.ServiceRoute), securityVerify: snapshot.SecVerify,
+		serviceRoute: splitVoiceHeaderValues(effectiveVoiceRoute(snapshot.ServiceRoute, snapshot.Path)), securityVerify: snapshot.SecVerify,
 		pani: snapshot.PAccessNetworkInfo, userAgent: snapshot.UserAgent,
 		localTag: voiceTag(), inviteBranch: voiceBranch(),
 		sessionID: voiceSessionID(), cseq: 1,

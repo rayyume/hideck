@@ -117,6 +117,24 @@ func resolveBindIP(address string) (net.IP, error) {
 }
 
 // SetRemoteAddr accepts an original host/port pair or an additive UDPAddr.
+func (r *RTPRelay) SetSendEnabled(enabled bool) {
+	if r == nil {
+		return
+	}
+	if enabled {
+		atomic.StoreUint32(&r.sendPaused, 0)
+		return
+	}
+	atomic.StoreUint32(&r.sendPaused, 1)
+}
+
+func (r *RTPRelay) SendEnabled() bool {
+	if r == nil {
+		return false
+	}
+	return atomic.LoadUint32(&r.sendPaused) == 0
+}
+
 func (r *RTPRelay) SetRemoteAddr(target any, ports ...int) error {
 	addr, err := resolveMediaAddr(target, ports...)
 	if err != nil {

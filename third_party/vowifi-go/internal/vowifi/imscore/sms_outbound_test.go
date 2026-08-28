@@ -233,6 +233,9 @@ func TestSendOutboundSMSRejectsNon2xxWithoutSuccessEvent(t *testing.T) {
 	if outcome.MessageID == "" || outcome.DeliveryState != smsDeliveryStateFailed {
 		t.Fatalf("failed send outcome = %+v", outcome)
 	}
+	if outcome.SIPCode != 503 || !outcome.RecommendCSFallback {
+		t.Fatalf("CS fallback annotation = %+v", outcome)
+	}
 	assertAcceptedEvent(t, subscriber, outcome.MessageID)
 	select {
 	case event := <-subscriber.events:

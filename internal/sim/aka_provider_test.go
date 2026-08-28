@@ -1,6 +1,8 @@
 package sim
 
 import (
+	"bytes"
+	"encoding/hex"
 	"errors"
 	"reflect"
 	"testing"
@@ -180,6 +182,55 @@ func TestATAKAProviderUSIMOpenFailureDoesNotTryStaticFallbackAID(t *testing.T) {
 	}
 	if len(modem.logicalClosed) != 0 {
 		t.Fatalf("logicalClosed = %#v, want no closed channel", modem.logicalClosed)
+	}
+}
+
+func TestATAKAProviderUSIMSyncFailurePreservesAUTS(t *testing.T) {
+	auts := bytes.Repeat([]byte{0xCC}, 14)
+	modem := &akaProviderModemFake{
+		resolvedAID:   "A0000000871002FF49FF0189",
+		resolveSource: "qmi_card_status",
+		logicalResponses: []string{
+			"DC0E" + hex.EncodeToString(auts) + "9000",
+		},
+	}
+	provider := NewATAKAProvider(modem)
+
+	got, err := provider.CalculateAKAWithPreference(bytes16(0x10), bytes16(0x20), AKAAppPreferenceUSIM)
+	if !errors.Is(err, swusim.ErrSyncFailure) {
+		t.Fatalf("err = %v, want ErrSyncFailure", err)
+	}
+	if !reflect.DeepEqual(got.AUTS, auts) {
+		t.Fatalf("AUTS = %x, want %x", got.AUTS, auts)
+	}
+	if len(modem.logicalCalls) != 1 {
+		t.Fatalf("logicalCalls = %d, want a single AUTHENTICATE (no Le retry)", len(modem.logicalCalls))
+	}
+}
+
+func TestATAKAProviderISIMSyncFailureDoesNotFallbackToUSIM(t *testing.T) {
+	auts := bytes.Repeat([]byte{0xAA}, 14)
+	modem := &akaProviderModemFake{
+		resolvedAIDByApp: map[string]string{
+			"isim": "A0000000871004FFFFFFFF8903020000",
+			"usim": "A0000000871002FF49FF0189",
+		},
+		resolveSource: "qmi_card_status",
+		logicalResponses: []string{
+			"DC0E" + hex.EncodeToString(auts) + "9000",
+		},
+	}
+	provider := NewATAKAProvider(modem)
+
+	got, err := provider.CalculateAKAWithPreference(bytes16(0x10), bytes16(0x20), AKAAppPreferenceISIM)
+	if !errors.Is(err, swusim.ErrSyncFailure) {
+		t.Fatalf("err = %v, want ErrSyncFailure", err)
+	}
+	if !reflect.DeepEqual(got.AUTS, auts) {
+		t.Fatalf("AUTS = %x, want %x", got.AUTS, auts)
+	}
+	if !reflect.DeepEqual(modem.logicalAIDs, []string{"A0000000871004FFFFFFFF8903020000"}) {
+		t.Fatalf("logical AIDs = %#v, want ISIM only", modem.logicalAIDs)
 	}
 }
 

@@ -16,7 +16,9 @@ export function phoneStatusLabel(status: string) {
 }
 
 export function phoneCallStatusLabel(call: Readonly<PhoneCall>, ending = false) {
-  return ending ? '挂断中' : phoneStatusLabel(call.status)
+  if (ending) return '挂断中'
+  if (call.status === 'connected' && call.held) return '保持中'
+  return phoneStatusLabel(call.status)
 }
 
 export function phoneRecordStatusLabel(record: Readonly<PhoneRecord>) {

@@ -113,6 +113,7 @@ type Snapshot struct {
 	IMEI               string
 	PubGRUU            string
 	Voice              VoiceProfile
+	Path               string
 }
 
 // VoiceProfile contains the carrier-specific voice request headers.

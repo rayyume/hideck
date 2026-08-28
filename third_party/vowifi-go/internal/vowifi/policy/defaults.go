@@ -10,7 +10,7 @@ const (
 	defaultDNS                   = "1.1.1.1:53"
 	defaultIMSExpires            = 600000
 	defaultTemporaryRetrySeconds = 60
-	defaultSupportedHeader       = "path,sec-agree"
+	defaultSupportedHeader       = "path,sec-agree,outbound"
 	defaultAllowHeader           = "OPTIONS, REGISTER, SUBSCRIBE, NOTIFY, PUBLISH, INVITE, ACK, BYE, CANCEL, UPDATE, PRACK, REFER, INFO, MESSAGE"
 	defaultVoiceSupportedHeader  = "100rel, timer, replaces, norefersub, early-session"
 	defaultVoiceAllowHeader      = "INVITE, ACK, CANCEL, BYE, UPDATE, REFER, NOTIFY, MESSAGE, OPTIONS"

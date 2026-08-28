@@ -24,7 +24,7 @@ func (c *Controller) contextLocked() imsdialog.Context {
 	return imsdialog.Context{
 		IMPU: snapshot.IMPU, Realm: snapshot.Realm, ContactID: snapshot.ContactID,
 		LocalAddr: snapshot.LocalAddr, LocalPortC: snapshot.LocalPortC, LocalPortS: snapshot.LocalPortS,
-		Transport: snapshot.Transport, ServiceRoute: snapshot.ServiceRoute, SecVerify: snapshot.SecVerify,
+		Transport: snapshot.Transport, ServiceRoute: imsheaders.EffectiveRoute(snapshot.ServiceRoute, snapshot.Path), SecVerify: snapshot.SecVerify,
 		SecMode: snapshot.EffectiveSecMode, PAccessNetworkInfo: snapshot.PAccessNetworkInfo,
 		UserAgent: snapshot.UserAgent, IMEI: snapshot.IMEI, PubGRUU: snapshot.PubGRUU,
 		DeviceID: c.deviceID, CachedFromURI: c.cachedFromURI,
@@ -49,14 +49,14 @@ func (c *Controller) refreshCachedHeaders(snapshot imsendpoint.Snapshot) {
 	c.lastSessionHash = sessionHash
 	c.cachedFromURI = parseIdentityURI(snapshot.IMPU)
 	c.cachedContactHdr = buildContactHeader(snapshot)
-	c.cachedRouteHdr = genericHeader("Route", snapshot.ServiceRoute)
+	c.cachedRouteHdr = genericHeader("Route", imsheaders.EffectiveRoute(snapshot.ServiceRoute, snapshot.Path))
 }
 
 func dialogSessionHash(snapshot imsendpoint.Snapshot) string {
 	parts := []string{
 		snapshot.IMPU, snapshot.Realm, snapshot.ContactID,
 		strconv.Itoa(snapshot.LocalPortC), strconv.Itoa(snapshot.LocalPortS),
-		snapshot.LocalAddr, snapshot.Transport, snapshot.ServiceRoute,
+		snapshot.LocalAddr, snapshot.Transport, snapshot.ServiceRoute, snapshot.Path,
 		snapshot.IMEI, snapshot.PubGRUU, snapshot.Voice.AccessType,
 		strings.Join(snapshot.Voice.ContactParamOrder, ","),
 	}

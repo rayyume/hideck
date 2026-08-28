@@ -39,7 +39,7 @@ func (s *Service) Session() *imsendpoint.Session {
 		LocalPortC: localPortC, RemoteIP: remoteIP, RemotePortS: remotePortS,
 		TransportMode: s.registrationTransport, ServiceRoute: serviceRoute,
 		Path: s.path, SecVerify: s.securityVerify, SecMode: s.effectiveSecurityModeLocked(),
-		RouteSet: splitSIPHeaderValues(serviceRoute), IMPU: s.cfg.IMPU, IMPI: s.cfg.IMPI,
+		RouteSet: splitSIPHeaderValues(effectiveIMSRoute(s.regSession, s.path)), IMPU: s.cfg.IMPU, IMPI: s.cfg.IMPI,
 		Domain: s.cfg.Domain, Realm: s.GetRealm(), MSISDN: s.assocMSISDN,
 		Registered: s.regState == regRegistered || s.regStatus.Load() == registrationRegistered,
 	}
@@ -58,7 +58,7 @@ func (s *Service) Snapshot() imsendpoint.Snapshot {
 		LocalSpiC: runtime.LocalSpiC, LocalSpiS: runtime.LocalSpiS,
 		RemoteSpiC: runtime.RemoteSpiC, RemoteSpiS: runtime.RemoteSpiS,
 		Transport: runtime.Transport, IMEI: s.GetIMEI(), PubGRUU: s.GetPubGRUU(),
-		Voice: s.VoiceProfile(),
+		Voice: s.VoiceProfile(), Path: runtime.Path,
 	}
 }
 
@@ -97,6 +97,7 @@ func (s *Service) GetIMSContextSnapshot() sipkit.IMSRuntimeSnapshot {
 		RemotePortC: remotePortC, RemotePortS: remotePortS,
 		LocalSpiC: localSpiC, LocalSpiS: localSpiS,
 		RemoteSpiC: remoteSpiC, RemoteSpiS: remoteSpiS, Transport: s.registrationTransport,
+		Path: currentPath(s.regSession, s.path),
 	}
 }
 

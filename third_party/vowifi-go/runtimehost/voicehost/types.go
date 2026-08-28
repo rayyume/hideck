@@ -87,6 +87,7 @@ type CallEvent struct {
 	AudioCodec     string    `json:"audio_codec,omitempty"`
 	RecordingError string    `json:"recording_error,omitempty"`
 	Time           time.Time `json:"time"`
+	Held           bool      `json:"held,omitempty"`
 }
 
 // NewGateway is additive; the original Gateway was constructed by runtimehost.

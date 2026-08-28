@@ -29,6 +29,7 @@ type CallSnapshot struct {
 	EndTime   time.Time     `json:"end_time,omitempty"`
 	Duration  time.Duration `json:"duration"`
 	ClientSDP string        `json:"client_sdp,omitempty"`
+	Held      bool          `json:"held,omitempty"`
 }
 
 // BeginCall returns the real Call-ID immediately and reports later outcomes
@@ -84,6 +85,22 @@ func (g *Gateway) SendCallDTMF(deviceID, callID, digit string) error {
 	return agent.SendDTMF(strings.TrimSpace(callID), digit)
 }
 
+func (g *Gateway) HoldCall(ctx context.Context, deviceID, callID string) error {
+	agent := g.internalAgent(deviceID)
+	if agent == nil {
+		return errors.New("voicehost: voice is unavailable for device " + strings.TrimSpace(deviceID))
+	}
+	return agent.HoldCall(ctx, strings.TrimSpace(callID))
+}
+
+func (g *Gateway) ResumeCall(ctx context.Context, deviceID, callID string) error {
+	agent := g.internalAgent(deviceID)
+	if agent == nil {
+		return errors.New("voicehost: voice is unavailable for device " + strings.TrimSpace(deviceID))
+	}
+	return agent.ResumeCall(ctx, strings.TrimSpace(callID))
+}
+
 // StartCallCapture enables automatic paired PCAP/audio capture.
 func (g *Gateway) StartCallCapture(deviceID, callID, basePath string) error {
 	agent := g.internalAgent(deviceID)
@@ -101,5 +118,6 @@ func callSnapshotFromVoice(deviceID string, snapshot *voice.CallSnapshot) CallSn
 		CallID: snapshot.CallID, DeviceID: deviceID, State: snapshot.State,
 		Direction: snapshot.Direction, Peer: snapshot.Peer, StartTime: snapshot.StartTime,
 		EndTime: snapshot.EndTime, Duration: snapshot.Duration, ClientSDP: snapshot.ClientSDP,
+		Held: snapshot.Held,
 	}
 }

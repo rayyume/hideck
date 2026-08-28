@@ -97,7 +97,7 @@ func TestOutboundSessionTimerSendsRealUpdate(t *testing.T) {
 	}
 	select {
 	case request := <-registrar.update:
-		if got := voiceTestHeader(request, "Session-Expires"); got != "1" {
+		if got := voiceTestHeader(request, "Session-Expires"); got != "1;refresher=uac" {
 			t.Fatalf("UPDATE Session-Expires = %q", got)
 		}
 		if got := voiceTestHeader(request, "Content-Type"); got != "" {
@@ -186,10 +186,14 @@ func sendInboundSessionUpdate(t *testing.T, fixture inboundSessionFixture, expir
 			to: fixture.to, method: "UPDATE", cseq: 2,
 			extra: fmt.Sprintf("Session-Expires: %d;refresher=uas\r\n", expires),
 		}))
-	_ = fixture.registrar.waitResponse(t, func(raw string) bool {
+	raw := fixture.registrar.waitResponse(t, func(raw string) bool {
 		return strings.HasPrefix(raw, "SIP/2.0 200 ") &&
 			strings.HasSuffix(voiceTestHeader(raw, "CSeq"), " UPDATE")
 	}, "UPDATE 200")
+	want := fmt.Sprintf("%d;refresher=uas", expires)
+	if got := voiceTestHeader(raw, "Session-Expires"); got != want {
+		t.Fatalf("UPDATE 200 Session-Expires = %q, want %q", got, want)
+	}
 }
 
 func sendInboundSessionBYE(t *testing.T, fixture inboundSessionFixture) {

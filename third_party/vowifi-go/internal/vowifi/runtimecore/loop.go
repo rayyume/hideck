@@ -36,6 +36,9 @@ func RunLoop(
 		if errors.Is(err, context.Canceled) {
 			return err
 		}
+		if isTerminalRuntimeError(err) {
+			return err
+		}
 		delay, nextAttempt := retryDecision(err, attempt, reconnectDelay)
 		attempt = nextAttempt
 		if delay <= 0 {
@@ -48,6 +51,10 @@ func RunLoop(
 			return err
 		}
 	}
+}
+
+func isTerminalRuntimeError(err error) bool {
+	return errors.Is(err, ErrTooManyRedirects)
 }
 
 func retryDecision(err error, attempt int, delayFn func(int) int64) (int64, int) {

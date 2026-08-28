@@ -4,13 +4,26 @@ import (
 	"context"
 	"strings"
 
+	"github.com/iniwex5/vowifi-go/runtimehost/eventhost"
 	"github.com/yibaiba/hideck/internal/smsnotify"
 	"github.com/yibaiba/hideck/pkg/logger"
-	"github.com/iniwex5/vowifi-go/runtimehost/eventhost"
 )
 
 type poolVoWiFiRuntimeDispatcher struct {
 	pool *Pool
+}
+
+func applyVoWiFiSMSMemoryPressure(set func(bool), persistErr error, retained vowifiSMSRecordResult) {
+	if set == nil {
+		return
+	}
+	if persistErr != nil {
+		set(true)
+		return
+	}
+	if retained.Stored || retained.Duplicate || retained.Suppressed {
+		set(false)
+	}
 }
 
 func isCompatVoWiFiIncomingSMSLog(msg string) bool {
@@ -26,6 +39,9 @@ func (d poolVoWiFiRuntimeDispatcher) Dispatch(ctx context.Context, e eventhost.E
 	switch v := e.(type) {
 	case eventhost.SMSReceived:
 		res, err := recorder.RecordReceived(v)
+		applyVoWiFiSMSMemoryPressure(func(full bool) {
+			d.pool.SetVoWiFiSMSMemoryFull(v.DevID, full)
+		}, err, res)
 		if err != nil {
 			logger.Warn("VoWiFi 上层入库入站短信失败", "device", v.DevID, "sender", v.Sender, "err", err)
 		}

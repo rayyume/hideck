@@ -83,11 +83,14 @@ func (p *channelOrAuthAKAProvider) calculate(rand16, autn16 []byte, preference s
 	if err == nil {
 		return res, nil
 	}
+	if errors.Is(err, swusim.ErrSyncFailure) {
+		return res, err
+	}
 	if isUICCChannelOpenError(err) && allowsMBIMAuthFallback(preference) {
 		logger.Warn("[sim] 逻辑通道开通道失败，降级到 MBIM Auth AKA", "err", err)
 		return p.auth.CalculateAKA(rand16, autn16)
 	}
-	return swusim.AKAResult{}, err
+	return res, err
 }
 
 func allowsMBIMAuthFallback(preference string) bool {

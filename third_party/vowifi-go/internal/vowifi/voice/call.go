@@ -258,5 +258,6 @@ func (c *Call) Snapshot() *CallSnapshot {
 		EndTime:   c.endTime,
 		Duration:  c.callDurationLocked(time.Now()),
 		ClientSDP: c.clientRemoteSDP,
+		Held:      c.localHold || c.remoteHold,
 	}
 }

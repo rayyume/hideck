@@ -358,6 +358,36 @@ func assertRecoveredDeliveryEventFields(t *testing.T, event events.Event) {
 	}
 }
 
+func TestRecommendCSFallbackForSend(t *testing.T) {
+	tests := []struct {
+		sipCode  int
+		accepted bool
+		want     bool
+	}{
+		{sipCode: 503, want: true},
+		{sipCode: 0, want: true},
+		{sipCode: 408, want: true},
+		{sipCode: 480, want: true},
+		{sipCode: 481, want: true},
+		{sipCode: 500, want: true},
+		{sipCode: 502, want: true},
+		{sipCode: 504, want: true},
+		{sipCode: 403, want: false},
+		{sipCode: 404, want: false},
+		{sipCode: 488, want: false},
+		{sipCode: -1, want: false},
+		{sipCode: 200, accepted: true, want: false},
+		{sipCode: 503, accepted: true, want: false},
+		{sipCode: -1, accepted: true, want: false},
+	}
+	for _, test := range tests {
+		if got := recommendCSFallbackForSend(test.sipCode, test.accepted); got != test.want {
+			t.Fatalf("recommendCSFallbackForSend(%d, %t) = %t, want %t",
+				test.sipCode, test.accepted, got, test.want)
+		}
+	}
+}
+
 func deliveryEventMessageID(event events.Event) string {
 	switch value := event.(type) {
 	case events.EventSMSDeliveryUpdated:

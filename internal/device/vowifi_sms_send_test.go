@@ -3,6 +3,7 @@ package device
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -127,6 +128,71 @@ func TestShouldRouteSMSViaVoWiFiDuringConfiguredRecovery(t *testing.T) {
 				t.Fatalf("ShouldRouteSMSViaVoWiFi() = %t, want %t", got, tt.expected)
 			}
 		})
+	}
+}
+
+func TestShouldFallbackVoWiFiSMSToCS(t *testing.T) {
+	tests := []struct {
+		name    string
+		outcome messaging.SendOutcome
+		err     error
+		want    bool
+	}{
+		{name: "success", outcome: messaging.SendOutcome{RecommendCSFallback: true}},
+		{name: "not ready", err: fmt.Errorf("wrap: %w", messaging.ErrSMSNotReady), want: true},
+		{name: "recommended", outcome: messaging.SendOutcome{SIPCode: 503, RecommendCSFallback: true}, err: errors.New("503"), want: true},
+		{name: "rejected 403", outcome: messaging.SendOutcome{SIPCode: 403}, err: errors.New("403")},
+		{name: "report timeout", outcome: messaging.SendOutcome{SIPCode: 0}, err: errors.New("report timeout")},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := ShouldFallbackVoWiFiSMSToCS(test.outcome, test.err); got != test.want {
+				t.Fatalf("ShouldFallbackVoWiFiSMSToCS() = %t, want %t", got, test.want)
+			}
+		})
+	}
+}
+
+func TestSendRoutedSMSFallsBackOnceWithoutDoubleSend(t *testing.T) {
+	vowifiCalls, csCalls := 0, 0
+	result, err := sendRoutedSMS(true,
+		func() (messaging.SendOutcome, error) {
+			vowifiCalls++
+			return messaging.SendOutcome{MessageID: "ims-1", SIPCode: 503, RecommendCSFallback: true, DeliveryState: "failed"}, errors.New("503")
+		},
+		func() error { csCalls++; return nil },
+	)
+	if err != nil || !result.FellBackToCS || result.Via != RoutedSMSViaCS || result.Outcome.MessageID != "ims-1" {
+		t.Fatalf("fallback result=%+v err=%v", result, err)
+	}
+	if vowifiCalls != 1 || csCalls != 1 {
+		t.Fatalf("calls vowifi=%d cs=%d", vowifiCalls, csCalls)
+	}
+}
+
+func TestSendRoutedSMSDoesNotFallbackAfterIMSAccept(t *testing.T) {
+	csCalls := 0
+	result, err := sendRoutedSMS(true,
+		func() (messaging.SendOutcome, error) {
+			return messaging.SendOutcome{MessageID: "ims-1", SIPCode: 403, RecommendCSFallback: false, DeliveryState: "failed"}, errors.New("403")
+		},
+		func() error { csCalls++; return nil },
+	)
+	if err == nil || result.FellBackToCS || result.Via != RoutedSMSViaVoWiFi || csCalls != 0 {
+		t.Fatalf("rejected fallback result=%+v err=%v cs=%d", result, err, csCalls)
+	}
+}
+
+func TestSendRoutedSMSKeepsVoWiFiErrorWhenCSAlsoFails(t *testing.T) {
+	imsErr := errors.New("503")
+	result, err := sendRoutedSMS(true,
+		func() (messaging.SendOutcome, error) {
+			return messaging.SendOutcome{RecommendCSFallback: true}, imsErr
+		},
+		func() error { return errors.New("cs down") },
+	)
+	if !errors.Is(err, imsErr) || !result.FellBackToCS || result.Via != RoutedSMSViaVoWiFi {
+		t.Fatalf("dual failure result=%+v err=%v", result, err)
 	}
 }
 

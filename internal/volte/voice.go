@@ -323,6 +323,14 @@ func (c *Controller) finishLocalCall(deviceID string, call nativeCall, reason st
 	})
 }
 
+func (c *Controller) HoldCall(context.Context, string, string) error {
+	return errors.New("volte: native hold is not supported")
+}
+
+func (c *Controller) ResumeCall(context.Context, string, string) error {
+	return errors.New("volte: native hold is not supported")
+}
+
 func (c *Controller) SendCallDTMF(deviceID, id, digit string) error {
 	call, ok := c.lookup(deviceID, id)
 	if !ok {

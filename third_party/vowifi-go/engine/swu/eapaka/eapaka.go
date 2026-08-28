@@ -58,6 +58,7 @@ const (
 	AttributeNextReauthID    uint8 = 133
 	AttributeCheckcode       uint8 = 134
 	AttributeResultInd       uint8 = 135
+	AttributeBidding         uint8 = 136
 )
 
 const (
@@ -266,7 +267,8 @@ func RESAttribute(res []byte) Attribute {
 }
 
 func AUTSAttribute(auts []byte) Attribute {
-	return FixedAttribute(AttributeAUTS, auts)
+	// RFC 4187 §10.9: AT_AUTS has no reserved bytes. Type + Length=4 + 14-octet AUTS.
+	return Attribute{Type: AttributeAUTS, Data: append([]byte(nil), auts...)}
 }
 
 func RANDAttribute(rand16 ...[]byte) Attribute {
@@ -307,6 +309,21 @@ func NotificationAttribute(code uint16) Attribute {
 	var b [2]byte
 	binary.BigEndian.PutUint16(b[:], code)
 	return Attribute{Type: AttributeNotification, Data: b[:]}
+}
+
+// BiddingAttribute builds RFC 5448 AT_BIDDING. The D flag is the most
+// significant bit of the 16-bit reserved field and means the sender prefers
+// EAP-AKA'.
+func BiddingAttribute(preferPrime bool) Attribute {
+	var b [2]byte
+	if preferPrime {
+		b[0] = 0x80
+	}
+	return Attribute{Type: AttributeBidding, Data: b[:]}
+}
+
+func (a Attribute) BiddingPrefersPrime() bool {
+	return len(a.Data) >= 1 && a.Data[0]&0x80 != 0
 }
 
 func ClientErrorCodeAttribute(code uint16) Attribute {
@@ -424,7 +441,18 @@ func (a Attribute) AUTNValue() ([]byte, error) {
 }
 
 func (a Attribute) AUTSValue() ([]byte, error) {
-	return a.FixedValue(14)
+	// RFC 4187 §10.9: AUTS starts immediately after Type/Length.
+	if len(a.Data) == 14 {
+		return append([]byte(nil), a.Data...), nil
+	}
+	// Tolerate the old FixedAttribute form (2 reserved zeros + 14 AUTS).
+	if len(a.Data) >= 16 && a.Data[0] == 0 && a.Data[1] == 0 {
+		return append([]byte(nil), a.Data[2:16]...), nil
+	}
+	if len(a.Data) >= 14 {
+		return append([]byte(nil), a.Data[:14]...), nil
+	}
+	return nil, ErrInvalidAttribute
 }
 
 func (a Attribute) KDFInputValue() (string, error) {

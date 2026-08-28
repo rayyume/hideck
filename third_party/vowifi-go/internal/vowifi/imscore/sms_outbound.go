@@ -157,7 +157,10 @@ func (s *Service) executeSMSDelivery(
 	if err := s.createOutboundDelivery(
 		environment.messageID, environment.recipient, environment.text, len(parts),
 	); err != nil {
-		return SendOutcome{}, err
+		return annotateSMSSendOutcome(SendOutcome{
+			MessageID: environment.messageID, PartsTotal: len(parts),
+			DeliveryState: smsDeliveryStateFailed,
+		}, 0, false), err
 	}
 	outcome := SendOutcome{
 		MessageID: environment.messageID, PartsTotal: len(parts),
@@ -165,10 +168,11 @@ func (s *Service) executeSMSDelivery(
 	}
 	ackedParts := 0
 	for index := range parts {
-		pending, state, err := s.sendOutboundSMSPart(ctx, environment.messageID, parts[index])
+		pending, state, sipCode, err := s.sendOutboundSMSPart(ctx, environment.messageID, parts[index])
 		if err != nil {
 			outcome.DeliveryState = smsDeliveryStateFailed
-			return outcome, err
+			accepted := sipCode >= 200 && sipCode < 300
+			return annotateSMSSendOutcome(outcome, sipCode, accepted), err
 		}
 		parts[index].pending = pending
 		if state == smsDeliveryStateAcked {
@@ -177,7 +181,7 @@ func (s *Service) executeSMSDelivery(
 		if index < len(parts)-1 {
 			if err := s.waitSMSInterPartDelay(ctx); err != nil {
 				outcome.DeliveryState = smsDeliveryStateFailed
-				return outcome, s.recordOutboundSMSFailure(environment.messageID, parts[index+1], err)
+				return annotateSMSSendOutcome(outcome, sipCode, true), s.recordOutboundSMSFailure(environment.messageID, parts[index+1], err)
 			}
 		}
 	}
@@ -277,54 +281,64 @@ func (s *Service) sendOutboundSMSPart(
 	ctx context.Context,
 	messageID string,
 	part outboundSMSPart,
-) (*smsPendingInfo, string, error) {
+) (*smsPendingInfo, string, int, error) {
 	sentAt := time.Now()
 	if s.delivery != nil {
 		if err := s.delivery.UpsertSMSDeliveryPart(messageID, part.number, part.callID, int(part.rpMR), smsDeliveryStatePending, sentAt); err != nil {
-			return nil, smsDeliveryStateFailed, s.recordOutboundSMSFailure(messageID, part, fmt.Errorf("persist pending part: %w", err))
+			return nil, smsDeliveryStateFailed, 0, s.recordOutboundSMSFailure(messageID, part, fmt.Errorf("persist pending part: %w", err))
 		}
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	if s.smsTransactionTimeout <= 0 {
-		return nil, smsDeliveryStateFailed, s.recordOutboundSMSFailure(messageID, part, errors.New("SMS transaction timeout is not configured"))
+		return nil, smsDeliveryStateFailed, 0, s.recordOutboundSMSFailure(messageID, part, errors.New("SMS transaction timeout is not configured"))
 	}
 	transactionCtx, cancel := context.WithTimeoutCause(
 		ctx, s.smsTransactionTimeout, errMOSMSFinalProbeTimeout,
 	)
 	defer cancel()
 	pending, response, err := s.dispatchSubmitPartWithRetry(transactionCtx, messageID, part, sentAt)
+	sipCode := sipResponseCode(response)
 	if err != nil {
 		transactionErr := classifySMSTransactionError(ctx, transactionCtx, s.smsTransactionTimeout, err)
 		wait := smsSubmitReportWait{
 			messageID: messageID, part: part, pending: pending, dispatchErr: transactionErr,
 		}
-		if isSoftMOSubmitProbeTimeout(transactionErr, sipResponseCode(response), s.cfg.Transport) {
+		if isSoftMOSubmitProbeTimeout(transactionErr, sipCode, s.cfg.Transport) {
 			retained, preserveErr := s.preservePendingSubmit(wait)
-			return retained, smsDeliveryStatePending, preserveErr
+			return retained, smsDeliveryStatePending, sipCode, preserveErr
 		}
 		if shouldWaitForSubmitReport(ctx, response, transactionErr) {
-			return s.waitForSubmitReport(ctx, wait)
+			pending, state, waitErr := s.waitForSubmitReport(ctx, wait)
+			return pending, state, -1, waitErr
 		}
 		s.takePendingSMSByCallID(part.callID)
-		persistErr := s.persistOutboundSIPResult(messageID, part.number, 0, smsDeliveryStateFailed, transactionErr.Error())
-		return nil, smsDeliveryStateFailed, s.recordOutboundSMSFailure(messageID, part, errors.Join(transactionErr, persistErr))
+		persistErr := s.persistOutboundSIPResult(messageID, part.number, sipCode, smsDeliveryStateFailed, transactionErr.Error())
+		return nil, smsDeliveryStateFailed, sipCode, s.recordOutboundSMSFailure(messageID, part, errors.Join(transactionErr, persistErr))
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		err = fmt.Errorf("MESSAGE rejected with status %d (%s)", response.StatusCode, strings.TrimSpace(response.Reason))
 		persistErr := s.persistOutboundSIPResult(
 			messageID, part.number, response.StatusCode, smsDeliveryStateFailed, err.Error(),
 		)
-		return nil, smsDeliveryStateFailed, s.recordOutboundSMSFailure(messageID, part, errors.Join(err, persistErr))
+		return nil, smsDeliveryStateFailed, response.StatusCode, s.recordOutboundSMSFailure(messageID, part, errors.Join(err, persistErr))
 	}
 	state, err := s.persistAcceptedSIPPart(messageID, part, response.StatusCode)
 	if err != nil {
 		s.takePendingSMSByCallID(part.callID)
-		return nil, smsDeliveryStateFailed, s.recordOutboundSMSFailure(messageID, part, err)
+		return nil, smsDeliveryStateFailed, response.StatusCode, s.recordOutboundSMSFailure(messageID, part, err)
 	}
 	s.expirePendingSMSAfter(part.callID, pendingSMSReportRetention)
-	return pending, state, nil
+	return pending, state, response.StatusCode, nil
+}
+
+func annotateSMSSendOutcome(outcome SendOutcome, sipCode int, accepted bool) SendOutcome {
+	if sipCode > 0 {
+		outcome.SIPCode = sipCode
+	}
+	outcome.RecommendCSFallback = recommendCSFallbackForSend(sipCode, accepted)
+	return outcome
 }
 
 func shouldWaitForSubmitReport(callerCtx context.Context, response *sip.Response, dispatchErr error) bool {

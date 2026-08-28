@@ -30,7 +30,7 @@ func TestIMSRegisterConfigForGiffgaff(t *testing.T) {
 		"urn%3Aurn-7%3A3gpp-service.ims.icsi.sms," +
 		"urn%3Aurn-7%3A3gpp-service.ims.icsi.oma.cpm.msg," +
 		"urn%3Aurn-7%3A3gpp-service.ims.icsi.oma.cpm.sms"
-	if template.Expires != 600000*time.Second || template.SupportedHeader != "path,sec-agree" ||
+	if template.Expires != 600000*time.Second || template.SupportedHeader != "path,sec-agree,outbound" ||
 		template.ContactMode != "android_default" || template.ICSIRef != wantICSIRef {
 		t.Fatalf("giffgaff IMS defaults = %+v", template)
 	}

@@ -60,18 +60,28 @@ func TestRegistrationSubscriptionUsesProductionTransactionAndRefreshes(t *testin
 	}
 	first, second := <-requests, <-requests
 	assertRegistrationSubscriptionRequest(t, first, 5)
-	assertRegistrationSubscriptionRequest(t, second, 6)
+	assertInDialogRegistrationSubscription(t, second, 6, "reg-notifier")
+	if rawSIPHeaderValue(first, "Call-ID") != rawSIPHeaderValue(second, "Call-ID") {
+		t.Fatal("refresh opened a new subscription dialog")
+	}
+	if rawSIPHeaderValue(first, "From") != rawSIPHeaderValue(second, "From") {
+		t.Fatal("refresh changed the subscription From")
+	}
 
 	service.mu.RLock()
 	expires := service.subscriptionExpires
 	lastOK := service.subscriptionLastOKAt
 	refreshAt := service.subscriptionRefreshAt
+	dialog := service.subscriptionDialog
 	service.mu.RUnlock()
 	if expires != 120*time.Second {
 		t.Fatalf("subscription expires = %s, want 2m", expires)
 	}
 	if delay := refreshAt.Sub(lastOK); delay != time.Minute {
 		t.Fatalf("subscription refresh delay = %s, want 1m", delay)
+	}
+	if !dialog.ready() || dialog.remoteTag != "reg-notifier" || dialog.cseq != 6 {
+		t.Fatalf("subscription dialog = %+v", dialog)
 	}
 }
 
@@ -89,7 +99,7 @@ func serveSubscriptionResponses(
 			return
 		}
 		requests <- request
-		if _, err = io.WriteString(conn, registerWireResponse(request, 200, "Expires: 120\r\n")); err != nil {
+		if _, err = io.WriteString(conn, subscriptionWireResponse(request, 200, "Expires: 120\r\n")); err != nil {
 			result <- err
 			return
 		}
@@ -99,11 +109,21 @@ func serveSubscriptionResponses(
 
 func assertRegistrationSubscriptionRequest(t *testing.T, request string, wantCSeq int) {
 	t.Helper()
+	assertRegistrationSubscription(t, request, wantCSeq, 3600, "")
+}
+
+func assertInDialogRegistrationSubscription(t *testing.T, request string, wantCSeq int, toTag string) {
+	t.Helper()
+	assertRegistrationSubscription(t, request, wantCSeq, 3600, toTag)
+}
+
+func assertRegistrationSubscription(t *testing.T, request string, wantCSeq, expires int, toTag string) {
+	t.Helper()
 	if !strings.HasPrefix(request, "SUBSCRIBE sip:+447840844894@o2.co.uk SIP/2.0") {
 		t.Fatalf("request line = %q", strings.SplitN(request, "\r\n", 2)[0])
 	}
 	checks := map[string]string{
-		"Event": "reg", "Accept": reginfoContentType, "Expires": "3600",
+		"Event": "reg", "Accept": reginfoContentType, "Expires": strconv.Itoa(expires),
 		"CSeq":            strconv.Itoa(wantCSeq) + " SUBSCRIBE",
 		"Security-Verify": "ipsec-3gpp;alg=hmac-sha-1-96",
 	}
@@ -111,6 +131,14 @@ func assertRegistrationSubscriptionRequest(t *testing.T, request string, wantCSe
 		if got := rawSIPHeaderValue(request, name); got != want {
 			t.Fatalf("%s = %q, want %q", name, got, want)
 		}
+	}
+	to := rawSIPHeaderValue(request, "To")
+	if toTag == "" {
+		if sipAddressTag(to) != "" {
+			t.Fatalf("initial SUBSCRIBE To should not have a tag: %q", to)
+		}
+	} else if sipAddressTag(to) != toTag {
+		t.Fatalf("To = %q, want tag %s", to, toTag)
 	}
 	contact := rawSIPHeaderValue(request, "Contact")
 	if !strings.Contains(contact, ":16083;transport=tcp>") {
@@ -120,6 +148,15 @@ func assertRegistrationSubscriptionRequest(t *testing.T, request string, wantCSe
 	if err != nil || !strings.HasPrefix(viaBranch, "z9hG4bK") || len(viaBranch) != len("z9hG4bK")+36 {
 		t.Fatalf("Via branch = %q, err = %v", viaBranch, err)
 	}
+}
+
+func subscriptionWireResponse(request string, status int, extraHeaders string) string {
+	from := rawSIPHeaderValue(request, "From")
+	to := rawSIPHeaderValue(request, "To")
+	if sipAddressTag(to) == "" {
+		to += ";tag=reg-notifier"
+	}
+	return registerWireResponse(request, status, "From: "+from+"\r\nTo: "+to+"\r\n"+extraHeaders)
 }
 
 func TestRegistrationSubscriptionSkipReason(t *testing.T) {
@@ -372,6 +409,162 @@ func TestReginfoAORPrefersTelephoneIdentityAndSummaryIsBounded(t *testing.T) {
 	}
 }
 
+func TestStopUnsubscribesRegistrationBeforeDeregister(t *testing.T) {
+	service := newProtectedKeepaliveTestService(t)
+	service.mu.Lock()
+	service.regSession.callID = "reg-call"
+	service.regSession.expires = time.Hour
+	service.mu.Unlock()
+	client, server := net.Pipe()
+	service.activateProtectedRegistrationTCP(client)
+	t.Cleanup(func() { _ = server.Close() })
+
+	seen := make(chan string, 3)
+	errorsSeen := make(chan error, 1)
+	go func() {
+		reader := bufio.NewReader(server)
+		for i := 0; i < 3; i++ {
+			request, err := readSIPStreamMessage(reader)
+			if err != nil {
+				errorsSeen <- err
+				return
+			}
+			seen <- request
+			if _, err = io.WriteString(server, subscriptionWireResponse(request, 200, "Expires: 0\r\n")); err != nil {
+				errorsSeen <- err
+				return
+			}
+		}
+		errorsSeen <- nil
+	}()
+	if err := service.sendSubscribeReg(context.Background()); err != nil {
+		t.Fatalf("sendSubscribeReg: %v", err)
+	}
+	initial := <-seen
+	if err := service.Stop(context.Background()); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+	unsubscribe := <-seen
+	deregister := <-seen
+	if err := <-errorsSeen; err != nil {
+		t.Fatal(err)
+	}
+	assertRegistrationSubscription(t, unsubscribe, 6, 0, "reg-notifier")
+	if rawSIPHeaderValue(unsubscribe, "Call-ID") != rawSIPHeaderValue(initial, "Call-ID") {
+		t.Fatal("unsubscribe used a different Call-ID")
+	}
+	if sipHeaderValue(deregister, "Expires") != "0" || !strings.HasPrefix(deregister, "REGISTER ") {
+		t.Fatalf("deregister = %q", strings.SplitN(deregister, "\r\n", 2)[0])
+	}
+	if service.hasSubscriptionDialog() || !service.subscriptionClosed {
+		t.Fatalf("subscription after stop dialog=%v closed=%v",
+			service.hasSubscriptionDialog(), service.subscriptionClosed)
+	}
+}
+
+func TestUnsubscribeSkippedWithoutDialog(t *testing.T) {
+	service := newProtectedKeepaliveTestService(t)
+	service.mu.Lock()
+	service.regSession.callID = "reg-call"
+	service.regSession.expires = time.Hour
+	service.mu.Unlock()
+	requests := make(chan string, 1)
+	service.transport.SetSendFn(func(request string) error {
+		requests <- request
+		service.transport.DeliverResponse(registerResponseForRequest(request, 200, nil))
+		return nil
+	})
+	if err := service.Unregister(context.Background()); err != nil {
+		t.Fatalf("Unregister: %v", err)
+	}
+	select {
+	case request := <-requests:
+		if !strings.HasPrefix(request, "REGISTER ") || sipHeaderValue(request, "Expires") != "0" {
+			t.Fatalf("unexpected shutdown request %q", request)
+		}
+	default:
+		t.Fatal("Unregister sent no REGISTER")
+	}
+	select {
+	case request := <-requests:
+		t.Fatalf("extra request after Unregister: %q", request)
+	default:
+	}
+}
+
+func TestNotifyLearnsSubscriptionDialogAndTerminatedClosesIt(t *testing.T) {
+	service := newProtectedKeepaliveTestService(t)
+	service.subscriptionDialog = registrationSubscriptionDialog{
+		callID: "notify-call", localTag: "client", cseq: 5,
+	}
+	replied := make(chan string, 1)
+	active := registrationNotifyRequestWithState(
+		`<reginfo><registration aor="sip:+447840844894@o2.co.uk">`+
+			`<contact id="registered-contact" state="active"><uri>sip:registered-contact@new.example</uri></contact>`+
+			`</registration></reginfo>`,
+		"active;expires=3600",
+	)
+	if err := service.dispatchInboundSIP(active, func(response string) error {
+		replied <- response
+		return nil
+	}); err != nil {
+		t.Fatalf("active NOTIFY: %v", err)
+	}
+	if !strings.HasPrefix(<-replied, "SIP/2.0 200 OK") {
+		t.Fatal("active NOTIFY was not acknowledged")
+	}
+	waitForReginfoAOR(t, service, "sip:+447840844894@o2.co.uk")
+	if !service.hasSubscriptionDialog() {
+		t.Fatal("NOTIFY did not learn the subscription remote tag")
+	}
+	service.mu.RLock()
+	dialog := service.subscriptionDialog
+	service.mu.RUnlock()
+	if dialog.remoteTag != "server" || dialog.localTag != "client" {
+		t.Fatalf("learned dialog = %+v", dialog)
+	}
+
+	terminated := strings.Replace(
+		registrationNotifyRequestWithState(
+			`<reginfo><registration aor="sip:+447840844894@o2.co.uk">`+
+				`<contact id="registered-contact" state="active"><uri>sip:registered-contact@new.example</uri></contact>`+
+				`</registration></reginfo>`,
+			"terminated;reason=timeout",
+		),
+		"CSeq: 1 NOTIFY",
+		"CSeq: 2 NOTIFY",
+		1,
+	)
+	if err := service.dispatchInboundSIP(terminated, func(response string) error {
+		replied <- response
+		return nil
+	}); err != nil {
+		t.Fatalf("terminated NOTIFY: %v", err)
+	}
+	<-replied
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) && !service.subscriptionClosed {
+		time.Sleep(time.Millisecond)
+	}
+	if service.hasSubscriptionDialog() || !service.subscriptionClosed {
+		t.Fatalf("terminated NOTIFY left dialog=%v closed=%v",
+			service.hasSubscriptionDialog(), service.subscriptionClosed)
+	}
+}
+
+func TestSubscriptionStateTerminatedParsesHeader(t *testing.T) {
+	raw := registrationNotifyRequestWithState("<reginfo/>", "terminated;reason=timeout")
+	if got := rawSIPHeaderValue(raw, "Subscription-State"); got != "terminated;reason=timeout" {
+		t.Fatalf("Subscription-State = %q", got)
+	}
+	if !subscriptionStateTerminated(raw) {
+		t.Fatal("terminated subscription-state was not recognized")
+	}
+	if subscriptionStateTerminated(registrationNotifyRequestWithState("<reginfo/>", "active;expires=3600")) {
+		t.Fatal("active subscription-state was treated as terminated")
+	}
+}
+
 func TestSubscriptionRefreshDelayMatchesRecoveredClient(t *testing.T) {
 	if got := subscriptionRefreshDelay(time.Hour); got != 59*time.Minute {
 		t.Fatalf("hour subscription refresh delay = %s", got)
@@ -382,13 +575,33 @@ func TestSubscriptionRefreshDelayMatchesRecoveredClient(t *testing.T) {
 }
 
 func registrationNotifyRequest(body string) string {
+	return registrationNotifyRequestWithState(body, "")
+}
+
+func registrationNotifyRequestWithState(body, subscriptionState string) string {
+	headers := "Event: reg;id=registration\r\nContent-Type: application/reginfo+xml;charset=UTF-8\r\n"
+	if subscriptionState != "" {
+		headers += "Subscription-State: " + subscriptionState + "\r\n"
+	}
 	return "NOTIFY sip:user@example SIP/2.0\r\n" +
 		"Via: SIP/2.0/TCP 192.0.2.1:6060;branch=z9hG4bK-notify\r\n" +
 		"From: <sip:server@example>;tag=server\r\n" +
 		"To: <sip:user@example>;tag=client\r\n" +
 		"Call-ID: notify-call\r\nCSeq: 1 NOTIFY\r\n" +
-		"Event: reg;id=registration\r\nContent-Type: application/reginfo+xml;charset=UTF-8\r\n" +
+		headers +
 		"Content-Length: " + strconv.Itoa(len(body)) + "\r\n\r\n" + body
+}
+
+func waitForSubscriptionDialog(t *testing.T, service *Service, ready bool) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if service.hasSubscriptionDialog() == ready {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("subscription dialog ready=%v, want %v", service.hasSubscriptionDialog(), ready)
 }
 
 func waitForReginfoAOR(t *testing.T, service *Service, want string) {

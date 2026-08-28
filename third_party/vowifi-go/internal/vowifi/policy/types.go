@@ -209,6 +209,7 @@ type EffectiveCarrierConfig struct {
 	IMSRegisterPolicySource                            string
 	SMSRoutingMethod, SMSRoutingGW                     string
 	ForceSMSCAuth                                      bool
+	AKAPrimePreferred                                  bool
 
 	IMS IMSRegisterTemplate
 }
@@ -231,6 +232,7 @@ type IKEPlan struct {
 	AllowedLegacyCiphers                               []string
 	AlgorithmPolicy                                    string
 	DPDKeepaliveIntervalSeconds, ReauthIntervalSeconds int
+	AKAPrimePreferred                                  bool
 }
 type IMSPlan struct {
 	Domain, Realm, Registrar, PCSCF, UserAgent, Transport, IdentitySource string

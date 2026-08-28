@@ -256,6 +256,68 @@ func TestRegisterTransportDeadlineUsesEarlierContextDeadline(t *testing.T) {
 	}
 }
 
+func TestRefreshRegisterFallsBackToLearnedPath(t *testing.T) {
+	service := &Service{cfg: &IMSConfig{
+		IMPI: "user@ims.example", IMPU: "sip:user@ims.example", Domain: "ims.example",
+		LocalIP: net.ParseIP("192.0.2.10"), LocalPort: 5060, Transport: "udp",
+	}}
+	request := service.buildRegister(&registerSession{
+		callID: "call-1", fromTag: "tag-1", contactUser: "contact-1", cseq: 3,
+		path: "<sip:pcscf.ims.example;lr;ob>",
+	}, "Digest response")
+	if got := sipHeaderValue(request, "Route"); got != "<sip:pcscf.ims.example;lr;ob>" {
+		t.Fatalf("Path fallback Route = %q", got)
+	}
+}
+
+func TestRefreshRegisterPrefersServiceRouteOverPath(t *testing.T) {
+	service := &Service{cfg: &IMSConfig{
+		IMPI: "user@ims.example", IMPU: "sip:user@ims.example", Domain: "ims.example",
+		LocalIP: net.ParseIP("192.0.2.10"), LocalPort: 5060, Transport: "udp",
+	}}
+	request := service.buildRegister(&registerSession{
+		callID: "call-1", fromTag: "tag-1", contactUser: "contact-1", cseq: 3,
+		serviceRoute: "<sip:scscf.ims.example;lr>",
+		path:         "<sip:pcscf.ims.example;lr;ob>",
+	}, "Digest response")
+	if got := sipHeaderValue(request, "Route"); got != "<sip:scscf.ims.example;lr>" {
+		t.Fatalf("Service-Route = %q", got)
+	}
+	if strings.Count(request, "\r\nRoute:") != 1 {
+		t.Fatalf("stacked Route headers:\n%s", request)
+	}
+}
+
+func TestRefreshRegisterAddsOutboundContactAfterNegotiation(t *testing.T) {
+	service := &Service{cfg: &IMSConfig{
+		IMPI: "user@ims.example", IMPU: "sip:user@ims.example", Domain: "ims.example",
+		LocalIP: net.ParseIP("192.0.2.10"), LocalPort: 5060, Transport: "udp",
+		RegisterTemplate: IMSRegisterTemplate{
+			ContactOrder: []string{"access_type", "sip_instance", "audio", "icsi_ref"},
+			AccessType:   "wlan1",
+		},
+		IMEI: "356938035643809",
+	}}
+	before := service.buildRegister(&registerSession{
+		callID: "call-1", fromTag: "tag-1", contactUser: "contact-1", cseq: 1,
+	}, "")
+	if strings.Contains(sipHeaderValue(before, "Contact"), ";ob") ||
+		strings.Contains(sipHeaderValue(before, "Contact"), "reg-id=") {
+		t.Fatalf("pre-negotiation Contact = %q", sipHeaderValue(before, "Contact"))
+	}
+	service.logRegisterFlowNegotiation(&sipResponse{
+		StatusCode: 200,
+		Headers:    map[string]string{"Path": "<sip:pcscf.example;lr;ob>"},
+	})
+	after := service.buildRegister(&registerSession{
+		callID: "call-1", fromTag: "tag-1", contactUser: "contact-1", cseq: 3,
+	}, "Digest response")
+	contact := sipHeaderValue(after, "Contact")
+	if !strings.Contains(contact, ";ob") || !strings.Contains(contact, "reg-id=1") {
+		t.Fatalf("post-negotiation Contact = %q", contact)
+	}
+}
+
 func TestRefreshRegisterCarriesLearnedServiceRoute(t *testing.T) {
 	service := &Service{cfg: &IMSConfig{
 		IMPI: "user@ims.example", IMPU: "sip:user@ims.example", Domain: "ims.example",

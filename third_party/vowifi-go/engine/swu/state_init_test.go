@@ -131,8 +131,16 @@ func TestBuildIKESAInitPacket(t *testing.T) {
 	if len(s.Ni) != 32 {
 		t.Errorf("Ni length = %d, want 32", len(s.Ni))
 	}
-	if len(pkt.Payloads) != 4 {
-		t.Fatalf("payloads = %d, want 4 (SA/KE/Ni/FRAG)", len(pkt.Payloads))
+	if len(pkt.Payloads) != 5 {
+		t.Fatalf("payloads = %d, want 5 (SA/KE/Ni/FRAG/NON_FIRST)", len(pkt.Payloads))
+	}
+	frag, ok := pkt.Payloads[3].(*ikev2.EncryptedPayloadNotify)
+	if !ok || frag.NotifyType != ikev2.IKEV2_FRAGMENTATION_SUPPORTED {
+		t.Fatalf("fragmentation notify = %#v", pkt.Payloads[3])
+	}
+	nonFirst, ok := pkt.Payloads[4].(*ikev2.EncryptedPayloadNotify)
+	if !ok || nonFirst.NotifyType != ikev2.NON_FIRST_FRAGMENTS_ALSO {
+		t.Fatalf("non-first-fragment notify = %#v", pkt.Payloads[4])
 	}
 
 	// Encode and round-trip through the ikev2 decoder.
@@ -147,8 +155,8 @@ func TestBuildIKESAInitPacket(t *testing.T) {
 	if dec.Header.ExchangeType != ikev2.IKE_SA_INIT {
 		t.Errorf("decoded exchange = %d", dec.Header.ExchangeType)
 	}
-	if len(dec.Payloads) != 4 {
-		t.Fatalf("decoded payloads = %d, want 4", len(dec.Payloads))
+	if len(dec.Payloads) != 5 {
+		t.Fatalf("decoded payloads = %d, want 5", len(dec.Payloads))
 	}
 
 	// SA payload.

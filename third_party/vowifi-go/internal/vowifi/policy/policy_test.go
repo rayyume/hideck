@@ -26,6 +26,9 @@ func TestDefaultIMSRegisterTemplate(t *testing.T) {
 	if !reflect.DeepEqual(template.ContactParamOrder, defaultContactParams) {
 		t.Fatalf("default contact order = %v", template.ContactParamOrder)
 	}
+	if template.SupportedHeader != "path,sec-agree,outbound" {
+		t.Fatalf("default Supported = %q", template.SupportedHeader)
+	}
 }
 
 func TestNormalizeIMSRegisterPolicy(t *testing.T) {

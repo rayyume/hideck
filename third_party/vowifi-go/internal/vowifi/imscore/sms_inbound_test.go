@@ -13,10 +13,14 @@ import (
 )
 
 type captureIMSEventSubscriber struct {
-	events chan events.Event
+	events  chan events.Event
+	onEvent func(events.Event)
 }
 
 func (s *captureIMSEventSubscriber) OnIMSEvent(event events.Event) {
+	if s.onEvent != nil {
+		s.onEvent(event)
+	}
 	s.events <- event
 }
 

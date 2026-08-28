@@ -3,6 +3,7 @@ package imscore
 import (
 	"bytes"
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -110,6 +111,71 @@ func TestInboundMemoryFullSendsRPError22ThenSMMA(t *testing.T) {
 	}
 	if !bytes.Equal(smmaBody, smscodec.BuildRPSMMA(0x2b)) {
 		t.Fatalf("RP-SMMA body = %x", smmaBody)
+	}
+}
+
+func TestNotifySMSMemoryAvailableRetriesRejectedFinalResponses(t *testing.T) {
+	service, _, _ := newInboundSMSTestService(t)
+	service.smsRandom = bytes.NewReader([]byte{0x2c})
+	service.rememberSMSMemoryDenied(
+		"MESSAGE sip:user@ims.example SIP/2.0\r\n" +
+			"P-Asserted-Identity: <sip:ipsmgw@ims.example>\r\n" +
+			"Call-ID: denied\r\nCSeq: 1 MESSAGE\r\nContent-Length: 0\r\n\r\n",
+	)
+	attempts := 0
+	service.transport.SetSendFn(func(request string) error {
+		attempts++
+		status := 503
+		if attempts == rpReportMaxAttempts {
+			status = 200
+		}
+		service.transport.DeliverResponse(registerResponseForRequest(request, status, nil))
+		return nil
+	})
+	if err := service.sendRPSMMAWithRetryPolicy(0, 0); err != nil {
+		t.Fatal(err)
+	}
+	if attempts != rpReportMaxAttempts {
+		t.Fatalf("SMMA attempts = %d, want %d", attempts, rpReportMaxAttempts)
+	}
+}
+
+func TestNotifySMSMemoryAvailableAbortOnStop(t *testing.T) {
+	service, _, _ := newInboundSMSTestService(t)
+	service.rememberSMSMemoryDenied(
+		"MESSAGE sip:user@ims.example SIP/2.0\r\n" +
+			"P-Asserted-Identity: <sip:ipsmgw@ims.example>\r\n" +
+			"Call-ID: denied\r\nCSeq: 1 MESSAGE\r\nContent-Length: 0\r\n\r\n",
+	)
+	service.StopCurrent()
+	if err := service.sendRPSMMAWithRetryPolicy(0, 0); !errors.Is(err, errRPReportAborted) {
+		t.Fatalf("stopped SMMA = %v", err)
+	}
+}
+
+func TestInboundPersistFailureSendsRPError22(t *testing.T) {
+	service, subscriber, outbound := newInboundSMSTestService(t)
+	subscriber.onEvent = func(event events.Event) {
+		if _, ok := event.(*events.EventSMSReceived); ok {
+			service.SetSMSMemoryFull(true)
+		}
+	}
+	raw := inboundSMSRequest(t, imsSMSContentType, inboundRPData(t, 0x61, "+447700900123", "held"))
+	if err := service.dispatchInboundSIP(raw, func(string) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-subscriber.events:
+	case <-time.After(time.Second):
+		t.Fatal("inbound SMS event was not published")
+	}
+	request := waitForOutboundSMSControl(t, outbound)
+	body, err := rawSIPBody(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(body, smscodec.BuildRPError(0x61, smscodec.RPCauseMemoryCapacityExceeded)) {
+		t.Fatalf("persist-failure RP body = %x", body)
 	}
 }
 

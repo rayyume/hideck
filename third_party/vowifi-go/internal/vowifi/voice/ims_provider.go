@@ -47,10 +47,17 @@ func (a *Agent) registeredDialogProfile() (imscore.SIPDialogProfile, error) {
 	return imscore.SIPDialogProfile{
 		LocalURI: snapshot.IMPU, ContactURI: contact, ContactHeader: "<" + contact + ">",
 		Domain: snapshot.Realm, LocalAddress: snapshot.LocalAddr,
-		Transport: snapshot.Transport, ServiceRoute: snapshot.ServiceRoute,
+		Transport: snapshot.Transport, ServiceRoute: effectiveVoiceRoute(snapshot.ServiceRoute, snapshot.Path),
 		SecurityVerify: snapshot.SecVerify, PANI: snapshot.PAccessNetworkInfo,
 		UserAgent: snapshot.UserAgent, InitialCSeq: int(endpoint.NextCSeq()),
 	}, nil
+}
+
+func effectiveVoiceRoute(serviceRoute, path string) string {
+	if route := strings.TrimSpace(serviceRoute); route != "" {
+		return route
+	}
+	return strings.TrimSpace(path)
 }
 
 func endpointContactURI(snapshot imsendpoint.Snapshot) string {

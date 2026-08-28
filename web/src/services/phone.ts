@@ -43,6 +43,7 @@ export type PhoneCall = {
   codec?: string
   recording_error?: string
   read_only: boolean
+  held?: boolean
 }
 
 export type PhoneRecord = {
@@ -116,6 +117,14 @@ export const phoneService = {
 
   async dtmf(callId: string, digit: string, lease: string) {
     await api.post(`/phone/calls/${encodeURIComponent(callId)}/dtmf`, { digit }, { headers: leaseHeaders(lease) })
+  },
+
+  async hold(callId: string, lease: string) {
+    await api.post(`/phone/calls/${encodeURIComponent(callId)}/hold`, {}, { headers: leaseHeaders(lease) })
+  },
+
+  async resume(callId: string, lease: string) {
+    await api.post(`/phone/calls/${encodeURIComponent(callId)}/resume`, {}, { headers: leaseHeaders(lease) })
   },
 
   async refreshMedia(callId: string, mediaId: string, lease: string, takeover = false) {

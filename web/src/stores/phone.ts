@@ -239,6 +239,18 @@ export const usePhoneStore = defineStore('phone', {
       await phoneService.dtmf(call.call_id, digit, this.lease)
     },
 
+    async toggleHold() {
+      const call = this.currentCall
+      if (!call || call.status !== 'connected' || call.read_only) return
+      if (call.held) {
+        await phoneService.resume(call.call_id, this.lease)
+        this.upsertCall({ ...call, held: false })
+        return
+      }
+      await phoneService.hold(call.call_id, this.lease)
+      this.upsertCall({ ...call, held: true })
+    },
+
     toggleMute() {
       if (this.mediaMode !== 'two-way') return
       this.muted = !this.muted

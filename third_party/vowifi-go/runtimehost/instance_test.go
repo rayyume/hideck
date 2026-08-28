@@ -90,6 +90,31 @@ func TestInstanceSMSDelegation(t *testing.T) {
 	}
 }
 
+type memoryService struct {
+	stubService
+	full *bool
+}
+
+func (s *memoryService) SetSMSMemoryFull(full bool) {
+	if s.full != nil {
+		*s.full = full
+	}
+}
+
+func TestInstanceSetSMSMemoryFull(t *testing.T) {
+	var full bool
+	instance := &Instance{}
+	instance.SetSMSMemoryFull(true)
+	if full {
+		t.Fatal("nil service should ignore memory-full")
+	}
+	instance.setService(&memoryService{full: &full})
+	instance.SetSMSMemoryFull(true)
+	if !full {
+		t.Fatal("SetSMSMemoryFull did not reach the IMS service")
+	}
+}
+
 func TestInstanceStop(t *testing.T) {
 	i := &Instance{}
 	svc := &stubService{}

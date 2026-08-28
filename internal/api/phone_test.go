@@ -75,6 +75,14 @@ func TestPhoneRoutesEnforceAuthenticationAndControlLease(t *testing.T) {
 	if dtmf.Code != http.StatusNoContent || gateway.dtmf != "call-api-1:5" {
 		t.Fatalf("DTMF status=%d forwarded=%q body=%s", dtmf.Code, gateway.dtmf, dtmf.Body.String())
 	}
+	hold := performPhoneRequest(router, http.MethodPost, "/api/phone/calls/call-api-1/hold", token, media.Lease, map[string]string{})
+	if hold.Code != http.StatusNoContent || gateway.dtmf != "call-api-1:hold" {
+		t.Fatalf("hold status=%d forwarded=%q body=%s", hold.Code, gateway.dtmf, hold.Body.String())
+	}
+	resume := performPhoneRequest(router, http.MethodPost, "/api/phone/calls/call-api-1/resume", token, media.Lease, map[string]string{})
+	if resume.Code != http.StatusNoContent || gateway.dtmf != "call-api-1:resume" {
+		t.Fatalf("resume status=%d forwarded=%q body=%s", resume.Code, gateway.dtmf, resume.Body.String())
+	}
 	hangup := performPhoneRequest(router, http.MethodDelete, "/api/phone/calls/call-api-1", token, media.Lease, nil)
 	if hangup.Code != http.StatusNoContent {
 		t.Fatalf("hangup status=%d body=%s", hangup.Code, hangup.Body.String())
@@ -253,6 +261,22 @@ func (g *phoneRouteGatewayStub) HangupCall(_ context.Context, deviceID, callID s
 
 func (g *phoneRouteGatewayStub) SendCallDTMF(_, callID, digit string) error {
 	g.dtmf = callID + ":" + digit
+	return nil
+}
+
+func (g *phoneRouteGatewayStub) HoldCall(_ context.Context, _, callID string) error {
+	g.dtmf = callID + ":hold"
+	g.emit(voicehost.CallEvent{
+		Type: "CallMediaUpdated", DeviceID: "dev-1", CallID: callID, Held: true, Time: time.Now(),
+	})
+	return nil
+}
+
+func (g *phoneRouteGatewayStub) ResumeCall(_ context.Context, _, callID string) error {
+	g.dtmf = callID + ":resume"
+	g.emit(voicehost.CallEvent{
+		Type: "CallMediaUpdated", DeviceID: "dev-1", CallID: callID, Held: false, Time: time.Now(),
+	})
 	return nil
 }
 

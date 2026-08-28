@@ -3,7 +3,6 @@ package voice
 import (
 	"errors"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/iniwex5/vowifi-go/internal/vowifi/imscore"
@@ -93,8 +92,8 @@ func (a *Agent) rejectInboundCall(call *Call, statusCode int) error {
 
 func (a *Agent) voiceSDPResponse(call *Call, status int, sdp string) imscore.InboundVoiceResponse {
 	response := imscore.InboundVoiceResponse{StatusCode: status, ContentType: "application/sdp", Body: []byte(sdp)}
-	if expires := call.voiceSessionExpires(); expires > 0 {
-		response.SessionExpires = strconv.FormatInt(int64(expires/time.Second), 10)
+	if expires := formatSessionExpiresHeader(call); expires != "" {
+		response.SessionExpires = expires
 	}
 	if profile, err := a.registeredDialogProfile(); err == nil {
 		response.Contact = profile.ContactURI

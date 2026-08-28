@@ -159,11 +159,12 @@ func TestServiceAdapterNoService(t *testing.T) {
 func TestAdaptSMSSendOutcomePreservesIdentity(t *testing.T) {
 	out := adaptSMSSendOutcome(imscore.SendOutcome{
 		MessageID: "sms-1", PartsTotal: 1, DeliveryState: "failed",
+		SIPCode: 503, RecommendCSFallback: true,
 	})
 	if out.MessageID != "sms-1" || out.Ref != "sms-1" || out.PartsTotal != 1 {
 		t.Fatalf("delivery identity = %+v", out)
 	}
-	if out.DeliveryState != "failed" || out.Err != nil {
+	if out.DeliveryState != "failed" || out.Err != nil || out.SIPCode != 503 || !out.RecommendCSFallback {
 		t.Fatalf("delivery failure = %+v", out)
 	}
 }
