@@ -1,6 +1,9 @@
 package policy
 
-import "reflect"
+import (
+	"reflect"
+	"strings"
+)
 
 func (plan CarrierPlan) IsZero() bool {
 	return reflect.DeepEqual(plan, CarrierPlan{})
@@ -18,7 +21,8 @@ func CarrierPlanFromEffectiveConfig(config EffectiveCarrierConfig) CarrierPlan {
 		},
 		EPDG: EPDGPlan{
 			IPStackType: config.IPStackType, Addr: config.EPDGAddr, AddrSource: config.EPDGAddrSource,
-			Port: config.EPDGPort, APN: config.APN, DNSServer: config.DNSServer,
+			EmergencyAddr: emergencyEPDGAddr(config),
+			Port:          config.EPDGPort, APN: config.APN, DNSServer: config.DNSServer,
 		},
 		IKE: IKEPlan{
 			NATKeepaliveSeconds: config.NATKeepaliveSeconds, DPDIntervalSeconds: config.DPDIntervalSeconds,
@@ -55,8 +59,9 @@ func EffectiveCarrierConfigFromCarrierPlan(plan CarrierPlan) EffectiveCarrierCon
 			EntitlementURL: plan.E911.EntitlementURL, WebsheetHostPolicy: plan.E911.WebsheetHostPolicy,
 		},
 		IPStackType: plan.EPDG.IPStackType, EPDGAddr: plan.EPDG.Addr,
-		EPDGAddrSource: plan.EPDG.AddrSource, EPDGPort: plan.EPDG.Port,
-		APN: plan.EPDG.APN, DNSServer: plan.EPDG.DNSServer,
+		EPDGAddrSource: plan.EPDG.AddrSource, EmergencyEPDGAddr: planEmergencyEPDGAddr(plan),
+		EPDGPort: plan.EPDG.Port,
+		APN:      plan.EPDG.APN, DNSServer: plan.EPDG.DNSServer,
 		NATKeepaliveSeconds: plan.IKE.NATKeepaliveSeconds, DPDIntervalSeconds: plan.IKE.DPDIntervalSeconds,
 		AKAChallengeMode: plan.IKE.AKAChallengeMode, IKEIdentityMode: plan.IKE.IKEIdentityMode,
 		AKAIdentityMode: plan.IKE.AKAIdentityMode, IKEProposals: cloneStrings(plan.IKE.IKEProposals),
@@ -77,6 +82,20 @@ func EffectiveCarrierConfigFromCarrierPlan(plan CarrierPlan) EffectiveCarrierCon
 	}
 	syncCompatibilityProjection(&config)
 	return config
+}
+
+func emergencyEPDGAddr(config EffectiveCarrierConfig) string {
+	if value := strings.TrimSpace(config.EmergencyEPDGAddr); value != "" {
+		return value
+	}
+	return DefaultCarrierEmergencyEPDGAddr(config.MCC, config.MNC)
+}
+
+func planEmergencyEPDGAddr(plan CarrierPlan) string {
+	if value := strings.TrimSpace(plan.EPDG.EmergencyAddr); value != "" {
+		return value
+	}
+	return DefaultCarrierEmergencyEPDGAddr(plan.Metadata.MCC, plan.Metadata.MNC)
 }
 
 func cloneIMSRegisterTemplate(template IMSRegisterTemplate) IMSRegisterTemplate {

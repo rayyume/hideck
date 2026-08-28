@@ -82,7 +82,7 @@ func toInternalBase(cfg carrier.EffectiveCarrierConfig) policy.EffectiveCarrierC
 			Websheet: cfg.E911.Websheet, EntitlementEndpoint: cfg.E911.EntitlementEndpoint,
 		},
 		IPStackType: cfg.IPStackType, EPDGAddr: cfg.EPDGAddr, EPDGAddrSource: cfg.EPDGAddrSource,
-		EPDGPort: cfg.EPDGPort, APN: cfg.APN, DNSServer: cfg.DNSServer,
+		EmergencyEPDGAddr: cfg.EmergencyEPDGAddr, EPDGPort: cfg.EPDGPort, APN: cfg.APN, DNSServer: cfg.DNSServer,
 	}
 }
 
@@ -132,7 +132,7 @@ func fromInternalBase(cfg policy.EffectiveCarrierConfig) carrier.EffectiveCarrie
 			Websheet: cfg.E911.Websheet, EntitlementEndpoint: cfg.E911.EntitlementEndpoint,
 		},
 		IPStackType: cfg.IPStackType, EPDGAddr: cfg.EPDGAddr, EPDGAddrSource: cfg.EPDGAddrSource,
-		EPDGPort: cfg.EPDGPort, APN: cfg.APN, DNSServer: cfg.DNSServer,
+		EmergencyEPDGAddr: cfg.EmergencyEPDGAddr, EPDGPort: cfg.EPDGPort, APN: cfg.APN, DNSServer: cfg.DNSServer,
 	}
 }
 

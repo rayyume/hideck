@@ -79,17 +79,36 @@ func (s *captureDeliveryStore) MarkSMSDeliveryPartReport(inReplyTo, callID, _ st
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.reportCalls++
-	for _, key := range []string{inReplyTo, callID} {
-		if part, ok := s.parts[key]; ok {
-			return DeliveryPartMatch{MessageID: part.messageID, PartNo: part.partNo, State: state, Matched: true}, nil
-		}
+	if part, ok := s.lookupPartByCallID(inReplyTo); ok {
+		return DeliveryPartMatch{MessageID: part.messageID, PartNo: part.partNo, State: state, Matched: true}, nil
 	}
-	for _, part := range s.parts {
-		if part.rpMR == rpMR {
-			return DeliveryPartMatch{MessageID: part.messageID, PartNo: part.partNo, State: state, Matched: true}, nil
+	if strings.TrimSpace(inReplyTo) != "" {
+		return DeliveryPartMatch{}, errors.New("delivery part not found")
+	}
+	if part, ok := s.lookupPartByCallID(callID); ok {
+		return DeliveryPartMatch{MessageID: part.messageID, PartNo: part.partNo, State: state, Matched: true}, nil
+	}
+	if rpMR >= 0 {
+		for _, part := range s.parts {
+			if part.rpMR == rpMR {
+				return DeliveryPartMatch{MessageID: part.messageID, PartNo: part.partNo, State: state, Matched: true}, nil
+			}
 		}
 	}
 	return DeliveryPartMatch{}, errors.New("delivery part not found")
+}
+
+func (s *captureDeliveryStore) lookupPartByCallID(callID string) (capturedDeliveryPart, bool) {
+	key := normalizeSMSCallID(callID)
+	if key == "" {
+		return capturedDeliveryPart{}, false
+	}
+	for storedID, part := range s.parts {
+		if normalizeSMSCallID(storedID) == key || normalizeSMSCallID(part.callID) == key {
+			return part, true
+		}
+	}
+	return capturedDeliveryPart{}, false
 }
 
 func (s *captureDeliveryStore) RecomputeSMSDelivery(messageID string, _ time.Time) error {

@@ -189,6 +189,7 @@ type EffectiveCarrierConfig struct {
 	MCC, MNC, PresetID, MatchedTemplate                string
 	E911                                               E911Policy
 	IPStackType, EPDGAddr, EPDGAddrSource              string
+	EmergencyEPDGAddr                                  string
 	EPDGPort                                           uint16
 	APN, DNSServer                                     string
 	NATKeepaliveSeconds, DPDIntervalSeconds            int
@@ -218,9 +219,9 @@ type E911Plan struct {
 	Provider, EntitlementURL, WebsheetHostPolicy string
 }
 type EPDGPlan struct {
-	IPStackType, Addr, AddrSource string
-	Port                          uint16
-	APN, DNSServer                string
+	IPStackType, Addr, AddrSource, EmergencyAddr string
+	Port                                         uint16
+	APN, DNSServer                               string
 }
 type IKEPlan struct {
 	NATKeepaliveSeconds, DPDIntervalSeconds            int

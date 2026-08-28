@@ -114,6 +114,7 @@ type EffectiveCarrierConfig struct {
 	IPStackType                   string
 	EPDGAddr                      string
 	EPDGAddrSource                string
+	EmergencyEPDGAddr             string
 	EPDGPort                      uint16
 	APN                           string
 	DNSServer                     string

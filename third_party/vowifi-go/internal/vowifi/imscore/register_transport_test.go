@@ -260,7 +260,7 @@ func TestRegisterContactUsesRecoveredCarrierTemplate(t *testing.T) {
 		RegisterTemplate: IMSRegisterTemplate{
 			AccessType: "wlan1", ICSIRef: icsi,
 			ContactOrder: []string{
-				"access_type", "sip_instance", "audio", "smsip", "icsi_ref",
+				"access_type", "sip_instance", "audio", "smsip", "smsip_msisdn_less", "icsi_ref",
 				"mid_call", "srvcc_alerting", "ps2cs_srvcc_orig_pre_alerting",
 			},
 		},
@@ -275,7 +275,7 @@ func TestRegisterContactUsesRecoveredCarrierTemplate(t *testing.T) {
 	want := `<sip:234102356143376@192.0.2.10:5060;transport=udp>` +
 		`;+g.3gpp.accesstype="wlan1"` +
 		`;+sip.instance="<urn:gsma:imei:35693803-564380-9>"` +
-		`;audio;+g.3gpp.smsip` +
+		`;audio;+g.3gpp.smsip;+g.3gpp.smsip-msisdn-less` +
 		`;+g.3gpp.icsi-ref="` + icsi + `"` +
 		`;+g.3gpp.mid-call;+g.3gpp.srvcc-alerting` +
 		`;+g.3gpp.ps2cs-srvcc-orig-pre-alerting`

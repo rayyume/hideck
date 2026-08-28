@@ -77,6 +77,9 @@ func TestPrepareStartDerivedIdentityAndRedirect(t *testing.T) {
 	if prepared.EPDGAddr != "redirect.epdg.example" || prepared.EPDGSource != "redirect" {
 		t.Fatalf("ePDG = %q source %q", prepared.EPDGAddr, prepared.EPDGSource)
 	}
+	if prepared.CarrierPlan.EPDG.EmergencyAddr != "sos.epdg.epc.mnc010.mcc234.pub.3gppnetwork.org" {
+		t.Fatalf("emergency ePDG = %q", prepared.CarrierPlan.EPDG.EmergencyAddr)
+	}
 	if HasIMSIdentityResolution(prepared.IMSIdentity) {
 		t.Fatalf("derived identity was applied during startup: %+v", prepared.IMSIdentity)
 	}

@@ -43,7 +43,7 @@ func applyBuiltInCarrierExtensions(key string, preset CarrierPreset) CarrierPres
 	}
 	preset.IMSRegisterTemplate.SupportedHeader = "path,sec-agree,outbound"
 	contactOrder := []string{
-		"access_type", "sip_instance", "reg_id", "audio", "smsip", "icsi_ref",
+		"access_type", "sip_instance", "reg_id", "audio", "smsip", "smsip_msisdn_less", "icsi_ref",
 	}
 	preset.IMSRegisterTemplate.ContactParamOrder = cloneStrings(contactOrder)
 	preset.IMSRegisterTemplate.ContactOrder = cloneStrings(contactOrder)

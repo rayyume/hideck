@@ -26,7 +26,7 @@ var (
 	defaultTemporaryStatusCodes = []int{408, 429, 500, 502, 503, 504}
 	defaultForbiddenStatusCodes = []int{403}
 	defaultFallbackStatusCodes  = []int{400, 403, 500}
-	defaultContactParams        = []string{"access_type", "sip_instance", "audio", "smsip", "icsi_ref"}
+	defaultContactParams        = []string{"access_type", "sip_instance", "audio", "smsip", "smsip_msisdn_less", "icsi_ref"}
 	defaultSecurityMechanisms   = []IPSec3GPPSecurityMechanism{
 		{Alg: "hmac-md5-96", EAlg: "des-ede3-cbc", Prot: "esp", Mode: "trans"},
 		{Alg: "hmac-md5-96", EAlg: "aes-cbc", Prot: "esp", Mode: "trans"},

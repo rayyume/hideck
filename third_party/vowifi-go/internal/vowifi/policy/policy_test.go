@@ -23,6 +23,9 @@ func TestDefaultIMSRegisterTemplate(t *testing.T) {
 	if template.SMSReceiverTransport != "" || NormalizeIMSRegisterTemplate(template).SMSReceiverTransport != "dual" {
 		t.Fatalf("receiver defaults = raw %q normalized %q", template.SMSReceiverTransport, NormalizeIMSRegisterTemplate(template).SMSReceiverTransport)
 	}
+	if !reflect.DeepEqual(template.ContactParamOrder, defaultContactParams) {
+		t.Fatalf("default contact order = %v", template.ContactParamOrder)
+	}
 }
 
 func TestNormalizeIMSRegisterPolicy(t *testing.T) {
@@ -96,7 +99,8 @@ func TestVoWiFiBlocklistAndErrorChain(t *testing.T) {
 func TestResolveEmbeddedCarrierPresets(t *testing.T) {
 	giffgaff := ResolveEffectiveCarrierConfig("234", "10")
 	if giffgaff.PresetID != "giffgaff_23410" || giffgaff.DeviceModel != "rmx3366" ||
-		giffgaff.ReauthIntervalSeconds != 0 || giffgaff.EPDGAddrSource != "standard" {
+		giffgaff.ReauthIntervalSeconds != 0 || giffgaff.EPDGAddrSource != "standard" ||
+		giffgaff.EmergencyEPDGAddr != DefaultCarrierEmergencyEPDGAddr("234", "10") {
 		t.Fatalf("giffgaff = %+v", giffgaff)
 	}
 	if !reflect.DeepEqual(giffgaff.IKEProposals, []string{"aes256-sha512-prfsha512-modp2048"}) {
@@ -105,8 +109,8 @@ func TestResolveEmbeddedCarrierPresets(t *testing.T) {
 	cteUK := ResolveEffectiveCarrierConfig("234", "33")
 	if cteUK.PresetID != "CTEUK_23433" ||
 		cteUK.IMSRegisterTemplate.SupportedHeader != "path,sec-agree,outbound" ||
-		!reflect.DeepEqual(cteUK.IMSRegisterTemplate.ContactParamOrder[:3], []string{
-			"access_type", "sip_instance", "reg_id",
+		!reflect.DeepEqual(cteUK.IMSRegisterTemplate.ContactParamOrder, []string{
+			"access_type", "sip_instance", "reg_id", "audio", "smsip", "smsip_msisdn_less", "icsi_ref",
 		}) || !reflect.DeepEqual(cteUK.IMSRegisterTemplate.ContactOrder,
 		cteUK.IMSRegisterTemplate.ContactParamOrder) {
 		t.Fatalf("CTEUK outbound registration = %+v", cteUK.IMSRegisterTemplate)
@@ -114,7 +118,7 @@ func TestResolveEmbeddedCarrierPresets(t *testing.T) {
 	vodafoneUK := ResolveEffectiveCarrierConfig("234", "15")
 	if vodafoneUK.PresetID != "vodafone_uk_23415" || vodafoneUK.DeviceModel != "rmx3366" ||
 		vodafoneUK.EPDGAddr != "epdg.epc.mnc015.mcc234.pub.3gppnetwork.org" ||
-		DefaultCarrierEmergencyEPDGAddr("234", "15") != "sos.epdg.epc.mnc015.mcc234.pub.3gppnetwork.org" ||
+		vodafoneUK.EmergencyEPDGAddr != "sos.epdg.epc.mnc015.mcc234.pub.3gppnetwork.org" ||
 		vodafoneUK.EPDGAddrSource != "standard" ||
 		vodafoneUK.IMSRegisterTemplate.ID != "vodafone_uk_23415" {
 		t.Fatalf("vodafone uk = %+v", vodafoneUK)
@@ -122,8 +126,8 @@ func TestResolveEmbeddedCarrierPresets(t *testing.T) {
 	if !strings.Contains(vodafoneUK.IMSRegisterTemplate.ICSIRef, "ims.icsi.sms") {
 		t.Fatalf("vodafone uk ICSI missing SMS: %q", vodafoneUK.IMSRegisterTemplate.ICSIRef)
 	}
-	if !reflect.DeepEqual(vodafoneUK.IMSRegisterTemplate.ContactParamOrder[:5], []string{
-		"access_type", "sip_instance", "audio", "smsip", "icsi_ref",
+	if !reflect.DeepEqual(vodafoneUK.IMSRegisterTemplate.ContactParamOrder[:6], []string{
+		"access_type", "sip_instance", "audio", "smsip", "smsip_msisdn_less", "icsi_ref",
 	}) {
 		t.Fatalf("vodafone uk contact order = %v", vodafoneUK.IMSRegisterTemplate.ContactParamOrder)
 	}
@@ -137,8 +141,8 @@ func TestResolveEmbeddedCarrierPresets(t *testing.T) {
 	if !strings.Contains(lebaraUK.IMSRegisterTemplate.ICSIRef, "ims.icsi.sms") {
 		t.Fatalf("lebara uk ICSI missing SMS: %q", lebaraUK.IMSRegisterTemplate.ICSIRef)
 	}
-	if !reflect.DeepEqual(lebaraUK.IMSRegisterTemplate.ContactParamOrder[:5], []string{
-		"access_type", "sip_instance", "audio", "smsip", "icsi_ref",
+	if !reflect.DeepEqual(lebaraUK.IMSRegisterTemplate.ContactParamOrder[:6], []string{
+		"access_type", "sip_instance", "audio", "smsip", "smsip_msisdn_less", "icsi_ref",
 	}) {
 		t.Fatalf("lebara uk contact order = %v", lebaraUK.IMSRegisterTemplate.ContactParamOrder)
 	}
@@ -147,6 +151,7 @@ func TestResolveEmbeddedCarrierPresets(t *testing.T) {
 	}
 	att := ResolveEffectiveCarrierConfig("310", "280")
 	if att.PresetID != "att_310280" || att.EPDGAddr != "epdg.epc.att.net" ||
+		att.EmergencyEPDGAddr != DefaultCarrierEmergencyEPDGAddr("310", "280") ||
 		att.IMSRegisterTemplate.RegisterPolicy.ID != "att_main" || att.IMSRegisterPolicySource != "preset" {
 		t.Fatalf("AT&T = %+v", att)
 	}

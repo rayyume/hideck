@@ -12,7 +12,8 @@ func GetGlobalDefaultConfig(mcc, mnc string) EffectiveCarrierConfig {
 	config := EffectiveCarrierConfig{
 		MCC: mcc, MNC: mnc, IPStackType: "ipv4v6",
 		EPDGAddr: DefaultCarrierStandardEPDGAddr(mcc, mnc), EPDGAddrSource: "standard",
-		EPDGPort: 500, APN: "ims", DNSServer: defaultDNS,
+		EmergencyEPDGAddr: DefaultCarrierEmergencyEPDGAddr(mcc, mnc),
+		EPDGPort:          500, APN: "ims", DNSServer: defaultDNS,
 		NATKeepaliveSeconds: 20, DPDIntervalSeconds: 120,
 		AKAChallengeMode: "minimal", IKEIdentityMode: "epc_nai", AKAIdentityMode: "epc_nai",
 		IKEProposals: DefaultCarrierIKEProposals(), ESPProposals: DefaultCarrierESPProposals(),

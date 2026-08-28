@@ -3,6 +3,7 @@ package startup
 import (
 	"testing"
 
+	"github.com/iniwex5/vowifi-go/internal/vowifi/policy"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/profile"
 )
 
@@ -66,6 +67,10 @@ func assertOriginalCarrierProjection(
 	}
 	if prepared.EPDGAddr != want.epdg || prepared.EPDGSource != want.epdgSource {
 		t.Fatalf("ePDG = %q source %q", prepared.EPDGAddr, prepared.EPDGSource)
+	}
+	wantEmergency := policy.DefaultCarrierEmergencyEPDGAddr(want.mcc, want.normalizedMNC)
+	if plan.EPDG.EmergencyAddr != wantEmergency || prepared.EPDGAddr == wantEmergency {
+		t.Fatalf("emergency ePDG = %q ordinary = %q", plan.EPDG.EmergencyAddr, prepared.EPDGAddr)
 	}
 	if plan.IKE.DPDIntervalSeconds != want.dpdSeconds || plan.IKE.ReauthIntervalSeconds != want.reauthSeconds ||
 		plan.IKE.AKAChallengeMode != want.akaMode || len(plan.IKE.ESPProposals) == 0 ||

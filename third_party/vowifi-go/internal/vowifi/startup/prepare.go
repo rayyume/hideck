@@ -176,6 +176,9 @@ func selectEPDG(override string, plan policy.CarrierPlan) (string, string) {
 	if override = strings.TrimSpace(override); override != "" {
 		return override, redirectEPDGSource
 	}
+	// Ordinary VoWiFi IKE always uses the standard/custom ePDG. The IR.51
+	// emergency FQDN stays on the carrier plan for future SIMs and is never
+	// selected here.
 	return strings.TrimSpace(plan.EPDG.Addr), strings.TrimSpace(plan.EPDG.AddrSource)
 }
 

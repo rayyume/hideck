@@ -125,18 +125,64 @@ func TestSuccessfulSIPResponseRetainsRPReportCorrelation(t *testing.T) {
 	}
 }
 
-func TestUnmatchedDeliveryReportReturnsErrorAfterSIPResponse(t *testing.T) {
+func TestUnmatchedDeliveryReportWithInReplyToReturns488(t *testing.T) {
 	service, _, _, _ := newDeliveryReportTestService(t)
 	var response string
 	err := service.dispatchInboundSIP(deliveryReportRequest([]byte{0x03, 0x42}, "missing"), func(value string) error {
 		response = value
 		return nil
 	})
-	if err == nil || !strings.Contains(err.Error(), "not found") {
+	if err != nil {
+		t.Fatalf("dispatch error = %v", err)
+	}
+	if !strings.HasPrefix(response, "SIP/2.0 488") {
+		t.Fatalf("SIP response = %q", response)
+	}
+}
+
+func TestUnmatchedDeliveryReportWithoutInReplyToKeeps200(t *testing.T) {
+	service, _, _, _ := newDeliveryReportTestService(t)
+	var response string
+	err := service.dispatchInboundSIP(deliveryReportRequestWithoutInReplyTo([]byte{0x03, 0x42}), func(value string) error {
+		response = value
+		return nil
+	})
+	if err == nil || !errors.Is(err, errSMSDeliveryReportUnmatched) {
 		t.Fatalf("dispatch error = %v", err)
 	}
 	if !strings.HasPrefix(response, "SIP/2.0 200") {
 		t.Fatalf("SIP response = %q", response)
+	}
+}
+
+func TestLateDeliveryReportMatchesStoreAfterPendingExpiry(t *testing.T) {
+	service, subscriber, store, outbound := newDeliveryReportTestService(t)
+	outcome := sendDeliveryTestSMS(t, service, subscriber, outbound, "hello")
+	part := store.part(outcome.MessageID, 1)
+	if service.takePendingSMSByCallID(part.callID) == nil {
+		t.Fatal("expected pending SMS before the late report")
+	}
+	response := dispatchDeliveryReport(t, service, deliveryReportRequest([]byte{0x03, byte(part.rpMR)}, part.callID))
+	if !strings.HasPrefix(response, "SIP/2.0 200") {
+		t.Fatalf("SIP response = %q", response)
+	}
+	assertDeliveryStatus(t, store, outcome.MessageID, smsDeliveryStateAcked, smsDeliveryStateAcked)
+}
+
+func TestMismatchedInReplyToDoesNotStealRPReference(t *testing.T) {
+	service, subscriber, store, outbound := newDeliveryReportTestService(t)
+	outcome := sendDeliveryTestSMS(t, service, subscriber, outbound, "hello")
+	part := store.part(outcome.MessageID, 1)
+	response := dispatchDeliveryReport(t, service, deliveryReportRequest([]byte{0x03, byte(part.rpMR)}, "other-call"))
+	if !strings.HasPrefix(response, "SIP/2.0 488") {
+		t.Fatalf("SIP response = %q", response)
+	}
+	assertDeliveryStatus(t, store, outcome.MessageID, smsDeliveryStatePending, smsDeliveryStatePending)
+	service.outboundMu.Lock()
+	pending := service.matchPendingByCallIDLocked(part.callID)
+	service.outboundMu.Unlock()
+	if pending == nil {
+		t.Fatal("mismatched In-Reply-To completed the pending send")
 	}
 }
 
@@ -232,6 +278,15 @@ func deliveryReportRequest(body []byte, inReplyTo string) string {
 		"To: <sip:user@ims.example>\r\nCall-ID: report-call\r\n"+
 		"In-Reply-To: %s\r\nCSeq: 1 MESSAGE\r\nContent-Type: %s\r\n"+
 		"Content-Length: %d\r\n\r\n%s", inReplyTo, imsSMSContentType, len(body), body)
+}
+
+func deliveryReportRequestWithoutInReplyTo(body []byte) string {
+	return fmt.Sprintf("MESSAGE sip:user@ims.example SIP/2.0\r\n"+
+		"Via: SIP/2.0/TCP 10.0.0.1:5060;branch=z9hG4bK-report\r\n"+
+		"From: <sip:+447802002606@ims.example>;tag=remote\r\n"+
+		"To: <sip:user@ims.example>\r\nCall-ID: report-call\r\n"+
+		"CSeq: 1 MESSAGE\r\nContent-Type: %s\r\n"+
+		"Content-Length: %d\r\n\r\n%s", imsSMSContentType, len(body), body)
 }
 
 func networkRPData(t *testing.T, rpMR byte, payload []byte) []byte {

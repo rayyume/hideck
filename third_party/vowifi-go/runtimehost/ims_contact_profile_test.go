@@ -20,7 +20,7 @@ func TestIMSRegisterConfigForGiffgaff(t *testing.T) {
 		t.Fatalf("imsRegisterConfigForPrepared() error = %v", err)
 	}
 	wantOrder := []string{
-		"access_type", "sip_instance", "audio", "smsip", "icsi_ref",
+		"access_type", "sip_instance", "audio", "smsip", "smsip_msisdn_less", "icsi_ref",
 		"mid_call", "srvcc_alerting", "ps2cs_srvcc_orig_pre_alerting",
 	}
 	if !reflect.DeepEqual(template.ContactOrder, wantOrder) || template.AccessType != "wlan1" {

@@ -10,8 +10,11 @@ import (
 	"github.com/iniwex5/vowifi-go/internal/smscodec"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/events"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/logging"
+	"github.com/iniwex5/vowifi-go/internal/vowifi/smsdelivery"
 	"github.com/warthog618/sms/encoding/tpdu"
 )
+
+var errSMSDeliveryReportUnmatched = errors.New("imscore: SMS delivery report did not match a pending part")
 
 const (
 	smsDeliveryStateAcked = "acked"
@@ -28,10 +31,6 @@ type smsDeliveryReport struct {
 }
 
 func (s *Service) handleInboundRPReport(raw string, info smscodec.RPDUInfo, state, errorText string) (inboundSIPResult, error) {
-	response, err := buildSIPRequestResponse(raw, 200)
-	if err != nil {
-		return inboundSIPResult{}, err
-	}
 	if state == smsDeliveryStateAcked && strings.TrimSpace(errorText) == "" {
 		errorText = smsSubmitReportAck
 	}
@@ -39,7 +38,27 @@ func (s *Service) handleInboundRPReport(raw string, info smscodec.RPDUInfo, stat
 		reference: int(info.MR), state: state, sipCode: 0,
 		rpCause: info.Cause, errorText: errorText,
 	}
-	return inboundSIPResult{response: response}, s.recordSMSDeliveryReport(raw, report)
+	inReplyTo := strings.TrimSpace(rawSIPHeaderValue(raw, "In-Reply-To"))
+	matchedPending := false
+	if inReplyTo != "" {
+		s.outboundMu.Lock()
+		matchedPending = s.matchPendingByCallIDLocked(inReplyTo) != nil
+		s.outboundMu.Unlock()
+	}
+	recordErr := s.recordSMSDeliveryReport(raw, report)
+	status := 200
+	if inReplyTo != "" && !matchedPending && (s.delivery == nil || unmatchedSMSDeliveryReport(recordErr)) {
+		status = 488
+		recordErr = nil
+		logging.WarnRate("sms-rp-report-unmatched-"+s.DeviceID(), 30*time.Second,
+			"IMS RP-ACK/RP-ERROR In-Reply-To did not match a submitted SM",
+			"device", s.DeviceID())
+	}
+	response, err := buildSIPRequestResponse(raw, status)
+	if err != nil {
+		return inboundSIPResult{}, err
+	}
+	return inboundSIPResult{response: response}, recordErr
 }
 
 func (s *Service) handleInboundTPStatusReport(raw string, rpMR byte, payload []byte) (inboundSIPResult, error) {
@@ -87,7 +106,6 @@ func parseTPStatusReport(payload []byte) (smsDeliveryReport, error) {
 }
 
 func (s *Service) recordSMSDeliveryReport(raw string, report smsDeliveryReport) error {
-	s.handleMORPError(report.rpCause, report.errorText)
 	inReplyTo := rawSIPHeaderValue(raw, "In-Reply-To")
 	callID := rawSIPHeaderValue(raw, "Call-ID")
 	if s.delivery == nil {
@@ -103,11 +121,15 @@ func (s *Service) recordSMSDeliveryReport(raw string, report smsDeliveryReport) 
 		report.rpCause, report.errorText, reportedAt,
 	)
 	if err != nil {
+		if unmatchedSMSDeliveryReport(err) {
+			return errSMSDeliveryReportUnmatched
+		}
 		return fmt.Errorf("imscore: persist SMS delivery report: %w", err)
 	}
 	if !match.Matched || strings.TrimSpace(match.MessageID) == "" {
-		return errors.New("imscore: SMS delivery report did not match a pending part")
+		return errSMSDeliveryReportUnmatched
 	}
+	s.handleMORPError(report.rpCause, report.errorText)
 	if err := s.delivery.RecomputeSMSDelivery(match.MessageID, time.Now()); err != nil {
 		return fmt.Errorf("imscore: recompute SMS delivery: %w", err)
 	}
@@ -226,6 +248,16 @@ func latestDeliveryPart(status *DeliveryStatus) (partNo, sipCode, rpCause int) {
 
 func recommendCSFallback(sipCode int) bool {
 	return sipCode == 408 || sipCode == 480 || sipCode == 503
+}
+
+func unmatchedSMSDeliveryReport(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, errSMSDeliveryReportUnmatched) || errors.Is(err, smsdelivery.ErrDeliveryNotFound) {
+		return true
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "not found")
 }
 
 func (s *Service) waitDeliveryReport(

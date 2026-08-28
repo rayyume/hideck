@@ -218,29 +218,33 @@ func MarkSMSDeliveryPartReport(inReplyTo, callID, deviceID string, rpMR int, sta
 
 	var part SMSDeliveryPart
 	var err error
-	if inReplyTo != "" {
-		part, err = findLatest(baseQuery().Where("sms_delivery_part.call_id = ?", inReplyTo))
-	}
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		return SMSDeliveryPart{}, err
-	}
-	if part.ID == 0 && callID != "" {
-		part, err = findLatest(baseQuery().Where("sms_delivery_part.call_id = ?", callID))
+	if keys := smsCallIDLookupValues(inReplyTo); len(keys) > 0 {
+		part, err = findLatest(baseQuery().Where("sms_delivery_part.call_id IN ?", keys))
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return SMSDeliveryPart{}, err
 		}
-	}
-	if part.ID == 0 && rpMR >= 0 {
-		cutoff := at.Add(-120 * time.Second)
-		part, err = findLatest(baseQuery().
-			Where("sms_delivery_part.rp_mr = ? AND sms_delivery_part.created_at >= ?", rpMR, cutoff).
-			Where("sms_delivery_part.state IN ?", []string{SMSDeliveryPartStatePending, SMSDeliveryPartStateAcked, SMSDeliveryPartStateFailed, SMSDeliveryPartStateTimeout}))
-		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-			return SMSDeliveryPart{}, err
+		if part.ID == 0 {
+			return SMSDeliveryPart{}, gorm.ErrRecordNotFound
 		}
-	}
-	if part.ID == 0 {
-		return SMSDeliveryPart{}, gorm.ErrRecordNotFound
+	} else {
+		if callID != "" {
+			part, err = findLatest(baseQuery().Where("sms_delivery_part.call_id IN ?", smsCallIDLookupValues(callID)))
+			if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+				return SMSDeliveryPart{}, err
+			}
+		}
+		if part.ID == 0 && rpMR >= 0 {
+			cutoff := at.Add(-120 * time.Second)
+			part, err = findLatest(baseQuery().
+				Where("sms_delivery_part.rp_mr = ? AND sms_delivery_part.created_at >= ?", rpMR, cutoff).
+				Where("sms_delivery_part.state IN ?", []string{SMSDeliveryPartStatePending, SMSDeliveryPartStateAcked, SMSDeliveryPartStateFailed, SMSDeliveryPartStateTimeout}))
+			if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+				return SMSDeliveryPart{}, err
+			}
+		}
+		if part.ID == 0 {
+			return SMSDeliveryPart{}, gorm.ErrRecordNotFound
+		}
 	}
 
 	reportAt := at
@@ -265,6 +269,30 @@ func MarkSMSDeliveryPartReport(inReplyTo, callID, deviceID string, rpMR int, sta
 		return SMSDeliveryPart{}, err
 	}
 	return part, nil
+}
+
+func smsCallIDLookupValues(value string) []string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	seen := map[string]struct{}{value: {}}
+	out := []string{value}
+	add := func(candidate string) {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" {
+			return
+		}
+		if _, ok := seen[candidate]; ok {
+			return
+		}
+		seen[candidate] = struct{}{}
+		out = append(out, candidate)
+	}
+	trimmed := strings.Trim(value, "<>\"")
+	add(trimmed)
+	add(strings.ToLower(trimmed))
+	return out
 }
 
 func RecomputeSMSDelivery(messageID string, at time.Time) error {

@@ -95,14 +95,30 @@ func (s *memoryDeliveryStore) MarkSMSDeliveryPartReport(inReplyTo, callID, _ str
 }
 
 func (s *memoryDeliveryStore) findPart(inReplyTo, callID string, rpMR int) *memoryDeliveryPart {
+	if key := normalizeSMSCallID(inReplyTo); key != "" {
+		for _, parts := range s.parts {
+			for _, part := range parts {
+				if normalizeSMSCallID(part.callID) == key {
+					return part
+				}
+			}
+		}
+		return nil
+	}
+	if key := normalizeSMSCallID(callID); key != "" {
+		for _, parts := range s.parts {
+			for _, part := range parts {
+				if normalizeSMSCallID(part.callID) == key {
+					return part
+				}
+			}
+		}
+	}
+	if rpMR < 0 {
+		return nil
+	}
 	for _, parts := range s.parts {
 		for _, part := range parts {
-			if inReplyTo != "" && part.callID == inReplyTo {
-				return part
-			}
-			if callID != "" && part.callID == callID {
-				return part
-			}
 			if part.rpMR == rpMR {
 				return part
 			}

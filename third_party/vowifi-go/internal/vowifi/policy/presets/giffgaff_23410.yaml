@@ -16,6 +16,7 @@ ims_register_template:
     - sip_instance
     - audio
     - smsip
+    - smsip_msisdn_less
     - icsi_ref
     - mid_call
     - srvcc_alerting

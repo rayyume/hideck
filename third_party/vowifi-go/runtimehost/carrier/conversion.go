@@ -50,8 +50,9 @@ func carrierConfigBaseFromInternal(value policy.EffectiveCarrierConfig) Effectiv
 			EntitlementEndpoint: value.E911.EntitlementEndpoint,
 		},
 		IPStackType: value.IPStackType, EPDGAddr: value.EPDGAddr,
-		EPDGAddrSource: value.EPDGAddrSource, EPDGPort: value.EPDGPort,
-		APN: value.APN, DNSServer: value.DNSServer,
+		EPDGAddrSource: value.EPDGAddrSource, EmergencyEPDGAddr: value.EmergencyEPDGAddr,
+		EPDGPort: value.EPDGPort,
+		APN:      value.APN, DNSServer: value.DNSServer,
 	}
 }
 

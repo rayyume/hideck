@@ -20,6 +20,7 @@ ims_register_template:
     - access_type
     - audio
     - smsip
+    - smsip_msisdn_less
     - icsi_ref
     - sip_instance
   include_pani_authenticated: true
