@@ -695,15 +695,18 @@ func exerciseVocallHold(gw *voicehost.Gateway, deviceID string) {
 		logger.Warn("vocall 保持跳过：没有活动通话", "device", deviceID)
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-	defer cancel()
-	if err := gw.HoldCall(ctx, deviceID, snap.CallID); err != nil {
+	holdCtx, holdCancel := context.WithTimeout(context.Background(), 8*time.Second)
+	err := gw.HoldCall(holdCtx, deviceID, snap.CallID)
+	holdCancel()
+	if err != nil {
 		logger.Warn("vocall 保持失败", "device", deviceID, "call_id", snap.CallID, "err", err)
 		return
 	}
 	logger.Info("vocall 已保持", "device", deviceID, "call_id", snap.CallID)
 	time.Sleep(3 * time.Second)
-	if err := gw.ResumeCall(ctx, deviceID, snap.CallID); err != nil {
+	resumeCtx, resumeCancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer resumeCancel()
+	if err := gw.ResumeCall(resumeCtx, deviceID, snap.CallID); err != nil {
 		logger.Warn("vocall 恢复失败", "device", deviceID, "call_id", snap.CallID, "err", err)
 		return
 	}
