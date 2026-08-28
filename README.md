@@ -141,7 +141,7 @@ curl -fsSL https://raw.githubusercontent.com/yibaiba/hideck/main/deploy-binary.s
 ```bash
 curl -fsSL https://raw.githubusercontent.com/yibaiba/hideck/main/deploy-binary.sh | \
   HIDECK_DIR=/opt/hideck \
-  HIDECK_VERSION=v2.0.15 \
+  HIDECK_VERSION=v2.1.0 \
   HIDECK_ARCH=linux_amd64 sh
 ```
 
@@ -151,9 +151,9 @@ curl -fsSL https://raw.githubusercontent.com/yibaiba/hideck/main/deploy-binary.s
 
 | 文件 | 适用平台 |
 | --- | --- |
-| `hideck_v2.0.15_linux_amd64` | x86_64 服务器、多数 NAS / 工控机 |
-| `hideck_v2.0.15_linux_arm64` | ARM64 板卡、树莓派 64 位 |
-| `hideck_v2.0.15_linux_armv7` | 32 位 ARM |
+| `hideck_v2.1.0_linux_amd64` | x86_64 服务器、多数 NAS / 工控机 |
+| `hideck_v2.1.0_linux_arm64` | ARM64 板卡、树莓派 64 位 |
+| `hideck_v2.1.0_linux_armv7` | 32 位 ARM |
 
 ## 配置
 
