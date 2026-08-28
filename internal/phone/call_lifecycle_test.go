@@ -141,6 +141,28 @@ func TestBusyIncomingCallIsRecordedOnce(t *testing.T) {
 	_ = service
 }
 
+func TestWaitingIncomingCallWhenConnected(t *testing.T) {
+	gateway, store := newFakeVoiceGateway(), newMemoryCallStore()
+	service := newPhoneTestService(t, gateway, store, time.Second)
+	first := voicehost.IncomingCall{DeviceID: "dev-1", CallID: "active-1", Caller: "+15550001", ReceivedAt: time.Now()}
+	gateway.emitIncoming(first)
+	gateway.emitEvent(voicehost.CallEvent{
+		Type: "CallAnswered", DeviceID: first.DeviceID, CallID: first.CallID, Time: time.Now(),
+	})
+	waitForRecordStatus(t, store, first.CallID, StatusConnected)
+	waiting := voicehost.IncomingCall{
+		DeviceID: "dev-1", CallID: "wait-1", Caller: "+15550002", ReceivedAt: time.Now(),
+	}
+	gateway.emitIncoming(waiting)
+	waitForRecordStatus(t, store, waiting.CallID, StatusWaiting)
+	select {
+	case rejected := <-gateway.rejectCalls:
+		t.Fatalf("waiting call was rejected: %+v", rejected)
+	default:
+	}
+	_ = service
+}
+
 func TestOutboundEventsEmittedBeforeBeginReturnsAreReplayed(t *testing.T) {
 	gateway, store := newFakeVoiceGateway(), newMemoryCallStore()
 	gateway.beginEvents = []voicehost.CallEvent{{

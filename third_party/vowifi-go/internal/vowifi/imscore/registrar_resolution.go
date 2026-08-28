@@ -159,8 +159,59 @@ func (s *Service) selectRegistrarCandidate(ctx context.Context, transport string
 	return selected, nil
 }
 
+func parseUseProxyContact(contact string) string {
+	contact = strings.TrimSpace(contact)
+	if contact == "" {
+		return ""
+	}
+	if start := strings.Index(contact, "<"); start >= 0 {
+		end := strings.Index(contact[start:], ">")
+		if end <= 1 {
+			return ""
+		}
+		contact = contact[start+1 : start+end]
+	}
+	contact = strings.TrimSpace(contact)
+	contact = strings.TrimPrefix(strings.TrimPrefix(contact, "sips:"), "sip:")
+	if at := strings.LastIndex(contact, "@"); at >= 0 {
+		contact = contact[at+1:]
+	}
+	if semi := strings.Index(contact, ";"); semi >= 0 {
+		contact = contact[:semi]
+	}
+	contact = strings.TrimSpace(contact)
+	if contact == "" {
+		return ""
+	}
+	host, port, err := sipkit.ParseHostPortWithDefault(contact, defaultSIPPort)
+	if err != nil {
+		return ""
+	}
+	return net.JoinHostPort(strings.Trim(host, "[]"), strconv.Itoa(port))
+}
+
+func (s *Service) applyRegisterUseProxy(target string) {
+	target = strings.TrimSpace(target)
+	if s == nil || target == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	candidates := make([]string, 0, len(s.registrarCandidates)+1)
+	candidates = append(candidates, target)
+	for _, candidate := range s.registrarCandidates {
+		if candidate != target {
+			candidates = append(candidates, candidate)
+		}
+	}
+	s.registrar = target
+	s.registrarCandidates = candidates
+	s.registrarIndex = 0
+	s.registrarSource = "use-proxy"
+}
+
 func (s *Service) advanceRegistrarForNextRetry(reason string) bool {
-	if s == nil || reason == "min_expires" {
+	if s == nil || reason == "min_expires" || reason == "use_proxy" {
 		return false
 	}
 	s.mu.Lock()

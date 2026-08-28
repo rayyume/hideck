@@ -70,6 +70,8 @@ func selectRecordableCodec(codecs []AudioCodec) (AudioCodec, string, error) {
 			return codec, ".amr-wb", nil
 		case "AMR", "AMR-NB":
 			return codec, ".amr", nil
+		case "EVS":
+			return codec, ".evs", nil
 		case "PCMU", "PCMA":
 			if codec.ClockRate == 0 {
 				codec.ClockRate = 8000
@@ -99,6 +101,9 @@ func (r *rtpAudioRecorder) writeHeader() error {
 	case "AMR":
 		_, err := r.file.WriteString("#!AMR\n")
 		return err
+	case "EVS":
+		_, err := r.file.WriteString("#!EVS_MC1.0\n")
+		return err
 	case "PCMU", "PCMA":
 		_, err := r.file.Write(make([]byte, wavHeaderLength))
 		return err
@@ -123,6 +128,8 @@ func (r *rtpAudioRecorder) writeRTP(packet []byte) error {
 			return r.writeOctetAlignedAMR(payload, amrFrameBytes[:])
 		}
 		return r.writeBandwidthEfficientAMR(payload, amrSpeechBits[:])
+	case "EVS":
+		return r.writeEVS(payload)
 	case "PCMU", "PCMA":
 		return r.writeG711(payload)
 	default:
@@ -286,6 +293,25 @@ func (r *amrBitReader) readBitsAsBytes(n int) ([]byte, error) {
 		}
 	}
 	return out, nil
+}
+
+func (r *rtpAudioRecorder) writeEVS(payload []byte) error {
+	if len(payload) == 0 {
+		return errors.New("media: truncated EVS RTP payload")
+	}
+	if len(payload) > 0xffff/8 {
+		return errors.New("media: EVS RTP payload is too large")
+	}
+	header := make([]byte, 2)
+	binary.BigEndian.PutUint16(header, uint16(len(payload)*8))
+	if _, err := r.file.Write(header); err != nil {
+		return err
+	}
+	if _, err := r.file.Write(payload); err != nil {
+		return err
+	}
+	r.frames++
+	return nil
 }
 
 func (r *rtpAudioRecorder) writeG711(payload []byte) error {

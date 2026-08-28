@@ -554,6 +554,10 @@ func TestRegistrationResponseErrorIncludesRegistrarDiagnostic(t *testing.T) {
 }
 
 func serveRegisterStatus(conn *net.UDPConn, status int, seen chan<- string) {
+	serveRegisterStatusWithHeaders(conn, status, "", seen)
+}
+
+func serveRegisterStatusWithHeaders(conn *net.UDPConn, status int, extraHeaders string, seen chan<- string) {
 	buffer := make([]byte, 64*1024)
 	n, remote, err := conn.ReadFromUDP(buffer)
 	if err != nil {
@@ -563,7 +567,7 @@ func serveRegisterStatus(conn *net.UDPConn, status int, seen chan<- string) {
 	if seen != nil {
 		seen <- request
 	}
-	response := registerWireResponse(request, status, "")
+	response := registerWireResponse(request, status, extraHeaders)
 	_, _ = conn.WriteToUDP([]byte(response), remote)
 }
 

@@ -97,6 +97,38 @@ func (e Generic) Type() string {
 // DeviceID returns the device ID.
 func (e Generic) DeviceID() string { return e.DevID }
 
+// MWIUpdated is published when RFC 3842 message-waiting state changes.
+type MWIUpdated struct {
+	DevID           string
+	MessagesWaiting bool
+	VoiceNew        int
+	VoiceOld        int
+	Account         string
+	Time            time.Time
+}
+
+// Type returns "MWIUpdated".
+func (e MWIUpdated) Type() string { return "MWIUpdated" }
+
+// DeviceID returns the device ID.
+func (e MWIUpdated) DeviceID() string { return e.DevID }
+
+// CallWaiting is published when a second inbound call is accepted.
+type CallWaiting struct {
+	DevID    string
+	CallID   string
+	Caller   string
+	Callee   string
+	ActiveID string
+	Time     time.Time
+}
+
+// Type returns "CallWaiting".
+func (e CallWaiting) Type() string { return "CallWaiting" }
+
+// DeviceID returns the device ID.
+func (e CallWaiting) DeviceID() string { return e.DevID }
+
 // Dispatcher dispatches runtime events.
 type Dispatcher interface {
 	Dispatch(ctx context.Context, e Event)

@@ -1,6 +1,7 @@
 package imscore
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -46,6 +47,13 @@ func TestBuildAnonymousEmergencyREGISTEROmitsAuthorization(t *testing.T) {
 	}
 	if !strings.Contains(rawSIPHeaderValue(request, "Contact"), ";sos") {
 		t.Fatal("anonymous emergency REGISTER omitted sos")
+	}
+}
+
+func TestSendEmergencyREGISTERDisabledByDefault(t *testing.T) {
+	service := newProtectedKeepaliveTestService(t)
+	if err := service.SendEmergencyREGISTER(t.Context(), false); !errors.Is(err, ErrEmergencyRegistrationDisabled) {
+		t.Fatalf("SendEmergencyREGISTER = %v, want disabled", err)
 	}
 }
 

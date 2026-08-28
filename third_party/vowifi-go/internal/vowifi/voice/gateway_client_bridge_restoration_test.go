@@ -247,7 +247,7 @@ func TestGatewayLayoutAndQueueFullResponse(t *testing.T) {
 	gatewayType := reflect.TypeOf(Gateway{})
 	wantFields := []string{
 		"notifier", "eventDispatcher", "clientAdapter", "mu", "agents", "entryWorkers",
-		"running", "epoch", "ctx", "cancel",
+		"running", "epoch", "ctx", "cancel", "incomingSeen",
 	}
 	if gatewayType.NumField() != len(wantFields) {
 		t.Fatalf("Gateway field count = %d, want %d", gatewayType.NumField(), len(wantFields))

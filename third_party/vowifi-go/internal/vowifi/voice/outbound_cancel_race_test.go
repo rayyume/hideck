@@ -80,7 +80,14 @@ func TestCancelSettleAndFinalFailureShareTerminalOwner(t *testing.T) {
 		t.Fatal("client cancellation was not marked")
 	}
 	var notifications atomic.Int32
-	agent.SetNotifier(func(events.Event) { notifications.Add(1) })
+	agent.SetNotifier(func(ev events.Event) {
+		switch ev.(type) {
+		case events.EventCallFailed, *events.EventCallFailed,
+			events.EventCallCanceled, *events.EventCallCanceled,
+			events.EventCallEnded, *events.EventCallEnded:
+			notifications.Add(1)
+		}
+	})
 	var workers sync.WaitGroup
 	workers.Add(2)
 	go func() {

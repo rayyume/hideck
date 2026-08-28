@@ -50,6 +50,7 @@ type Agent struct {
 
 	outboundCancelSettle time.Duration
 	allowEmergencyCalls  bool
+	waitingCall          *Call
 }
 
 // Call is one voice call (inbound or outbound).

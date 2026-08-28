@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/iniwex5/vowifi-go/internal/vowifi/access"
+	"github.com/iniwex5/vowifi-go/internal/vowifi/policy"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/profile"
 )
 
@@ -202,6 +203,22 @@ func TestIdentityDomain(t *testing.T) {
 				t.Fatalf("identityDomain() = %q, want %q", got, test.want)
 			}
 		})
+	}
+}
+
+func TestSelectEmergencyEPDGDoesNotAffectOrdinarySelection(t *testing.T) {
+	plan := policy.CarrierPlan{
+		EPDG: policy.EPDGPlan{
+			Addr: "epdg.example", AddrSource: "carrier",
+			EmergencyAddr: "sos.epdg.epc.mnc015.mcc234.pub.3gppnetwork.org",
+		},
+	}
+	addr, source := selectEPDG("", plan)
+	if addr != "epdg.example" || source != "carrier" {
+		t.Fatalf("ordinary ePDG = %q %q", addr, source)
+	}
+	if got := SelectEmergencyEPDG(plan); got != plan.EPDG.EmergencyAddr {
+		t.Fatalf("emergency ePDG = %q", got)
 	}
 }
 

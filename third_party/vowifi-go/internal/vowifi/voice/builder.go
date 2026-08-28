@@ -101,6 +101,14 @@ func ensureBuilderVoiceDialog(agent *Agent, call *Call) voiceSIPDialog {
 }
 
 func buildVoiceRequest(dialog voiceSIPDialog, callID, method, branch, body string) string {
+	contentType := ""
+	if body != "" {
+		contentType = "application/sdp"
+	}
+	return buildVoiceRequestWithContent(dialog, callID, method, branch, contentType, body)
+}
+
+func buildVoiceRequestWithContent(dialog voiceSIPDialog, callID, method, branch, contentType, body string) string {
 	target := dialog.remoteTarget
 	if target == "" {
 		target = dialog.remoteURI
@@ -108,8 +116,8 @@ func buildVoiceRequest(dialog voiceSIPDialog, callID, method, branch, body strin
 	var request strings.Builder
 	fmt.Fprintf(&request, "%s %s SIP/2.0\r\n", method, target)
 	writeVoiceDialogHeaders(&request, dialog, callID, method, branch)
-	if body != "" {
-		request.WriteString("Content-Type: application/sdp\r\n")
+	if body != "" && strings.TrimSpace(contentType) != "" {
+		fmt.Fprintf(&request, "Content-Type: %s\r\n", contentType)
 	}
 	fmt.Fprintf(&request, "Content-Length: %d\r\n\r\n%s", len(body), body)
 	return request.String()
@@ -236,8 +244,8 @@ func buildBasicSDP(ip string, port int, sessionID int64) []byte {
 			"s=VoHive Call\r\n"+
 			"c=IN %s %s\r\n"+
 			"t=0 0\r\n"+
-			"m=audio %d RTP/AVP 104 110 102 108 101 0\r\n"+
-			"b=AS:41\r\n"+
+			"m=audio %d RTP/AVP 104 110 102 108 106 101 0\r\n"+
+			"b=AS:80\r\n"+
 			"a=rtpmap:104 AMR-WB/16000\r\n"+
 			"a=fmtp:104 mode-change-capability=2;max-red=0\r\n"+
 			"a=rtpmap:110 AMR-WB/16000\r\n"+
@@ -246,9 +254,15 @@ func buildBasicSDP(ip string, port int, sessionID int64) []byte {
 			"a=fmtp:102 mode-change-capability=2;max-red=0\r\n"+
 			"a=rtpmap:108 AMR/8000\r\n"+
 			"a=fmtp:108 octet-align=1;mode-change-capability=2;max-red=0\r\n"+
+			"a=rtpmap:106 EVS/16000\r\n"+
+			"a=fmtp:106 evs-mode-switch=1;hf-only=0;br=6.6-23.85;bw=wb;ch-aw-recv=-1;max-red=0\r\n"+
 			"a=rtpmap:101 telephone-event/8000\r\n"+
 			"a=fmtp:101 0-15\r\n"+
 			"a=rtpmap:0 PCMU/8000\r\n"+
+			"a=curr:qos local none\r\n"+
+			"a=curr:qos remote none\r\n"+
+			"a=des:qos mandatory local sendrecv\r\n"+
+			"a=des:qos optional remote sendrecv\r\n"+
 			"a=sendrecv\r\n"+
 			"a=ptime:20\r\n"+
 			"a=maxptime:20\r\n",

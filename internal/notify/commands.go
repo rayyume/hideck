@@ -746,15 +746,19 @@ func voiceRecordingAttachment(result *voicehost.SimulateCallResult) (CommandAtta
 	if sourcePath == "" {
 		sourcePath, sourceCodec = path, codec
 	}
-	if sourcePath == "" || !voiceRecordingIsAMR(sourceCodec) {
+	if sourcePath == "" || !voiceRecordingIsAttachable(sourceCodec) {
 		return CommandAttachment{}, false
 	}
 	info, err := os.Stat(sourcePath)
 	if err != nil || !info.Mode().IsRegular() || info.Size() <= 0 {
 		return CommandAttachment{}, false
 	}
+	contentType := "audio/amr"
+	if strings.EqualFold(sourceCodec, "EVS") {
+		contentType = "audio/evs"
+	}
 	return CommandAttachment{
-		Type: "audio", Recording: filepath.Base(sourcePath), ContentType: "audio/amr",
+		Type: "audio", Recording: filepath.Base(sourcePath), ContentType: contentType,
 		Path: sourcePath, Codec: sourceCodec, Size: info.Size(),
 		SourcePath: sourcePath, SourceCodec: sourceCodec,
 	}, true
@@ -763,6 +767,11 @@ func voiceRecordingAttachment(result *voicehost.SimulateCallResult) (CommandAtta
 func voiceRecordingIsAMR(codec string) bool {
 	codec = strings.ToUpper(strings.TrimSpace(codec))
 	return codec == "AMR" || codec == "AMR-NB" || codec == "AMR-WB"
+}
+
+func voiceRecordingIsAttachable(codec string) bool {
+	codec = strings.ToUpper(strings.TrimSpace(codec))
+	return voiceRecordingIsAMR(codec) || codec == "EVS"
 }
 
 // handleCmdCellCall 处理 /cellcall 命令，用于发起蜂窝数据模拟呼叫

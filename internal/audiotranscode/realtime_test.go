@@ -11,17 +11,18 @@ func TestRealtimeCodecFramesAMRInBothDirections(t *testing.T) {
 		sampleRate      int
 		samplesPerFrame int
 		frameSizes      []int
+		speechBits      []int
 		maxMode         int
 	}{
-		{name: "AMR", fmtp: "octet-align=1; mode-set=0,2,7", sampleRate: 8000, samplesPerFrame: 160, frameSizes: amrNBFrameBytes[:], maxMode: 7},
-		{name: "AMR-WB", fmtp: "octet-align=1; mode-set=0,2", sampleRate: 16000, samplesPerFrame: 320, frameSizes: amrWBFrameBytes[:], maxMode: 8},
+		{name: "AMR", fmtp: "octet-align=1; mode-set=0,2,7", sampleRate: 8000, samplesPerFrame: 160, frameSizes: amrNBFrameBytes[:], speechBits: amrNBSpeechBits[:], maxMode: 7},
+		{name: "AMR-WB", fmtp: "octet-align=1; mode-set=0,2", sampleRate: 16000, samplesPerFrame: 320, frameSizes: amrWBFrameBytes[:], speechBits: amrWBSpeechBits[:], maxMode: 8},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			capture := &fakeRealtimeNative{}
 			api := capture.api(test.frameSizes)
 			config := realtimeCodecConfig{
 				name: test.name, sampleRate: test.sampleRate, samplesPerFrame: test.samplesPerFrame,
-				frameSizes: test.frameSizes, maxMode: test.maxMode, api: api,
+				frameSizes: test.frameSizes, speechBits: test.speechBits, maxMode: test.maxMode, api: api,
 			}
 			mode, err := selectAMRMode(test.fmtp, test.maxMode)
 			if err != nil {
@@ -31,6 +32,7 @@ func TestRealtimeCodecFramesAMRInBothDirections(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			codec.octetAligned = true
 			defer codec.Close()
 			payload := amrTestPayload(test.frameSizes, mode)
 			pcm, err := codec.Decode(payload)
@@ -51,14 +53,96 @@ func TestRealtimeCodecFramesAMRInBothDirections(t *testing.T) {
 	}
 }
 
-func TestRealtimeCodecRejectsUnsupportedPacketization(t *testing.T) {
-	if _, err := selectAMRMode("mode-set=0,1", 7); err == nil || !strings.Contains(err.Error(), "octet-align") {
-		t.Fatalf("missing octet-align error = %v", err)
+func TestRealtimeCodecFramesBandwidthEfficientAMR(t *testing.T) {
+	capture := &fakeRealtimeNative{}
+	config := realtimeCodecConfig{
+		name: "AMR", sampleRate: 8000, samplesPerFrame: 160,
+		frameSizes: amrNBFrameBytes[:], speechBits: amrNBSpeechBits[:], maxMode: 7,
+		api: capture.api(amrNBFrameBytes[:]),
 	}
-	payload := amrTestPayload(amrNBFrameBytes[:], 7)
-	payload[1] |= 0x80
-	if _, _, err := parseOctetAlignedFrame(payload, amrNBFrameBytes[:]); err == nil || !strings.Contains(err.Error(), "multiple") {
-		t.Fatalf("multiple frame error = %v", err)
+	mode, err := selectAMRMode("mode-change-capability=2;max-red=0", 7)
+	if err != nil || mode != 7 {
+		t.Fatalf("mode=%d err=%v", mode, err)
+	}
+	codec, err := newRealtimeCodec(config, mode)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer codec.Close()
+	storage := []byte{byte(mode<<3) | amrQualityBit}
+	speech := make([]byte, amrNBFrameBytes[mode])
+	for i := range speech {
+		speech[i] = byte(i + 2)
+	}
+	storage = append(storage, speech...)
+	payload, err := storageFrameToBandwidthEfficientRTP(storage, len(storage), amrNBSpeechBits[:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	pcm, err := codec.Decode(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pcm) != 160 || capture.decodedFrame[0] != storage[0] {
+		t.Fatalf("decoded samples=%d header=%#x", len(pcm), capture.decodedFrame[0])
+	}
+	encoded, err := codec.Encode(pcm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if capture.encodedMode != mode || encoded[0]&0xf0 != 0xf0 {
+		t.Fatalf("BE encode mode=%d payload=%x", capture.encodedMode, encoded)
+	}
+	if _, _, err := parseBandwidthEfficientFrame(encoded, amrNBSpeechBits[:]); err != nil {
+		t.Fatalf("encoded BE payload is not parseable: %v", err)
+	}
+}
+
+func TestRealtimeCodecDecodesMultipleAMRFramesAndAppliesCMR(t *testing.T) {
+	capture := &fakeRealtimeNative{}
+	config := realtimeCodecConfig{
+		name: "AMR", sampleRate: 8000, samplesPerFrame: 160,
+		frameSizes: amrNBFrameBytes[:], speechBits: amrNBSpeechBits[:], maxMode: 7,
+		api: capture.api(amrNBFrameBytes[:]),
+	}
+	codec, err := newRealtimeCodec(config, 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	codec.octetAligned = true
+	defer codec.Close()
+	first := amrTestPayload(amrNBFrameBytes[:], 0)
+	second := amrTestPayload(amrNBFrameBytes[:], 7)
+	payload := []byte{0x20, first[1] | 0x80}
+	payload = append(payload, first[2:]...)
+	payload = append(payload, second[1])
+	payload = append(payload, second[2:]...)
+	pcm, err := codec.Decode(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pcm) != 320 {
+		t.Fatalf("decoded samples=%d", len(pcm))
+	}
+	if codec.mode != 2 {
+		t.Fatalf("CMR did not update encoder mode: %d", codec.mode)
+	}
+	if _, err := codec.Encode(pcm[:160]); err != nil {
+		t.Fatal(err)
+	}
+	if capture.encodedMode != 2 {
+		t.Fatalf("encode after CMR used mode %d", capture.encodedMode)
+	}
+}
+
+func TestParseAMRRejectsTooManyFrames(t *testing.T) {
+	payload := make([]byte, 1+maxAMRFramesPerRTP+1)
+	payload[0] = amrNoModeRequest
+	for i := 1; i <= maxAMRFramesPerRTP; i++ {
+		payload[i] = 0x80
+	}
+	if _, _, err := parseOctetAlignedFrames(payload, amrNBFrameBytes[:]); err == nil || !strings.Contains(err.Error(), "too many") {
+		t.Fatalf("too many frames error = %v", err)
 	}
 }
 

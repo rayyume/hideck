@@ -273,6 +273,18 @@ type Service struct {
 	reginfoAOR             string
 
 	stop chan struct{}
+
+	// RFC 3842 MWI subscription. Independent of the RFC 3680 reg dialog.
+	mwiSubscriptionDialog        registrationSubscriptionDialog
+	mwiSubscriptionRefreshAt     time.Time
+	mwiSubscriptionLastAttemptAt time.Time
+	mwiSubscriptionLastOKAt      time.Time
+	mwiSubscriptionExpires       time.Duration
+	mwiSubscriptionLastErr       string
+	mwiSubscriptionInFlight      atomic.Bool
+	mwiSubscriptionClosed        bool
+	mwiLastSummary               string
+	mwiMessagesWaiting           bool
 }
 
 type registrationRuntime struct {

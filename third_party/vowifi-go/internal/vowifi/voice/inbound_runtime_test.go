@@ -229,6 +229,36 @@ func TestInboundReinviteMovesRTPToNewIMSRemote(t *testing.T) {
 	}
 }
 
+func TestInboundWaitingCallRingsInsteadOfBusy(t *testing.T) {
+	agent := startedVoiceAgent(t)
+	firstPeer := listenVoiceUDP(t)
+	firstResponder := &capturedVoiceResponder{localTag: "first-tag"}
+	first := inboundAgentInvite("call-active", firstPeer, firstResponder)
+	if _, err := agent.HandleInboundVoiceRequest(first); err != nil {
+		t.Fatal(err)
+	}
+	client := listenVoiceUDP(t)
+	if _, err := agent.AnswerWithSDP(first.CallID, voiceSDP(client.LocalAddr().(*net.UDPAddr).Port)); err != nil {
+		t.Fatal(err)
+	}
+	secondPeer := listenVoiceUDP(t)
+	secondResponder := &capturedVoiceResponder{localTag: "wait-tag"}
+	second := inboundAgentInvite("call-waiting", secondPeer, secondResponder)
+	result, err := agent.HandleInboundVoiceRequest(second)
+	if err != nil || result.StatusCode != 0 {
+		t.Fatalf("waiting INVITE result=%+v err=%v", result, err)
+	}
+	if got := fmt.Sprint(secondResponder.statuses()); got != "[180]" {
+		t.Fatalf("waiting responses = %v, want 180", secondResponder.statuses())
+	}
+	if agent.waitingCall == nil || agent.waitingCall.CallID() != second.CallID {
+		t.Fatal("waiting call was not reserved")
+	}
+	if !agent.IsBusy() {
+		t.Fatal("active call should keep the agent busy")
+	}
+}
+
 func startedVoiceAgent(t *testing.T) *Agent {
 	t.Helper()
 	agent := newTestAgent(t)

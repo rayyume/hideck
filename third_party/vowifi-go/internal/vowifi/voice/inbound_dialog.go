@@ -34,24 +34,40 @@ func (a *Agent) prepareInboundVoiceDialog(call *Call, request imscore.InboundVoi
 	return nil
 }
 
-func (a *Agent) reserveInboundCall(request imscore.InboundVoiceRequest) (*Call, bool, error) {
+func (a *Agent) reserveInboundCall(request imscore.InboundVoiceRequest) (*Call, bool, bool, error) {
 	call := a.newInboundCall(request)
 	if err := call.TransitionChecked(callstate.StateRinging); err != nil {
-		return nil, false, errors.Join(err, releaseUnregisteredCall(call))
+		return nil, false, false, errors.Join(err, releaseUnregisteredCall(call))
 	}
 	a.mu.Lock()
 	if existing := a.calls[request.CallID]; existing != nil && !existing.IsTerminalState() {
 		a.mu.Unlock()
-		return existing, false, releaseUnregisteredCall(call)
+		return existing, false, false, releaseUnregisteredCall(call)
 	}
 	if a.activeCall != nil && !a.activeCall.IsTerminalState() {
+		if a.canAcceptWaitingCallLocked() {
+			a.calls[request.CallID] = call
+			a.waitingCall = call
+			a.mu.Unlock()
+			return call, true, true, nil
+		}
 		a.mu.Unlock()
-		return nil, false, errors.Join(errors.New("voice: busy"), releaseUnregisteredCall(call))
+		return nil, false, false, errors.Join(errors.New("voice: busy"), releaseUnregisteredCall(call))
 	}
 	a.calls[request.CallID] = call
 	a.activeCall = call
 	a.mu.Unlock()
-	return call, true, nil
+	return call, true, false, nil
+}
+
+func (a *Agent) canAcceptWaitingCallLocked() bool {
+	if a.activeCall == nil || a.activeCall.IsTerminalState() {
+		return false
+	}
+	if a.activeCall.CallState() != callstate.StateConnected {
+		return false
+	}
+	return a.waitingCall == nil || a.waitingCall.IsTerminalState()
 }
 
 func (a *Agent) newInboundCall(request imscore.InboundVoiceRequest) *Call {

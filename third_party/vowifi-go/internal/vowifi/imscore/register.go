@@ -17,7 +17,10 @@ import (
 	"github.com/iniwex5/vowifi-go/internal/vowifi/policy"
 )
 
-const maxAKAChallenges = 3
+const (
+	maxAKAChallenges          = 3
+	registerFeatureCapsHeader = `*;+g.3gpp.icsi-ref="urn%3Aurn-7%3A3gpp-service.ims.icsi.mmtel";+g.3gpp.smsip`
+)
 
 // registerSession tracks one registration attempt.
 type registerSession struct {
@@ -45,6 +48,7 @@ type registerAttemptResult struct {
 	authRealm      string
 	authorization  string
 	securityVerify string
+	useProxy       string
 }
 
 type registerAttemptError struct {
@@ -139,6 +143,7 @@ func (s *Service) Register(ctx context.Context) error {
 	s.notifySMSReadiness()
 	s.scheduleRegistrationRefresh(expires)
 	s.startRegistrationSubscription()
+	s.startMWISubscription()
 	s.startIMSKeepalive()
 	return nil
 }
@@ -154,6 +159,7 @@ func (s *Service) runRegisterFlow(ctx context.Context) (time.Duration, error) {
 	candidates := registerTransportCandidates(s.cfg.Transport)
 	transportIndex := indexOfRegisterTransport(candidates, s.currentRegistrationTransport())
 	minExpiresRetried := false
+	useProxyRetried := false
 	for {
 		expires, result, err := s.runRegisterAttempt(ctx)
 		if err == nil {
@@ -162,6 +168,15 @@ func (s *Service) runRegisterFlow(ctx context.Context) (time.Duration, error) {
 		if result.statusCode == 423 && result.minExpires > 0 && !minExpiresRetried {
 			s.applyRegisterMinExpires(result.minExpires)
 			minExpiresRetried = true
+			continue
+		}
+		if result.statusCode == 305 && result.useProxy != "" && !useProxyRetried {
+			s.applyRegisterUseProxy(result.useProxy)
+			s.resetRegistrationTransportForRegistrarRetry()
+			if transportErr := s.ensureRegistrationTransport(ctx); transportErr != nil {
+				return 0, &registerAttemptError{result: result, err: transportErr}
+			}
+			useProxyRetried = true
 			continue
 		}
 		if s.usesExternalRegistrationTransport() || !shouldRetryNextRegisterTransport(result, err) {
@@ -267,6 +282,9 @@ func (s *Service) finalizeInitialRegisterSecurity(session *registerSession, resp
 func updateRegisterAttemptResponse(result *registerAttemptResult, response *sipResponse) {
 	result.statusCode = response.StatusCode
 	result.retryAfter, result.minExpires = parseRegisterRetryHintsFromResponse(response)
+	if response.StatusCode == 305 {
+		result.useProxy = parseUseProxyContact(response.Header("Contact"))
+	}
 }
 
 func updateRegisterAttemptAuth(result *registerAttemptResult, session *registerSession, authorization string) {
@@ -390,7 +408,7 @@ func (s *Service) applyRegistrationFailureStatus(err error) {
 		s.lastSIPCode.Store(int32(responseErr.statusCode))
 	}
 	s.transitionRegStatus(outcome.kind)
-	if outcome.kind == registrationRejectedTemporary && outcome.reason != "min_expires" {
+	if outcome.kind == registrationRejectedTemporary && outcome.reason != "min_expires" && outcome.reason != "use_proxy" {
 		if s.advanceRegistrarForNextRetry(outcome.reason) {
 			s.resetRegistrationTransportForRegistrarRetry()
 		}
@@ -633,6 +651,7 @@ func (s *Service) buildRegisterRequest(
 	if strings.TrimSpace(cfg.UserAgent) != "" {
 		b.WriteString("User-Agent: " + strings.TrimSpace(cfg.UserAgent) + "\r\n")
 	}
+	b.WriteString("Feature-Caps: " + registerFeatureCapsHeader + "\r\n")
 	b.WriteString("Content-Length: 0\r\n\r\n")
 	return b.String()
 }

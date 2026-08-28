@@ -131,6 +131,8 @@ func inboundRequestFromEvent(
 		CSeq:           requestHeaderValue(request, "CSeq"),
 		ContentType:    requestHeaderValue(request, "Content-Type"),
 		SessionExpires: requestHeaderValue(request, "Session-Expires"),
+		ReferTo:        requestHeaderValue(request, "Refer-To"),
+		ReferSub:       requestHeaderValue(request, "Refer-Sub"),
 		Body:           append([]byte(nil), request.Body()...), Request: request.Clone(),
 		ServerInvite: handle, Session: session,
 	}

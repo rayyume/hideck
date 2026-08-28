@@ -777,6 +777,29 @@ func (a *Agent) emitIncomingCall(c *Call) {
 	})
 }
 
+func (a *Agent) emitCallWaiting(c *Call) {
+	if a == nil || c == nil {
+		return
+	}
+	receivedAt := time.Now()
+	activeID := ""
+	a.mu.RLock()
+	if a.activeCall != nil {
+		activeID = a.activeCall.CallID()
+	}
+	a.mu.RUnlock()
+	c.mu.RLock()
+	caller, callee := strings.TrimSpace(c.DialogState.CallerID), strings.TrimSpace(c.DialogState.CalleeID)
+	c.mu.RUnlock()
+	if caller == "" {
+		caller = c.Peer()
+	}
+	a.emit(events.EventCallWaiting{
+		DevID: a.deviceID, CallID: c.CallID(), Caller: caller, Callee: callee,
+		ActiveID: activeID, ReceivedAt: receivedAt, Time: receivedAt,
+	})
+}
+
 // emit publishes a locally-created event and notifies the local callback.
 func (a *Agent) emit(ev events.Event) {
 	if a == nil {
@@ -815,6 +838,9 @@ func (a *Agent) finalizeActiveCall(call *Call) error {
 	a.mu.Lock()
 	if a.activeCall == call {
 		a.activeCall = nil
+	}
+	if a.waitingCall == call {
+		a.waitingCall = nil
 	}
 	for callID, registered := range a.calls {
 		if registered == call {

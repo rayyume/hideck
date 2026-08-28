@@ -39,6 +39,10 @@ func TestReceiverRuntimeRespondsToUDPOptionsAndStops(t *testing.T) {
 		if !strings.HasPrefix(got, "SIP/2.0 200 OK") || rawSIPHeaderValue(got, "CSeq") != "1 OPTIONS" {
 			t.Fatalf("OPTIONS response = %q", got)
 		}
+		if rawSIPHeaderValue(got, "Allow") == "" || rawSIPHeaderValue(got, "Supported") == "" ||
+			rawSIPHeaderValue(got, "Accept") == "" {
+			t.Fatalf("OPTIONS missing capability headers: %q", got)
+		}
 	case <-ctx.Done():
 		t.Fatal("did not receive OPTIONS response")
 	}

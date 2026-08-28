@@ -39,22 +39,23 @@ type IMSConfig struct {
 	SMSRoutingGW               string                     `mapstructure:"-"`
 	ForceSMSCAuth              bool                       `mapstructure:"-"`
 
-	IMEI                  string
-	IMSI                  string
-	IMPUs                 []string
-	SMSC                  string
-	EPDGAddr              string
-	LocalIP               net.IP
-	Expires               time.Duration
-	KeepaliveInterval     time.Duration
-	KeepaliveTimeout      time.Duration
-	AKAProvider           AKAProvider
-	IMSNetwork            IMSNetwork
-	DeliveryStore         DeliveryStore
-	EventBus              *EventBus
-	TraceID               string
-	PAccessNetworkCountry string
-	RegisterTemplate      IMSRegisterTemplate
+	IMEI                       string
+	IMSI                       string
+	IMPUs                      []string
+	SMSC                       string
+	EPDGAddr                   string
+	LocalIP                    net.IP
+	Expires                    time.Duration
+	KeepaliveInterval          time.Duration
+	KeepaliveTimeout           time.Duration
+	AKAProvider                AKAProvider
+	IMSNetwork                 IMSNetwork
+	DeliveryStore              DeliveryStore
+	EventBus                   *EventBus
+	TraceID                    string
+	PAccessNetworkCountry      string
+	RegisterTemplate           IMSRegisterTemplate
+	AllowEmergencyRegistration bool
 }
 
 type IMScoreConfig struct {

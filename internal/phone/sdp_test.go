@@ -26,6 +26,23 @@ func TestParseRTPEndpointSelectsNegotiatedG711(t *testing.T) {
 	}
 }
 
+func TestParseRTPEndpointAcceptsBandwidthEfficientAMRAndEVS(t *testing.T) {
+	amr, err := parseRTPEndpoint("v=0\r\nc=IN IP4 127.0.0.1\r\nm=audio 41000 RTP/AVP 102\r\na=rtpmap:102 AMR/8000\r\na=fmtp:102 mode-change-capability=2;max-red=0\r\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if amr.Codec != "AMR" || amr.Fmtp != "mode-change-capability=2;max-red=0" {
+		t.Fatalf("BE AMR endpoint = %+v", amr)
+	}
+	evs, err := parseRTPEndpoint("v=0\r\nc=IN IP4 127.0.0.1\r\nm=audio 41000 RTP/AVP 106\r\na=rtpmap:106 EVS/16000\r\na=fmtp:106 br=5.9-24.4;bw=nb-wb\r\n", "EVS")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if evs.Codec != "EVS" || evs.ClockRate != 16000 {
+		t.Fatalf("EVS endpoint = %+v", evs)
+	}
+}
+
 func TestParseRTPEndpointPreservesAMRParameters(t *testing.T) {
 	endpoint, err := parseRTPEndpoint("v=0\r\nc=IN IP4 127.0.0.1\r\nm=audio 41000 RTP/AVP 104\r\na=rtpmap:104 AMR-WB/16000\r\na=fmtp:104 octet-align=1; mode-set=0,2\r\n")
 	if err != nil {
@@ -59,9 +76,15 @@ func TestPlainAudioSDPAdvertisesOnlySupportedIMSCodecsAndDTMF(t *testing.T) {
 		}
 	}
 	withAMR := plainAudioSDP(42000, []string{"AMR-WB", "AMR"})
-	for _, expected := range []string{"RTP/AVP 104 114 0 8 101", "AMR-WB/16000", "AMR/8000", "octet-align=1"} {
+	for _, expected := range []string{"RTP/AVP 104 110 102 114 0 8 101", "AMR-WB/16000", "AMR/8000", "octet-align=1", "mode-change-capability=2"} {
 		if !strings.Contains(withAMR, expected) {
 			t.Fatalf("AMR SDP missing %q: %s", expected, withAMR)
+		}
+	}
+	withEVS := plainAudioSDP(42000, []string{"EVS"})
+	for _, expected := range []string{"RTP/AVP 106 0 8 101", "EVS/16000", "evs-mode-switch=1", "br=6.6-23.85"} {
+		if !strings.Contains(withEVS, expected) {
+			t.Fatalf("EVS SDP missing %q: %s", expected, withEVS)
 		}
 	}
 	answer := plainSelectedAudioSDP(42000, rtpEndpoint{

@@ -11,8 +11,9 @@ import (
 )
 
 const (
-	voiceInviteSupported = "100rel, timer, replaces, norefersub, early-session, sec-agree"
+	voiceInviteSupported = "100rel, timer, replaces, norefersub, early-session, sec-agree, precondition"
 	voiceInviteAllow     = "INVITE, ACK, CANCEL, BYE, UPDATE, REFER, NOTIFY, MESSAGE, OPTIONS"
+	voiceFeatureCaps     = `*;+g.3gpp.icsi-ref="urn%3Aurn-7%3A3gpp-service.ims.icsi.mmtel"`
 )
 
 // BuildIMSInvite builds the initial IMS INVITE with the registered route.
@@ -73,6 +74,12 @@ func voiceIMSRequestOptions(dialog voiceSIPDialog, input voiceInitialRequest) si
 	}
 	if strings.TrimSpace(dialog.sessionID) != "" {
 		headers = append(headers, sip.NewHeader("Session-ID", strings.TrimSpace(dialog.sessionID)))
+	}
+	headers = append(headers, sip.NewHeader("P-Early-Media", "supported"))
+	headers = append(headers, sip.NewHeader("Privacy", "none"))
+	headers = append(headers, sip.NewHeader("Feature-Caps", voiceFeatureCaps))
+	if strings.TrimSpace(dialog.remoteURI) != "" {
+		headers = append(headers, sip.NewHeader("History-Info", "<"+strings.TrimSpace(dialog.remoteURI)+">;index=1"))
 	}
 	if emergency.IsEmergencyDestination(dialog.remoteURI) {
 		headers = append(headers, sip.NewHeader("Priority", "emergency"))

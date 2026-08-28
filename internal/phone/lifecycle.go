@@ -24,7 +24,21 @@ func (s *Service) handleIncoming(incoming voicehost.IncomingCall) {
 		s.mu.Unlock()
 		return
 	}
-	if _, busy := s.deviceCalls[incoming.DeviceID]; busy {
+	if existingID, busy := s.deviceCalls[incoming.DeviceID]; busy {
+		existing := s.calls[existingID]
+		if existing != nil && !existing.terminal && existing.view.Status == StatusConnected &&
+			strings.TrimSpace(s.deviceWaiting[incoming.DeviceID]) == "" {
+			s.calls[incoming.CallID] = call
+			s.deviceWaiting[incoming.DeviceID] = incoming.CallID
+			call.view.Status, call.record.Status = StatusWaiting, StatusWaiting
+			s.mu.Unlock()
+			s.persist(call.record)
+			s.publish("call_waiting", call)
+			if s.notifier != nil {
+				go s.notifier.NotifyIncomingCall(incoming.DeviceID, incoming.Caller, incoming.Callee)
+			}
+			return
+		}
 		s.mu.Unlock()
 		err := s.gateway.RejectIncomingCall(voicehost.RejectRequest{
 			DeviceID: incoming.DeviceID, CallID: incoming.CallID, StatusCode: 486,
@@ -115,7 +129,7 @@ func (s *Service) dispatchCallEvent(event voicehost.CallEvent) {
 func (s *Service) updateRinging(callID string) {
 	s.mu.Lock()
 	call := s.calls[callID]
-	if call == nil || call.terminal || call.view.Status == StatusConnected {
+	if call == nil || call.terminal || call.view.Status == StatusConnected || call.view.Status == StatusWaiting {
 		s.mu.Unlock()
 		return
 	}
@@ -217,6 +231,9 @@ func (s *Service) finishCall(event voicehost.CallEvent) {
 	}
 	if s.deviceCalls[call.view.DeviceID] == call.view.CallID {
 		delete(s.deviceCalls, call.view.DeviceID)
+	}
+	if s.deviceWaiting[call.view.DeviceID] == call.view.CallID {
+		delete(s.deviceWaiting, call.view.DeviceID)
 	}
 	delete(s.mediaCalls, call.mediaID)
 	delete(s.pendingMediaDrops, call.mediaID)

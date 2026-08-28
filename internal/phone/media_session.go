@@ -149,7 +149,7 @@ func (s *MediaSession) Attach(remoteSDP string) error {
 }
 
 func (s *MediaSession) createRealtimeCodec(endpoint rtpEndpoint) (RealtimeCodec, error) {
-	if endpoint.Codec != "AMR" && endpoint.Codec != "AMR-WB" {
+	if endpoint.Codec != "AMR" && endpoint.Codec != "AMR-WB" && endpoint.Codec != "EVS" {
 		return nil, nil
 	}
 	if s.newRealtimeCodec == nil {

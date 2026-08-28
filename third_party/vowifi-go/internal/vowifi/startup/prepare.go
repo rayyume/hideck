@@ -182,6 +182,12 @@ func selectEPDG(override string, plan policy.CarrierPlan) (string, string) {
 	return strings.TrimSpace(plan.EPDG.Addr), strings.TrimSpace(plan.EPDG.AddrSource)
 }
 
+// SelectEmergencyEPDG returns the IR.51 sos.epdg FQDN. Ordinary IKE never
+// calls this; emergency originating remains opt-in and off by default.
+func SelectEmergencyEPDG(plan policy.CarrierPlan) string {
+	return strings.TrimSpace(plan.EPDG.EmergencyAddr)
+}
+
 func HasIMSIdentityResolution(identity profile.IMSIdentityResult) bool {
 	return identity.Applied ||
 		strings.TrimSpace(identity.RequestedSource) != "" ||

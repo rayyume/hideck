@@ -48,6 +48,8 @@ type InboundVoiceRequest struct {
 	DialogResponded  bool
 	DialogTerminated bool
 	Session          *imsendpoint.Session
+	ReferTo          string
+	ReferSub         string
 }
 
 // InboundVoiceResponse is one provisional or final response to an inbound
@@ -214,6 +216,8 @@ func (s *Service) handleInboundVoice(dispatch inboundSIPDispatch) (inboundSIPRes
 		Contact: rawSIPHeaderValue(dispatch.raw, "Contact"), RecordRoute: rawSIPHeaderValue(dispatch.raw, "Record-Route"),
 		CSeq: rawSIPHeaderValue(dispatch.raw, "CSeq"), ContentType: rawSIPHeaderValue(dispatch.raw, "Content-Type"),
 		SessionExpires: rawSIPHeaderValue(dispatch.raw, "Session-Expires"),
+		ReferTo:        rawSIPHeaderValue(dispatch.raw, "Refer-To"),
+		ReferSub:       rawSIPHeaderValue(dispatch.raw, "Refer-Sub"),
 		Body:           body, Responder: newInboundVoiceResponder(dispatch.raw, dispatch.reply),
 		Dialog: dialogRead.handle, DialogMatched: dialogRead.matched,
 		DialogResponded: dialogRead.responded, DialogTerminated: dialogRead.terminated,

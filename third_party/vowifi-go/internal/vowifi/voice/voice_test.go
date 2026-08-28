@@ -572,8 +572,16 @@ func TestBuildIMSInvite(t *testing.T) {
 		t.Errorf("invite missing Call-ID: %q", invite)
 	}
 	if strings.Contains(invite, "m=audio 0 ") ||
-		!strings.Contains(invite, "m=audio 12000 RTP/AVP 104 110 102 108 101 0") {
+		!strings.Contains(invite, "m=audio 12000 RTP/AVP 104 110 102 108 106 101 0") {
 		t.Errorf("builder did not emit the recovered basic offer: %q", invite)
+	}
+	if !strings.Contains(invite, "P-Early-Media: supported") {
+		t.Errorf("INVITE missing P-Early-Media: %q", invite)
+	}
+	if !strings.Contains(invite, "Privacy: none") ||
+		!strings.Contains(invite, "Feature-Caps: "+voiceFeatureCaps) ||
+		!strings.Contains(invite, "History-Info:") {
+		t.Errorf("INVITE missing Privacy/Feature-Caps/History-Info: %q", invite)
 	}
 }
 

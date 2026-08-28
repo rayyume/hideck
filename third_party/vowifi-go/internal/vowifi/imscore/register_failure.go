@@ -37,6 +37,10 @@ func decideRegisterFailureOutcome(
 		outcome.reason = "min_expires"
 		return outcome
 	}
+	if result.statusCode == 305 {
+		outcome.reason = "use_proxy"
+		return outcome
+	}
 	if transportFailure {
 		outcome.retryDelay = 5 * time.Second
 		outcome.nextRegister = now.Add(outcome.retryDelay)

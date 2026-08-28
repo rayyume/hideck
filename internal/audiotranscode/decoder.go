@@ -36,6 +36,12 @@ func (t *Transcoder) decodeInput(ctx context.Context, inputPath string) ([]int16
 		})
 	case ".wav":
 		return decodePCM16WAV(data)
+	case ".evs":
+		decoder, err := t.recordingDecoder("AMR-WB")
+		if err != nil {
+			return nil, 0, err
+		}
+		return decodeEVSRecording(ctx, decoder, data)
 	default:
 		return nil, 0, fmt.Errorf("unsupported recording format %q", filepath.Ext(inputPath))
 	}
@@ -102,6 +108,54 @@ func decodeAMR(ctx context.Context, config amrDecodeConfig) ([]int16, int, error
 		return nil, 0, errors.New("AMR recording contains no audio frames")
 	}
 	return pcm, config.sampleRate, nil
+}
+
+const evsRecordingMagic = "#!EVS_MC1.0\n"
+
+func decodeEVSRecording(ctx context.Context, decoder *amrDecoderAPI, data []byte) ([]int16, int, error) {
+	if decoder == nil {
+		return nil, 0, errors.New("AMR-WB decoder is unavailable")
+	}
+	if !strings.HasPrefix(string(data), evsRecordingMagic) {
+		return nil, 0, errors.New("invalid EVS recording header")
+	}
+	state := decoder.init()
+	if state == 0 {
+		return nil, 0, errors.New("initialize AMR-WB decoder")
+	}
+	defer decoder.close(state)
+	offset := len(evsRecordingMagic)
+	pcm := make([]int16, 0, len(data)*4)
+	for offset < len(data) {
+		if err := ctx.Err(); err != nil {
+			return nil, 0, err
+		}
+		if offset+2 > len(data) {
+			return nil, 0, errors.New("truncated EVS recording frame")
+		}
+		bits := int(binary.BigEndian.Uint16(data[offset : offset+2]))
+		offset += 2
+		frameBytes := (bits + 7) / 8
+		if bits <= 0 || offset+frameBytes > len(data) {
+			return nil, 0, errors.New("truncated EVS recording frame")
+		}
+		storage, err := evsIOPayloadToStorageBits(data[offset:offset+frameBytes], bits)
+		if err != nil {
+			return nil, 0, err
+		}
+		offset += frameBytes
+		framePCM := make([]int16, 320)
+		badFrame := 0
+		if storage[0]&amrQualityBit == 0 {
+			badFrame = 1
+		}
+		decoder.decode(state, storage, framePCM, badFrame)
+		pcm = append(pcm, framePCM...)
+	}
+	if len(pcm) == 0 {
+		return nil, 0, errors.New("EVS recording contains no audio frames")
+	}
+	return pcm, 16000, nil
 }
 
 func decodePCM16WAV(data []byte) ([]int16, int, error) {

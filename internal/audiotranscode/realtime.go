@@ -30,6 +30,7 @@ type realtimeCodecConfig struct {
 	sampleRate      int
 	samplesPerFrame int
 	frameSizes      []int
+	speechBits      []int
 	maxMode         int
 	api             *amrRealtimeAPI
 }
@@ -38,32 +39,11 @@ type realtimeCodecConfig struct {
 type RealtimeCodec struct {
 	config       realtimeCodecConfig
 	mode         int
+	octetAligned bool
 	decoderState uintptr
 	encoderState uintptr
 	mu           sync.RWMutex
 	closed       bool
-}
-
-func (t *Transcoder) ValidateRealtimeCodec(codec string) error {
-	_, err := t.realtimeAPI(codec)
-	return err
-}
-
-func (t *Transcoder) NewRealtimeCodec(codec, fmtp string) (*RealtimeCodec, error) {
-	name := strings.ToUpper(strings.TrimSpace(codec))
-	api, err := t.realtimeAPI(name)
-	if err != nil {
-		return nil, err
-	}
-	config, err := realtimeConfig(name, api)
-	if err != nil {
-		return nil, err
-	}
-	mode, err := selectAMRMode(fmtp, config.maxMode)
-	if err != nil {
-		return nil, fmt.Errorf("%s realtime codec: %w", name, err)
-	}
-	return newRealtimeCodec(config, mode)
 }
 
 func (t *Transcoder) realtimeAPI(codec string) (*amrRealtimeAPI, error) {
@@ -87,12 +67,12 @@ func realtimeConfig(name string, api *amrRealtimeAPI) (realtimeCodecConfig, erro
 	case "AMR":
 		return realtimeCodecConfig{
 			name: name, sampleRate: 8000, samplesPerFrame: 160,
-			frameSizes: amrNBFrameBytes[:], maxMode: 7, api: api,
+			frameSizes: amrNBFrameBytes[:], speechBits: amrNBSpeechBits[:], maxMode: 7, api: api,
 		}, nil
 	case "AMR-WB":
 		return realtimeCodecConfig{
 			name: name, sampleRate: 16000, samplesPerFrame: 320,
-			frameSizes: amrWBFrameBytes[:], maxMode: 8, api: api,
+			frameSizes: amrWBFrameBytes[:], speechBits: amrWBSpeechBits[:], maxMode: 8, api: api,
 		}, nil
 	default:
 		return realtimeCodecConfig{}, fmt.Errorf("unsupported realtime codec %q", name)
@@ -118,19 +98,58 @@ func newRealtimeCodec(config realtimeCodecConfig, mode int) (*RealtimeCodec, err
 
 func (codec *RealtimeCodec) SampleRate() int { return codec.config.sampleRate }
 
-func (codec *RealtimeCodec) Decode(payload []byte) ([]int16, error) {
+func (codec *RealtimeCodec) decodeStorageFrame(frame []byte, badFrame int) ([]int16, error) {
 	codec.mu.RLock()
 	defer codec.mu.RUnlock()
 	if codec.closed {
 		return nil, errors.New("realtime codec is closed")
 	}
-	frame, badFrame, err := parseOctetAlignedFrame(payload, codec.config.frameSizes)
-	if err != nil {
-		return nil, err
-	}
 	pcm := make([]int16, codec.config.samplesPerFrame)
 	codec.config.api.decoder.decode(codec.decoderState, frame, pcm, badFrame)
 	return pcm, nil
+}
+
+func (codec *RealtimeCodec) encodeStorageFrame(pcm []int16) ([]byte, error) {
+	codec.mu.RLock()
+	defer codec.mu.RUnlock()
+	if codec.closed {
+		return nil, errors.New("realtime codec is closed")
+	}
+	if len(pcm) != codec.config.samplesPerFrame {
+		return nil, fmt.Errorf("%s encoder needs %d samples, got %d", codec.config.name, codec.config.samplesPerFrame, len(pcm))
+	}
+	storage := make([]byte, maxAMRStorageFrameBytes)
+	written := codec.config.api.encoder.encode(codec.encoderState, codec.mode, pcm, storage)
+	if written <= 0 || written > len(storage) {
+		return nil, fmt.Errorf("AMR encoder returned invalid length %d", written)
+	}
+	return append([]byte(nil), storage[:written]...), nil
+}
+
+func (codec *RealtimeCodec) Decode(payload []byte) ([]int16, error) {
+	codec.mu.Lock()
+	defer codec.mu.Unlock()
+	if codec.closed {
+		return nil, errors.New("realtime codec is closed")
+	}
+	cmr, frames, err := parseAMRRTPFrames(payload, codec.octetAligned, codec.config.frameSizes, codec.config.speechBits)
+	if err != nil {
+		return nil, err
+	}
+	codec.applyCMR(cmr)
+	pcm := make([]int16, 0, codec.config.samplesPerFrame*len(frames))
+	for _, frame := range frames {
+		framePCM := make([]int16, codec.config.samplesPerFrame)
+		codec.config.api.decoder.decode(codec.decoderState, frame.storage, framePCM, frame.bad)
+		pcm = append(pcm, framePCM...)
+	}
+	return pcm, nil
+}
+
+func (codec *RealtimeCodec) applyCMR(cmr int) {
+	if cmr >= 0 && cmr <= codec.config.maxMode {
+		codec.mode = cmr
+	}
 }
 
 func (codec *RealtimeCodec) Encode(pcm []int16) ([]byte, error) {
@@ -144,7 +163,7 @@ func (codec *RealtimeCodec) Encode(pcm []int16) ([]byte, error) {
 	}
 	storage := make([]byte, maxAMRStorageFrameBytes)
 	written := codec.config.api.encoder.encode(codec.encoderState, codec.mode, pcm, storage)
-	return storageFrameToRTP(storage, written, codec.config.frameSizes)
+	return storageFrameToNegotiatedRTP(storage, written, codec.octetAligned, codec.config.frameSizes, codec.config.speechBits)
 }
 
 func (codec *RealtimeCodec) Close() error {
@@ -161,9 +180,6 @@ func (codec *RealtimeCodec) Close() error {
 
 func selectAMRMode(fmtp string, maxMode int) (int, error) {
 	fields := parseFMTP(fmtp)
-	if fields["octet-align"] != "1" {
-		return 0, errors.New("octet-align=1 is required")
-	}
 	modeSet := strings.TrimSpace(fields["mode-set"])
 	if modeSet == "" {
 		return maxMode, nil
@@ -196,29 +212,55 @@ func parseFMTP(value string) map[string]string {
 }
 
 func parseOctetAlignedFrame(payload []byte, frameSizes []int) ([]byte, int, error) {
+	_, frames, err := parseOctetAlignedFrames(payload, frameSizes)
+	if err != nil {
+		return nil, 0, err
+	}
+	return frames[0].storage, frames[0].bad, nil
+}
+
+func parseOctetAlignedFrames(payload []byte, frameSizes []int) (int, []amrParsedFrame, error) {
 	if len(payload) < 2 {
-		return nil, 0, errors.New("truncated AMR RTP payload")
+		return 0, nil, errors.New("truncated AMR RTP payload")
 	}
-	toc := payload[1]
-	if toc&0x80 != 0 {
-		return nil, 0, errors.New("multiple AMR frames per RTP packet are unsupported")
+	cmr := int(payload[0] >> 4)
+	index := 1
+	var toc []byte
+	for {
+		if index >= len(payload) {
+			return 0, nil, errors.New("truncated AMR table of contents")
+		}
+		if len(toc) >= maxAMRFramesPerRTP {
+			return 0, nil, errors.New("too many AMR frames in RTP payload")
+		}
+		entry := payload[index]
+		toc = append(toc, entry)
+		index++
+		if entry&0x80 == 0 {
+			break
+		}
 	}
-	frameType := int((toc >> 3) & 0x0f)
-	frameBytes := frameSizes[frameType]
-	if frameBytes == 0 && frameType < 14 {
-		return nil, 0, fmt.Errorf("unsupported AMR frame type %d", frameType)
+	frames := make([]amrParsedFrame, 0, len(toc))
+	for _, entry := range toc {
+		frameType := int((entry >> 3) & 0x0f)
+		frameBytes := frameSizes[frameType]
+		if frameBytes == 0 && frameType < 14 {
+			return 0, nil, fmt.Errorf("unsupported AMR frame type %d", frameType)
+		}
+		if index+frameBytes > len(payload) {
+			return 0, nil, fmt.Errorf("AMR frame size is %d, want at least %d", len(payload), index+frameBytes)
+		}
+		storage := make([]byte, 1+frameBytes)
+		storage[0] = entry & 0x7c
+		copy(storage[1:], payload[index:index+frameBytes])
+		index += frameBytes
+		badFrame := 0
+		if entry&amrQualityBit == 0 {
+			badFrame = 1
+		}
+		frames = append(frames, amrParsedFrame{storage: storage, bad: badFrame})
 	}
-	if len(payload) != 2+frameBytes {
-		return nil, 0, fmt.Errorf("AMR frame size is %d, want %d", len(payload), 2+frameBytes)
-	}
-	frame := make([]byte, 1+frameBytes)
-	frame[0] = toc & 0x7c
-	copy(frame[1:], payload[2:])
-	badFrame := 0
-	if toc&amrQualityBit == 0 {
-		badFrame = 1
-	}
-	return frame, badFrame, nil
+	return cmr, frames, nil
 }
 
 func storageFrameToRTP(storage []byte, written int, frameSizes []int) ([]byte, error) {

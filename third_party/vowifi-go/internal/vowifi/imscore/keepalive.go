@@ -48,6 +48,7 @@ const (
 	imsMaintenanceIdle imsMaintenanceAction = iota
 	imsMaintenanceRefresh
 	imsMaintenanceSubscribe
+	imsMaintenanceSubscribeMWI
 	imsMaintenanceKeepalive
 )
 
@@ -74,6 +75,8 @@ func (s *Service) keepaliveLoop() {
 			s.refreshRegistration()
 		case imsMaintenanceSubscribe:
 			s.refreshRegistrationSubscription()
+		case imsMaintenanceSubscribeMWI:
+			s.refreshMWISubscription()
 		case imsMaintenanceKeepalive:
 			s.handleIMSKeepaliveTick()
 		}
@@ -101,8 +104,10 @@ func (s *Service) computeNextWakeTime(now time.Time) time.Time {
 	s.mu.RLock()
 	registered := s.regState == regRegistered
 	subscriptionEligible := s.subscriptionEligibleLocked()
+	mwiEligible := s.mwiSubscriptionEligibleLocked()
 	refreshAt := s.registrationRefreshAt
 	subscribeAt := s.subscriptionRefreshAt
+	mwiAt := s.mwiSubscriptionRefreshAt
 	lastTrafficAt := s.lastPingAt
 	interval := s.keepaliveIntervalLocked()
 	s.mu.RUnlock()
@@ -116,6 +121,9 @@ func (s *Service) computeNextWakeTime(now time.Time) time.Time {
 	}
 	if subscriptionEligible && !subscribeAt.IsZero() && subscribeAt.Before(next) {
 		next = subscribeAt
+	}
+	if mwiEligible && !mwiAt.IsZero() && mwiAt.Before(next) {
+		next = mwiAt
 	}
 	keepaliveAt := lastTrafficAt.Add(interval)
 	if lastTrafficAt.IsZero() {
@@ -139,6 +147,10 @@ func (s *Service) nextIMSMaintenanceAction(now time.Time) imsMaintenanceAction {
 	if s.subscriptionEligibleLocked() &&
 		(s.subscriptionRefreshAt.IsZero() || !now.Before(s.subscriptionRefreshAt)) {
 		return imsMaintenanceSubscribe
+	}
+	if s.mwiSubscriptionEligibleLocked() &&
+		!s.mwiSubscriptionRefreshAt.IsZero() && !now.Before(s.mwiSubscriptionRefreshAt) {
+		return imsMaintenanceSubscribeMWI
 	}
 	if s.lastPingAt.IsZero() || !now.Before(s.lastPingAt.Add(s.keepaliveIntervalLocked())) {
 		return imsMaintenanceKeepalive

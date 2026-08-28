@@ -39,6 +39,7 @@ type Service struct {
 	terminalSeen        map[string]struct{}
 	closeOnce           sync.Once
 	closeErr            error
+	deviceWaiting       map[string]string
 }
 
 func NewService(options ServiceOptions) (*Service, error) {
@@ -54,6 +55,7 @@ func NewService(options ServiceOptions) (*Service, error) {
 		deviceCalls: make(map[string]string), mediaCalls: make(map[string]string),
 		pendingMediaDrops: make(map[string]struct{}),
 		pendingEvents:     make(map[string][]voicehost.CallEvent), terminalSeen: make(map[string]struct{}),
+		deviceWaiting: make(map[string]string),
 	}
 	if service.recoveryGrace <= 0 {
 		service.recoveryGrace = defaultRecoveryGrace

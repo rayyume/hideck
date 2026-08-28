@@ -192,6 +192,7 @@ func (s *Service) Unregister(ctx context.Context) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	s.unsubscribeMWI(ctx)
 	s.unsubscribeRegistration(ctx)
 	s.registerMu.Lock()
 	defer s.registerMu.Unlock()

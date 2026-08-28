@@ -40,6 +40,7 @@ func (a *Agent) handleIMS1xxResponse(
 			logging.WarnRate("ims-invite-provisional-sdp", "IMS INVITE 临时响应 SDP 处理失败",
 				"status", response.StatusCode, "err", err)
 		}
+		a.applyCallPreconditions(call, string(response.Body))
 	}
 	if !sipHeaderHasToken(voiceResponseHeader(response.Headers, "Require"), "100rel") {
 		return nil

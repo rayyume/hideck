@@ -56,6 +56,13 @@ func prepareWeComMedia(attachment CommandAttachment) (weComMediaPlan, error) {
 			return source, nil
 		}
 		fallbackNote = "原始 AMR-WB 录音不可用，已发送 MP3 文件"
+	case "EVS":
+		source, sourceErr := weComFilePlan(attachment.SourcePath, "", "file")
+		if sourceErr == nil && hasRecordingHeader(source.path, "#!EVS_MC1.0\n") {
+			source.note = "企业微信语音仅支持 AMR-NB，EVS 录音已按文件发送"
+			return source, nil
+		}
+		fallbackNote = "原始 EVS 录音不可用，已发送 MP3 文件"
 	default:
 		codec := strings.TrimSpace(attachment.Codec)
 		if codec == "" {

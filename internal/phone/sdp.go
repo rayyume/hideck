@@ -9,9 +9,12 @@ import (
 )
 
 const (
-	amrWBPayloadType = 104
-	amrPayloadType   = 114
-	dtmfPayloadType  = 101
+	amrWBPayloadType   = 104
+	amrWBOAPayloadType = 110
+	amrPayloadType     = 102
+	amrOAPayloadType   = 114
+	evsPayloadType     = 106
+	dtmfPayloadType    = 101
 )
 
 type rtpEndpoint struct {
@@ -70,16 +73,26 @@ func advertisedAudioCodecs(realtimeCodecs []string) ([]string, []string) {
 		seen[codec] = struct{}{}
 		switch codec {
 		case "AMR-WB":
-			payloads = append(payloads, strconv.Itoa(amrWBPayloadType))
+			payloads = append(payloads, strconv.Itoa(amrWBPayloadType), strconv.Itoa(amrWBOAPayloadType))
 			attributes = append(attributes,
 				fmt.Sprintf("a=rtpmap:%d AMR-WB/16000", amrWBPayloadType),
-				fmt.Sprintf("a=fmtp:%d octet-align=1; max-red=0", amrWBPayloadType),
+				fmt.Sprintf("a=fmtp:%d mode-change-capability=2; max-red=0", amrWBPayloadType),
+				fmt.Sprintf("a=rtpmap:%d AMR-WB/16000", amrWBOAPayloadType),
+				fmt.Sprintf("a=fmtp:%d octet-align=1; mode-change-capability=2; max-red=0", amrWBOAPayloadType),
 			)
 		case "AMR":
-			payloads = append(payloads, strconv.Itoa(amrPayloadType))
+			payloads = append(payloads, strconv.Itoa(amrPayloadType), strconv.Itoa(amrOAPayloadType))
 			attributes = append(attributes,
 				fmt.Sprintf("a=rtpmap:%d AMR/8000", amrPayloadType),
-				fmt.Sprintf("a=fmtp:%d octet-align=1; max-red=0", amrPayloadType),
+				fmt.Sprintf("a=fmtp:%d mode-change-capability=2; max-red=0", amrPayloadType),
+				fmt.Sprintf("a=rtpmap:%d AMR/8000", amrOAPayloadType),
+				fmt.Sprintf("a=fmtp:%d octet-align=1; mode-change-capability=2; max-red=0", amrOAPayloadType),
+			)
+		case "EVS":
+			payloads = append(payloads, strconv.Itoa(evsPayloadType))
+			attributes = append(attributes,
+				fmt.Sprintf("a=rtpmap:%d EVS/16000", evsPayloadType),
+				fmt.Sprintf("a=fmtp:%d evs-mode-switch=1; hf-only=0; br=6.6-23.85; bw=wb; ch-aw-recv=-1; max-red=0", evsPayloadType),
 			)
 		}
 	}
@@ -163,12 +176,12 @@ func selectRTPEndpoint(selection endpointSelection) (rtpEndpoint, error) {
 		if payloadType == 8 && codec.name == "" {
 			codec = rtpCodec{name: "PCMA", clockRate: 8000}
 		}
-		if codec.name != "PCMU" && codec.name != "PCMA" && codec.name != "AMR" && codec.name != "AMR-WB" {
+		if codec.name != "PCMU" && codec.name != "PCMA" && codec.name != "AMR" && codec.name != "AMR-WB" && codec.name != "EVS" {
 			continue
 		}
 		if len(allowed) > 0 {
 			if _, ok := allowed[codec.name]; !ok {
-				if codec.name == "AMR" || codec.name == "AMR-WB" {
+				if codec.name == "AMR" || codec.name == "AMR-WB" || codec.name == "EVS" {
 					unavailableAMR = codec.name
 				}
 				continue

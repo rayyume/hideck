@@ -108,6 +108,36 @@ func TestRTPAudioRecorderWritesBandwidthEfficientAMRMultipleFrames(t *testing.T)
 	}
 }
 
+func TestRTPAudioRecorderWritesEVS(t *testing.T) {
+	base := filepath.Join(t.TempDir(), "call")
+	recorder, err := newRTPAudioRecorder(base, []AudioCodec{{
+		PayloadType: 106, Name: "EVS", ClockRate: 16000, Fmtp: "br=5.9-24.4;bw=nb-wb",
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := []byte{0x70, 0x11, 0x22, 0x33, 0x44, 0x55}
+	if err := recorder.writeRTP(testRTPPacket(106, payload)); err != nil {
+		t.Fatal(err)
+	}
+	if err := recorder.close(); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(base + ".evs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data[:12]) != "#!EVS_MC1.0\n" {
+		t.Fatalf("EVS header=%q", data[:12])
+	}
+	if binary.BigEndian.Uint16(data[12:14]) != uint16(len(payload)*8) {
+		t.Fatalf("EVS frame bits=%d", binary.BigEndian.Uint16(data[12:14]))
+	}
+	if string(data[14:]) != string(payload) {
+		t.Fatalf("EVS payload=%x", data[14:])
+	}
+}
+
 func TestSelectRecordableCodecAcceptsBandwidthEfficientAMR(t *testing.T) {
 	codec, ext, err := selectRecordableCodec([]AudioCodec{{
 		PayloadType: 102, Name: "AMR", ClockRate: 8000, Fmtp: "mode-change-capability=2;max-red=0",

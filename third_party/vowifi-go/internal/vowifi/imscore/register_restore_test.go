@@ -244,6 +244,59 @@ func TestDecideRegisterFailureOutcome(t *testing.T) {
 	if retryAfter.reason != "retry_after" || retryAfter.nextRegister != now.Add(17*time.Second) {
 		t.Fatalf("retry-after outcome = %+v", retryAfter)
 	}
+	useProxy := decideRegisterFailureOutcome(now, registerAttemptResult{statusCode: 305}, registerPolicy, false)
+	if useProxy.kind != registrationRejectedTemporary || useProxy.reason != "use_proxy" {
+		t.Fatalf("305 outcome = %+v", useProxy)
+	}
+}
+
+func TestParseUseProxyContact(t *testing.T) {
+	tests := []struct {
+		contact, want string
+	}{
+		{`<sip:pcscf2.ims.example:5060;lr>`, "pcscf2.ims.example:5060"},
+		{`sip:192.0.2.10`, "192.0.2.10:5060"},
+		{`<sip:user@127.0.0.1:4060>`, "127.0.0.1:4060"},
+		{"", ""},
+	}
+	for _, test := range tests {
+		if got := parseUseProxyContact(test.contact); got != test.want {
+			t.Fatalf("parseUseProxyContact(%q) = %q, want %q", test.contact, got, test.want)
+		}
+	}
+}
+
+func TestRegisterRetries305UseProxy(t *testing.T) {
+	first, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Close()
+	second, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer second.Close()
+	firstSeen := make(chan string, 1)
+	secondSeen := make(chan string, 1)
+	go serveRegisterStatusWithHeaders(first, 305, "Contact: <sip:"+second.LocalAddr().String()+">\r\n", firstSeen)
+	go serveRegisterStatus(second, 200, secondSeen)
+	service, err := New(registerTransportTestConfig("udp", first.LocalAddr().String()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer service.StopCurrent()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := service.Register(ctx); err != nil {
+		t.Fatalf("Register after 305: %v", err)
+	}
+	if <-firstSeen == "" || <-secondSeen == "" {
+		t.Fatal("REGISTER did not follow 305 Use Proxy Contact")
+	}
+	if got := service.registrar; got != second.LocalAddr().String() {
+		t.Fatalf("registrar after 305 = %q", got)
+	}
 }
 
 func TestRegisterTransportDeadlineUsesEarlierContextDeadline(t *testing.T) {

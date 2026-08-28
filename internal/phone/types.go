@@ -11,6 +11,7 @@ import (
 const (
 	StatusCalling   = "calling"
 	StatusRinging   = "ringing"
+	StatusWaiting   = "waiting"
 	StatusConnected = "connected"
 	StatusCompleted = "completed"
 	StatusMissed    = "missed"

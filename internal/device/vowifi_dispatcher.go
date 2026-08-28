@@ -60,6 +60,9 @@ func (d poolVoWiFiRuntimeDispatcher) Dispatch(ctx context.Context, e eventhost.E
 		if err := recorder.RecordLocalNumberLearned(v); err != nil {
 			logger.Warn("VoWiFi 上层持久化本机号码失败", "device", v.DevID, "imsi", v.IMSI, "phone", v.Number, "err", err)
 		}
+	case eventhost.MWIUpdated:
+		logger.Info("VoWiFi MWI 更新", "device", v.DevID, "waiting", v.MessagesWaiting,
+			"voice_new", v.VoiceNew, "voice_old", v.VoiceOld)
 	}
 
 	notifier := d.pool.getNotifier()

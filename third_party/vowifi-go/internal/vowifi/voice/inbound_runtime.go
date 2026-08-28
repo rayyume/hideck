@@ -69,6 +69,8 @@ func (a *Agent) HandleInboundVoiceRequest(request imscore.InboundVoiceRequest) (
 		return voiceResult(200), nil
 	case "UPDATE":
 		return a.handleInboundUpdate(request, call)
+	case "REFER":
+		return a.handleInboundRefer(request, call)
 	default:
 		return imscore.InboundVoiceResult{}, nil
 	}
@@ -91,9 +93,9 @@ func (a *Agent) handleInboundInvite(request imscore.InboundVoiceRequest, call *C
 	if request.Responder == nil && request.ServerInvite == nil {
 		return voiceResult(500), errors.New("voice: inbound INVITE reply path is unavailable")
 	}
-	var created bool
+	var created, waiting bool
 	var err error
-	call, created, err = a.reserveInboundCall(request)
+	call, created, waiting, err = a.reserveInboundCall(request)
 	if err != nil {
 		a.emitCallBusy(request)
 		return voiceResult(486), nil
@@ -105,6 +107,9 @@ func (a *Agent) handleInboundInvite(request imscore.InboundVoiceRequest, call *C
 	status, err := a.beginInboundInvite(call, request)
 	if status != 0 || err != nil {
 		return voiceResult(status), err
+	}
+	if waiting {
+		a.emitCallWaiting(call)
 	}
 	a.emitIncomingCall(call)
 	a.emitCallRinging(call)
@@ -194,6 +199,7 @@ func (a *Agent) handleInboundUpdate(request imscore.InboundVoiceRequest, call *C
 		return voiceResult(481), nil
 	}
 	if len(request.Body) > 0 {
+		a.applyCallPreconditions(call, string(request.Body))
 		return a.handleReinvite(request, call)
 	}
 	call.inboundDecisionMu.Lock()

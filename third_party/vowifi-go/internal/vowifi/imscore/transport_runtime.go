@@ -107,10 +107,10 @@ func (s *Service) handleInboundSIPDispatch(
 	case "NOTIFY":
 		response, err := buildSIPRequestResponse(dispatch.raw, 200)
 		return inboundSIPResult{response: response, afterReply: func() {
-			s.handleRegistrationNotification(dispatch.raw)
+			s.handleInboundNotification(dispatch.raw)
 		}}, err
 	case "OPTIONS":
-		response, err := buildSIPRequestResponse(dispatch.raw, 200)
+		response, err := s.buildInboundOPTIONSResponse(dispatch.raw)
 		return inboundSIPResult{response: response}, err
 	case "MESSAGE":
 		return s.handleInboundSMS(dispatch.raw)
@@ -125,7 +125,7 @@ func (s *Service) handleInboundSIPDispatch(
 		}
 		response, responseErr := buildSIPRequestResponse(dispatch.raw, 405)
 		return inboundSIPResult{response: response}, responseErr
-	case "INVITE", "CANCEL", "PRACK", "UPDATE":
+	case "INVITE", "CANCEL", "PRACK", "UPDATE", "REFER":
 		result, handled, err := s.handleInboundVoice(dispatch)
 		if handled {
 			return result, err

@@ -413,6 +413,9 @@ func (s *Service) StopCurrent() {
 	s.subscriptionRefreshAt = time.Time{}
 	s.subscriptionClosed = true
 	s.subscriptionDialog = registrationSubscriptionDialog{}
+	s.mwiSubscriptionRefreshAt = time.Time{}
+	s.mwiSubscriptionClosed = true
+	s.mwiSubscriptionDialog = registrationSubscriptionDialog{}
 	s.signalingReady = false
 	s.securityServerIO = nil
 	s.clientPortReserve = nil

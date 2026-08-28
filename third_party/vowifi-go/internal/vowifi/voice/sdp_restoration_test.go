@@ -182,7 +182,7 @@ func TestProcessIncomingIMSSDPKeepsCallWhenCaptureCodecUnsupported(t *testing.T)
 		t.Fatal(err)
 	}
 	ims := []byte("v=0\r\nc=IN IP4 127.0.0.1\r\nm=audio 23000 RTP/AVP 111\r\n" +
-		"a=rtpmap:111 EVS/16000\r\n")
+		"a=rtpmap:111 opus/48000/2\r\n")
 	if _, err := ProcessIncomingIMSSDP(call, ims, "127.0.0.1"); err != nil {
 		t.Fatalf("unrecordable codec must not tear down the call: %v", err)
 	}
@@ -207,6 +207,28 @@ func TestProcessIncomingIMSSDPConfiguresCaptureForBandwidthEfficientAMR(t *testi
 	snapshot := relay.CaptureSnapshot()
 	if snapshot.Codec != "AMR" || snapshot.AudioPath == "" || snapshot.Err != nil {
 		t.Fatalf("expected AMR capture, got %+v", snapshot)
+	}
+}
+
+func TestProcessIncomingIMSSDPConfiguresCaptureForEVS(t *testing.T) {
+	imsRelay := listenVoiceMediaUDP(t)
+	lanRelay := listenVoiceMediaUDP(t)
+	relay := media.NewRTPRelay(imsRelay, lanRelay)
+	t.Cleanup(relay.Stop)
+	call := NewCall(NewAgent("sdp-evs", nil, nil), callstate.DirectionOutbound, "sdp-evs", "43430")
+	t.Cleanup(func() { call.Cancel(); call.CloseDone() })
+	call.SetRTPRelay(relay)
+	if err := relay.StartCallCapture(filepath.Join(t.TempDir(), "call")); err != nil {
+		t.Fatal(err)
+	}
+	ims := []byte("v=0\r\nc=IN IP4 127.0.0.1\r\nm=audio 23000 RTP/AVP 106\r\n" +
+		"a=rtpmap:106 EVS/16000\r\na=fmtp:106 br=5.9-24.4;bw=nb-wb;max-red=0\r\n")
+	if _, err := ProcessIncomingIMSSDP(call, ims, "127.0.0.1"); err != nil {
+		t.Fatalf("EVS must be recordable: %v", err)
+	}
+	snapshot := relay.CaptureSnapshot()
+	if snapshot.Codec != "EVS" || snapshot.AudioPath == "" || snapshot.Err != nil {
+		t.Fatalf("expected EVS capture, got %+v", snapshot)
 	}
 }
 
@@ -271,12 +293,17 @@ func TestGenerateBasicSDPUsesRecoveredPortSelection(t *testing.T) {
 	gateway := NewGateway(agent)
 	gateway.SetClientAdapter(&agentVoiceClientAdapter{})
 	got := string(agent.generateBasicSDP())
-	if !strings.Contains(got, "m=audio 19998 RTP/AVP 104 110 102 108 101 0") {
+	if !strings.Contains(got, "m=audio 19998 RTP/AVP 104 110 102 108 106 101 0") {
 		t.Fatalf("basic SDP uses wrong payload order or port: %q", got)
 	}
 	if !strings.Contains(got, "a=fmtp:104 mode-change-capability=2;max-red=0") ||
 		strings.Contains(got, "a=fmtp:104 octet-align=1") ||
 		!strings.Contains(got, "a=fmtp:110 octet-align=1") ||
+		!strings.Contains(got, "a=rtpmap:106 EVS/16000") ||
+		!strings.Contains(got, "a=fmtp:106 evs-mode-switch=1") ||
+		!strings.Contains(got, "a=curr:qos local none") ||
+		!strings.Contains(got, "a=des:qos mandatory local sendrecv") ||
+		strings.Contains(got, "a=rtpmap:112 EVS") ||
 		strings.Contains(got, "G722/8000") {
 		t.Fatalf("basic SDP is not IR.92 AMR-WB first: %q", got)
 	}

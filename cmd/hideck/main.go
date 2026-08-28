@@ -323,7 +323,7 @@ func main() {
 
 func availableRealtimeCodecs(transcoder *audiotranscode.Transcoder) []string {
 	available := make([]string, 0, 2)
-	for _, codec := range []string{"AMR-WB", "AMR"} {
+	for _, codec := range []string{"AMR-WB", "AMR", "EVS"} {
 		if err := transcoder.ValidateRealtimeCodec(codec); err != nil {
 			logger.Warn("实时语音编解码器不可用", "codec", codec, "err", err)
 			continue

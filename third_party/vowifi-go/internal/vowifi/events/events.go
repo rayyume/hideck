@@ -209,6 +209,28 @@ type EventCallFinalized struct {
 	Time           time.Time
 }
 
+// EventMWIUpdated is published when RFC 3842 Message Waiting Indication changes.
+type EventMWIUpdated struct {
+	DevID           string
+	MessagesWaiting bool
+	VoiceNew        int
+	VoiceOld        int
+	Account         string
+	Time            time.Time
+}
+
+// EventCallWaiting is published when a second inbound INVITE is accepted while
+// another call is already connected.
+type EventCallWaiting struct {
+	DevID      string
+	CallID     string
+	Caller     string
+	Callee     string
+	ActiveID   string
+	ReceivedAt time.Time
+	Time       time.Time
+}
+
 // Type returns "SMSReceived".
 func (e EventSMSReceived) Type() string { return "SMSReceived" }
 
@@ -316,3 +338,15 @@ func (e EventCallFinalized) Type() string { return "CallFinalized" }
 
 // DeviceID returns the device ID.
 func (e EventCallFinalized) DeviceID() string { return e.DevID }
+
+// Type returns "MWIUpdated".
+func (e EventMWIUpdated) Type() string { return "MWIUpdated" }
+
+// DeviceID returns the device ID.
+func (e EventMWIUpdated) DeviceID() string { return e.DevID }
+
+// Type returns "CallWaiting".
+func (e EventCallWaiting) Type() string { return "CallWaiting" }
+
+// DeviceID returns the device ID.
+func (e EventCallWaiting) DeviceID() string { return e.DevID }
