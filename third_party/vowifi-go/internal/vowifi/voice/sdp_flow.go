@@ -51,43 +51,71 @@ func audioCaptureCodecs(info *SDPInfo) []media.AudioCodec {
 	if info == nil {
 		return nil
 	}
-	codecs := make([]media.AudioCodec, 0, len(info.Codecs))
+	byPayload := make(map[int]media.AudioCodec, len(info.Codecs)+2)
 	for _, codec := range info.Codecs {
-		codecs = append(codecs, media.AudioCodec{
+		byPayload[codec.PayloadType] = media.AudioCodec{
 			PayloadType: codec.PayloadType,
 			Name:        codec.Name,
 			ClockRate:   codec.ClockRate,
 			Channels:    codec.Channels,
 			Fmtp:        codec.Fmtp,
-		})
+		}
 	}
-	payloadTypes := sdpAudioPayloadTypes(info.RawSDP)
-	if _, offered := payloadTypes[0]; offered && info.GetCodecByPT(0) == nil {
-		codecs = append(codecs, media.AudioCodec{PayloadType: 0, Name: "PCMU", ClockRate: 8000, Channels: 1})
+	order := sdpAudioPayloadTypeOrder(info.RawSDP)
+	for _, payloadType := range order {
+		if _, exists := byPayload[payloadType]; exists {
+			continue
+		}
+		if payloadType == 0 {
+			byPayload[0] = media.AudioCodec{PayloadType: 0, Name: "PCMU", ClockRate: 8000, Channels: 1}
+		}
+		if payloadType == 8 {
+			byPayload[8] = media.AudioCodec{PayloadType: 8, Name: "PCMA", ClockRate: 8000, Channels: 1}
+		}
 	}
-	if _, offered := payloadTypes[8]; offered && info.GetCodecByPT(8) == nil {
-		codecs = append(codecs, media.AudioCodec{PayloadType: 8, Name: "PCMA", ClockRate: 8000, Channels: 1})
+	if len(order) == 0 {
+		codecs := make([]media.AudioCodec, 0, len(info.Codecs))
+		for _, codec := range info.Codecs {
+			codecs = append(codecs, byPayload[codec.PayloadType])
+		}
+		return codecs
+	}
+	codecs := make([]media.AudioCodec, 0, len(order))
+	seen := make(map[int]struct{}, len(order))
+	for _, payloadType := range order {
+		codec, ok := byPayload[payloadType]
+		if !ok {
+			continue
+		}
+		if _, already := seen[payloadType]; already {
+			continue
+		}
+		seen[payloadType] = struct{}{}
+		codecs = append(codecs, codec)
 	}
 	return codecs
 }
 
-func sdpAudioPayloadTypes(raw []byte) map[int]struct{} {
-	result := make(map[int]struct{})
+func sdpAudioPayloadTypeOrder(raw []byte) []int {
 	for _, line := range bytes.Split(raw, []byte{'\n'}) {
 		line = bytes.TrimSpace(line)
 		if !bytes.HasPrefix(line, []byte("m=audio ")) {
 			continue
 		}
 		fields := bytes.Fields(line)
+		if len(fields) < 4 {
+			return nil
+		}
+		order := make([]int, 0, len(fields)-3)
 		for _, field := range fields[3:] {
 			payloadType, err := strconv.Atoi(string(field))
 			if err == nil {
-				result[payloadType] = struct{}{}
+				order = append(order, payloadType)
 			}
 		}
-		break
+		return order
 	}
-	return result
+	return nil
 }
 
 // ExtractAndApplyPTMapping applies dynamic IMS-to-client payload mappings to

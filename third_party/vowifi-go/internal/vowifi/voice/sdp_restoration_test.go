@@ -181,10 +181,46 @@ func TestProcessIncomingIMSSDPKeepsCallWhenCaptureCodecUnsupported(t *testing.T)
 	if err := relay.StartCallCapture(filepath.Join(t.TempDir(), "call")); err != nil {
 		t.Fatal(err)
 	}
+	ims := []byte("v=0\r\nc=IN IP4 127.0.0.1\r\nm=audio 23000 RTP/AVP 111\r\n" +
+		"a=rtpmap:111 EVS/16000\r\n")
+	if _, err := ProcessIncomingIMSSDP(call, ims, "127.0.0.1"); err != nil {
+		t.Fatalf("unrecordable codec must not tear down the call: %v", err)
+	}
+}
+
+func TestProcessIncomingIMSSDPConfiguresCaptureForBandwidthEfficientAMR(t *testing.T) {
+	imsRelay := listenVoiceMediaUDP(t)
+	lanRelay := listenVoiceMediaUDP(t)
+	relay := media.NewRTPRelay(imsRelay, lanRelay)
+	t.Cleanup(relay.Stop)
+	call := NewCall(NewAgent("sdp-be-amr", nil, nil), callstate.DirectionOutbound, "sdp-be-amr", "43430")
+	t.Cleanup(func() { call.Cancel(); call.CloseDone() })
+	call.SetRTPRelay(relay)
+	if err := relay.StartCallCapture(filepath.Join(t.TempDir(), "call")); err != nil {
+		t.Fatal(err)
+	}
 	ims := []byte("v=0\r\nc=IN IP4 127.0.0.1\r\nm=audio 23000 RTP/AVP 102\r\n" +
 		"a=rtpmap:102 AMR/8000\r\na=fmtp:102 mode-change-capability=2;max-red=0\r\n")
 	if _, err := ProcessIncomingIMSSDP(call, ims, "127.0.0.1"); err != nil {
-		t.Fatalf("unrecordable AMR must not tear down the call: %v", err)
+		t.Fatalf("bandwidth-efficient AMR must be recordable: %v", err)
+	}
+	snapshot := relay.CaptureSnapshot()
+	if snapshot.Codec != "AMR" || snapshot.AudioPath == "" || snapshot.Err != nil {
+		t.Fatalf("expected AMR capture, got %+v", snapshot)
+	}
+}
+
+func TestAudioCaptureCodecsFollowMediaLineOrder(t *testing.T) {
+	info, err := ParseSDP([]byte("v=0\r\nm=audio 23000 RTP/AVP 102 104\r\n" +
+		"a=rtpmap:104 AMR-WB/16000\r\n" +
+		"a=rtpmap:102 AMR/8000\r\n" +
+		"a=fmtp:102 mode-change-capability=2;max-red=0\r\n"))
+	if err != nil || info == nil {
+		t.Fatalf("ParseSDP: %v", err)
+	}
+	codecs := audioCaptureCodecs(info)
+	if len(codecs) != 2 || codecs[0].PayloadType != 102 || codecs[0].Name != "AMR" {
+		t.Fatalf("capture codecs should follow m-line order, got %+v", codecs)
 	}
 }
 

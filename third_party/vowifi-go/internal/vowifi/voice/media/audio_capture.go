@@ -11,23 +11,28 @@ import (
 )
 
 const (
-	rtpFixedHeaderLength = 12
-	wavHeaderLength      = 44
+	rtpFixedHeaderLength  = 12
+	wavHeaderLength       = 44
+	maxAMRFramesPerPacket = 32
 )
 
 var (
 	amrFrameBytes   = [...]int{12, 13, 15, 17, 19, 20, 26, 31, 5, 0, 0, 0, 0, 0, 0, 0}
 	amrWBFrameBytes = [...]int{17, 23, 32, 36, 40, 46, 50, 58, 60, 5, 0, 0, 0, 0, 0, 0}
+	// RFC 4867 speech-bit counts, used to unpack bandwidth-efficient RTP.
+	amrSpeechBits   = [...]int{95, 103, 118, 134, 148, 159, 204, 244, 39, 43, 38, 37, 0, 0, 0, 0}
+	amrWBSpeechBits = [...]int{132, 177, 253, 285, 317, 365, 397, 461, 477, 40, 0, 0, 0, 0, 0, 0}
 )
 
 type rtpAudioRecorder struct {
-	file        *os.File
-	path        string
-	codec       string
-	payloadType int
-	clockRate   int
-	dataBytes   uint32
-	frames      uint64
+	file         *os.File
+	path         string
+	codec        string
+	payloadType  int
+	clockRate    int
+	octetAligned bool
+	dataBytes    uint32
+	frames       uint64
 }
 
 func newRTPAudioRecorder(target string, codecs []AudioCodec) (*rtpAudioRecorder, error) {
@@ -43,9 +48,14 @@ func newRTPAudioRecorder(target string, codecs []AudioCodec) (*rtpAudioRecorder,
 	if err != nil {
 		return nil, fmt.Errorf("media: create audio capture: %w", err)
 	}
+	codecName := strings.ToUpper(codec.Name)
+	if codecName == "AMR-NB" {
+		codecName = "AMR"
+	}
 	recorder := &rtpAudioRecorder{
-		file: file, path: path, codec: strings.ToUpper(codec.Name),
+		file: file, path: path, codec: codecName,
 		payloadType: codec.PayloadType, clockRate: codec.ClockRate,
+		octetAligned: hasOctetAlignedFMTP(codec.Fmtp),
 	}
 	if err := recorder.writeHeader(); err != nil {
 		return nil, errors.Join(err, file.Close())
@@ -57,14 +67,8 @@ func selectRecordableCodec(codecs []AudioCodec) (AudioCodec, string, error) {
 	for _, codec := range codecs {
 		switch strings.ToUpper(strings.TrimSpace(codec.Name)) {
 		case "AMR-WB":
-			if !hasOctetAlignedFMTP(codec.Fmtp) {
-				continue
-			}
 			return codec, ".amr-wb", nil
-		case "AMR":
-			if !hasOctetAlignedFMTP(codec.Fmtp) {
-				continue
-			}
+		case "AMR", "AMR-NB":
 			return codec, ".amr", nil
 		case "PCMU", "PCMA":
 			if codec.ClockRate == 0 {
@@ -110,9 +114,15 @@ func (r *rtpAudioRecorder) writeRTP(packet []byte) error {
 	}
 	switch r.codec {
 	case "AMR-WB":
-		return r.writeOctetAlignedAMR(payload, amrWBFrameBytes[:])
+		if r.octetAligned {
+			return r.writeOctetAlignedAMR(payload, amrWBFrameBytes[:])
+		}
+		return r.writeBandwidthEfficientAMR(payload, amrWBSpeechBits[:])
 	case "AMR":
-		return r.writeOctetAlignedAMR(payload, amrFrameBytes[:])
+		if r.octetAligned {
+			return r.writeOctetAlignedAMR(payload, amrFrameBytes[:])
+		}
+		return r.writeBandwidthEfficientAMR(payload, amrSpeechBits[:])
 	case "PCMU", "PCMA":
 		return r.writeG711(payload)
 	default:
@@ -176,6 +186,106 @@ func (r *rtpAudioRecorder) writeOctetAlignedAMR(payload []byte, sizes []int) err
 		r.frames++
 	}
 	return nil
+}
+
+func (r *rtpAudioRecorder) writeBandwidthEfficientAMR(payload []byte, speechBits []int) error {
+	if len(payload) == 0 {
+		return errors.New("media: truncated AMR RTP payload")
+	}
+	reader := amrBitReader{data: payload}
+	if _, err := reader.read(4); err != nil {
+		return errors.New("media: truncated AMR RTP payload")
+	}
+	var toc []byte
+	for {
+		if len(toc) >= maxAMRFramesPerPacket {
+			return errors.New("media: too many AMR frames in RTP payload")
+		}
+		follow, err := reader.read(1)
+		if err != nil {
+			return errors.New("media: truncated AMR table of contents")
+		}
+		frameType, err := reader.read(4)
+		if err != nil {
+			return errors.New("media: truncated AMR table of contents")
+		}
+		quality, err := reader.read(1)
+		if err != nil {
+			return errors.New("media: truncated AMR table of contents")
+		}
+		entry := byte(frameType<<3) | byte(quality<<2)
+		if follow == 1 {
+			entry |= 0x80
+		}
+		toc = append(toc, entry)
+		if follow == 0 {
+			break
+		}
+	}
+	for _, entry := range toc {
+		frameType := int((entry >> 3) & 0x0f)
+		speech, err := reader.readBitsAsBytes(speechBits[frameType])
+		if err != nil {
+			return errors.New("media: truncated AMR speech frame")
+		}
+		if _, err := r.file.Write([]byte{entry & 0x7c}); err != nil {
+			return err
+		}
+		if len(speech) > 0 {
+			if _, err := r.file.Write(speech); err != nil {
+				return err
+			}
+		}
+		r.frames++
+	}
+	return nil
+}
+
+type amrBitReader struct {
+	data []byte
+	bit  int
+}
+
+func (r *amrBitReader) remaining() int {
+	return len(r.data)*8 - r.bit
+}
+
+func (r *amrBitReader) read(n int) (uint8, error) {
+	if n <= 0 {
+		return 0, nil
+	}
+	if n > 8 || r.remaining() < n {
+		return 0, io.ErrUnexpectedEOF
+	}
+	var value uint8
+	for i := 0; i < n; i++ {
+		value <<= 1
+		if r.data[r.bit/8]&(1<<uint(7-r.bit%8)) != 0 {
+			value |= 1
+		}
+		r.bit++
+	}
+	return value, nil
+}
+
+func (r *amrBitReader) readBitsAsBytes(n int) ([]byte, error) {
+	if n == 0 {
+		return nil, nil
+	}
+	if r.remaining() < n {
+		return nil, io.ErrUnexpectedEOF
+	}
+	out := make([]byte, (n+7)/8)
+	for i := 0; i < n; i++ {
+		bit, err := r.read(1)
+		if err != nil {
+			return nil, err
+		}
+		if bit == 1 {
+			out[i/8] |= 1 << uint(7-i%8)
+		}
+	}
+	return out, nil
 }
 
 func (r *rtpAudioRecorder) writeG711(payload []byte) error {
