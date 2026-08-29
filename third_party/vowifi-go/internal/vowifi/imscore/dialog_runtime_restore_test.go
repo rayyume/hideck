@@ -21,8 +21,12 @@ func TestDialogHandleRetainsOriginalFieldPrefix(t *testing.T) {
 			t.Fatalf("field %d = %q, want %q", index, got, name)
 		}
 	}
-	if reflect.TypeOf(imsendpoint.DialogRequestOptions{}).Field(0).Type.Kind() != reflect.Int64 {
-		t.Fatal("DialogRequestOptions.Timeout is not int64")
+	optionsType := reflect.TypeOf(imsendpoint.DialogRequestOptions{})
+	if optionsType.Field(0).Name != "Timeout" || optionsType.Field(0).Type.Kind() != reflect.Int64 {
+		t.Fatal("DialogRequestOptions.Timeout is not the first int64 field")
+	}
+	if optionsType.NumField() < 2 || optionsType.Field(1).Name != "OnResponse" {
+		t.Fatal("DialogRequestOptions.OnResponse must remain the additive trailing field")
 	}
 	service, err := New(&IMSConfig{})
 	if err != nil {

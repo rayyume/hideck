@@ -24,6 +24,7 @@ type reliableProvisionalRegistrar struct {
 	update              chan string
 	prackResponsesAfter int
 	prackCount          int
+	rseq                uint32
 	sessionExpires      string
 	provisionalExpires  string
 	provisionalSDP      string
@@ -77,9 +78,10 @@ func startReliableProvisionalRegistrarWithOptions(
 		t.Fatalf("ListenUDP: %v", err)
 	}
 	registrar := &reliableProvisionalRegistrar{
-		conn: conn, prack: make(chan string, 4), ack: make(chan string, 1),
+		conn: conn, prack: make(chan string, 4), ack: make(chan string, 4),
 		update:              make(chan string, 4),
 		prackResponsesAfter: options.prackResponsesAfter,
+		rseq:                41,
 		sessionExpires:      options.finalSessionExpires,
 		provisionalExpires:  options.provisionalSessionExpires,
 		provisionalSDP:      options.provisionalSDP,
@@ -102,6 +104,7 @@ func (r *reliableProvisionalRegistrar) serve() {
 		switch sipMethodForTest(request) {
 		case "INVITE":
 			invite, inviteRemote = request, remote
+			r.prackCount = 0
 			r.writeProvisional(request, remote)
 		case "PRACK":
 			r.prack <- request
@@ -127,7 +130,8 @@ func (r *reliableProvisionalRegistrar) writeProvisional(request string, remote *
 	extra := "To: <sip:callee@ims.example.com>;tag=early-dialog\r\n" +
 		"Contact: " + contact + "\r\n" +
 		"Record-Route: <sip:edge-one.example;lr>, <sip:edge-two.example;lr>\r\n" +
-		"Require: 100rel\r\nRSeq: 41\r\nContent-Type: application/sdp\r\n"
+		fmt.Sprintf("Require: 100rel\r\nRSeq: %d\r\nContent-Type: application/sdp\r\n", r.rseq)
+	r.rseq++
 	if r.provisionalExpires != "" {
 		extra += "Session-Expires: " + r.provisionalExpires + "\r\n"
 	}

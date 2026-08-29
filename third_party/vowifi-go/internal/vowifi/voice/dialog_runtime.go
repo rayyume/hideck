@@ -165,6 +165,8 @@ func (c *Call) advanceVoiceInviteCSeq() voiceSIPDialog {
 	}
 	c.sipDialog.cseq++
 	c.sipDialog.inviteCSeq = c.sipDialog.cseq
+	// RFC 3262: RSeq numbering is per INVITE transaction (per CSeq).
+	c.Timers.RSeq = 0
 	copy := *c.sipDialog
 	copy.serviceRoute = append([]string(nil), c.sipDialog.serviceRoute...)
 	return copy

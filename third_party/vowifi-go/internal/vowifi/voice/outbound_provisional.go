@@ -10,6 +10,7 @@ import (
 	"github.com/iniwex5/vowifi-go/internal/vowifi/imscore"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/imsendpoint"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/logging"
+	"github.com/iniwex5/vowifi-go/internal/vowifi/voice/callstate"
 )
 
 func (a *Agent) handleOutboundProvisional(
@@ -29,9 +30,12 @@ func (a *Agent) handleIMS1xxResponse(
 		return nil
 	}
 	logOutboundInviteResponse("IMS INVITE 临时响应", response)
-	call.MarkInviteProvisional(response.StatusCode)
-	if response.StatusCode == 180 {
-		a.emitCallRinging(call)
+	confirmed := call.CallState() == callstate.StateConnected
+	if !confirmed {
+		call.MarkInviteProvisional(response.StatusCode)
+		if response.StatusCode == 180 {
+			a.emitCallRinging(call)
+		}
 	}
 	call.learnVoiceDialog(response)
 	call.applyVoiceSessionExpires(voiceResponseHeader(response.Headers, "Session-Expires"))
@@ -40,7 +44,9 @@ func (a *Agent) handleIMS1xxResponse(
 			logging.WarnRate("ims-invite-provisional-sdp", "IMS INVITE 临时响应 SDP 处理失败",
 				"status", response.StatusCode, "err", err)
 		}
-		a.applyCallPreconditions(call, string(response.Body))
+		if !confirmed {
+			a.applyCallPreconditions(call, string(response.Body))
+		}
 	}
 	if !sipHeaderHasToken(voiceResponseHeader(response.Headers, "Require"), "100rel") {
 		return nil
@@ -52,7 +58,7 @@ func (a *Agent) handleIMS1xxResponse(
 	if !call.markReliableProvisionalRSeq(rseq) {
 		return nil
 	}
-	if call.hasLocalInviteTransaction() {
+	if call.hasLocalInviteTransaction() && !confirmed {
 		return nil
 	}
 	return a.sendReliableProvisionalPRACK(ctx, call, rseq)

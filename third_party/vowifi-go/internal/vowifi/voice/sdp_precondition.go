@@ -6,6 +6,19 @@ import (
 	"github.com/iniwex5/vowifi-go/internal/vowifi/voice/callstate"
 )
 
+// sdpQoSReservedLocal is the RFC 3312 / 3GPP 24.229 originating offer once the
+// access bearer is already up. GSMA IR.92 requires the precondition option
+// tag and qos attributes; VoWiFi has SWu/IPsec before INVITE, so current
+// local status must be sendrecv. Advertising "local none" plus "des
+// mandatory" makes the callee wait for a segmented UPDATE that this stack
+// does not send. Desired local stays mandatory (already satisfied). Remote
+// stays optional. Do not put Require: precondition on the INVITE.
+const sdpQoSReservedLocal = "" +
+	"a=curr:qos local sendrecv\r\n" +
+	"a=curr:qos remote none\r\n" +
+	"a=des:qos mandatory local sendrecv\r\n" +
+	"a=des:qos optional remote sendrecv\r\n"
+
 func sdpHasPreconditions(sdp string) bool {
 	for _, line := range strings.Split(sdp, "\n") {
 		line = strings.TrimSpace(strings.TrimSuffix(line, "\r"))

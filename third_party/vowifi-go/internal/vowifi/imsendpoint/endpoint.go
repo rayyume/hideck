@@ -157,7 +157,8 @@ type ClientInviteOptions struct {
 
 // DialogRequestOptions controls one in-dialog transaction.
 type DialogRequestOptions struct {
-	Timeout int64
+	Timeout    int64
+	OnResponse func(*sip.Response) error
 }
 
 // RetryPolicy controls reliable-provisional retry timing.

@@ -578,6 +578,11 @@ func TestBuildIMSInvite(t *testing.T) {
 	if !strings.Contains(invite, "P-Early-Media: supported") {
 		t.Errorf("INVITE missing P-Early-Media: %q", invite)
 	}
+	if !strings.Contains(invite, "a=curr:qos local sendrecv") ||
+		strings.Contains(invite, "a=curr:qos local none") ||
+		!strings.Contains(invite, "Supported: "+voiceInviteSupported) {
+		t.Errorf("INVITE qos/precondition offer is not RFC 3312 reserved-local: %q", invite)
+	}
 	if !strings.Contains(invite, "Privacy: none") ||
 		!strings.Contains(invite, "Feature-Caps: "+voiceFeatureCaps) ||
 		!strings.Contains(invite, "History-Info:") {

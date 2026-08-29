@@ -141,6 +141,7 @@ func (a *Agent) prepareSimulatedOutboundMedia(call *Call) (string, error) {
 		return "", errors.New("voice: failed to generate simulated-call SDP")
 	}
 	call.setLocalSDP("", imsOffer)
+	call.setPreconditionMet(sdpPreconditionsSatisfied(imsOffer))
 	return imsOffer, nil
 }
 

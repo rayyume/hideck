@@ -301,7 +301,8 @@ func TestGenerateBasicSDPUsesRecoveredPortSelection(t *testing.T) {
 		!strings.Contains(got, "a=fmtp:110 octet-align=1") ||
 		!strings.Contains(got, "a=rtpmap:106 EVS/16000") ||
 		!strings.Contains(got, "a=fmtp:106 evs-mode-switch=1") ||
-		!strings.Contains(got, "a=curr:qos local none") ||
+		!strings.Contains(got, "a=curr:qos local sendrecv") ||
+		strings.Contains(got, "a=curr:qos local none") ||
 		!strings.Contains(got, "a=des:qos mandatory local sendrecv") ||
 		strings.Contains(got, "a=rtpmap:112 EVS") ||
 		strings.Contains(got, "G722/8000") {

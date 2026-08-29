@@ -18,6 +18,9 @@ func TestSDPPreconditionsSatisfied(t *testing.T) {
 	if !sdpPreconditionsSatisfied(met) {
 		t.Fatal("sendrecv qos was not satisfied")
 	}
+	if !sdpPreconditionsSatisfied(sdpQoSReservedLocal) {
+		t.Fatal("VoWiFi reserved local qos must already be satisfied")
+	}
 }
 
 func TestApplyCallPreconditionsMovesEarlyMediaToWait(t *testing.T) {

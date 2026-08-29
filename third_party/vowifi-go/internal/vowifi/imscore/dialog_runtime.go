@@ -93,7 +93,7 @@ func (s *Service) SendDialogRequest(
 	if err != nil {
 		return nil, err
 	}
-	return s.sendDialogRequestByMode(ctx, handle, request, time.Duration(options.Timeout))
+	return s.sendDialogRequestByMode(ctx, handle, request, options)
 }
 
 // SendDialogRequestForCurrentDevice retains the additive device-implicit API.
@@ -121,9 +121,9 @@ func (s *Service) sendDialogRequestByMode(
 	ctx context.Context,
 	handle *imscoreDialogHandle,
 	template *sip.Request,
-	timeout time.Duration,
+	options imsendpoint.DialogRequestOptions,
 ) (*sip.Response, error) {
-	ctx, cancel := dialogRequestContext(ctx, timeout)
+	ctx, cancel := dialogRequestContext(ctx, time.Duration(options.Timeout))
 	defer cancel()
 	serverRole := handle.server != nil
 	if serverRole && template.Method == sip.BYE {
@@ -138,8 +138,15 @@ func (s *Service) sendDialogRequestByMode(
 	if request.IsAck() {
 		return nil, s.writeDialogACK(ctx, request, sender)
 	}
+	callbacks := sipTransactionCallbacks{}
+	if options.OnResponse != nil && template.Method == sip.INVITE {
+		handler := options.OnResponse
+		callbacks.onProvisional = func(response *sipResponse) error {
+			return callClientInviteResponseHandler(handler, response)
+		}
+	}
 	transaction, err := s.transport.startClientTransactionWithSender(
-		request.String(), sipTransactionCallbacks{}, sender,
+		request.String(), callbacks, sender,
 	)
 	if err != nil {
 		s.handleDialogRequestError(request, err)

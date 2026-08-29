@@ -48,7 +48,7 @@ func (a *Agent) sendLocalHoldOffer(ctx context.Context, call *Call, hold bool) e
 	if strings.TrimSpace(sdp) == "" {
 		return errors.New("voice: local hold offer SDP is unavailable")
 	}
-	response, err := a.sendCallDialogRequest(ctx, call, buildIMSReinvite(a, call, sdp))
+	response, err := a.sendCallDialogInvite(ctx, call, buildIMSReinvite(a, call, sdp))
 	if err != nil {
 		return fmt.Errorf("voice: hold re-INVITE failed: %w", err)
 	}

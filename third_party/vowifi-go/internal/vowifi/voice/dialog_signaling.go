@@ -100,6 +100,27 @@ func (a *Agent) sendCallDialogRequest(
 	call *Call,
 	raw string,
 ) (imscore.SIPResponse, error) {
+	return a.sendCallDialogRequestWithOptions(ctx, call, raw, imsendpoint.DialogRequestOptions{})
+}
+
+func (a *Agent) sendCallDialogInvite(
+	ctx context.Context,
+	call *Call,
+	raw string,
+) (imscore.SIPResponse, error) {
+	return a.sendCallDialogRequestWithOptions(ctx, call, raw, imsendpoint.DialogRequestOptions{
+		OnResponse: func(response *sip.Response) error {
+			return a.handleIMSResponseCallback(ctx, call, response)
+		},
+	})
+}
+
+func (a *Agent) sendCallDialogRequestWithOptions(
+	ctx context.Context,
+	call *Call,
+	raw string,
+	options imsendpoint.DialogRequestOptions,
+) (imscore.SIPResponse, error) {
 	if a == nil || a.dialog == nil || call == nil {
 		return imscore.SIPResponse{}, errors.New("voice: dialog controller is unavailable")
 	}
@@ -112,7 +133,7 @@ func (a *Agent) sendCallDialogRequest(
 		return imscore.SIPResponse{}, err
 	}
 	response, err := a.dialog.SendDialogRequestWithHandle(
-		ctx, a.deviceID, handle, request, imsendpoint.DialogRequestOptions{},
+		ctx, a.deviceID, handle, request, options,
 	)
 	if err != nil {
 		return imscore.SIPResponse{}, err

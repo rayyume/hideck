@@ -31,6 +31,12 @@ func TestBuildIMSReinviteUsesHoldDirection(t *testing.T) {
 	if !strings.Contains(request, "a=sendonly") {
 		t.Fatalf("re-INVITE omitted sendonly: %q", request)
 	}
+	if !strings.Contains(request, "Supported: "+voiceInviteSupported) {
+		t.Fatalf("re-INVITE omitted Supported: %q", request)
+	}
+	if strings.Count(request, "Supported:") != 1 {
+		t.Fatalf("re-INVITE duplicated Supported: %q", request)
+	}
 }
 
 func TestOutboundHoldAndResumeRewriteLocalSDP(t *testing.T) {
@@ -56,6 +62,49 @@ func TestOutboundHoldAndResumeRewriteLocalSDP(t *testing.T) {
 	}
 	if call.Held() || sdpMediaDirection(call.imsLocalSDPValue()) != sdpDirectionSendRecv {
 		t.Fatalf("resumed held=%t direction=%s", call.Held(), sdpMediaDirection(call.imsLocalSDPValue()))
+	}
+}
+
+func TestHoldReinvitePRACKsReliableProvisional(t *testing.T) {
+	registrar := startReliableProvisionalRegistrar(t)
+	agent := newVoiceTestAgent(t, registrar.conn)
+	if err := agent.StartCurrent(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = agent.Stop() })
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	call, err := agent.dialContext(ctx, "+447942985429", testClientSDP)
+	if err != nil {
+		t.Fatalf("dialContext: %v", err)
+	}
+	initialInviteCSeq := call.voiceDialogSnapshot().inviteCSeq
+	assertReliableProvisionalPRACK(t, <-registrar.prack, registrar.conn.LocalAddr().(*net.UDPAddr).Port, initialInviteCSeq)
+	<-registrar.ack
+
+	if err := agent.HoldCall(ctx, call.CallID()); err != nil {
+		t.Fatal(err)
+	}
+	if !call.Held() || sdpMediaDirection(call.imsLocalSDPValue()) != sdpDirectionSendOnly {
+		t.Fatalf("held=%t direction=%s", call.Held(), sdpMediaDirection(call.imsLocalSDPValue()))
+	}
+	holdInviteCSeq := call.voiceDialogSnapshot().inviteCSeq
+	if holdInviteCSeq == initialInviteCSeq {
+		t.Fatal("hold re-INVITE did not advance INVITE CSeq")
+	}
+	if got := voiceTestHeader(<-registrar.prack, "RAck"); got != fmt.Sprintf("42 %d INVITE", holdInviteCSeq) {
+		t.Fatalf("hold RAck = %q", got)
+	}
+
+	if err := agent.ResumeCall(ctx, call.CallID()); err != nil {
+		t.Fatal(err)
+	}
+	if call.Held() || sdpMediaDirection(call.imsLocalSDPValue()) != sdpDirectionSendRecv {
+		t.Fatalf("resumed held=%t direction=%s", call.Held(), sdpMediaDirection(call.imsLocalSDPValue()))
+	}
+	if got := voiceTestHeader(<-registrar.prack, "RAck"); got != fmt.Sprintf("43 %d INVITE", call.voiceDialogSnapshot().inviteCSeq) {
+		t.Fatalf("resume RAck = %q", got)
 	}
 }
 

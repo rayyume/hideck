@@ -31,7 +31,9 @@ func (s *Service) SendReliableProvisionalPRACK(
 	if err != nil {
 		return err
 	}
-	_, err = s.sendDialogRequestByMode(ctx, dialog, request, reliableProvisionalTimeout)
+	_, err = s.sendDialogRequestByMode(ctx, dialog, request, imsendpoint.DialogRequestOptions{
+		Timeout: int64(reliableProvisionalTimeout),
+	})
 	return err
 }
 

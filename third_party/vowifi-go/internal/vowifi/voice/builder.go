@@ -35,13 +35,24 @@ func buildIMSReinvite(agent *Agent, call *Call, sdp string) string {
 		return ""
 	}
 	dialog := call.advanceVoiceInviteCSeq()
-	return attachSessionTimerHeaders(call, buildVoiceRequest(dialog, call.CallID(), "INVITE", voiceBranch(), sdp))
+	request := attachInviteSupported(buildVoiceRequest(dialog, call.CallID(), "INVITE", voiceBranch(), sdp))
+	return attachSessionTimerHeaders(call, request)
+}
+
+func attachInviteSupported(request string) string {
+	if strings.TrimSpace(request) == "" || strings.Contains(request, "Supported:") {
+		return request
+	}
+	return strings.Replace(request, "Content-Length:", "Supported: "+voiceInviteSupported+"\r\nContent-Length:", 1)
 }
 
 func attachSessionTimerHeaders(call *Call, request string) string {
 	header := formatSessionTimerHeaders(call)
 	if header == "" {
 		return request
+	}
+	if strings.Contains(request, "Supported:") {
+		header = strings.Replace(header, "Supported: timer\r\n", "", 1)
 	}
 	return strings.Replace(request, "Content-Length:", header+"Content-Length:", 1)
 }
@@ -259,10 +270,7 @@ func buildBasicSDP(ip string, port int, sessionID int64) []byte {
 			"a=rtpmap:101 telephone-event/8000\r\n"+
 			"a=fmtp:101 0-15\r\n"+
 			"a=rtpmap:0 PCMU/8000\r\n"+
-			"a=curr:qos local none\r\n"+
-			"a=curr:qos remote none\r\n"+
-			"a=des:qos mandatory local sendrecv\r\n"+
-			"a=des:qos optional remote sendrecv\r\n"+
+			sdpQoSReservedLocal +
 			"a=sendrecv\r\n"+
 			"a=ptime:20\r\n"+
 			"a=maxptime:20\r\n",
