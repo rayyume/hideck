@@ -44,7 +44,10 @@ func (a *Agent) sendLocalHoldOffer(ctx context.Context, call *Call, hold bool) e
 	if hold {
 		direction = sdpDirectionSendOnly
 	}
-	sdp := rewriteSDPDirection(bumpSDPOriginVersion(call.imsLocalSDPValue()), direction)
+	sdp := rewriteSDPDirection(
+		bumpSDPOriginVersion(advertiseEstablishedSessionQoS(call.imsLocalSDPValue())),
+		direction,
+	)
 	if strings.TrimSpace(sdp) == "" {
 		return errors.New("voice: local hold offer SDP is unavailable")
 	}

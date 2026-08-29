@@ -57,11 +57,61 @@ func TestOutboundHoldAndResumeRewriteLocalSDP(t *testing.T) {
 	if !call.Held() || sdpMediaDirection(call.imsLocalSDPValue()) != sdpDirectionSendOnly {
 		t.Fatalf("held=%t direction=%s sdp=%q", call.Held(), sdpMediaDirection(call.imsLocalSDPValue()), call.imsLocalSDPValue())
 	}
+	if sdpHasPreconditions(call.imsLocalSDPValue()) && strings.Contains(call.imsLocalSDPValue(), "a=curr:qos remote none") {
+		t.Fatalf("hold SDP kept first-offer remote none: %q", call.imsLocalSDPValue())
+	}
 	if err := agent.ResumeCall(ctx, call.CallID()); err != nil {
 		t.Fatal(err)
 	}
 	if call.Held() || sdpMediaDirection(call.imsLocalSDPValue()) != sdpDirectionSendRecv {
 		t.Fatalf("resumed held=%t direction=%s", call.Held(), sdpMediaDirection(call.imsLocalSDPValue()))
+	}
+}
+
+func TestSimulatedHoldReinviteUses24610RemoteQoS(t *testing.T) {
+	holdInvites := make(chan string, 2)
+	registrar := startScriptedVoiceRegistrar(t, func(request string) (int, string, string) {
+		if strings.HasPrefix(request, "INVITE ") {
+			if strings.Contains(request, "a=sendonly") {
+				holdInvites <- request
+			}
+			extra := "To: <sip:callee@ims.example.com>;tag=remote\r\nContact: <sip:callee@ims.example.com>\r\nContent-Type: application/sdp\r\n"
+			return 200, extra, testIMSAnswerSDP
+		}
+		return 200, "", ""
+	})
+	agent := newVoiceTestAgent(t, registrar)
+	if err := agent.StartCurrent(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = agent.Stop() })
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	call, err := agent.DialContext(ctx, "+447000000001")
+	if err != nil {
+		t.Fatalf("DialContext: %v", err)
+	}
+	if strings.Contains(call.imsLocalSDPValue(), "a=curr:qos remote none") {
+		t.Fatalf("connected local SDP still first-offer remote none: %q", call.imsLocalSDPValue())
+	}
+	if err := agent.HoldCall(ctx, call.CallID()); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case invite := <-holdInvites:
+		if !strings.Contains(invite, "a=sendonly") {
+			t.Fatalf("hold re-INVITE omitted sendonly: %q", invite)
+		}
+		if !strings.Contains(invite, "a=curr:qos remote sendrecv") || strings.Contains(invite, "a=curr:qos remote none") {
+			t.Fatalf("hold re-INVITE must follow TS 24.610 curr remote sendrecv: %q", invite)
+		}
+		if !strings.Contains(invite, "a=des:qos mandatory local sendrecv") ||
+			!strings.Contains(invite, "a=des:qos optional remote sendrecv") {
+			t.Fatalf("hold re-INVITE dropped 24.610 qos desired: %q", invite)
+		}
+	case <-ctx.Done():
+		t.Fatal("hold re-INVITE was not observed")
 	}
 }
 

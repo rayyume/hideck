@@ -104,6 +104,7 @@ func (a *Agent) applyInboundAnswer(call *Call, answer string) (InboundAnswer, er
 	}
 	ExtractAndApplyPTMapping(call, []byte(call.remoteSDPValue()))
 	call.setLocalSDP(answer, string(imsAnswer))
+	markLocalSDPSessionEstablished(call)
 	return InboundAnswer{CallID: call.CallID(), OfferSDP: call.clientRemoteSDPValue(), State: call.CallState().String()}, nil
 }
 
@@ -173,6 +174,7 @@ func (a *Agent) completeOutboundMedia(call *Call, response imscore.SIPResponse) 
 		return completeSimulatedOutboundMedia(a, call, string(response.Body))
 	}
 	call.setRemoteSDP(string(response.Body), string(clientAnswer))
+	markLocalSDPSessionEstablished(call)
 	a.enableMediaMonitor(call)
 	return relay.StartCurrent()
 }
@@ -196,6 +198,7 @@ func finalOrEarlyMediaResponse(call *Call, response imscore.SIPResponse) imscore
 func completeSimulatedOutboundMedia(a *Agent, call *Call, rawAnswer string) error {
 	call.setComfortNoise(media.NewComfortNoiseGenerator())
 	call.setRemoteSDP(rawAnswer, "")
+	markLocalSDPSessionEstablished(call)
 	a.enableMediaMonitor(call)
 	return call.startMediaResourcesCurrent()
 }

@@ -19,6 +19,13 @@ const sdpQoSReservedLocal = "" +
 	"a=des:qos mandatory local sendrecv\r\n" +
 	"a=des:qos optional remote sendrecv\r\n"
 
+// sdpQoSEstablishedRemote is the RFC 3312 current remote status after the
+// initial session is already up. TS 24.610 Table A.1.3-1 hold re-INVITE uses
+// "curr:qos remote sendrecv". Replaying the first-offer "remote none" on a
+// mid-dialog hold tells the peer mandatory/segmented preconditions are still
+// open (RFC 3312 §6); IR.92 2.4.1 then expects a SIP UPDATE we do not send.
+const sdpQoSEstablishedRemote = "a=curr:qos remote sendrecv"
+
 func sdpHasPreconditions(sdp string) bool {
 	for _, line := range strings.Split(sdp, "\n") {
 		line = strings.TrimSpace(strings.TrimSuffix(line, "\r"))
@@ -39,6 +46,35 @@ func sdpQoSCurrent(sdp, side string) string {
 		}
 	}
 	return ""
+}
+
+func advertiseEstablishedSessionQoS(sdp string) string {
+	if strings.TrimSpace(sdp) == "" || !sdpHasPreconditions(sdp) {
+		return sdp
+	}
+	var rewritten strings.Builder
+	for _, source := range splitSDPTextLines(sdp) {
+		line := strings.TrimRight(source, "\r")
+		trimmed := strings.ToLower(strings.TrimSpace(line))
+		if strings.HasPrefix(trimmed, "a=curr:qos remote none") {
+			line = sdpQoSEstablishedRemote
+		}
+		rewritten.WriteString(line)
+		rewritten.WriteString("\r\n")
+	}
+	return rewritten.String()
+}
+
+func markLocalSDPSessionEstablished(call *Call) {
+	if call == nil {
+		return
+	}
+	client, ims := call.localSDPs()
+	updated := advertiseEstablishedSessionQoS(ims)
+	if updated == ims {
+		return
+	}
+	call.setLocalSDP(client, updated)
 }
 
 func sdpPreconditionsSatisfied(remoteSDP string) bool {

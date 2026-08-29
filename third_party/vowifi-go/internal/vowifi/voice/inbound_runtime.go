@@ -244,7 +244,10 @@ func (a *Agent) handleReinvite(request imscore.InboundVoiceRequest, call *Call) 
 	}
 	answerDir := negotiateAnswerDirection(sdpMediaDirection(string(request.Body)), call.localHoldValue())
 	rewritten = []byte(rewriteSDPDirection(string(rewritten), answerDir))
-	imsAnswer = rewriteSDPDirection(bumpSDPOriginVersion(imsAnswer), answerDir)
+	imsAnswer = rewriteSDPDirection(
+		bumpSDPOriginVersion(advertiseEstablishedSessionQoS(imsAnswer)),
+		answerDir,
+	)
 	call.setRemoteHold(remoteHoldFromDirection(sdpMediaDirection(string(request.Body))))
 	call.setLocalSDP(clientAnswer, imsAnswer)
 	call.setRemoteSDP(string(request.Body), string(rewritten))

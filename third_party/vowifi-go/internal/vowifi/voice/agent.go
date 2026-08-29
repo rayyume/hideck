@@ -553,7 +553,11 @@ func (a *Agent) refreshVoiceSession(ctx context.Context, call *Call) error {
 func (a *Agent) sendSessionRefresh(ctx context.Context, call *Call, useInvite, retried422 bool) error {
 	raw := buildIMSSessionUpdate(a, call)
 	if useInvite {
-		raw = buildIMSReinvite(a, call, bumpSDPOriginVersion(call.imsLocalSDPValue()))
+		raw = buildIMSReinvite(
+			a,
+			call,
+			bumpSDPOriginVersion(advertiseEstablishedSessionQoS(call.imsLocalSDPValue())),
+		)
 	}
 	response, err := a.sendCallDialogRequest(ctx, call, raw)
 	if err != nil {
