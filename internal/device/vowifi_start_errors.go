@@ -70,6 +70,9 @@ func (p *Pool) restoreNetworkAfterVoWiFiStartupFailure(traceID, deviceID string,
 	if blocked {
 		return
 	}
+	if !PhoneModeCampsOnCell(w.Config.PhoneMode) {
+		return
+	}
 	w.setCellularRadioSuppressed(false)
 	if restoreErr := w.Backend.SetOperatingMode(p.ctx, backend.ModeOnline); restoreErr != nil {
 		logger.Warn("恢复射频失败", "trace_id", traceID, "device", deviceID, "err", restoreErr)

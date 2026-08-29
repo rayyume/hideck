@@ -132,6 +132,24 @@ func TestApplyPolicyProjectsFields(t *testing.T) {
 	if !w.cellularRadioIsSuppressed() {
 		t.Fatal("VoWiFi/飞行策略必须抑制蜂窝射频协调")
 	}
+	if w.restoreNetworkAfterVoWiFi {
+		t.Fatal("WiFi calling 投影后不得把启动失败恢复射频留成 true")
+	}
+}
+
+func TestShouldEnterAirplaneOnDeviceBindForDefaultVoWiFi(t *testing.T) {
+	if shouldEnterAirplaneOnDeviceBind(config.DeviceConfig{}) {
+		t.Fatal("空静态配置不应在绑定时先飞")
+	}
+	if !shouldEnterAirplaneOnDeviceBind(config.DeviceConfig{VoWiFiEnabled: true, PhoneMode: PhoneModeWiFi}) {
+		t.Fatal("默认 VoWiFi 开启时绑定时必须关射频")
+	}
+	if !shouldEnterAirplaneOnDeviceBind(config.DeviceConfig{AirplaneEnabled: true, VoWiFiEnabled: true, PhoneMode: PhoneModeWiFi}) {
+		t.Fatal("VoWiFi 已开也不能跳过绑定时关射频")
+	}
+	if shouldEnterAirplaneOnDeviceBind(config.DeviceConfig{VoWiFiEnabled: true, PhoneMode: PhoneModeCellular}) {
+		t.Fatal("蜂窝软件电话绑定时应允许驻网")
+	}
 }
 
 func TestInitialCellularRadioSuppressionWaitsForLiveCardPolicy(t *testing.T) {
@@ -308,6 +326,34 @@ func TestProjectionEntersAirplaneMode(t *testing.T) {
 
 	if len(stub.setOpModeCalls) != 1 || stub.setOpModeCalls[0] != backend.ModeRFOff {
 		t.Fatalf("应切到 RFOff: %+v", stub.setOpModeCalls)
+	}
+}
+
+func TestProjectionEnterAirplaneUpgradesLowPowerToPersistRFOff(t *testing.T) {
+	p := &Pool{ctx: context.Background()}
+	stub := &workerStatusBackendStub{opMode: backend.ModeLowPower}
+	w := &Worker{ID: "wwan0", Backend: stub}
+
+	p.enterAirplaneModeFromPolicy(w, "test")
+
+	if len(stub.setOpModeCalls) != 1 || stub.setOpModeCalls[0] != backend.ModeRFOff {
+		t.Fatalf("瞬时 LowPower 必须升级成持久 RFOff: %+v", stub.setOpModeCalls)
+	}
+}
+
+func TestHoldRadioOffOnConnectUpgradesLowPowerToPersistRFOff(t *testing.T) {
+	p := &Pool{ctx: context.Background()}
+	stub := &workerStatusBackendStub{opMode: backend.ModeLowPower}
+	w := &Worker{
+		ID:      "wwan0",
+		Backend: stub,
+		Config:  config.DeviceConfig{ConnectHoldRF: true},
+	}
+
+	p.holdRadioOffOnConnect(w, "connect_hold_rf")
+
+	if len(stub.setOpModeCalls) != 1 || stub.setOpModeCalls[0] != backend.ModeRFOff {
+		t.Fatalf("连接期 LowPower 必须升级成持久 RFOff: %+v", stub.setOpModeCalls)
 	}
 }
 

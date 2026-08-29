@@ -28,6 +28,11 @@ func shouldSuppressCellularRadio(cfg config.DeviceConfig) bool {
 	return PhoneServiceEnabled(cfg) && !PhoneModeCampsOnCell(cfg.PhoneMode)
 }
 
+// shouldEnterAirplaneOnDeviceBind 绑定设备时就要关射频：默认 VoWiFi / 飞行都不能先驻网。
+func shouldEnterAirplaneOnDeviceBind(cfg config.DeviceConfig) bool {
+	return shouldSuppressCellularRadio(cfg)
+}
+
 // applyPolicyToWorker 把卡策略投影进 worker.Config 的运行时有效字段。
 // 不在此触发 re-apply，仅做纯投影，便于单测。
 func applyPolicyToWorker(w *Worker, p cardpolicy.Policy) error {
@@ -61,7 +66,8 @@ func applyPolicyToWorker(w *Worker, p cardpolicy.Policy) error {
 	}
 	w.Config.APN = strings.TrimSpace(p.APN)
 	w.Config.SMSEnabled = true // SMS 恒开
-	w.restoreNetworkAfterVoWiFi = p.NetworkEnabled
+	// 用投影后的有效网络开关。WiFi calling 已强制关流量，启动失败不得借此把射频拉回来。
+	w.restoreNetworkAfterVoWiFi = w.Config.NetworkEnabled
 	if class.IsLebara {
 		applyLebaraUKRFLock(w)
 	}
@@ -113,7 +119,8 @@ func (p *Pool) resolveAndApplyPolicy(worker *Worker, reason string) policyApplyR
 			logger.Warn("应用网络偏好失败", "device", worker.ID, "err", err)
 		}
 	case PhoneServiceEnabled(effective):
-		// WiFi calling 原有路径：网络偏好按 false 走(停数据网)，射频由 VoWiFi 恢复流程切 RFOff。
+		// WiFi calling：先关射频，再停数据。不要等 VoWiFi 启动后再补飞。
+		p.enterAirplaneModeFromPolicy(worker, reason)
 		if err := p.applyNetworkPreference(worker); err != nil {
 			logger.Warn("应用网络偏好失败", "device", worker.ID, "err", err)
 		}
@@ -175,7 +182,7 @@ func (p *Pool) holdRadioOffOnConnect(w *Worker, reason string) {
 		clearConnectHoldRF(w)
 		return
 	}
-	if cur, err := ctrl.GetOperatingMode(p.ctx); err == nil && isFlightOperatingMode(cur) {
+	if cur, err := ctrl.GetOperatingMode(p.ctx); err == nil && isPersistFlightOperatingMode(cur) {
 		logger.Info("连接期射频已处于飞行，保持暂扣", "device", w.ID, "reason", reason)
 		clearConnectHoldRF(w)
 		return
@@ -226,7 +233,7 @@ func (p *Pool) enterAirplaneModeFromPolicy(w *Worker, reason string) {
 		logger.Warn("设备不支持射频控制，无法投影飞行模式", "device", w.ID, "reason", reason)
 		return
 	}
-	if cur, err := ctrl.GetOperatingMode(p.ctx); err == nil && isFlightOperatingMode(cur) {
+	if cur, err := ctrl.GetOperatingMode(p.ctx); err == nil && isPersistFlightOperatingMode(cur) {
 		return
 	}
 	if err := ctrl.SetOperatingMode(p.ctx, backend.ModeRFOff); err != nil {

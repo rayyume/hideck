@@ -44,6 +44,8 @@ type qmiBackendSendSourceStub struct {
 	snapshot         *qmimanager.DeviceSnapshot
 	simStatus        *qmi.SIMStatus
 	simStatusCalls   int
+	setModes         []qmi.OperatingMode
+	persistLowErr    error
 }
 
 func (s *qmiBackendSendSourceStub) GetDeviceSerialNumbers(ctx context.Context) (*qmi.DeviceInfo, error) {
@@ -169,6 +171,10 @@ func (s *qmiBackendSendSourceStub) GetOperatingMode(ctx context.Context) (qmi.Op
 }
 
 func (s *qmiBackendSendSourceStub) SetOperatingMode(ctx context.Context, mode qmi.OperatingMode) error {
+	s.setModes = append(s.setModes, mode)
+	if mode == qmi.ModePersistLow && s.persistLowErr != nil {
+		return s.persistLowErr
+	}
 	return nil
 }
 
@@ -229,6 +235,26 @@ func (s *qmiBackendSendSourceStub) UIMPostSwitchReload(ctx context.Context, read
 
 func (s *qmiBackendSendSourceStub) GetUIMReadiness(ctx context.Context) (qmimanager.UIMReadiness, error) {
 	return s.uimReadiness, s.uimReadinessErr
+}
+
+func TestQMISetOperatingModeRFOffUsesPersistLow(t *testing.T) {
+	src := &qmiBackendSendSourceStub{}
+	if err := (&QMIBackend{source: src}).SetOperatingMode(context.Background(), ModeRFOff); err != nil {
+		t.Fatal(err)
+	}
+	if len(src.setModes) != 1 || src.setModes[0] != qmi.ModePersistLow {
+		t.Fatalf("ModeRFOff 应对齐 PersistLow: %+v", src.setModes)
+	}
+}
+
+func TestQMISetOperatingModeRFOffFallsBackToLowPower(t *testing.T) {
+	src := &qmiBackendSendSourceStub{persistLowErr: errors.New("not supported")}
+	if err := (&QMIBackend{source: src}).SetOperatingMode(context.Background(), ModeRFOff); err != nil {
+		t.Fatal(err)
+	}
+	if len(src.setModes) != 2 || src.setModes[0] != qmi.ModePersistLow || src.setModes[1] != qmi.ModeLowPower {
+		t.Fatalf("PersistLow 失败应回退 LowPower: %+v", src.setModes)
+	}
 }
 
 func TestQMIOperatingModeToBackendTreatsShutdownAsLowPower(t *testing.T) {

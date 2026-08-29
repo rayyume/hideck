@@ -174,6 +174,18 @@ func shouldRecoverQMIRegistration(info *qmi.ServingSystem) bool {
 	}
 }
 
+func servingSystemIsCamped(info *qmi.ServingSystem) bool {
+	if info == nil {
+		return false
+	}
+	switch info.RegistrationState {
+	case qmi.RegStateRegistered, qmi.RegStateRoaming:
+		return true
+	default:
+		return false
+	}
+}
+
 func shouldUseExtendedQMIRegistrationRecovery(attempt int) bool {
 	return attempt >= qmiRegistrationExtendedAfter
 }

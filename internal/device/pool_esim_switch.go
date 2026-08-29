@@ -66,6 +66,12 @@ func isFlightOperatingMode(mode backend.OperatingMode) bool {
 	return mode == backend.ModeRFOff || mode == backend.ModeLowPower
 }
 
+// isPersistFlightOperatingMode 只认持久飞行（AT+CFUN=4 / DMS PersistLow）。
+// LowPower 会被部分模组自行拉回 Online，不能当成已经关射频。
+func isPersistFlightOperatingMode(mode backend.OperatingMode) bool {
+	return mode == backend.ModeRFOff
+}
+
 func (p *Pool) captureESIMSwitchContext(deviceID string, targetICCID string) esimSwitchContext {
 	ctx := esimSwitchContext{
 		CapturedAt:  time.Now(),

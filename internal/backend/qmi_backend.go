@@ -906,8 +906,12 @@ func (q *QMIBackend) SetOperatingMode(ctx context.Context, mode OperatingMode) e
 	case ModeLowPower:
 		qmiMode = qmi.ModeLowPower
 	case ModeRFOff:
-		// 飞行模式：QMI 切换为 ModeLowPower (0x01)，这等价于 AT+CFUN=4。
-		qmiMode = qmi.ModeLowPower
+		// 飞行模式应对齐 AT+CFUN=4 / DMS PersistLow。LowPower 会被部分模组自行拉回 Online。
+		if err := q.source.SetOperatingMode(ctx, qmi.ModePersistLow); err != nil {
+			logger.Warn("QMI PersistLow 飞行未被接受，回退 LowPower", "err", err)
+			return q.source.SetOperatingMode(ctx, qmi.ModeLowPower)
+		}
+		return nil
 	default:
 		return fmt.Errorf("不支持的操作模式: %d", mode)
 	}

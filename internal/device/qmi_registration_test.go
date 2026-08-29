@@ -780,6 +780,34 @@ func TestShouldRecoverQMIRegistration(t *testing.T) {
 	}
 }
 
+func TestServingSystemIsCamped(t *testing.T) {
+	if servingSystemIsCamped(nil) {
+		t.Fatal("nil 不应视为已驻网")
+	}
+	if !servingSystemIsCamped(&qmi.ServingSystem{RegistrationState: qmi.RegStateRegistered}) {
+		t.Fatal("registered 应视为已驻网")
+	}
+	if !servingSystemIsCamped(&qmi.ServingSystem{RegistrationState: qmi.RegStateRoaming}) {
+		t.Fatal("roaming 应视为已驻网")
+	}
+	if servingSystemIsCamped(&qmi.ServingSystem{RegistrationState: qmi.RegStateSearching}) {
+		t.Fatal("searching 不应视为已驻网")
+	}
+}
+
+func TestHandleNASServingSystemChangedUncampsWhenVoWiFiSuppressesRadio(t *testing.T) {
+	p := &Pool{ctx: context.Background()}
+	stub := &workerStatusBackendStub{opMode: backend.ModeOnline}
+	w := &Worker{ID: "wwan0", Backend: stub}
+	w.setCellularRadioSuppressed(true)
+
+	p.handleNASServingSystemChanged(w, &qmi.ServingSystem{RegistrationState: qmi.RegStateRoaming, PSAttached: true})
+
+	if len(stub.setOpModeCalls) != 1 || stub.setOpModeCalls[0] != backend.ModeRFOff {
+		t.Fatalf("WiFi calling 抑制射频时误驻网必须补飞: %+v", stub.setOpModeCalls)
+	}
+}
+
 func TestShouldUseExtendedQMIRegistrationRecovery(t *testing.T) {
 	cases := []struct {
 		attempt int

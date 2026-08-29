@@ -125,6 +125,41 @@ func TestEnableVoWiFiBlockedWhenESIMSwitching(t *testing.T) {
 	}
 }
 
+func TestVoWiFiStartupFailureDoesNotRestoreWiFiCallingRadio(t *testing.T) {
+	p := NewPool(&config.Config{})
+	defer p.cancel()
+	backendStub := &workerStatusBackendStub{mode: backend.BackendQMI, opMode: backend.ModeRFOff}
+	controller := &fakeController{}
+	w := &Worker{
+		ID:                        "wwan0",
+		Backend:                   backendStub,
+		netOverride:               controller,
+		restoreNetworkAfterVoWiFi: true,
+		Config:                    config.DeviceConfig{PhoneMode: PhoneModeWiFi, NetworkEnabled: true},
+	}
+
+	p.restoreNetworkAfterVoWiFiStartupFailure("trace-wifi", w.ID, w)
+
+	if len(backendStub.setOpModeCalls) != 0 {
+		t.Fatalf("WiFi calling 启动失败不得把射频拉回 Online: %v", backendStub.setOpModeCalls)
+	}
+	if controller.connected {
+		t.Fatal("WiFi calling 启动失败不得恢复数据连接")
+	}
+}
+
+func TestEnterVoWiFiRFOffUpgradesLowPowerToPersistRFOff(t *testing.T) {
+	stub := &workerStatusBackendStub{mode: backend.BackendQMI, opMode: backend.ModeLowPower}
+	w := &Worker{ID: "wwan0", Backend: stub}
+
+	if err := enterVoWiFiRFOff(context.Background(), w, "trace-wifi"); err != nil {
+		t.Fatal(err)
+	}
+	if len(stub.setOpModeCalls) != 1 || stub.setOpModeCalls[0] != backend.ModeRFOff {
+		t.Fatalf("VoWiFi 启动时 LowPower 必须升级成持久 RFOff: %+v", stub.setOpModeCalls)
+	}
+}
+
 func TestVoWiFiStartupFailureDoesNotRestoreLebaraUKRadio(t *testing.T) {
 	p := NewPool(&config.Config{})
 	defer p.cancel()

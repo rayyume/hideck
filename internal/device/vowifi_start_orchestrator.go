@@ -482,7 +482,7 @@ func enterVoWiFiRFOff(ctx context.Context, w *Worker, traceID string) error {
 	if err != nil {
 		return fmt.Errorf("VoWiFi 启动前读取射频模式失败: %w", err)
 	}
-	if isFlightOperatingMode(mode) {
+	if isPersistFlightOperatingMode(mode) {
 		logger.Info("设备已处于飞行模式，跳过冗余的飞行模式切换",
 			"trace_id", traceID, "device", w.ID, "backend", w.Backend.Mode())
 		return nil

@@ -673,7 +673,7 @@ func (p *Pool) AddWorkerFromConfig(devCfg config.DeviceConfig) (*Worker, error) 
 		p.holdRadioOffOnConnect(w, "connect_hold_rf")
 	}
 	p.scheduleATRadioWarmup(w, "startup")
-	if w.Config.AirplaneEnabled && !w.Config.VoWiFiEnabled {
+	if shouldEnterAirplaneOnDeviceBind(w.Config) {
 		p.enterAirplaneModeFromPolicy(w, "device_bind_default")
 	}
 

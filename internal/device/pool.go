@@ -710,13 +710,26 @@ func (p *Pool) bindQMIStateIndications(worker *Worker) {
 	})
 
 	worker.QMICore.OnNASServingSystemChanged(func(info *qmi.ServingSystem) {
-		if !shouldRecoverQMIRegistration(info) {
-			return
-		}
-		if worker.StartQMIRegistrationReconcile(p.ctx, "nas_registration_lost") {
-			logger.Info("[事件驱动] QMI 驻网状态需要恢复", "device", worker.ID, "registration_state", info.RegistrationState.String(), "ps_attached", info.PSAttached)
-		}
+		p.handleNASServingSystemChanged(worker, info)
 	})
+}
+
+func (p *Pool) handleNASServingSystemChanged(worker *Worker, info *qmi.ServingSystem) {
+	if p == nil || worker == nil {
+		return
+	}
+	if worker.shouldAbortCellularRegistration() {
+		if servingSystemIsCamped(info) {
+			p.enterAirplaneModeFromPolicy(worker, "vowifi_uncamp")
+		}
+		return
+	}
+	if !shouldRecoverQMIRegistration(info) {
+		return
+	}
+	if worker.StartQMIRegistrationReconcile(p.ctx, "nas_registration_lost") {
+		logger.Info("[事件驱动] QMI 驻网状态需要恢复", "device", worker.ID, "registration_state", info.RegistrationState.String(), "ps_attached", info.PSAttached)
+	}
 }
 
 func (p *Pool) bindMBIMStateIndications(worker *Worker) {
