@@ -7,10 +7,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/iniwex5/vowifi-go/runtimehost/voicehost"
 	"github.com/yibaiba/hideck/internal/automation"
 	"github.com/yibaiba/hideck/internal/db"
 	"github.com/yibaiba/hideck/internal/device"
-	"github.com/iniwex5/vowifi-go/runtimehost/voicehost"
+	"github.com/yibaiba/hideck/pkg/smscodec"
 )
 
 const automationPollInterval = 500 * time.Millisecond
@@ -205,11 +206,24 @@ func (e *automaticTaskExecutor) executeSMS(
 		return "", err
 	}
 	if task.Environment == automation.EnvironmentVoWiFi {
-		outcome, err := e.server.pool.SendVoWiFiSMSWithResult(ctx, task.DeviceID, task.Payload.Phone, task.Payload.Message)
+		routed, err := e.server.pool.SendRoutedSMS(ctx, worker, task.Payload.Phone, task.Payload.Message, smscodec.SubmitOptions{})
 		if err != nil {
 			return "", automation.Permanent(fmt.Errorf("send VoWiFi SMS: %w", err))
 		}
-		return fmt.Sprintf("短信已提交，message_id=%s，delivery_state=%s，parts=%d", outcome.MessageID, outcome.DeliveryState, outcome.PartsTotal), nil
+		via := "VoWiFi"
+		if routed.Via == device.RoutedSMSViaCS {
+			via = "蜂窝"
+		}
+		if routed.FellBackToCS {
+			return fmt.Sprintf(
+				"短信已提交（VoWiFi 回落 %s），message_id=%s，delivery_state=%s，parts=%d",
+				via, routed.Outcome.MessageID, routed.Outcome.DeliveryState, routed.Outcome.PartsTotal,
+			), nil
+		}
+		return fmt.Sprintf(
+			"短信已提交，message_id=%s，delivery_state=%s，parts=%d",
+			routed.Outcome.MessageID, routed.Outcome.DeliveryState, routed.Outcome.PartsTotal,
+		), nil
 	}
 	if err := worker.SendSMS(task.Payload.Phone, task.Payload.Message); err != nil {
 		return "", automation.Permanent(fmt.Errorf("send cellular SMS: %w", err))

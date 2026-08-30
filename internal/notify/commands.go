@@ -13,7 +13,9 @@ import (
 	"github.com/iniwex5/vowifi-go/runtimehost/messaging"
 	"github.com/iniwex5/vowifi-go/runtimehost/voicehost"
 	"github.com/yibaiba/hideck/internal/db"
+	"github.com/yibaiba/hideck/internal/device"
 	"github.com/yibaiba/hideck/pkg/logger"
+	"github.com/yibaiba/hideck/pkg/smscodec"
 )
 
 // ---------- 通用命令 handler（TG 和飞书共用） ----------
@@ -73,30 +75,19 @@ func (m *Manager) handleCmdSendSMS(cmdCtx CommandContext, args []string) string 
 	// /send 是用户的显式操作，不能因 notifyPool 满载被丢弃。
 	// 这里使用独立 goroutine，确保命令被执行并回执结果。
 	go func() {
-		var sendErr error
-		if isVoWiFi {
-			ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-			defer cancel()
-			ctx = messaging.WithSuppressSendTGSuccess(ctx)
-			sendErr = m.pool.SendVoWiFiSMS(ctx, deviceID, phone, message)
-			if sendErr != nil {
-				cmdCtx.Reply(fmt.Sprintf("发送短信 / 失败\n设备    %s\n号码    %s\n通道    VoWiFi\n原因    %v", displayName, phone, sendErr))
-				return
-			}
-		} else {
-			sendErr = worker.SendSMS(phone, message)
-			if sendErr != nil {
-				cmdCtx.Reply(fmt.Sprintf("发送短信 / 失败\n设备    %s\n号码    %s\n通道    蜂窝\n原因    %v", displayName, phone, sendErr))
-				return
-			}
+		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		defer cancel()
+		ctx = messaging.WithSuppressSendTGSuccess(ctx)
+		routed, sendErr := m.pool.SendRoutedSMS(ctx, worker, phone, message, smscodec.SubmitOptions{})
+		channel := smsRouteChannelLabel(routed.Via)
+		if sendErr != nil {
+			cmdCtx.Reply(fmt.Sprintf("发送短信 / 失败\n设备    %s\n号码    %s\n通道    %s\n原因    %v", displayName, phone, channel, sendErr))
+			return
+		}
+		if routed.Via == device.RoutedSMSViaCS {
 			if err := db.SaveSMS(worker.GetIMSI(), worker.ID, phone, message, 2, 2, time.Now()); err != nil {
 				logger.Warn("短信发送成功但入库失败", "device", deviceID, "err", err)
 			}
-		}
-
-		channel := "蜂窝"
-		if isVoWiFi {
-			channel = "VoWiFi"
 		}
 		cmdCtx.Reply(fmt.Sprintf("发送短信 / 完成\n设备    %s\n号码    %s\n通道    %s\n内容    %s", displayName, phone, channel, message))
 	}()
@@ -106,6 +97,13 @@ func (m *Manager) handleCmdSendSMS(cmdCtx CommandContext, args []string) string 
 		channel = "VoWiFi"
 	}
 	return fmt.Sprintf("发送短信 / 已受理\n设备    %s\n号码    %s\n通道    %s", displayName, phone, channel)
+}
+
+func smsRouteChannelLabel(via string) string {
+	if via == device.RoutedSMSViaVoWiFi {
+		return "VoWiFi"
+	}
+	return "蜂窝"
 }
 
 func summarizeVoWiFiReady(st runtimehost.State) string {
@@ -240,6 +238,16 @@ func (m *Manager) handleCmdStatus(cmdCtx CommandContext, args []string) string {
 		sb.WriteString(fmt.Sprintf("数据平面  %s\n", dataplane))
 		sb.WriteString(fmt.Sprintf("就绪项  %s\n", readySummary))
 		sb.WriteString(fmt.Sprintf("最后原因  %s\n", lastReason))
+		mwi := m.pool.GetVoWiFiMWI(worker.ID)
+		if mwi.Known {
+			waiting := "无"
+			if mwi.MessagesWaiting {
+				waiting = fmt.Sprintf("有（新 %d / 旧 %d）", mwi.VoiceNew, mwi.VoiceOld)
+			}
+			sb.WriteString(fmt.Sprintf("语音信箱  %s\n", waiting))
+		} else {
+			sb.WriteString("语音信箱  未订阅\n")
+		}
 	} else {
 		sb.WriteString(fmt.Sprintf("运营商  %s\n", operator))
 		sb.WriteString(fmt.Sprintf("注册    %s\n", regStatus))
@@ -659,7 +667,7 @@ func (m *Manager) handleCmdCall(cmdCtx CommandContext, args []string) string {
 			OnConnected: func() {
 				reportProgress(cmdCtx, fmt.Sprintf("发起 VoWiFi 呼叫 / 已接通\n设备    %s\n主叫    %s\n被叫    %s\n保持    %d 秒", displayName, caller, callee, holdSeconds))
 				if holdSeconds >= 12 {
-					go exerciseVocallHold(m.pool.GetVoiceGateway(), deviceID)
+					go exerciseVocallHold(deviceID)
 				}
 			},
 		}
@@ -685,32 +693,8 @@ func (m *Manager) handleCmdCall(cmdCtx CommandContext, args []string) string {
 	return fmt.Sprintf("发起 VoWiFi 呼叫 / 已受理\n设备    %s\n主叫    %s\n被叫    %s\n保持    %d 秒", displayName, caller, callee, holdSeconds)
 }
 
-func exerciseVocallHold(gw *voicehost.Gateway, deviceID string) {
-	if gw == nil {
-		return
-	}
-	time.Sleep(2 * time.Second)
-	snap := gw.ActiveCall(deviceID)
-	if snap == nil || strings.TrimSpace(snap.CallID) == "" {
-		logger.Warn("vocall 保持跳过：没有活动通话", "device", deviceID)
-		return
-	}
-	holdCtx, holdCancel := context.WithTimeout(context.Background(), 8*time.Second)
-	err := gw.HoldCall(holdCtx, deviceID, snap.CallID)
-	holdCancel()
-	if err != nil {
-		logger.Warn("vocall 保持失败", "device", deviceID, "call_id", snap.CallID, "err", err)
-		return
-	}
-	logger.Info("vocall 已保持", "device", deviceID, "call_id", snap.CallID)
-	time.Sleep(3 * time.Second)
-	resumeCtx, resumeCancel := context.WithTimeout(context.Background(), 8*time.Second)
-	defer resumeCancel()
-	if err := gw.ResumeCall(resumeCtx, deviceID, snap.CallID); err != nil {
-		logger.Warn("vocall 恢复失败", "device", deviceID, "call_id", snap.CallID, "err", err)
-		return
-	}
-	logger.Info("vocall 已恢复", "device", deviceID, "call_id", snap.CallID)
+func exerciseVocallHold(deviceID string) {
+	logger.Info("VoWiFi hold 暂未对齐，已跳过", "device", deviceID)
 }
 
 func replyVoiceCallCompletion(cmdCtx CommandContext, message string, result *voicehost.SimulateCallResult) {

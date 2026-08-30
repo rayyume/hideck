@@ -122,6 +122,12 @@ func TestHelpShowsEmptyDeviceState(t *testing.T) {
 	}
 }
 
+func TestExerciseVocallHoldSkipsUnalignedHold(t *testing.T) {
+	// Must not talk to the voice gateway: originating VoWiFi hold is not
+	// aligned to 24.229/24.610 on the live network.
+	exerciseVocallHold("wwan1")
+}
+
 func joinArgs(args []string) string {
 	result := ""
 	for index, arg := range args {

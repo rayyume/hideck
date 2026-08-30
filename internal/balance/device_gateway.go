@@ -41,7 +41,14 @@ func (g *PoolGateway) Snapshot(deviceID string) (DeviceSnapshot, error) {
 }
 
 func (g *PoolGateway) SendVoWiFiSMS(ctx context.Context, deviceID, destination, payload string) error {
-	_, err := g.pool.SendVoWiFiSMSWithOptions(ctx, deviceID, destination, payload, smscodec.SubmitOptions{})
+	if g == nil || g.pool == nil {
+		return ErrDeviceNotFound
+	}
+	worker := g.pool.GetWorker(deviceID)
+	if worker == nil {
+		return ErrDeviceNotFound
+	}
+	_, err := g.pool.SendRoutedSMS(ctx, worker, destination, payload, smscodec.SubmitOptions{})
 	return err
 }
 

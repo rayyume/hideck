@@ -80,15 +80,47 @@ func (p *Pool) SendRoutedSMS(
 		return routedSMSSendResult{}, errors.New("sms route: worker is nil")
 	}
 	deviceID := worker.ID
+	p.mu.RLock()
+	sendVoWiFiHook := p.routedVoWiFiSMSSend
+	sendCSHook := p.routedCSSMSSend
+	p.mu.RUnlock()
 	return sendRoutedSMS(
 		p.ShouldRouteSMSViaVoWiFi(deviceID),
 		func() (messaging.SendOutcome, error) {
+			if sendVoWiFiHook != nil {
+				return sendVoWiFiHook(ctx, deviceID, phone, message, opts)
+			}
 			return p.SendVoWiFiSMSWithOptions(ctx, deviceID, phone, message, opts)
 		},
 		func() error {
+			if sendCSHook != nil {
+				return sendCSHook(deviceID, phone, message)
+			}
 			return worker.SendSMSWithOptions(phone, message, opts)
 		},
 	)
+}
+
+// AttachWorkerForTest registers a worker for tests in other packages.
+func (p *Pool) AttachWorkerForTest(worker *Worker) {
+	if p == nil || worker == nil {
+		return
+	}
+	_ = p.registerWorkerStarting(worker)
+}
+
+// SetRoutedSMSTestSenders overrides the VoWiFi and CS legs of SendRoutedSMS for tests.
+func (p *Pool) SetRoutedSMSTestSenders(
+	sendVoWiFi func(context.Context, string, string, string, smscodec.SubmitOptions) (messaging.SendOutcome, error),
+	sendCS func(string, string, string) error,
+) {
+	if p == nil {
+		return
+	}
+	p.mu.Lock()
+	p.routedVoWiFiSMSSend = sendVoWiFi
+	p.routedCSSMSSend = sendCS
+	p.mu.Unlock()
 }
 
 type voWiFiSMSRuntime interface {
