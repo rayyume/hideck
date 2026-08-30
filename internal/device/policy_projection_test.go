@@ -141,6 +141,9 @@ func TestShouldEnterAirplaneOnDeviceBindForDefaultVoWiFi(t *testing.T) {
 	if shouldEnterAirplaneOnDeviceBind(config.DeviceConfig{}) {
 		t.Fatal("空静态配置不应在绑定时先飞")
 	}
+	if !shouldEnterAirplaneOnDeviceBind(config.DeviceConfig{AirplaneEnabled: true, VoWiFiEnabled: false, NetworkEnabled: false}) {
+		t.Fatal("第一次添加设备默认飞行时绑定时必须关射频")
+	}
 	if !shouldEnterAirplaneOnDeviceBind(config.DeviceConfig{VoWiFiEnabled: true, PhoneMode: PhoneModeWiFi}) {
 		t.Fatal("默认 VoWiFi 开启时绑定时必须关射频")
 	}
@@ -149,6 +152,112 @@ func TestShouldEnterAirplaneOnDeviceBindForDefaultVoWiFi(t *testing.T) {
 	}
 	if shouldEnterAirplaneOnDeviceBind(config.DeviceConfig{VoWiFiEnabled: true, PhoneMode: PhoneModeCellular}) {
 		t.Fatal("蜂窝软件电话绑定时应允许驻网")
+	}
+}
+
+func defaultNewCardPolicy(iccid string) cardpolicy.Policy {
+	return cardpolicy.Policy{
+		ICCID:           iccid,
+		NetworkEnabled:  false,
+		VoWiFiEnabled:   false,
+		AirplaneEnabled: true,
+		IPVersion:       "v4",
+		PhoneMode:       PhoneModeWiFi,
+		DataStrategy:    "on_demand",
+	}
+}
+
+func assertNoRadioOnline(t *testing.T, stub *workerStatusBackendStub, label string) {
+	t.Helper()
+	for _, mode := range stub.setOpModeCalls {
+		if mode == backend.ModeOnline {
+			t.Fatalf("%s 不得开射频: %+v", label, stub.setOpModeCalls)
+		}
+	}
+}
+
+func TestDefaultAirplaneAndNonVoWiFiNeverOpenRadioOrIMS(t *testing.T) {
+	cases := []struct {
+		name string
+		pol  cardpolicy.Policy
+	}{
+		{name: "first-card-default", pol: defaultNewCardPolicy("898600000000000001")},
+		{name: "airplane-vowifi-off", pol: cardpolicy.Policy{
+			ICCID: "898600000000000002", AirplaneEnabled: true, VoWiFiEnabled: false, PhoneMode: PhoneModeWiFi,
+		}},
+		{name: "airplane-cellular-phone-off", pol: cardpolicy.Policy{
+			ICCID: "898600000000000003", AirplaneEnabled: true, VoWiFiEnabled: false, PhoneMode: PhoneModeCellular,
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := NewPool(nil)
+			defer p.cancel()
+			p.SetPolicyResolver(&stubPolicyResolver{pol: tc.pol})
+			commands := make(chan vowifihost.LifecycleCommand, 1)
+			p.voWiFiHost().LifecycleControllerForTest().TestRun = func(ctx context.Context, cmd vowifihost.LifecycleCommand) error {
+				commands <- cmd
+				return nil
+			}
+			stub := &workerStatusBackendStub{opMode: backend.ModeOnline}
+			w := &Worker{ID: "wwan0", Backend: stub}
+			w.state.Identity.ICCID = tc.pol.ICCID
+			w.state.Identity.IMSI = "001010000000001"
+
+			res := p.resolveAndApplyPolicy(w, "startup_post_apply")
+			if !res.Applied {
+				t.Fatalf("应成功应用: %+v", res)
+			}
+			if !w.Config.AirplaneEnabled || w.Config.NetworkEnabled {
+				t.Fatalf("默认飞行/VoWiFi 应关射频并关流量: %+v", w.Config)
+			}
+			if !w.cellularRadioIsSuppressed() {
+				t.Fatal("应抑制蜂窝驻网")
+			}
+			assertNoRadioOnline(t, stub, tc.name)
+			if len(stub.setOpModeCalls) != 1 || stub.setOpModeCalls[0] != backend.ModeRFOff {
+				t.Fatalf("应从在线切到 RFOff: %+v", stub.setOpModeCalls)
+			}
+
+			select {
+			case cmd := <-commands:
+				t.Fatalf("默认飞行或未开 VoWiFi 不应启动 IMS/VoWiFi: %+v", cmd)
+			case <-time.After(120 * time.Millisecond):
+			}
+		})
+	}
+}
+
+func TestSwitchAirplaneToVoWiFiKeepsRadioOff(t *testing.T) {
+	p := NewPool(nil)
+	defer p.cancel()
+	p.SetPolicyResolver(&stubPolicyResolver{pol: cardpolicy.Policy{
+		ICCID: "898600000000000010", AirplaneEnabled: true, VoWiFiEnabled: true, PhoneMode: PhoneModeWiFi,
+	}})
+	commands := make(chan vowifihost.LifecycleCommand, 1)
+	p.voWiFiHost().LifecycleControllerForTest().TestRun = func(ctx context.Context, cmd vowifihost.LifecycleCommand) error {
+		commands <- cmd
+		return nil
+	}
+	stub := &workerStatusBackendStub{opMode: backend.ModeRFOff}
+	w := &Worker{
+		ID:      "wwan0",
+		Backend: stub,
+		Config:  config.DeviceConfig{AirplaneEnabled: true, PhoneMode: PhoneModeWiFi},
+	}
+	w.state.Identity.ICCID = "898600000000000010"
+	w.state.Identity.IMSI = "001010000000001"
+
+	res := p.resolveAndApplyPolicy(w, "api_enable_vowifi")
+	if !res.Applied {
+		t.Fatalf("应成功应用: %+v", res)
+	}
+	if !w.Config.AirplaneEnabled || w.Config.NetworkEnabled || !w.Config.VoWiFiEnabled {
+		t.Fatalf("从飞行切到 VoWiFi 应继续关射频: %+v", w.Config)
+	}
+	assertNoRadioOnline(t, stub, "airplane-to-vowifi")
+	if len(stub.setOpModeCalls) != 0 {
+		t.Fatalf("已在飞行切到 VoWiFi 不应再动射频: %+v", stub.setOpModeCalls)
 	}
 }
 
