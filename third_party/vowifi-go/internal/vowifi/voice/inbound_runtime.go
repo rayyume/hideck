@@ -135,7 +135,7 @@ func (a *Agent) beginInboundInvite(call *Call, request imscore.InboundVoiceReque
 	if call.ClientCallID() == "" {
 		call.SetClientCallID(call.CallID() + "-" + voiceHex(16))
 	}
-	call.applyVoiceSessionExpires(request.SessionExpires)
+	call.applyInboundSessionTimer(request.Supported, request.SessionExpires, request.MinSE)
 	if request.ServerInvite != nil {
 		if _, err := a.rejectStoredServerInvite(call, 100); err != nil {
 			a.releaseInboundCall(call, err, false)

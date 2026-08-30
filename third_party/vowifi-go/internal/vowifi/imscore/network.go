@@ -113,7 +113,7 @@ func (t *sipTransport) DeliverResponse(r *sipResponse) {
 	}
 	if r != nil {
 		logging.WarnRate("ims-unmatched-sip-response", "IMS response did not match an active transaction",
-			"status", r.StatusCode, "cseq", r.CSeq)
+			unmatchedResponseIdentityFields(r)...)
 	}
 	select {
 	case t.responses <- r:

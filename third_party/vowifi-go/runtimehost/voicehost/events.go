@@ -143,6 +143,10 @@ func applyCallAuxiliaryEvent(result *CallEvent, event events.Event) bool {
 		result.CallID, result.Caller, result.Callee, result.Time = value.CallID, value.Caller, value.Callee, eventTime(value.Time)
 	case *events.EventCallBusy:
 		result.CallID, result.Caller, result.Callee, result.Time = value.CallID, value.Caller, value.Callee, eventTime(value.Time)
+	case events.EventCallWaiting:
+		applyCallWaitingEvent(result, value)
+	case *events.EventCallWaiting:
+		applyCallWaitingEvent(result, *value)
 	case events.EventCallFinalized:
 		applyFinalizedEvent(result, value)
 	case *events.EventCallFinalized:
@@ -154,6 +158,11 @@ func applyCallAuxiliaryEvent(result *CallEvent, event events.Event) bool {
 }
 
 func applyIncomingEvent(result *CallEvent, value events.EventIncomingCall) {
+	result.CallID, result.Caller, result.Callee = value.CallID, value.Caller, value.Callee
+	result.Time = eventTime(value.Time, value.ReceivedAt)
+}
+
+func applyCallWaitingEvent(result *CallEvent, value events.EventCallWaiting) {
 	result.CallID, result.Caller, result.Callee = value.CallID, value.Caller, value.Callee
 	result.Time = eventTime(value.Time, value.ReceivedAt)
 }

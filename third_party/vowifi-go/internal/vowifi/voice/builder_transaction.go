@@ -12,8 +12,11 @@ import (
 
 const (
 	voiceInviteSupported = "100rel, timer, replaces, norefersub, early-session, sec-agree, precondition"
-	voiceInviteAllow     = "INVITE, ACK, CANCEL, BYE, UPDATE, REFER, NOTIFY, MESSAGE, OPTIONS"
-	voiceFeatureCaps     = `*;+g.3gpp.icsi-ref="urn%3Aurn-7%3A3gpp-service.ims.icsi.mmtel"`
+	// TS 24.229 5.1.3.1: initial INVITE Accept must include SDP and the 3GPP
+	// IM CN subsystem XML body MIME type.
+	voiceInviteAccept = "application/sdp, application/3gpp-ims+xml"
+	voiceInviteAllow  = "INVITE, ACK, CANCEL, BYE, UPDATE, REFER, NOTIFY, MESSAGE, OPTIONS"
+	voiceFeatureCaps  = `*;+g.3gpp.icsi-ref="urn%3Aurn-7%3A3gpp-service.ims.icsi.mmtel"`
 )
 
 // BuildIMSInvite builds the initial IMS INVITE with the registered route.
@@ -75,6 +78,7 @@ func voiceIMSRequestOptions(dialog voiceSIPDialog, input voiceInitialRequest) si
 	if strings.TrimSpace(dialog.sessionID) != "" {
 		headers = append(headers, sip.NewHeader("Session-ID", strings.TrimSpace(dialog.sessionID)))
 	}
+	headers = append(headers, sip.NewHeader("Accept", voiceInviteAccept))
 	headers = append(headers, sip.NewHeader("P-Early-Media", "supported"))
 	headers = append(headers, sip.NewHeader("Privacy", "none"))
 	headers = append(headers, sip.NewHeader("Feature-Caps", voiceFeatureCaps))
@@ -96,6 +100,9 @@ func voiceIMSRequestOptions(dialog voiceSIPDialog, input voiceInitialRequest) si
 		PreferredService: "urn:urn-7:3gpp-service.ims.icsi.mmtel", AddAcceptContact: true,
 		AcceptContact: `*;+g.3gpp.icsi-ref="urn%3Aurn-7%3A3gpp-service.ims.icsi.mmtel"`,
 		AddUserAgent:  strings.TrimSpace(dialog.userAgent) != "", UserAgent: dialog.userAgent,
+		// IR.92 2.2.8 / RFC 4028: Supported: timer is required. Session-Expires
+		// on the initial INVITE may be 1800 or omitted. Omitting it is allowed
+		// by the spec, not a partial alignment. This UAC omits it.
 		AddSupported: true, Supported: voiceInviteSupported, AddAllow: true, Allow: voiceInviteAllow,
 		PreferredIdentity: "<" + dialog.localURI + ">", SecurityVerify: dialog.securityVerify,
 		Runtime:     sipkit.IMSRuntimeSnapshot{PAccessNetworkInfo: dialog.pani, LocalAddr: dialog.localAddress, Transport: dialog.transport},

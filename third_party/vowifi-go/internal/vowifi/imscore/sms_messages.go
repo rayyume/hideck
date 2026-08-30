@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/emiago/sipgo/sip"
-	"github.com/iniwex5/vowifi-go/internal/vowifi/imsheaders"
 )
 
 const smsSupportedHeader = "path, 100rel, replaces, gruu"
@@ -139,25 +138,31 @@ func (s *Service) registeredSIPRouteLocked() registeredSIPRoute {
 	serverPort := s.protectedServerPort
 	transport := "tcp"
 	if s.registrationTCP == nil {
-		clientPort, serverPort = s.cfg.LocalPort, s.cfg.LocalPort
 		transport = strings.ToLower(strings.TrimSpace(s.cfg.Transport))
 		if transport == "" {
 			transport = "udp"
 		}
+		// TCP/TLS after SA keep the configured local ports when the
+		// protected TCP socket is not up. UDP IPsec keeps port-s so Via
+		// sent-by can follow 24.229 5.1.2A.1.1 / 5.1.1.2.2 (c).
+		if !sipTransportIsUDP(transport) || serverPort < 1 {
+			clientPort, serverPort = s.cfg.LocalPort, s.cfg.LocalPort
+		}
 	}
 	route := registeredSIPRoute{transport: transport}
 	if clientPort > 0 {
-		route.clientAddress = net.JoinHostPort(s.cfg.LocalIP.String(), fmt.Sprint(clientPort))
+		viaPort := clientPort
+		if sipTransportIsUDP(transport) {
+			viaPort = protectedViaSentByPort(transport, serverPort, clientPort)
+		}
+		route.clientAddress = net.JoinHostPort(s.cfg.LocalIP.String(), fmt.Sprint(viaPort))
 	}
 	if serverPort > 0 {
 		route.serverAddress = net.JoinHostPort(s.cfg.LocalIP.String(), fmt.Sprint(serverPort))
 	}
 	route.remoteAddress = s.registeredRemoteAddressLocked()
 	if s.regSession != nil {
-		route.serviceRoute = imsheaders.EffectiveRoute(s.regSession.serviceRoute, s.regSession.path)
-		if route.serviceRoute == "" {
-			route.serviceRoute = strings.TrimSpace(s.path)
-		}
+		route.serviceRoute = s.originatingRouteSetLocked(s.regSession.serviceRoute)
 		if s.regSession.security != nil {
 			route.securityVerify = strings.TrimSpace(s.regSession.security.verifyHeader)
 		}

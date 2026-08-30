@@ -12,6 +12,57 @@ import (
 	"github.com/iniwex5/vowifi-go/internal/vowifi/voice/callstate"
 )
 
+func TestInitialInviteOmitsSessionExpiresPerIR92(t *testing.T) {
+	agent := newTestAgent(t)
+	call := NewCall(agent, callstate.DirectionOutbound, "call-se-omit", "+447700900001")
+	invite := BuildIMSInvite(agent, call)
+	if !strings.Contains(invite, "Supported: "+voiceInviteSupported) {
+		t.Fatalf("initial INVITE missing Supported timer: %s", invite)
+	}
+	if voiceTestHeader(invite, "Session-Expires") != "" {
+		t.Fatalf("IR.92 2.2.8 allows omitting Session-Expires; got %q", voiceTestHeader(invite, "Session-Expires"))
+	}
+}
+
+func TestInboundInviteWithoutSessionExpiresUsesIR92Default(t *testing.T) {
+	agent := startedVoiceAgent(t)
+	peer := listenVoiceUDP(t)
+	responder := &capturedVoiceResponder{localTag: "local-tag"}
+	invite := inboundAgentInvite("call-in-se-default", peer, responder)
+	invite.Supported = "100rel, timer"
+	if _, err := agent.HandleInboundVoiceRequest(invite); err != nil {
+		t.Fatal(err)
+	}
+	client := listenVoiceUDP(t)
+	if _, err := agent.AnswerWithSDP(invite.CallID, voiceSDP(client.LocalAddr().(*net.UDPAddr).Port)); err != nil {
+		t.Fatal(err)
+	}
+	call := agent.callByID(invite.CallID)
+	response := responder.lastResponse()
+	if response.SessionExpires != "1800;refresher=uac" {
+		t.Fatalf("IR.92 inbound 2xx Session-Expires = %q", response.SessionExpires)
+	}
+	if call.weAreSessionRefresher() || call.voiceSessionExpires() != 1800*time.Second {
+		t.Fatalf("inbound default refresher=%t expires=%s", call.weAreSessionRefresher(), call.voiceSessionExpires())
+	}
+}
+
+func TestInboundInviteWithoutTimerDoesNotInventSessionExpires(t *testing.T) {
+	call := NewCall(nil, callstate.DirectionInbound, "call-no-timer", "+447700900001")
+	call.applyInboundSessionTimer("100rel", "", "")
+	if got := formatSessionExpiresHeader(call); got != "" {
+		t.Fatalf("invented Session-Expires = %q", got)
+	}
+}
+
+func TestInboundInviteWithoutSessionExpiresHonorsMinSE(t *testing.T) {
+	call := NewCall(nil, callstate.DirectionInbound, "call-minse-default", "+447700900001")
+	call.applyInboundSessionTimer("timer", "", "2400")
+	if got := formatSessionExpiresHeader(call); got != "2400;refresher=uac" {
+		t.Fatalf("greater of 1800 and Min-SE = %q", got)
+	}
+}
+
 func TestWeAreSessionRefresher(t *testing.T) {
 	tests := []struct {
 		direction callstate.Direction

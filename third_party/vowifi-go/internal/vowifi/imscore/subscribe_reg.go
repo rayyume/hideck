@@ -393,6 +393,18 @@ func (s *Service) recordSubscriptionAttempt(at time.Time, expires time.Duration)
 	s.signalIMSMaintenance()
 }
 
+func subscriptionPermanentlyRejected(response *sip.Response) bool {
+	if response == nil {
+		return false
+	}
+	switch response.StatusCode {
+	case 403, 405, 489:
+		return true
+	default:
+		return false
+	}
+}
+
 func (s *Service) recordSubscriptionResult(
 	response *sip.Response,
 	requestedExpires time.Duration,
@@ -403,6 +415,12 @@ func (s *Service) recordSubscriptionResult(
 	s.mu.Lock()
 	if resultErr != nil {
 		s.subscriptionLastErr = resultErr.Error()
+		if subscriptionPermanentlyRejected(response) {
+			s.subscriptionClosed = true
+			s.subscriptionDialog = registrationSubscriptionDialog{}
+			s.subscriptionExpires = 0
+			s.subscriptionRefreshAt = time.Time{}
+		}
 		s.mu.Unlock()
 		return resultErr
 	}

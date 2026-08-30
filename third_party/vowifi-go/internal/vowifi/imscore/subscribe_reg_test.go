@@ -4,12 +4,15 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/emiago/sipgo/sip"
 )
 
 func TestFirstSIPHeaderURI(t *testing.T) {
@@ -141,8 +144,8 @@ func assertRegistrationSubscription(t *testing.T, request string, wantCSeq, expi
 		t.Fatalf("To = %q, want tag %s", to, toTag)
 	}
 	contact := rawSIPHeaderValue(request, "Contact")
-	if !strings.Contains(contact, ":16083;transport=tcp>") {
-		t.Fatalf("Contact = %q, want protected server port and transport", contact)
+	if !strings.Contains(contact, ":16083;ob;transport=tcp>") {
+		t.Fatalf("Contact = %q, want protected server port, ob, and transport", contact)
 	}
 	viaBranch, err := parseTopViaBranch(rawSIPHeaderValue(request, "Via"))
 	if err != nil || !strings.HasPrefix(viaBranch, "z9hG4bK") || len(viaBranch) != len("z9hG4bK")+36 {
@@ -617,4 +620,87 @@ func waitForReginfoAOR(t *testing.T, service *Service, want string) {
 		time.Sleep(time.Millisecond)
 	}
 	t.Fatalf("reginfo AOR was not updated to %q", want)
+}
+
+func TestRecordSubscriptionResultClosesOnPermanentReject(t *testing.T) {
+	for _, status := range []int{403, 405, 489} {
+		t.Run(strconv.Itoa(status), func(t *testing.T) {
+			service := newProtectedKeepaliveTestService(t)
+			service.recordSubscriptionAttempt(time.Now(), time.Hour)
+			err := service.recordSubscriptionResult(
+				&sip.Response{StatusCode: status, Reason: "rejected"},
+				time.Hour, false, fmt.Errorf("SUBSCRIBE rejected with status %d", status),
+			)
+			if err == nil {
+				t.Fatal("expected permanent reject error")
+			}
+			service.mu.RLock()
+			closed := service.subscriptionClosed
+			refresh := service.subscriptionRefreshAt
+			service.mu.RUnlock()
+			if !closed || !refresh.IsZero() {
+				t.Fatalf("closed=%t refresh=%v", closed, refresh)
+			}
+			now := time.Now()
+			service.mu.Lock()
+			service.registrationRefreshAt = now.Add(time.Hour)
+			service.lastPingAt = now
+			service.mu.Unlock()
+			if got := service.nextIMSMaintenanceAction(now); got == imsMaintenanceSubscribe {
+				t.Fatal("permanent reject still scheduled SUBSCRIBE")
+			}
+		})
+	}
+}
+
+func TestRecordSubscriptionResultKeepsRetryOnTemporaryReject(t *testing.T) {
+	service := newProtectedKeepaliveTestService(t)
+	service.recordSubscriptionAttempt(time.Now(), time.Hour)
+	before := service.subscriptionRefreshAt
+	err := service.recordSubscriptionResult(
+		&sip.Response{StatusCode: 503, Reason: "Service Unavailable"},
+		time.Hour, false, errors.New("SUBSCRIBE rejected with status 503"),
+	)
+	if err == nil {
+		t.Fatal("expected 503 error")
+	}
+	service.mu.RLock()
+	closed := service.subscriptionClosed
+	refresh := service.subscriptionRefreshAt
+	service.mu.RUnlock()
+	if closed || refresh.IsZero() || !refresh.Equal(before) {
+		t.Fatalf("temporary reject closed=%t refresh=%v before=%v", closed, refresh, before)
+	}
+}
+
+func TestSubscribeReg405StopsPeriodicRefresh(t *testing.T) {
+	service := newProtectedKeepaliveTestService(t)
+	client, server := net.Pipe()
+	service.activateProtectedRegistrationTCP(client)
+	t.Cleanup(func() { _ = server.Close() })
+	errorsSeen := make(chan error, 1)
+	go func() {
+		reader := bufio.NewReader(server)
+		request, err := readSIPStreamMessage(reader)
+		if err != nil {
+			errorsSeen <- err
+			return
+		}
+		_, err = io.WriteString(server, subscriptionWireResponse(request, 405, ""))
+		errorsSeen <- err
+	}()
+	err := service.sendSubscribeReg(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "405") {
+		t.Fatalf("sendSubscribeReg error = %v", err)
+	}
+	if err := <-errorsSeen; err != nil {
+		t.Fatal(err)
+	}
+	service.mu.RLock()
+	closed := service.subscriptionClosed
+	refresh := service.subscriptionRefreshAt
+	service.mu.RUnlock()
+	if !closed || !refresh.IsZero() {
+		t.Fatalf("closed=%t refresh=%v", closed, refresh)
+	}
 }

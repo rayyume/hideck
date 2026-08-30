@@ -341,6 +341,62 @@ func TestRefreshRegisterPrefersServiceRouteOverPath(t *testing.T) {
 	}
 }
 
+func TestProtectedRegisterViaKeepsConfiguredSentByNotPortC(t *testing.T) {
+	service := &Service{cfg: &IMSConfig{
+		IMPI: "user@ims.example", IMPU: "sip:user@ims.example", Domain: "ims.example",
+		LocalIP: net.ParseIP("192.0.2.10"), LocalPort: 5060, Transport: "udp",
+	}}
+	request := service.buildRegister(&registerSession{
+		callID: "call-1", fromTag: "tag-1", contactUser: "contact-1", cseq: 2,
+		security: &securityAgreement{
+			verifyHeader: "ipsec-3gpp;alg=hmac-sha-1-96",
+			client:       securityMechanism{PortC: 50309, PortS: 48554},
+		},
+	}, "Digest response")
+	via := sipHeaderValue(request, "Via")
+	if !strings.HasPrefix(via, "SIP/2.0/TCP ") {
+		t.Fatalf("protected REGISTER transport = %q, want TCP after SA", via)
+	}
+	if sipViaSentBy(via) != "192.0.2.10:5060" {
+		t.Fatalf("TCP REGISTER Via sent-by = %q, want configured local port", sipViaSentBy(via))
+	}
+	if sipSentByPort(via) == 50309 || sipSentByPort(via) == 48554 {
+		t.Fatalf("TCP REGISTER Via used an IPsec port: %q", via)
+	}
+	contact := sipHeaderValue(request, "Contact")
+	if !strings.Contains(contact, ":48554") {
+		t.Fatalf("REGISTER Contact = %q, want port-s", contact)
+	}
+}
+
+func TestProtectedUDPRegisterViaUsesPortS(t *testing.T) {
+	service := &Service{cfg: &IMSConfig{
+		IMPI: "user@ims.example", IMPU: "sip:user@ims.example", Domain: "ims.example",
+		LocalIP: net.ParseIP("192.0.2.10"), LocalPort: 5060, Transport: "udp",
+	}}
+	session := &registerSession{
+		security: &securityAgreement{
+			verifyHeader: "ipsec-3gpp;alg=hmac-sha-1-96",
+			client:       securityMechanism{PortC: 50309, PortS: 48554},
+		},
+	}
+	if got := service.registerLocalAddress(session, "udp"); got != "192.0.2.10:48554" {
+		t.Fatalf("UDP protected REGISTER Via = %q, want port-s", got)
+	}
+	if got := service.registerLocalAddress(session, "tcp"); got != "192.0.2.10:5060" {
+		t.Fatalf("TCP protected REGISTER Via = %q, want configured local port", got)
+	}
+}
+
+func TestSipSentByPortParsesIPv4AndIPv6(t *testing.T) {
+	if got := sipSentByPort("SIP/2.0/TCP 192.0.2.10:5060;rport;branch=z9hG4bK"); got != 5060 {
+		t.Fatalf("IPv4 via port = %d", got)
+	}
+	if got := sipSentByPort("SIP/2.0/TCP [2001:db8::10]:50309;rport;branch=z9hG4bK"); got != 50309 {
+		t.Fatalf("IPv6 via port = %d", got)
+	}
+}
+
 func TestRefreshRegisterAddsOutboundContactAfterNegotiation(t *testing.T) {
 	service := &Service{cfg: &IMSConfig{
 		IMPI: "user@ims.example", IMPU: "sip:user@ims.example", Domain: "ims.example",

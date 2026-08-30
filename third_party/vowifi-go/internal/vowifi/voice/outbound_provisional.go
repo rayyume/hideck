@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
+	"regexp"
 	"strconv"
 	"strings"
 
+	"github.com/emiago/sipgo/sip"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/imscore"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/imsendpoint"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/logging"
@@ -68,7 +71,143 @@ func (a *Agent) handleIMS1xxResponse(
 	return a.sendReliableProvisionalPRACK(ctx, call, rseq)
 }
 
+func logOutboundInviteRequest(raw string) {
+	if strings.TrimSpace(raw) == "" {
+		return
+	}
+	body := ""
+	if index := strings.Index(raw, "\r\n\r\n"); index >= 0 {
+		body = raw[index+4:]
+	}
+	fromTag := voiceHeaderTag(voiceRawHeader(raw, "From"))
+	toTag := voiceHeaderTag(voiceRawHeader(raw, "To"))
+	callID := voiceRawHeader(raw, "Call-ID")
+	routes := voiceRawHeaders(raw, "Route")
+	logging.Info("IMS INVITE outbound",
+		"ruri_host", inviteRequestURIHost(raw),
+		"ruri_user_kind", inviteRequestURIUserKind(raw),
+		"via", voiceRawHeader(raw, "Via"),
+		"via_port", sipHeaderSentByPort(voiceRawHeader(raw, "Via")),
+		"route", strings.Join(routes, ","),
+		"route_hops", len(routes),
+		"route_orig", voiceRouteHasOrig(routes),
+		"cseq", voiceRawHeader(raw, "CSeq"),
+		"accept", voiceRawHeader(raw, "Accept"),
+		"contact_has_ob", strings.Contains(strings.ToLower(voiceRawHeader(raw, "Contact")), ";ob"),
+		"contact_has_instance", strings.Contains(strings.ToLower(voiceRawHeader(raw, "Contact")), "+sip.instance"),
+		"session_expires_present", voiceRawHeader(raw, "Session-Expires") != "",
+		"body_bytes", len(body),
+		"content_length", voiceRawHeader(raw, "Content-Length"),
+		"qos_remote", sdpQoSCurrent(body, "remote"),
+		"to_has_tag", toTag != "",
+		"call_id_kind", inviteTokenKind(callID),
+		"call_id_len", len(strings.TrimSpace(callID)),
+		"from_tag_kind", inviteTokenKind(fromTag),
+		"from_tag_len", len(fromTag),
+		"from_tag_suffix", inviteTokenSuffix(fromTag),
+	)
+}
+
+func sipHeaderSentByPort(via string) int {
+	fields := strings.Fields(via)
+	if len(fields) < 2 {
+		return 0
+	}
+	sentBy, _, _ := strings.Cut(fields[1], ";")
+	_, portText, err := net.SplitHostPort(strings.TrimSpace(sentBy))
+	if err != nil {
+		return 0
+	}
+	port, err := strconv.Atoi(portText)
+	if err != nil || port < 1 {
+		return 0
+	}
+	return port
+}
+
+func inviteRequestURIHost(raw string) string {
+	line, _, _ := strings.Cut(raw, "\r\n")
+	fields := strings.Fields(line)
+	if len(fields) < 2 {
+		return ""
+	}
+	var uri sip.Uri
+	if err := sip.ParseUri(fields[1], &uri); err != nil {
+		return ""
+	}
+	return strings.ToLower(strings.Trim(uri.Host, "[]"))
+}
+
+func inviteRequestURIUserKind(raw string) string {
+	line, _, _ := strings.Cut(raw, "\r\n")
+	fields := strings.Fields(line)
+	if len(fields) < 2 {
+		return ""
+	}
+	var uri sip.Uri
+	if err := sip.ParseUri(fields[1], &uri); err != nil {
+		return ""
+	}
+	user := strings.TrimSpace(uri.User)
+	switch {
+	case user == "":
+		return "empty"
+	case strings.HasPrefix(user, "+"):
+		return "e164"
+	case isDigits(user) && len(user) <= 6:
+		return "shortcode"
+	case isDigits(user):
+		return "digits"
+	default:
+		return "other"
+	}
+}
+
+func isDigits(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, character := range value {
+		if character < '0' || character > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func voiceRawHeader(raw, name string) string {
+	values := voiceRawHeaders(raw, name)
+	if len(values) == 0 {
+		return ""
+	}
+	return values[0]
+}
+
+func voiceRawHeaders(raw, name string) []string {
+	prefix := strings.ToLower(name) + ":"
+	var values []string
+	for _, line := range strings.Split(raw, "\r\n") {
+		if strings.HasPrefix(strings.ToLower(line), prefix) {
+			values = append(values, strings.TrimSpace(line[len(name)+1:]))
+		}
+	}
+	return values
+}
+
+func voiceRouteHasOrig(routes []string) bool {
+	for _, route := range routes {
+		for _, item := range strings.Split(route, ",") {
+			item = strings.ToLower(strings.TrimSpace(item))
+			if strings.Contains(item, "sip:orig@") || strings.Contains(item, "sip:orig;") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func logOutboundInviteResponse(message string, response imscore.SIPResponse) {
+	toTag := voiceHeaderTag(voiceResponseHeader(response.Headers, "To"))
 	logging.Info(message,
 		"status", response.StatusCode,
 		"reason", response.Reason,
@@ -76,8 +215,36 @@ func logOutboundInviteResponse(message string, response imscore.SIPResponse) {
 		"rseq", voiceResponseHeader(response.Headers, "RSeq"),
 		"warning", logging.RedactSIPRaw(voiceResponseHeader(response.Headers, "Warning")),
 		"network_reason", logging.RedactSIPRaw(voiceResponseHeader(response.Headers, "Reason")),
+		"to_has_tag", toTag != "",
+		"to_tag_kind", inviteTokenKind(toTag),
+		"to_tag_len", len(toTag),
+		"to_tag_suffix", inviteTokenSuffix(toTag),
 	)
 }
+
+func inviteTokenKind(value string) string {
+	value = strings.TrimSpace(value)
+	switch {
+	case value == "":
+		return "empty"
+	case inviteLongDigitPattern.MatchString(value):
+		return "redacted"
+	default:
+		return "opaque"
+	}
+}
+
+func inviteTokenSuffix(value string) string {
+	if inviteTokenKind(value) != "opaque" {
+		return ""
+	}
+	if len(value) > 4 {
+		return value[len(value)-4:]
+	}
+	return value
+}
+
+var inviteLongDigitPattern = regexp.MustCompile(`\d{8,}`)
 
 func (a *Agent) sendReliableProvisionalPRACK(ctx context.Context, call *Call, rseq uint32) error {
 	options := reliableProvisionalPRACKOptions(

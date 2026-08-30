@@ -50,6 +50,8 @@ type InboundVoiceRequest struct {
 	Session          *imsendpoint.Session
 	ReferTo          string
 	ReferSub         string
+	Supported        string
+	MinSE            string
 }
 
 // InboundVoiceResponse is one provisional or final response to an inbound
@@ -144,6 +146,8 @@ func (s *Service) registeredSIPDialogProfile(reserveCSeq bool) (SIPDialogProfile
 		initialCSeq = s.reserveSIPCSeqLocked(session, route.securityVerify != "")
 	}
 	contactURI, contactHeader := registeredVoiceContact(s.cfg, registeredContactUser, route.serverAddress)
+	// LocalAddress is the Via sent-by: TCP/TLS keeps the actual source
+	// (port-c); UDP IPsec uses port-s. Contact stays on port-s.
 	return SIPDialogProfile{
 		LocalURI: localURI, Domain: strings.TrimSpace(s.cfg.Domain),
 		FromTag: session.fromTag, LocalAddress: route.clientAddress, RemoteAddress: route.remoteAddress,
@@ -168,20 +172,34 @@ func (s *Service) reserveSIPCSeqLocked(session *registerSession, subscriptionCon
 }
 
 func registeredVoiceContact(cfg *IMSConfig, user, address string) (string, string) {
-	uri := fmt.Sprintf("sip:%s@%s", user, address)
+	// TS 24.229 5.1.2A.1.1: dialog Contact uses the registered address and
+	// the "ob" URI parameter so subsequent in-dialog requests stay on this
+	// flow. Registration-only parameters such as +sip.instance, expires and
+	// reg-id are not copied onto non-REGISTER requests.
+	uri := fmt.Sprintf("sip:%s@%s;ob", user, address)
 	template := cfg.RegisterTemplate
 	if len(template.ContactOrder) == 0 {
 		return uri, "<" + uri + ">"
 	}
-	instance := strings.TrimSpace(cfg.IMEI)
-	if instance == "" {
-		instance = strings.TrimSpace(cfg.DeviceID)
-	}
 	header := imsheaders.IMSContactURI(uri, imsheaders.IMSContactOptions{
-		AccessType: template.AccessType, Instance: instance,
-		ICSIRef: template.ICSIRef, ParamOrder: template.ContactOrder,
+		AccessType: template.AccessType,
+		ICSIRef:    template.ICSIRef,
+		ParamOrder: dialogContactParamOrder(template.ContactOrder),
 	})
 	return uri, header
+}
+
+func dialogContactParamOrder(order []string) []string {
+	filtered := make([]string, 0, len(order))
+	for _, name := range order {
+		switch strings.ToLower(strings.TrimSpace(name)) {
+		case "sip_instance", "reg_id", "expires", "ob":
+			continue
+		default:
+			filtered = append(filtered, name)
+		}
+	}
+	return filtered
 }
 
 // EventBus returns the service event bus used by lifecycle consumers.
@@ -218,6 +236,8 @@ func (s *Service) handleInboundVoice(dispatch inboundSIPDispatch) (inboundSIPRes
 		SessionExpires: rawSIPHeaderValue(dispatch.raw, "Session-Expires"),
 		ReferTo:        rawSIPHeaderValue(dispatch.raw, "Refer-To"),
 		ReferSub:       rawSIPHeaderValue(dispatch.raw, "Refer-Sub"),
+		Supported:      rawSIPHeaderValue(dispatch.raw, "Supported"),
+		MinSE:          rawSIPHeaderValue(dispatch.raw, "Min-SE"),
 		Body:           body, Responder: newInboundVoiceResponder(dispatch.raw, dispatch.reply),
 		Dialog: dialogRead.handle, DialogMatched: dialogRead.matched,
 		DialogResponded: dialogRead.responded, DialogTerminated: dialogRead.terminated,

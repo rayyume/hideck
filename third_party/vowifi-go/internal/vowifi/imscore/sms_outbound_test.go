@@ -579,7 +579,7 @@ func assertOutboundSMSRequest(t *testing.T, request, recipient, smsc string) {
 	}
 	wantHeaders := map[string]string{
 		"From":                 "<sip:+447840844894@o2.co.uk>",
-		"Contact":              "<sip:registered-contact@10.0.0.2:5060>",
+		"Contact":              "<sip:registered-contact@10.0.0.2:5060;ob>",
 		"Route":                "<sip:pcscf.ims.example;lr>",
 		"P-Preferred-Identity": "<sip:+447840844894@o2.co.uk>",
 		"Security-Verify":      "ipsec-3gpp;alg=hmac-sha-1-96",

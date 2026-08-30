@@ -9,6 +9,7 @@ import (
 
 	"github.com/emiago/sipgo/sip"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/imsendpoint"
+	"github.com/iniwex5/vowifi-go/internal/vowifi/imsheaders"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/sipkit"
 )
 
@@ -94,15 +95,10 @@ func concreteReliableDialog(value imsendpoint.DialogHandle) (*imscoreDialogHandl
 }
 
 func applyReliableProvisionalRouteSet(dialog *imscoreDialogHandle, routes []string) {
-	if dialog == nil || len(routes) == 0 {
+	if dialog == nil {
 		return
 	}
-	cleaned := make([]string, 0, len(routes))
-	for index := len(routes) - 1; index >= 0; index-- {
-		if route := strings.TrimSpace(routes[index]); route != "" {
-			cleaned = append(cleaned, route)
-		}
-	}
+	cleaned := imsheaders.RecordRouteSet(routes)
 	if len(cleaned) == 0 {
 		return
 	}

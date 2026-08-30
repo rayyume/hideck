@@ -3,12 +3,15 @@ package imscore
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/emiago/sipgo/sip"
 )
 
 func TestParseMWISummary(t *testing.T) {
@@ -198,5 +201,69 @@ func TestMWISubscribe481RetriesAsInitial(t *testing.T) {
 	}
 	if sipAddressTag(rawSIPHeaderValue(second, "To")) != "" {
 		t.Fatalf("481 retry kept To tag: %q", rawSIPHeaderValue(second, "To"))
+	}
+}
+
+func TestRecordMWISubscriptionResultClosesOnPermanentReject(t *testing.T) {
+	for _, status := range []int{405, 489} {
+		t.Run(strconv.Itoa(status), func(t *testing.T) {
+			service := newProtectedKeepaliveTestService(t)
+			service.recordMWISubscriptionAttempt(time.Now(), time.Hour)
+			err := service.recordMWISubscriptionResult(
+				&sip.Response{StatusCode: status, Reason: "rejected"},
+				time.Hour, false, fmt.Errorf("SUBSCRIBE rejected with status %d", status),
+			)
+			if err == nil {
+				t.Fatal("expected permanent reject error")
+			}
+			service.mu.RLock()
+			closed := service.mwiSubscriptionClosed
+			refresh := service.mwiSubscriptionRefreshAt
+			service.mu.RUnlock()
+			if !closed || !refresh.IsZero() {
+				t.Fatalf("closed=%t refresh=%v", closed, refresh)
+			}
+			now := time.Now()
+			service.mu.Lock()
+			service.registrationRefreshAt = now.Add(time.Hour)
+			service.subscriptionRefreshAt = now.Add(time.Hour)
+			service.lastPingAt = now
+			service.mu.Unlock()
+			if got := service.nextIMSMaintenanceAction(now); got == imsMaintenanceSubscribeMWI {
+				t.Fatal("permanent MWI reject still scheduled SUBSCRIBE")
+			}
+		})
+	}
+}
+
+func TestSubscribeMWI405StopsPeriodicRefresh(t *testing.T) {
+	service := newProtectedKeepaliveTestService(t)
+	client, server := net.Pipe()
+	service.activateProtectedRegistrationTCP(client)
+	t.Cleanup(func() { _ = server.Close() })
+	errorsSeen := make(chan error, 1)
+	go func() {
+		reader := bufio.NewReader(server)
+		request, err := readSIPStreamMessage(reader)
+		if err != nil {
+			errorsSeen <- err
+			return
+		}
+		_, err = io.WriteString(server, subscriptionWireResponse(request, 405, ""))
+		errorsSeen <- err
+	}()
+	err := service.sendSubscribeMWI(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "405") {
+		t.Fatalf("sendSubscribeMWI error = %v", err)
+	}
+	if err := <-errorsSeen; err != nil {
+		t.Fatal(err)
+	}
+	service.mu.RLock()
+	closed := service.mwiSubscriptionClosed
+	refresh := service.mwiSubscriptionRefreshAt
+	service.mu.RUnlock()
+	if !closed || !refresh.IsZero() {
+		t.Fatalf("closed=%t refresh=%v", closed, refresh)
 	}
 }

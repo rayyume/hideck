@@ -7,6 +7,15 @@ import (
 	"github.com/iniwex5/vowifi-go/internal/vowifi/voice/callstate"
 )
 
+func TestReservedLocalOfferDoesNotNeedSegmentedUpdate(t *testing.T) {
+	if !sdpPreconditionsSatisfied(sdpQoSReservedLocal) {
+		t.Fatal("reserved-local first offer still waits for a segmented UPDATE")
+	}
+	if strings.Contains(sdpQoSReservedLocal, "a=curr:qos local none") {
+		t.Fatal("reserved-local offer advertised unmet local qos")
+	}
+}
+
 func TestSDPPreconditionsSatisfied(t *testing.T) {
 	if !sdpPreconditionsSatisfied("v=0\r\nm=audio 9 RTP/AVP 0\r\n") {
 		t.Fatal("SDP without qos should be vacuously met")

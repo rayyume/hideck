@@ -274,6 +274,12 @@ func (s *Service) recordMWISubscriptionResult(
 	s.mu.Lock()
 	if resultErr != nil {
 		s.mwiSubscriptionLastErr = resultErr.Error()
+		if subscriptionPermanentlyRejected(response) {
+			s.mwiSubscriptionClosed = true
+			s.mwiSubscriptionDialog = registrationSubscriptionDialog{}
+			s.mwiSubscriptionExpires = 0
+			s.mwiSubscriptionRefreshAt = time.Time{}
+		}
 		s.mu.Unlock()
 		return resultErr
 	}

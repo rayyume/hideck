@@ -581,10 +581,15 @@ func TestBuildIMSInvite(t *testing.T) {
 	if !strings.Contains(invite, "P-Early-Media: supported") {
 		t.Errorf("INVITE missing P-Early-Media: %q", invite)
 	}
+	if !strings.Contains(invite, "Accept: "+voiceInviteAccept) {
+		t.Errorf("INVITE missing Accept: %q", invite)
+	}
 	if !strings.Contains(invite, "a=curr:qos local sendrecv") ||
 		strings.Contains(invite, "a=curr:qos local none") ||
-		!strings.Contains(invite, "Supported: "+voiceInviteSupported) {
-		t.Errorf("INVITE qos/precondition offer is not RFC 3312 reserved-local: %q", invite)
+		!strings.Contains(invite, "Supported: "+voiceInviteSupported) ||
+		strings.Contains(invite, "Require: precondition") ||
+		voiceTestHeader(invite, "Session-Expires") != "" {
+		t.Errorf("INVITE qos/precondition/session-timer offer is not IR.92 reserved-local: %q", invite)
 	}
 	if !strings.Contains(invite, "Privacy: none") ||
 		!strings.Contains(invite, "Feature-Caps: "+voiceFeatureCaps) ||
@@ -599,8 +604,8 @@ func TestBuildIMSInviteMatchesRegisteredCarrierProfile(t *testing.T) {
 	call.setVoiceDialog(&voiceSIPDialog{
 		localURI:  "sip:+447840844894@o2.co.uk",
 		remoteURI: "sip:+447942985429@o2.co.uk;user=phone", remoteTarget: "sip:+447942985429@o2.co.uk;user=phone",
-		contactURI:    "sip:binding@[2001:db8::10]:48554",
-		contactHeader: `<sip:binding@[2001:db8::10]:48554>;+g.3gpp.accesstype="wlan1";audio`,
+		contactURI:    "sip:binding@[2001:db8::10]:48554;ob",
+		contactHeader: `<sip:binding@[2001:db8::10]:48554;ob>;+g.3gpp.accesstype="wlan1";audio`,
 		localAddress:  "[2001:db8::10]:50309", transport: "tcp",
 		serviceRoute:   []string{"<sip:pcscf.example;lr>"},
 		securityVerify: "ipsec-3gpp;alg=hmac-sha-1-96", pani: "IEEE-802.11;country=GB",
@@ -612,7 +617,7 @@ func TestBuildIMSInviteMatchesRegisteredCarrierProfile(t *testing.T) {
 	checks := []string{
 		"INVITE sip:+447942985429@o2.co.uk;user=phone SIP/2.0",
 		"CSeq: 10 INVITE",
-		`Contact: <sip:binding@[2001:db8::10]:48554>;+g.3gpp.accesstype="wlan1";audio`,
+		`Contact: <sip:binding@[2001:db8::10]:48554;ob>;+g.3gpp.accesstype="wlan1";audio`,
 		"Require: sec-agree", "Proxy-Require: sec-agree",
 		"Supported: " + voiceInviteSupported, "Allow: " + voiceInviteAllow,
 		"P-Preferred-Identity: <sip:+447840844894@o2.co.uk>", "Session-ID: session-id",
@@ -620,6 +625,18 @@ func TestBuildIMSInviteMatchesRegisteredCarrierProfile(t *testing.T) {
 	for _, value := range checks {
 		if !strings.Contains(invite, value) {
 			t.Fatalf("INVITE missing %q: %s", value, invite)
+		}
+	}
+	via := voiceTestHeader(invite, "Via")
+	if !strings.Contains(via, "SIP/2.0/TCP") || !strings.Contains(via, "[2001:db8::10]:50309") {
+		t.Fatalf("TCP INVITE Via = %q, want actual source port-c", via)
+	}
+	if strings.Contains(via, ":48554") {
+		t.Fatalf("TCP INVITE Via used port-s: %q", via)
+	}
+	for _, unwanted := range []string{"+sip.instance", "reg-id=", ";expires="} {
+		if strings.Contains(invite, unwanted) {
+			t.Fatalf("dialog INVITE copied registration Contact param %q: %s", unwanted, invite)
 		}
 	}
 }
@@ -683,6 +700,37 @@ func TestBuildIMSCalledPartyURIAddsPhoneContextForLocalNumber(t *testing.T) {
 	want := "sip:191@ims.mnc015.mcc234.3gppnetwork.org;user=phone;phone-context=ims.mnc015.mcc234.3gppnetwork.org"
 	if got != want {
 		t.Fatalf("local called party URI = %q, want %q", got, want)
+	}
+}
+
+func TestBuildIMSByeUsesLearnedContactAndRecordRoute(t *testing.T) {
+	agent := &Agent{}
+	call := NewCall(agent, callstate.DirectionOutbound, "bye-dialog", "+447700900001")
+	call.setVoiceDialog(&voiceSIPDialog{
+		localURI: "sip:local@ims.example", remoteURI: "sip:+447700900001@ims.example;user=phone",
+		remoteTarget: "sip:+447700900001@ims.example;user=phone",
+		contactHeader: "<sip:local@192.0.2.10:48554;ob>",
+		localAddress: "192.0.2.10:50309", transport: "tcp",
+		serviceRoute: []string{"<sip:orig@scscf.ims.example;lr>"},
+		localTag: "local-tag", cseq: 1, inviteCSeq: 1,
+	})
+	call.learnVoiceDialog(imscore.SIPResponse{
+		Headers: map[string]string{
+			"To":           "<sip:+447700900001@ims.example>;tag=remote",
+			"Contact":      "<sip:term@10.128.120.163:50600>",
+			"Record-Route": "<sip:10.128.120.163:50600;transport=tcp;lr>,<sip:scscf.example;lr>",
+		},
+	})
+	bye := BuildIMSBye(agent, call)
+	if !strings.HasPrefix(bye, "BYE sip:term@10.128.120.163:50600 SIP/2.0") {
+		t.Fatalf("BYE Request-URI = %q", strings.SplitN(bye, "\r\n", 2)[0])
+	}
+	if !strings.Contains(bye, "Route: <sip:scscf.example;lr>") ||
+		!strings.Contains(bye, "Route: <sip:10.128.120.163:50600;transport=tcp;lr>") {
+		t.Fatalf("BYE Route missing reversed Record-Route: %s", bye)
+	}
+	if strings.Contains(bye, "orig@scscf.ims.example") {
+		t.Fatalf("BYE stacked REGISTER Service-Route: %s", bye)
 	}
 }
 

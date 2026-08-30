@@ -3,11 +3,13 @@ package imscore
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/emiago/sipgo"
 	"github.com/emiago/sipgo/sip"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/imsendpoint"
+	"github.com/iniwex5/vowifi-go/internal/vowifi/logging"
 )
 
 const dialogMaxForwards = 70
@@ -135,6 +137,9 @@ func (s *Service) sendDialogRequestByMode(
 	if err != nil {
 		return nil, err
 	}
+	if request.IsInvite() {
+		logDialogInviteRequest(request, handle)
+	}
 	if request.IsAck() {
 		return nil, s.writeDialogACK(ctx, request, sender)
 	}
@@ -236,4 +241,143 @@ func (s *Service) prepareDialogRequest(
 	applyDialogCoreHeaders(s, request, handle)
 	request.SetTransport(handle.inviteRequest.Transport())
 	return request, s.dialogSenderLocked(handle), handle.server != nil, nil
+}
+
+func logDialogInviteRequest(request *sip.Request, handle *imscoreDialogHandle) {
+	if request == nil {
+		return
+	}
+	body := request.Body()
+	contact := ""
+	if request.Contact() != nil {
+		contact = request.Contact().Value()
+	}
+	fields := []any{
+		"ruri_host", strings.ToLower(strings.Trim(request.Recipient.Host, "[]")),
+		"ruri_port", request.Recipient.Port,
+		"ruri_user_kind", dialogRequestURIUserKind(request.Recipient),
+		"ruri_params", strings.Join(dialogURIParamKeys(request.Recipient), ","),
+		"via", dialogHeaderValue(request, "Via"),
+		"via_port", sipSentByPort(dialogHeaderValue(request, "Via")),
+		"route", strings.Join(dialogHeaderValues(request, "Route"), ","),
+		"cseq", dialogHeaderValue(request, "CSeq"),
+		"contact_has_ob", strings.Contains(strings.ToLower(contact), ";ob"),
+		"contact_has_instance", strings.Contains(strings.ToLower(contact), "+sip.instance"),
+		"session_expires_present", strings.TrimSpace(dialogHeaderValue(request, "Session-Expires")) != "",
+		"body_bytes", len(body),
+		"qos_remote", sdpCurrentQoSRemote(body),
+	}
+	fields = append(fields, dialogInviteIdentityFields(request, handle)...)
+	logging.Info("IMS dialog INVITE outbound", fields...)
+}
+
+func dialogURIParamKeys(uri sip.Uri) []string {
+	if uri.UriParams == nil {
+		return nil
+	}
+	return append([]string(nil), uri.UriParams.Keys()...)
+}
+
+func dialogContactUserShape(user string) string {
+	user = strings.ToLower(strings.TrimSpace(user))
+	switch {
+	case user == "":
+		return "empty"
+	case user == "orig" || user == "term":
+		return user
+	case strings.HasPrefix(user, "+"):
+		return "e164"
+	case isDialogDigits(user):
+		return "digits"
+	case len(user) >= 8:
+		return "token"
+	default:
+		return "short"
+	}
+}
+
+func dialogRequestURIUserKind(uri sip.Uri) string {
+	user := strings.TrimSpace(uri.User)
+	switch {
+	case user == "":
+		return "empty"
+	case strings.HasPrefix(user, "+"):
+		return "e164"
+	case isDialogDigits(user) && len(user) <= 6:
+		return "shortcode"
+	case isDialogDigits(user):
+		return "digits"
+	default:
+		return "other"
+	}
+}
+
+func isDialogDigits(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, character := range value {
+		if character < '0' || character > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func dialogHeaderValue(request *sip.Request, name string) string {
+	values := dialogHeaderValues(request, name)
+	if len(values) == 0 {
+		return ""
+	}
+	return values[0]
+}
+
+func dialogHeaderValues(request *sip.Request, name string) []string {
+	if request == nil {
+		return nil
+	}
+	var values []string
+	for _, header := range request.GetHeaders(name) {
+		if value := strings.TrimSpace(header.Value()); value != "" {
+			values = append(values, value)
+		}
+	}
+	return values
+}
+
+func logLearnedDialogTarget(response *sip.Response, dialog *imscoreDialogHandle) {
+	if dialog == nil {
+		return
+	}
+	dialog.mu.Lock()
+	target := *dialog.remoteTarget.Clone()
+	routes := append([]string(nil), dialog.routeSet...)
+	dialog.mu.Unlock()
+	status := 0
+	if response != nil {
+		status = response.StatusCode
+	}
+	fields := []any{
+		"status", status,
+		"contact_host", strings.ToLower(strings.Trim(target.Host, "[]")),
+		"contact_port", target.Port,
+		"contact_user_kind", dialogRequestURIUserKind(target),
+		"contact_user_shape", dialogContactUserShape(target.User),
+		"contact_params", strings.Join(dialogURIParamKeys(target), ","),
+		"route_count", len(routes),
+		"route", strings.Join(routes, ","),
+	}
+	fields = append(fields, learnedDialogIdentityFields(response, dialog)...)
+	logging.Info("IMS dialog target learned", fields...)
+}
+
+func sdpCurrentQoSRemote(body []byte) string {
+	const prefix = "a=curr:qos remote "
+	for _, line := range strings.Split(string(body), "\n") {
+		line = strings.ToLower(strings.TrimSpace(strings.TrimSuffix(line, "\r")))
+		if strings.HasPrefix(line, prefix) {
+			return strings.TrimSpace(strings.TrimPrefix(line, prefix))
+		}
+	}
+	return ""
 }

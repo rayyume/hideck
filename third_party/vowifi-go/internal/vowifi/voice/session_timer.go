@@ -17,6 +17,10 @@ const (
 	voiceSessionRefreshTimeout = 5 * time.Second
 	sessionRefresherUAC        = "uac"
 	sessionRefresherUAS        = "uas"
+	// IR.92 2.2.8: inbound 2xx uses 1800 when the peer advertised timer
+	// but omitted Session-Expires. Outbound INVITE may omit the header;
+	// that is spec-complete, not a leftover.
+	defaultIMSSessionExpires = 1800
 )
 
 type sessionExpiresOffer struct {
@@ -59,6 +63,38 @@ func parseMinSEHeader(value string) time.Duration {
 		return 0
 	}
 	return time.Duration(seconds) * time.Second
+}
+
+func containsTimerOption(supported string) bool {
+	for _, token := range strings.Split(supported, ",") {
+		if strings.EqualFold(strings.TrimSpace(token), "timer") {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Call) applyInboundSessionTimer(supported, sessionExpires, minSE string) {
+	if c == nil {
+		return
+	}
+	if strings.TrimSpace(sessionExpires) != "" {
+		c.applyVoiceSessionExpires(sessionExpires)
+		c.applySessionMinSE(parseMinSEHeader(minSE))
+		return
+	}
+	if !containsTimerOption(supported) {
+		c.applySessionMinSE(parseMinSEHeader(minSE))
+		return
+	}
+	expires := defaultIMSSessionExpires
+	if parsed := parseMinSEHeader(minSE); parsed > 0 {
+		if seconds := int(parsed / time.Second); seconds > expires {
+			expires = seconds
+		}
+	}
+	c.applyVoiceSessionExpires(strconv.Itoa(expires))
+	c.applySessionMinSE(parseMinSEHeader(minSE))
 }
 
 func (c *Call) applyVoiceSessionExpires(value string) {

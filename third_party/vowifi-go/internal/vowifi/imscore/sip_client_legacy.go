@@ -10,6 +10,7 @@ import (
 	"github.com/emiago/sipgo"
 	"github.com/emiago/sipgo/sip"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/imsendpoint"
+	"github.com/iniwex5/vowifi-go/internal/vowifi/logging"
 )
 
 // StartClientInvite starts a v1.5.5 client-side INVITE transaction.
@@ -52,7 +53,11 @@ func (s *Service) StartClientInvite(
 		}
 	}
 	response, err := s.transport.waitClientTransaction(ctx, transaction)
-	return s.completeClientInviteResult(handle, result, response, options.OnResponse, err)
+	completed, completeErr := s.completeClientInviteResult(handle, result, response, options.OnResponse, err)
+	if completed != nil && completed.Response != nil {
+		s.observeInitialInvite503(newSIPResponse(completed.Response))
+	}
+	return completed, completeErr
 }
 
 // StartClientInviteForCurrentDevice retains the additive device-implicit API.
@@ -226,6 +231,14 @@ func (s *Service) closeReplacedEarlyDialog(previousID, currentID string) {
 		return
 	}
 	if previous := s.dialogs().load(previousID); previous != nil {
+		previous.mu.Lock()
+		previousToTag := previous.toTag
+		previous.mu.Unlock()
+		fields := []any{"phase", "early_replaced"}
+		fields = appendDialogTokenFields(fields, "prev_dialog", dialogTokenOf(previousID))
+		fields = appendDialogTokenFields(fields, "next_dialog", dialogTokenOf(currentID))
+		fields = appendDialogTokenFields(fields, "prev_to_tag", dialogTokenOf(previousToTag))
+		logging.Info("IMS dialog early replaced", fields...)
 		_ = s.closeDialogHandle(previous)
 	}
 }
@@ -257,11 +270,14 @@ func (s *Service) retainClientInviteEarlyDialog(
 	if response.parsed.To() == nil || toHeaderTag(response.parsed.To()) == "" {
 		return
 	}
-	dialog := newClientDialogHandle(invite.initialRequest, response.parsed)
-	dialog.client.Init()
-	dialog.confirmed = false
-	dialog.sender = invite.transaction.send
-	s.storeClientDialog(dialog, invite.initialRequest, response.parsed)
+	dialog := s.retainMatchingEarlyDialog(invite, response.parsed)
+	if dialog == nil {
+		dialog = newClientDialogHandle(invite.initialRequest, response.parsed)
+		dialog.client.Init()
+		dialog.confirmed = false
+		dialog.sender = invite.transaction.send
+		s.storeClientDialog(dialog, invite.initialRequest, response.parsed)
+	}
 	invite.mu.Lock()
 	previous := invite.dialog
 	invite.dialog = dialog.client
@@ -269,6 +285,42 @@ func (s *Service) retainClientInviteEarlyDialog(
 	if previous != nil {
 		s.closeReplacedEarlyDialog(previous.ID, dialog.id)
 	}
+}
+
+func (s *Service) retainMatchingEarlyDialog(
+	invite *imscoreInviteHandle,
+	response *sip.Response,
+) *imscoreDialogHandle {
+	id, err := sip.DialogIDFromResponse(response)
+	if err != nil && invite != nil && invite.initialRequest != nil && invite.initialRequest.From() != nil {
+		id = sip.DialogIDMake(
+			invite.initialRequest.CallID().Value(),
+			toHeaderTag(response.To()),
+			fromHeaderTag(invite.initialRequest.From()),
+		)
+	}
+	if id == "" {
+		return nil
+	}
+	dialog := s.dialogs().load(id)
+	if dialog == nil {
+		return nil
+	}
+	dialog.mu.Lock()
+	dialog.inviteResponse = response.Clone()
+	if dialog.client != nil {
+		dialog.client.InviteResponse = response.Clone()
+	}
+	if response.Contact() != nil {
+		dialog.remoteTarget = *response.Contact().Address.Clone()
+	}
+	applyClientDialogRouteSetLocked(dialog, response)
+	if invite != nil && invite.transaction != nil {
+		dialog.sender = invite.transaction.send
+	}
+	dialog.mu.Unlock()
+	s.dialogs().store(dialog)
+	return dialog
 }
 
 func retainedClientInviteFinal(handle *imscoreInviteHandle) *sipResponse {
@@ -305,6 +357,7 @@ func initializeClientDialogTarget(
 ) {
 	if request.CSeq() != nil {
 		handle.localCSeq = request.CSeq().SeqNo
+		handle.localInviteCSeq = request.CSeq().SeqNo
 		handle.remoteCSeq = request.CSeq().SeqNo
 	}
 	if request.Contact() != nil {
@@ -341,15 +394,15 @@ func (s *Service) storeClientDialog(
 	if s == nil || dialog == nil {
 		return
 	}
-	routes := response.GetHeaders("Record-Route")
-	routeSet := make([]string, 0, len(routes))
-	for index := len(routes) - 1; index >= 0; index-- {
-		routeSet = append(routeSet, routes[index].Value())
-	}
 	dialog.mu.Lock()
-	dialog.routeSet = routeSet
+	// RFC 3261 12.1.2: the UAC route set comes from the dialog-creating
+	// Record-Route. A later 2xx that omits Record-Route must not wipe the
+	// 18x set; VoWiFi still has to loose-route through the P-CSCF
+	// (TS 24.229 5.1.2A). A 2xx that repeats Record-Route recomputes it.
+	applyClientDialogRouteSetLocked(dialog, response)
 	dialog.mu.Unlock()
 	s.dialogs().store(dialog)
+	logLearnedDialogTarget(response, dialog)
 }
 
 func (s *Service) cancelClientInviteWithContext(

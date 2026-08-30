@@ -71,6 +71,10 @@ func (s *Service) Register(ctx context.Context) error {
 	ctx = common.WithTraceID(ctx, common.TraceID(ctx))
 	s.registerMu.Lock()
 	defer s.registerMu.Unlock()
+	return s.registerLocked(ctx)
+}
+
+func (s *Service) registerLocked(ctx context.Context) error {
 	select {
 	case <-s.stop:
 		return errors.New("imscore: service stopped")
@@ -319,7 +323,7 @@ func (s *Service) commitRegisterSuccess(resp *sipResponse, session *registerSess
 		s.learnedAOR = session.publicID
 		s.mu.Unlock()
 	}
-	if serviceRoute := imsheaders.FirstRoute(resp.Header("Service-Route"), ""); serviceRoute != "" {
+	if serviceRoute := strings.Join(resp.HeaderValues("Service-Route"), ","); strings.TrimSpace(serviceRoute) != "" {
 		session.serviceRoute = serviceRoute
 		s.mu.Lock()
 		s.serviceRoute = serviceRoute
@@ -436,6 +440,7 @@ func (s *Service) exchangeRegister(ctx context.Context, session *registerSession
 		"authenticated", strings.TrimSpace(authorization) != "",
 		"security_client_mechanisms", securityClientMechanismCount(rawSIPHeaderValue(request, "Security-Client")),
 		"sip", logging.RedactSIPRaw(request))
+	s.logRegisterViaPorts(session, request)
 	response, err := s.transport.RoundTrip(ctx, request)
 	if err != nil {
 		return nil, fmt.Errorf("imscore: REGISTER CSeq %d transaction: %w", session.cseq, err)
@@ -610,7 +615,7 @@ func (s *Service) buildRegisterRequest(
 	transport := s.registerRequestTransport(protected)
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("REGISTER sip:%s SIP/2.0\r\n", cfg.Domain))
-	localAddress := s.registerLocalAddress(session)
+	localAddress := s.registerLocalAddress(session, transport)
 	b.WriteString(fmt.Sprintf("Via: SIP/2.0/%s %s;rport;branch=%s%s\r\n",
 		transportUpper(transport), localAddress, session.branch, registerViaAlias(protected)))
 	publicIdentity := primaryPublicIdentity(cfg)
@@ -861,8 +866,59 @@ func associatedPublicIdentity(header string) string {
 	return identity
 }
 
-func (s *Service) registerLocalAddress(_ *registerSession) string {
-	return net.JoinHostPort(s.cfg.LocalIP.String(), strconv.Itoa(s.cfg.LocalPort))
+func (s *Service) registerLocalAddress(session *registerSession, transport string) string {
+	port := s.cfg.LocalPort
+	if registerUsesProtectedTransport(session) && session != nil && session.security != nil {
+		// TCP after SA keeps cfg.LocalPort (24.229 5.1.1.2.2 (c) is UDP-only;
+		// K.2.1.2.2.2 TCP Via is IP/FQDN). UDP IPsec uses port-s.
+		port = protectedViaSentByPort(transport, int(session.security.client.PortS), s.cfg.LocalPort)
+	}
+	return net.JoinHostPort(s.cfg.LocalIP.String(), strconv.Itoa(port))
+}
+
+func (s *Service) logRegisterViaPorts(session *registerSession, request string) {
+	if s == nil {
+		return
+	}
+	viaPort := sipSentByPort(rawSIPHeaderValue(request, "Via"))
+	portC, portS := 0, 0
+	if session != nil && session.security != nil {
+		portC = int(session.security.client.PortC)
+		portS = int(session.security.client.PortS)
+	}
+	localPort := 0
+	if s.cfg != nil {
+		localPort = s.cfg.LocalPort
+	}
+	transport := s.registerRequestTransport(registerUsesProtectedTransport(session))
+	logging.Info("IMS REGISTER via ports",
+		"device", s.DeviceID(),
+		"transport", transport,
+		"via_port", viaPort,
+		"cfg_local_port", localPort,
+		"port_c", portC,
+		"port_s", portS,
+		"via_eq_port_c", viaPort > 0 && viaPort == portC,
+		"via_eq_port_s", viaPort > 0 && viaPort == portS,
+		"udp_via_uses_port_s", sipTransportIsUDP(transport),
+		"protected", registerUsesProtectedTransport(session))
+}
+
+func sipSentByPort(via string) int {
+	fields := strings.Fields(via)
+	if len(fields) < 2 {
+		return 0
+	}
+	sentBy, _, _ := strings.Cut(fields[1], ";")
+	_, portText, err := net.SplitHostPort(strings.TrimSpace(sentBy))
+	if err != nil {
+		return 0
+	}
+	port, err := strconv.Atoi(portText)
+	if err != nil || port < 1 {
+		return 0
+	}
+	return port
 }
 
 func (s *Service) registerRequestTransport(protected bool) string {

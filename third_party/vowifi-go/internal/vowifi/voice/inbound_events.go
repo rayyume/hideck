@@ -133,6 +133,8 @@ func inboundRequestFromEvent(
 		SessionExpires: requestHeaderValue(request, "Session-Expires"),
 		ReferTo:        requestHeaderValue(request, "Refer-To"),
 		ReferSub:       requestHeaderValue(request, "Refer-Sub"),
+		Supported:      requestHeaderValue(request, "Supported"),
+		MinSE:          requestHeaderValue(request, "Min-SE"),
 		Body:           append([]byte(nil), request.Body()...), Request: request.Clone(),
 		ServerInvite: handle, Session: session,
 	}

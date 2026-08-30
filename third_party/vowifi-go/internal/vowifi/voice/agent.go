@@ -318,7 +318,7 @@ func (a *Agent) executeOutboundCall(
 	if err := call.StartOutboundNoAnswerTimerCurrent(voiceInviteTimeout); err != nil {
 		return imscore.SIPResponse{}, a.handleOutboundInviteRuntimeError(call, err)
 	}
-	logging.RunDebug("IMS INVITE outbound", "sip", logging.RedactSIPRaw(invite))
+	logOutboundInviteRequest(invite)
 	response, err := a.startVoiceClientInvite(ctx, call, invite)
 	call.StopOutboundNoAnswerTimer()
 	if response.StatusCode >= 200 {

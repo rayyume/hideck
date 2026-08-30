@@ -441,7 +441,6 @@ func assertRecoveredRegistrationSubscription(request, securityVerify string, cli
 		return fmt.Errorf("unexpected SUBSCRIBE request line: %q", strings.SplitN(request, "\r\n", 2)[0])
 	}
 	checks := map[string]string{
-		"Route":                "<sip:pcscf.example;lr>",
 		"Event":                "reg",
 		"Accept":               "application/reginfo+xml",
 		"P-Preferred-Identity": "<sip:+447840844894@o2.co.uk>",
@@ -454,9 +453,13 @@ func assertRecoveredRegistrationSubscription(request, securityVerify string, cli
 			return fmt.Errorf("SUBSCRIBE %s = %q, want %q", name, got, want)
 		}
 	}
+	route := sipHeaderValue(request, "Route")
+	if !strings.Contains(route, "<sip:pcscf.example;lr>") || !strings.Contains(route, ";transport=tcp;lr>") {
+		return fmt.Errorf("SUBSCRIBE Route = %q, want P-CSCF then Service-Route", route)
+	}
 	if !strings.Contains(sipHeaderValue(request, "Via"), fmt.Sprintf(":%d;", client.PortC)) ||
 		!strings.Contains(sipHeaderValue(request, "Contact"),
-			fmt.Sprintf(":%d;transport=tcp>", client.PortS)) {
+			fmt.Sprintf(":%d;ob;transport=tcp>", client.PortS)) {
 		return errors.New("SUBSCRIBE did not advertise the negotiated protected ports")
 	}
 	return nil
