@@ -143,6 +143,7 @@ func (p *Pool) DisableVoWiFi(deviceID ...string) error {
 			if err := p.voWiFiHost().Disable(p.ctx, target, "disable", false); err != nil {
 				return err
 			}
+			p.ClearVoWiFiMWI(target)
 			p.applyCardPolicyAfterVoWiFiDisable(target, "vowifi_disabled")
 			return nil
 		}
@@ -154,6 +155,7 @@ func (p *Pool) DisableVoWiFi(deviceID ...string) error {
 		if err := p.voWiFiHost().Disable(p.ctx, devID, "disable_all", false); err != nil {
 			return err
 		}
+		p.ClearVoWiFiMWI(devID)
 		p.applyCardPolicyAfterVoWiFiDisable(devID, "vowifi_disabled")
 	}
 	return nil

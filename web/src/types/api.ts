@@ -73,6 +73,12 @@ export type VoWiFiRuntimeState = {
   last_error?: string
   last_reason?: string
   updated_at?: string
+  mwi_known?: boolean
+  mwi_messages_waiting?: boolean
+  mwi_voice_new?: number
+  mwi_voice_old?: number
+  mwi_account?: string
+  mwi_updated_at?: string
 }
 
 export type DeviceLifecyclePhase =

@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/iniwex5/vowifi-go/runtimehost"
 	"github.com/yibaiba/hideck/internal/config"
 	"github.com/yibaiba/hideck/internal/device"
 	"github.com/yibaiba/hideck/internal/modem"
-	"github.com/iniwex5/vowifi-go/runtimehost"
 )
 
 func TestApplyLifecycleToOfflineOverviewItemKeepsRecoveryVisible(t *testing.T) {
@@ -85,5 +85,8 @@ func TestVoWiFiRuntimeDTOExportsSIMReadyOnly(t *testing.T) {
 	}
 	if strings.Contains(raw, "radio_ready") {
 		t.Fatalf("json=%s should not contain radio_ready", raw)
+	}
+	if !strings.Contains(raw, `"mwi_known":false`) || !strings.Contains(raw, `"mwi_messages_waiting":false`) {
+		t.Fatalf("json=%s, want empty MWI state", raw)
 	}
 }

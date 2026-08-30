@@ -3471,7 +3471,7 @@ components:
 
     PhoneCallStatus:
       type: string
-      enum: [calling, ringing, connected, completed, missed, rejected, busy, failed]
+      enum: [calling, ringing, waiting, connected, completed, missed, rejected, busy, failed]
 
     PhoneEvent:
       type: object
@@ -3482,7 +3482,7 @@ components:
           format: int64
         type:
           type: string
-          description: incoming_call、call_started、call_ringing、call_connected、media_disconnected、media_recovered、call_ended、recording_ready 或 recording_failed。
+          description: incoming_call、call_waiting、call_started、call_ringing、call_connected、media_disconnected、media_recovered、call_ended、recording_ready 或 recording_failed。
         call:
           $ref: '#/components/schemas/PhoneCall'
         time:
@@ -4050,6 +4050,19 @@ components:
         last_reason:
           type: string
         updated_at:
+          type: string
+          format: date-time
+        mwi_known:
+          type: boolean
+        mwi_messages_waiting:
+          type: boolean
+        mwi_voice_new:
+          type: integer
+        mwi_voice_old:
+          type: integer
+        mwi_account:
+          type: string
+        mwi_updated_at:
           type: string
           format: date-time
 

@@ -13,3 +13,8 @@ type Notifier interface {
 type SMSSourceNotifier interface {
 	NotifySMSWithSource(deviceID, sender, content, source string, timestamp time.Time)
 }
+
+// IncomingCallNotifier is implemented by host notifiers that can surface a ring.
+type IncomingCallNotifier interface {
+	NotifyIncomingCall(deviceID, caller, callee string)
+}

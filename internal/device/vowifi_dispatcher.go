@@ -61,8 +61,14 @@ func (d poolVoWiFiRuntimeDispatcher) Dispatch(ctx context.Context, e eventhost.E
 			logger.Warn("VoWiFi 上层持久化本机号码失败", "device", v.DevID, "imsi", v.IMSI, "phone", v.Number, "err", err)
 		}
 	case eventhost.MWIUpdated:
+		d.pool.RecordVoWiFiMWI(v.DevID, VoWiFiMWIState{
+			MessagesWaiting: v.MessagesWaiting, VoiceNew: v.VoiceNew, VoiceOld: v.VoiceOld,
+			Account: v.Account, UpdatedAt: v.Time,
+		})
 		logger.Info("VoWiFi MWI 更新", "device", v.DevID, "waiting", v.MessagesWaiting,
 			"voice_new", v.VoiceNew, "voice_old", v.VoiceOld)
+	case eventhost.CallWaiting:
+		d.pool.notifyCallWaiting(v)
 	}
 
 	notifier := d.pool.getNotifier()
@@ -91,4 +97,25 @@ func (d poolVoWiFiRuntimeDispatcher) Dispatch(ctx context.Context, e eventhost.E
 		return
 	}
 	notifier.NotifyRaw(logNotify.Message)
+}
+
+func (p *Pool) notifyCallWaiting(event eventhost.CallWaiting) {
+	if p == nil {
+		return
+	}
+	notifier := p.getNotifier()
+	if notifier == nil {
+		return
+	}
+	if incoming, ok := notifier.(IncomingCallNotifier); ok {
+		incoming.NotifyIncomingCall(event.DevID, event.Caller, event.Callee)
+		return
+	}
+	notifier.NotifyRaw(formatCallWaitingNotify(event.DevID, event.Caller, event.Callee))
+}
+
+func formatCallWaitingNotify(deviceID, caller, callee string) string {
+	return "呼叫等待\n设备    " + strings.TrimSpace(deviceID) +
+		"\n主叫    " + strings.TrimSpace(caller) +
+		"\n被叫    " + strings.TrimSpace(callee)
 }

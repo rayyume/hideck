@@ -458,24 +458,30 @@ type deviceMgmtListItem struct {
 }
 
 type voWiFiRuntimeDTO struct {
-	DeviceID       string    `json:"device_id"`
-	Phase          string    `json:"phase"`
-	DataplaneMode  string    `json:"dataplane_mode"`
-	ICCID          string    `json:"iccid,omitempty"`
-	IMSI           string    `json:"imsi,omitempty"`
-	SIMReady       bool      `json:"sim_ready"`
-	AccessReady    bool      `json:"access_ready"`
-	TunnelReady    bool      `json:"tunnel_ready"`
-	IMSReady       bool      `json:"ims_ready"`
-	SMSReady       bool      `json:"sms_ready"`
-	SMSReadyReason string    `json:"sms_ready_reason,omitempty"`
-	RegStatus      int       `json:"reg_status"`
-	RegStatusText  string    `json:"reg_status_text"`
-	NetworkMode    string    `json:"network_mode"`
-	LastErrorClass string    `json:"last_error_class"`
-	LastError      string    `json:"last_error"`
-	LastReason     string    `json:"last_reason"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	DeviceID           string    `json:"device_id"`
+	Phase              string    `json:"phase"`
+	DataplaneMode      string    `json:"dataplane_mode"`
+	ICCID              string    `json:"iccid,omitempty"`
+	IMSI               string    `json:"imsi,omitempty"`
+	SIMReady           bool      `json:"sim_ready"`
+	AccessReady        bool      `json:"access_ready"`
+	TunnelReady        bool      `json:"tunnel_ready"`
+	IMSReady           bool      `json:"ims_ready"`
+	SMSReady           bool      `json:"sms_ready"`
+	SMSReadyReason     string    `json:"sms_ready_reason,omitempty"`
+	RegStatus          int       `json:"reg_status"`
+	RegStatusText      string    `json:"reg_status_text"`
+	NetworkMode        string    `json:"network_mode"`
+	LastErrorClass     string    `json:"last_error_class"`
+	LastError          string    `json:"last_error"`
+	LastReason         string    `json:"last_reason"`
+	UpdatedAt          time.Time `json:"updated_at"`
+	MWIKnown           bool      `json:"mwi_known"`
+	MWIMessagesWaiting bool      `json:"mwi_messages_waiting"`
+	MWIVoiceNew        int       `json:"mwi_voice_new,omitempty"`
+	MWIVoiceOld        int       `json:"mwi_voice_old,omitempty"`
+	MWIAccount         string    `json:"mwi_account,omitempty"`
+	MWIUpdatedAt       time.Time `json:"mwi_updated_at,omitempty"`
 }
 
 func runtimeStateToDTO(st runtimehost.State, status modem.DeviceStatus) *voWiFiRuntimeDTO {
@@ -517,7 +523,21 @@ func (s *Server) getVoWiFiRuntimeDTO(deviceID string) *voWiFiRuntimeDTO {
 	if w := s.pool.GetWorker(deviceID); w != nil {
 		status = w.ProjectDeviceStatus()
 	}
-	return runtimeStateToDTO(st, status)
+	return s.attachVoWiFiMWI(runtimeStateToDTO(st, status), deviceID)
+}
+
+func (s *Server) attachVoWiFiMWI(dto *voWiFiRuntimeDTO, deviceID string) *voWiFiRuntimeDTO {
+	if dto == nil || s == nil || s.pool == nil {
+		return dto
+	}
+	mwi := s.pool.GetVoWiFiMWI(deviceID)
+	dto.MWIKnown = mwi.Known
+	dto.MWIMessagesWaiting = mwi.MessagesWaiting
+	dto.MWIVoiceNew = mwi.VoiceNew
+	dto.MWIVoiceOld = mwi.VoiceOld
+	dto.MWIAccount = mwi.Account
+	dto.MWIUpdatedAt = mwi.UpdatedAt
+	return dto
 }
 
 func isLifecycleActiveForAPI(phase string) bool {
@@ -2929,7 +2949,7 @@ func (s *Server) handleDeviceMgmtOverviewStreamSingle(c *gin.Context) {
 			s.applyLifecycleToOverviewLiteItem(&item, nil, *md)
 		}
 		if stateSnapshot != nil {
-			item.VoWiFiRuntime = runtimeStateSnapshotToDTO(*stateSnapshot, status)
+			item.VoWiFiRuntime = s.attachVoWiFiMWI(runtimeStateSnapshotToDTO(*stateSnapshot, status), deviceID)
 		}
 
 		trafficCh = trafficStream.sync(item)

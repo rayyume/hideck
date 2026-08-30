@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/iniwex5/vowifi-go/runtimehost"
+	"github.com/iniwex5/vowifi-go/runtimehost/messaging"
 	"github.com/iniwex5/vowifi-go/runtimehost/voicehost"
 	"github.com/yibaiba/hideck/internal/apduarbiter"
 	"github.com/yibaiba/hideck/internal/backend"
@@ -213,6 +214,13 @@ type Pool struct {
 	switchTokens     map[string]uint64
 	switchSeq        uint64
 
+	// routedSMS test overrides; nil in production.
+	routedVoWiFiSMSSend func(context.Context, string, string, string, smscodec.SubmitOptions) (messaging.SendOutcome, error)
+	routedCSSMSSend     func(string, string, string) error
+
+	vowifiMWIMu sync.RWMutex
+	vowifiMWI   map[string]VoWiFiMWIState
+
 	// 概览监控页面流定阅数统计
 	overviewSubs atomic.Int32
 
@@ -262,6 +270,7 @@ func NewPoolWithDynamicInterfaceMapper(cfg *config.Config, mapper DynamicInterfa
 		dynamicInterfaceMapper: mapper,
 		pcscService:            pcsc.New(),
 		runtimeQMIAttachments:  make(map[string]config.DeviceConfig),
+		vowifiMWI:              make(map[string]VoWiFiMWIState),
 	}
 	p.transportRecovery = NewTransportRecoveryController(p)
 	p.voWiFiHost().ConfigureAdapter(p)
