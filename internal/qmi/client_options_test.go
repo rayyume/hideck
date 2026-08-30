@@ -48,7 +48,7 @@ func TestClientOptionsFromDeviceConfigKeepsRuntimeDefaultsAndProxy(t *testing.T)
 	}
 }
 
-func TestClientOptionsFromDeviceConfigDefaultsQMIBackendToDirectWhenControlDeviceUnused(t *testing.T) {
+func TestClientOptionsFromDeviceConfigDefaultsQMIBackendToProxyWhenControlDeviceUnused(t *testing.T) {
 	proxyExecutable := filepath.Join(t.TempDir(), "qmi-proxy")
 	writeExecutableForTest(t, proxyExecutable)
 	restore := stubQMIControlDeviceHolders(t, qmiControlDeviceHolders{})
@@ -60,11 +60,11 @@ func TestClientOptionsFromDeviceConfigDefaultsQMIBackendToDirectWhenControlDevic
 		QMIProxyExecutable: proxyExecutable,
 	})
 
-	if opts.UseProxy {
-		t.Fatal("UseProxy=true, want false for unused qmi control device")
+	if !opts.UseProxy {
+		t.Fatal("UseProxy=false, want true for unused qmi control device")
 	}
 	if opts.ProxyFallbackToRaw {
-		t.Fatal("ProxyFallbackToRaw=true, want no raw fallback in auto direct mode")
+		t.Fatal("ProxyFallbackToRaw=true, want no raw fallback in auto proxy mode")
 	}
 }
 
@@ -140,6 +140,22 @@ func TestRecoveryClientOptionsForControlDeviceProbesWhenHideckHoldsDevice(t *tes
 	}
 }
 
+func TestDiscoveryClientOptionsForControlDeviceUsesProxyWhenUnused(t *testing.T) {
+	restore := stubQMIControlDeviceHolders(t, qmiControlDeviceHolders{})
+	defer restore()
+
+	opts, ok := DiscoveryClientOptionsForControlDevice("/dev/cdc-wdm0")
+	if !ok {
+		t.Fatal("ok=false, want true when unused qmi control device is probed")
+	}
+	if !opts.UseProxy {
+		t.Fatal("UseProxy=false, want true so unused control devices still open via qmi-proxy")
+	}
+	if opts.ProxyFallbackToRaw {
+		t.Fatal("ProxyFallbackToRaw=true, want false")
+	}
+}
+
 func TestDiscoveryClientOptionsForControlDeviceUsesProxyWhenOnlyProxyHoldsDevice(t *testing.T) {
 	restore := stubQMIControlDeviceHolders(t, qmiControlDeviceHolders{
 		Holders: []qmiControlDeviceHolder{{PID: 1234, Command: "/usr/libexec/qmi-proxy"}},
@@ -211,6 +227,32 @@ func TestClientOpenModeSummaryReportsProxy(t *testing.T) {
 	}
 	if got["qmi_proxy_executable"] != proxyExecutable {
 		t.Fatalf("qmi_proxy_executable=%v, want %s", got["qmi_proxy_executable"], proxyExecutable)
+	}
+}
+
+func TestClientOpenModeSummaryReportsProxyForUnusedQMIBackend(t *testing.T) {
+	proxyExecutable := filepath.Join(t.TempDir(), "qmi-proxy")
+	writeExecutableForTest(t, proxyExecutable)
+	restore := stubQMIControlDeviceHolders(t, qmiControlDeviceHolders{})
+	defer restore()
+
+	fields := clientOpenModeSummary(config.DeviceConfig{
+		ID:                 "dev-qmi",
+		ControlDevice:      "/dev/cdc-wdm0",
+		DeviceBackend:      "qmi",
+		QMIProxyPath:       "@qmi-proxy",
+		QMIProxyExecutable: proxyExecutable,
+	})
+	got := fieldsToMap(fields)
+
+	if got["qmi_use_proxy"] != true {
+		t.Fatalf("qmi_use_proxy=%v, want true for unused qmi backend", got["qmi_use_proxy"])
+	}
+	if got["qmi_transport_selected"] != "proxy" {
+		t.Fatalf("qmi_transport_selected=%v, want proxy", got["qmi_transport_selected"])
+	}
+	if got["qmi_control_holder_count"] != 0 {
+		t.Fatalf("qmi_control_holder_count=%v, want 0", got["qmi_control_holder_count"])
 	}
 }
 

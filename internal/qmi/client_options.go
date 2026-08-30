@@ -38,6 +38,8 @@ func DiscoveryClientOptionsForControlDevice(controlDevice string) (qmiq.ClientOp
 		return opts, true
 	}
 	if len(holders.Holders) == 0 {
+		// 空闲控制口也走 qmi-proxy：双模组时直连探测会让一张卡占 fd、另一张被判 unused 后直连打开。
+		forceProxy(&opts)
 		return opts, true
 	}
 	if holders.onlyQMIProxy() {
@@ -128,9 +130,9 @@ func decideQMITransport(cfg config.DeviceConfig, backend string) qmiTransportDec
 		decision.UseProxy = true
 		return decision
 	}
-	if backend == "qmi" &&
-		decision.ControlDeviceScanned &&
-		(decision.HolderScanError != "" || decision.HolderScanUnknown || decision.HolderCount > 0) {
+	// QMI 后端一律走 qmi-proxy，不再按「控制口是否空闲」自动直连。
+	// p11 的 unused→direct 会让第二张卡直连打开，启动期 UIM reset/AKA 把模组 QMI 卡死。
+	if backend == "qmi" {
 		decision.UseProxy = true
 	}
 	return decision
