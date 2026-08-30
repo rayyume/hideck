@@ -186,6 +186,10 @@ test('surfaces API error messages without hiding the underlying failure', () => 
   const error = { response: { data: { message: 'phone: media session is unavailable' } } }
   assert.equal(phoneErrorMessage(error, 'fallback'), 'phone: media session is unavailable')
   assert.equal(phoneErrorMessage(new Error('network down'), 'fallback'), 'network down')
+  assert.equal(
+    phoneErrorMessage(new Error('voice: hold is not aligned to 24.229/24.610 on the live network'), '保持失败'),
+    '保持未对齐，暂不可用'
+  )
 })
 
 test('hangup success drops the local call without waiting for events and ignores a second click', async () => {
@@ -256,11 +260,26 @@ test('labels pending and ended calls from their real lifecycle data', () => {
   })
 
   assert.equal(phoneCallStatusLabel(active), '通话中')
+  assert.equal(phoneCallStatusLabel({ ...active, status: 'waiting' }), '呼叫等待')
   assert.equal(phoneCallStatusLabel({ ...active, held: true }), '保持中')
   assert.equal(phoneCallStatusLabel(active, true), '挂断中')
   assert.equal(phoneRecordStatusLabel(record('local_hangup')), '已挂断')
   assert.equal(phoneRecordStatusLabel(record('remote_bye')), '对方已挂断')
   assert.equal(phoneRecordStatusLabel(record()), '已结束')
+})
+
+test('keeps a waiting second call in the active list', () => {
+  setActivePinia(createPinia())
+  const store = usePhoneStore()
+  store.mediaId = 'media-1'
+  store.handleEvent(event(1, call('media-1')))
+  store.handleEvent({
+    id: 2,
+    type: 'call_waiting',
+    call: call('', { call_id: 'wait-1', status: 'waiting', direction: 'inbound', peer: '+15550002' }),
+    time: '2026-08-13T12:01:00Z'
+  })
+  assert.equal(store.calls.some((item) => item.call_id === 'wait-1' && item.status === 'waiting'), true)
 })
 
 test('refreshes ringing outbound media but leaves an unclaimed incoming call unattached', () => {

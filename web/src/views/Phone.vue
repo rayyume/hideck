@@ -37,6 +37,8 @@ const connected = computed(() => call.value?.status === 'connected')
 const incoming = computed(() => call.value?.direction === 'inbound'
   && call.value.status === 'ringing'
   && !call.value.media_id)
+const waitingCall = computed(() => phone.calls.find((item) =>
+  item.status === 'waiting' && item.call_id !== call.value?.call_id))
 const selected = computed(() => phone.devices.find((device) => device.id === selectedDevice.value))
 const canPlaceCall = computed(() => CALLEE_PATTERN.test(callee.value)
   && !!selected.value
@@ -402,6 +404,7 @@ async function sendDTMF(digit: string) {
             <span>{{ call.direction === 'inbound' ? 'INCOMING' : 'OUTGOING' }}</span>
             <strong>{{ call.peer || '未知号码' }}</strong>
             <p>{{ phoneCallStatusLabel(call, callEnding) }} · {{ formatCallDuration(call, phone.now) }}</p>
+            <p v-if="waitingCall" class="call-waiting-hint">第二路来电 {{ waitingCall.peer || '未知号码' }}（呼叫等待）</p>
           </div>
 
           <dl class="call-meta">

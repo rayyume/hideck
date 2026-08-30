@@ -50,6 +50,8 @@ test('phone view exposes explicit listen-only and microphone call actions withou
   assert.match(phoneStore, /mediaMode = 'listen-only'/)
   assert.match(phoneView, /取消静音/)
   assert.match(phoneView, /call\.held \? '恢复' : '保持'/)
+  assert.match(phoneView, /第二路来电/)
+  assert.match(callBar, /第二路/)
   assert.match(phoneView, /@click="toggleHold"/)
   assert.match(callBar, /保持通话/)
   assert.match(phoneView, />键盘</)

@@ -68,6 +68,20 @@ func (s *Service) handleIncoming(incoming voicehost.IncomingCall) {
 	}
 }
 
+func (s *Service) handleCallWaiting(event voicehost.CallEvent) {
+	s.mu.RLock()
+	existing := s.calls[event.CallID]
+	s.mu.RUnlock()
+	if existing != nil {
+		s.publish("call_waiting", existing)
+		return
+	}
+	s.handleIncoming(voicehost.IncomingCall{
+		DeviceID: event.DeviceID, CallID: event.CallID,
+		Caller: event.Caller, Callee: event.Callee, ReceivedAt: event.Time,
+	})
+}
+
 func (s *Service) newIncomingCall(incoming voicehost.IncomingCall, startedAt time.Time) *activeCall {
 	peer := strings.TrimSpace(incoming.Caller)
 	view := CallView{
@@ -119,6 +133,8 @@ func (s *Service) dispatchCallEvent(event voicehost.CallEvent) {
 		s.finishCall(event)
 	case "CallBusy":
 		s.recordBusyResult(event, nil)
+	case "CallWaiting":
+		s.handleCallWaiting(event)
 	case "CallFinalized":
 		s.finalizeRecording(event)
 	case "CallMediaUpdated":

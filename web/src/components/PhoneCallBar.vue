@@ -21,6 +21,8 @@ const ending = ref(false)
 const keypadOpen = ref(false)
 const lastDTMF = ref('')
 const call = computed(() => phone.currentCall)
+const waitingCall = computed(() => phone.calls.find((item) =>
+  item.status === 'waiting' && item.call_id !== call.value?.call_id))
 const callEnding = computed(() => call.value ? phone.isCallEnding(call.value.call_id) : false)
 const connected = computed(() => call.value?.status === 'connected')
 const canControl = computed(() => !!call.value
@@ -78,7 +80,7 @@ async function sendDigit(digit: string) {
         <span class="call-pulse" aria-hidden="true" />
         <span class="call-copy">
           <strong>{{ call.peer || '未知号码' }}</strong>
-          <small>{{ phone.mediaMode === 'listen-only' ? '仅听 · ' : '' }}{{ phoneCallStatusLabel(call, callEnding) }} · {{ formatCallDuration(call, phone.now) }}</small>
+          <small>{{ phone.mediaMode === 'listen-only' ? '仅听 · ' : '' }}{{ phoneCallStatusLabel(call, callEnding) }} · {{ formatCallDuration(call, phone.now) }}{{ waitingCall ? ` · 第二路 ${waitingCall.peer || '未知号码'}` : '' }}</small>
         </span>
         <span v-if="call.read_only" class="read-only-tag">只读</span>
       </button>

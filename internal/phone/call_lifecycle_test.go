@@ -2,6 +2,7 @@ package phone
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -161,6 +162,59 @@ func TestWaitingIncomingCallWhenConnected(t *testing.T) {
 	default:
 	}
 	_ = service
+}
+
+func TestCallWaitingEventNotifiesAndKeepsSecondCall(t *testing.T) {
+	gateway, store := newFakeVoiceGateway(), newMemoryCallStore()
+	notifications := make(chan capturedNotification, 4)
+	service := newPhoneTestService(t, gateway, store, time.Second)
+	service.notifier = captureNotifier{notifications: notifications}
+	first := voicehost.IncomingCall{DeviceID: "dev-1", CallID: "active-1", Caller: "+15550001", ReceivedAt: time.Now()}
+	gateway.emitIncoming(first)
+	gateway.emitEvent(voicehost.CallEvent{
+		Type: "CallAnswered", DeviceID: first.DeviceID, CallID: first.CallID, Time: time.Now(),
+	})
+	waitForRecordStatus(t, store, first.CallID, StatusConnected)
+	select {
+	case <-notifications:
+	case <-time.After(time.Second):
+		t.Fatal("first incoming was not notified")
+	}
+	gateway.emitEvent(voicehost.CallEvent{
+		Type: "CallWaiting", DeviceID: "dev-1", CallID: "wait-2",
+		Caller: "+15550002", Callee: "10010", Time: time.Now(),
+	})
+	waitForRecordStatus(t, store, "wait-2", StatusWaiting)
+	select {
+	case notification := <-notifications:
+		if !notification.incoming || notification.caller != "+15550002" {
+			t.Fatalf("waiting notification = %+v", notification)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("call waiting was not notified")
+	}
+}
+
+func TestHoldMapsNotAlignedError(t *testing.T) {
+	gateway, store := newFakeVoiceGateway(), newMemoryCallStore()
+	gateway.holdErr = voicehost.ErrHoldNotAligned
+	service := newPhoneTestService(t, gateway, store, time.Second)
+	call := &activeCall{
+		view:   CallView{CallID: "call-1", DeviceID: "dev-1", Status: StatusConnected, MediaID: "media-1"},
+		record: CallRecord{CallID: "call-1", DeviceID: "dev-1", Status: StatusConnected},
+		owner:  "admin", lease: "lease-1", mediaID: "media-1", terminalDone: make(chan struct{}),
+	}
+	service.mu.Lock()
+	service.calls[call.view.CallID] = call
+	service.deviceCalls[call.view.DeviceID] = call.view.CallID
+	service.mu.Unlock()
+	err := service.Hold(context.Background(), "admin", call.view.CallID, "lease-1")
+	if !errors.Is(err, ErrHoldUnavailable) {
+		t.Fatalf("Hold error = %v", err)
+	}
+	if service.callView(call.view.CallID, "lease-1").Held {
+		t.Fatal("failed hold marked the call held")
+	}
 }
 
 func TestOutboundEventsEmittedBeforeBeginReturnsAreReplayed(t *testing.T) {

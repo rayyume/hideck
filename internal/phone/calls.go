@@ -15,6 +15,9 @@ var calleePattern = regexp.MustCompile(`^\+?[0-9]{1,32}$`)
 var dtmfPattern = regexp.MustCompile(`^[0-9*#]$`)
 var errActiveCallNotFound = errors.New("phone: active call not found")
 
+// ErrHoldUnavailable is returned when originating hold/resume is refused as not aligned.
+var ErrHoldUnavailable = errors.New("保持未对齐，暂不可用")
+
 func (s *Service) StartCall(request StartCallRequest) (CallView, error) {
 	request.DeviceID, request.Callee = strings.TrimSpace(request.DeviceID), strings.TrimSpace(request.Callee)
 	if request.DeviceID == "" || !calleePattern.MatchString(request.Callee) {
@@ -193,7 +196,7 @@ func (s *Service) setCallHold(ctx context.Context, owner, callID, lease string, 
 		err = s.gateway.ResumeCall(ctx, deviceID, resolvedCallID)
 	}
 	if err != nil {
-		return err
+		return mapHoldError(err)
 	}
 	s.mu.Lock()
 	if current := s.calls[resolvedCallID]; current != nil && !current.terminal {
@@ -341,6 +344,13 @@ func (s *Service) assignControl(callID, owner, mediaID, lease string) {
 	pendingMediaDrop := s.bindMediaLocked(callID, mediaID)
 	s.mu.Unlock()
 	s.resumePendingMediaDrop(mediaID, pendingMediaDrop)
+}
+
+func mapHoldError(err error) error {
+	if errors.Is(err, voicehost.ErrHoldNotAligned) {
+		return ErrHoldUnavailable
+	}
+	return err
 }
 
 func (s *Service) iccid(deviceID string) string {

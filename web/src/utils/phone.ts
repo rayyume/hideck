@@ -8,7 +8,8 @@ export const phoneStatusLabels: Record<string, string> = {
   missed: '未接',
   rejected: '已拒接',
   busy: '忙线',
-  failed: '失败'
+  failed: '失败',
+  waiting: '呼叫等待'
 }
 
 export function phoneStatusLabel(status: string) {
@@ -61,8 +62,14 @@ export function shouldRefreshCallMedia(call: PhoneCall | undefined, mediaId: str
 
 export function phoneErrorMessage(error: unknown, fallback: string) {
   const responseMessage = (error as { response?: { data?: { message?: unknown } } })?.response?.data?.message
-  if (typeof responseMessage === 'string' && responseMessage) return responseMessage
-  return error instanceof Error && error.message ? error.message : fallback
+  if (typeof responseMessage === 'string' && responseMessage) return localizeHoldError(responseMessage)
+  if (error instanceof Error && error.message) return localizeHoldError(error.message)
+  return fallback
+}
+
+function localizeHoldError(message: string) {
+  if (message.includes('hold is not aligned')) return '保持未对齐，暂不可用'
+  return message
 }
 
 function formatDuration(seconds: number) {

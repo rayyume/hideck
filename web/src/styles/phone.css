@@ -70,6 +70,7 @@
 .call-identity > span { color: var(--ui-primary); font-family: "v-mono", monospace; font-size: 9px; font-weight: 700; letter-spacing: .16em; }
 .call-identity strong { margin-top: 8px; display: block; overflow-wrap: anywhere; font-family: "v-mono", monospace; font-size: clamp(26px, 4vw, 36px); }
 .call-identity p { margin: 5px 0 0; color: var(--ui-text-muted); font-variant-numeric: tabular-nums; }
+.call-waiting-hint { margin: 8px 0 0; color: var(--ui-warning); font-size: 12px; }
 .call-meta { width: 100%; margin: 0; display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--ui-border); border-radius: 8px; overflow: hidden; }
 .call-meta div { min-width: 0; padding: 10px; border-right: 1px solid var(--ui-border); text-align: center; }
 .call-meta div:last-child { border-right: 0; }

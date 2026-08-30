@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -290,7 +291,12 @@ func (s *Server) requirePhone(c *gin.Context) bool {
 func (s *Server) respondPhoneError(c *gin.Context, err error) {
 	message := err.Error()
 	status := http.StatusBadRequest
+	code := "phone_error"
 	switch {
+	case errors.Is(err, phone.ErrHoldUnavailable):
+		status = http.StatusServiceUnavailable
+		code = "phone_hold_unavailable"
+		message = phone.ErrHoldUnavailable.Error()
 	case strings.Contains(message, "lease"), strings.Contains(message, "another browser"):
 		status = http.StatusForbidden
 	case strings.Contains(message, "not found"):
@@ -300,7 +306,7 @@ func (s *Server) respondPhoneError(c *gin.Context, err error) {
 	case strings.Contains(message, "unavailable"):
 		status = http.StatusServiceUnavailable
 	}
-	c.JSON(status, gin.H{"status": "error", "code": "phone_error", "message": message})
+	c.JSON(status, gin.H{"status": "error", "code": code, "message": message})
 }
 
 func phoneLease(c *gin.Context) string {

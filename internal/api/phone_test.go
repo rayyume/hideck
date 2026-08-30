@@ -6,14 +6,15 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/yibaiba/hideck/internal/config"
-	"github.com/yibaiba/hideck/internal/phone"
 	"github.com/iniwex5/vowifi-go/runtimehost/voicehost"
 	"github.com/pion/webrtc/v4"
+	"github.com/yibaiba/hideck/internal/config"
+	"github.com/yibaiba/hideck/internal/phone"
 )
 
 func TestPhoneRoutesEnforceAuthenticationAndControlLease(t *testing.T) {
@@ -223,6 +224,7 @@ type phoneRouteGatewayStub struct {
 	events       func(voicehost.CallEvent)
 	dtmf         string
 	silentHangup bool
+	holdErr      error
 }
 
 func (g *phoneRouteGatewayStub) SubscribeIncomingCalls(handler func(voicehost.IncomingCall)) func() {
@@ -265,6 +267,9 @@ func (g *phoneRouteGatewayStub) SendCallDTMF(_, callID, digit string) error {
 }
 
 func (g *phoneRouteGatewayStub) HoldCall(_ context.Context, _, callID string) error {
+	if g.holdErr != nil {
+		return g.holdErr
+	}
 	g.dtmf = callID + ":hold"
 	g.emit(voicehost.CallEvent{
 		Type: "CallMediaUpdated", DeviceID: "dev-1", CallID: callID, Held: true, Time: time.Now(),
@@ -335,3 +340,59 @@ func browserPhoneOffer(t *testing.T) (string, func()) {
 }
 
 const apiPhonePlainSDP = "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=phone\r\nc=IN IP4 127.0.0.1\r\nt=0 0\r\nm=audio 40000 RTP/AVP 0\r\n"
+
+func TestPhoneHoldReturnsChineseWhenNotAligned(t *testing.T) {
+	gateway := &phoneRouteGatewayStub{holdErr: voicehost.ErrHoldNotAligned}
+	service, err := phone.NewService(phone.ServiceOptions{
+		Gateway: gateway, WebRTCUDPAddress: "127.0.0.1:0", RecoveryGrace: time.Second,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		if err := service.Close(ctx); err != nil {
+			t.Errorf("close phone service: %v", err)
+		}
+	})
+	server := &Server{
+		auth:  config.WebConfig{Username: "admin", Password: "secret"},
+		phone: service, shutdownCh: make(chan struct{}),
+	}
+	router := gin.New()
+	api := router.Group("/api")
+	api.Use(server.authMiddleware())
+	server.registerPhoneRoutes(api)
+	token := testSessionToken(t, "secret", time.Now().Add(time.Hour))
+	offer, closePeer := browserPhoneOffer(t)
+	defer closePeer()
+	mediaResponse := performPhoneRequest(router, http.MethodPost, "/api/phone/media", token, "", map[string]string{"sdp": offer})
+	if mediaResponse.Code != http.StatusCreated {
+		t.Fatalf("media status=%d body=%s", mediaResponse.Code, mediaResponse.Body.String())
+	}
+	var media struct {
+		MediaID string `json:"media_id"`
+		Lease   string `json:"lease"`
+	}
+	if err := json.Unmarshal(mediaResponse.Body.Bytes(), &media); err != nil {
+		t.Fatal(err)
+	}
+	callResponse := performPhoneRequest(router, http.MethodPost, "/api/phone/calls", token, media.Lease, map[string]string{
+		"device_id": "dev-1", "callee": "888", "media_id": media.MediaID,
+	})
+	if callResponse.Code != http.StatusAccepted {
+		t.Fatalf("call status=%d body=%s", callResponse.Code, callResponse.Body.String())
+	}
+	gateway.emit(voicehost.CallEvent{
+		Type: "CallAnswered", DeviceID: "dev-1", CallID: "call-api-1", Time: time.Now(),
+	})
+	hold := performPhoneRequest(router, http.MethodPost, "/api/phone/calls/call-api-1/hold", token, media.Lease, map[string]string{})
+	if hold.Code != http.StatusServiceUnavailable || !strings.Contains(hold.Body.String(), "保持未对齐，暂不可用") {
+		t.Fatalf("hold status=%d body=%s", hold.Code, hold.Body.String())
+	}
+	hangup := performPhoneRequest(router, http.MethodDelete, "/api/phone/calls/call-api-1", token, media.Lease, nil)
+	if hangup.Code != http.StatusNoContent {
+		t.Fatalf("hangup status=%d body=%s", hangup.Code, hangup.Body.String())
+	}
+}

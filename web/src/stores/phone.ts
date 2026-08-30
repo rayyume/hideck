@@ -9,7 +9,7 @@ import {
 } from '../services/phone-session'
 import { normalizeCallOwnership, phoneErrorMessage, shouldRefreshCallMedia } from '../utils/phone'
 
-const ACTIVE_STATUSES = new Set(['calling', 'ringing', 'connected'])
+const ACTIVE_STATUSES = new Set(['calling', 'ringing', 'waiting', 'connected'])
 export type PhoneMediaMode = 'none' | 'listen-only' | 'two-way'
 
 type PhoneState = {
