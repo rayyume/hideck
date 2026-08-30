@@ -10,6 +10,10 @@ import (
 	"github.com/iniwex5/vowifi-go/internal/vowifi/voice"
 )
 
+// ErrHoldNotAligned is kept so the phone API can still map a hold that the
+// live IMS dialog cannot send.
+var ErrHoldNotAligned = voice.ErrHoldNotAligned
+
 // BeginCallRequest starts a browser-media-backed outbound call.
 type BeginCallRequest struct {
 	DeviceID        string

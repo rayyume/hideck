@@ -293,7 +293,7 @@ func TestGenerateBasicSDPUsesRecoveredPortSelection(t *testing.T) {
 	gateway := NewGateway(agent)
 	gateway.SetClientAdapter(&agentVoiceClientAdapter{})
 	got := string(agent.generateBasicSDP())
-	if !strings.Contains(got, "m=audio 19998 RTP/AVP 104 110 102 108 106 101 0") {
+	if !strings.Contains(got, "m=audio 19998 RTP/AVP 104 110 102 108 106 96 101") {
 		t.Fatalf("basic SDP uses wrong payload order or port: %q", got)
 	}
 	if !strings.Contains(got, "a=fmtp:104 mode-change-capability=2;max-red=0") ||
@@ -301,6 +301,13 @@ func TestGenerateBasicSDPUsesRecoveredPortSelection(t *testing.T) {
 		!strings.Contains(got, "a=fmtp:110 octet-align=1") ||
 		!strings.Contains(got, "a=rtpmap:106 EVS/16000") ||
 		!strings.Contains(got, "a=fmtp:106 evs-mode-switch=1") ||
+		!strings.Contains(got, "a=rtpmap:96 telephone-event/16000") ||
+		!strings.Contains(got, "a=rtpmap:101 telephone-event/8000") ||
+		strings.Contains(got, "a=rtpmap:0 PCMU") ||
+		!strings.Contains(got, "a=maxptime:240") ||
+		!strings.Contains(got, "a=rtcp:19999") ||
+		!strings.Contains(got, "b=RS:0") ||
+		!strings.Contains(got, "b=RR:0") ||
 		!strings.Contains(got, "a=curr:qos local sendrecv") ||
 		strings.Contains(got, "a=curr:qos local none") ||
 		!strings.Contains(got, "a=des:qos mandatory local sendrecv") ||

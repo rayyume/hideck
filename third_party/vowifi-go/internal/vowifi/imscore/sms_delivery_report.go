@@ -66,7 +66,7 @@ func (s *Service) handleInboundTPStatusReport(raw string, rpMR byte, payload []b
 	if err != nil {
 		return s.inboundSMSProtocolError(raw, 400, rpMR, true, err)
 	}
-	response, err := buildSIPRequestResponse(raw, 200)
+	response, err := buildSIPRequestResponse(raw, inboundRPDataSIPStatus)
 	if err != nil {
 		return inboundSIPResult{}, err
 	}

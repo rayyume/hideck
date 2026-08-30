@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/iniwex5/vowifi-go/internal/vowifi/logging"
 )
 
 const (
@@ -50,7 +52,29 @@ func (a *Agent) SimulateCall(
 	if request.OnConnected != nil {
 		request.OnConnected()
 	}
+	if request.HoldSeconds >= 8 {
+		go a.exerciseSimulatedHoldResume(call)
+	}
 	return a.holdSimulatedCall(ctx, call, request.HoldSeconds, startedAt)
+}
+
+func (a *Agent) exerciseSimulatedHoldResume(call *Call) {
+	if a == nil || call == nil {
+		return
+	}
+	callID := call.CallID()
+	time.Sleep(2 * time.Second)
+	if err := a.HoldCall(context.Background(), callID); err != nil {
+		logging.Info("IMS simulated hold failed", "device", a.deviceID, "err", err)
+		return
+	}
+	logging.Info("IMS simulated hold sent", "device", a.deviceID)
+	time.Sleep(3 * time.Second)
+	if err := a.ResumeCall(context.Background(), callID); err != nil {
+		logging.Info("IMS simulated resume failed", "device", a.deviceID, "err", err)
+		return
+	}
+	logging.Info("IMS simulated resume sent", "device", a.deviceID)
 }
 
 func (a *Agent) waitForSimulateRegistration(ctx context.Context) error {

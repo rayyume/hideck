@@ -9,12 +9,17 @@ import (
 	"github.com/iniwex5/vowifi-go/internal/vowifi/voice/callstate"
 )
 
-// HoldCall puts an established call on hold with a sendonly re-INVITE.
+// ErrHoldNotAligned is kept for the phone/API mapping of a hold that the
+// live IMS dialog cannot send. Originating hold/resume now sends the
+// TS 24.610 re-INVITE via setCallHold.
+var ErrHoldNotAligned = errors.New("voice: hold is not aligned to 24.229/24.610 on the live network")
+
+// HoldCall sends a mid-dialog hold re-INVITE (a=sendonly).
 func (a *Agent) HoldCall(ctx context.Context, callID string) error {
 	return a.setCallHold(ctx, callID, true)
 }
 
-// ResumeCall retrieves a locally held call with a sendrecv re-INVITE.
+// ResumeCall sends a mid-dialog resume re-INVITE (a=sendrecv).
 func (a *Agent) ResumeCall(ctx context.Context, callID string) error {
 	return a.setCallHold(ctx, callID, false)
 }

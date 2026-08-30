@@ -17,8 +17,11 @@ import (
 const (
 	imsSMSContentType       = "application/vnd.3gpp.sms"
 	rpCauseTemporaryFailure = byte(41)
-	inboundSMSAckTimeout    = 10 * time.Second
-	inboundSMSFragmentTTL   = 3 * time.Minute
+	// TS 24.341 5.3.2.3: MT RP-DATA is accepted with SIP 202, then RP-ACK
+	// is sent in a separate MESSAGE. RP-ACK/RP-ERROR of our MO stay 200.
+	inboundRPDataSIPStatus = 202
+	inboundSMSAckTimeout   = 10 * time.Second
+	inboundSMSFragmentTTL  = 3 * time.Minute
 	// A carrier response arrived 35m37s late in production. One hour keeps a
 	// bounded recovery margin without delaying the 3-minute user notification.
 	inboundSMSLateReassemblyTTL = time.Hour
@@ -172,7 +175,7 @@ func (s *Service) handleInboundRPData(raw string, rpdu []byte, rpMR byte, xml sh
 	}
 	if smscodec.IsDummyMSISDN(message.sender) {
 		if !hasMSISDNLessFeatureCaps(raw) {
-			response, responseErr := buildSIPRequestResponse(raw, 200)
+			response, responseErr := buildSIPRequestResponse(raw, inboundRPDataSIPStatus)
 			return inboundSIPResult{response: response}, responseErr
 		}
 		message.msisdnLess = true
@@ -182,7 +185,7 @@ func (s *Service) handleInboundRPData(raw string, rpdu []byte, rpMR byte, xml sh
 		}
 	}
 	s.logInboundSMSCorrelation(raw, message)
-	response, err := buildSIPRequestResponse(raw, 200)
+	response, err := buildSIPRequestResponse(raw, inboundRPDataSIPStatus)
 	if err != nil {
 		return inboundSIPResult{}, err
 	}

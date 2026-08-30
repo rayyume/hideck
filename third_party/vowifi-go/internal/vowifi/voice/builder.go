@@ -255,8 +255,10 @@ func buildBasicSDP(ip string, port int, sessionID int64) []byte {
 			"s=VoHive Call\r\n"+
 			"c=IN %s %s\r\n"+
 			"t=0 0\r\n"+
-			"m=audio %d RTP/AVP 104 110 102 108 106 101 0\r\n"+
+			"m=audio %d RTP/AVP 104 110 102 108 106 96 101\r\n"+
 			"b=AS:80\r\n"+
+			"b=RS:0\r\n"+
+			"b=RR:0\r\n"+
 			"a=rtpmap:104 AMR-WB/16000\r\n"+
 			"a=fmtp:104 mode-change-capability=2;max-red=0\r\n"+
 			"a=rtpmap:110 AMR-WB/16000\r\n"+
@@ -267,14 +269,16 @@ func buildBasicSDP(ip string, port int, sessionID int64) []byte {
 			"a=fmtp:108 octet-align=1;mode-change-capability=2;max-red=0\r\n"+
 			"a=rtpmap:106 EVS/16000\r\n"+
 			"a=fmtp:106 evs-mode-switch=1;hf-only=0;br=6.6-23.85;bw=wb;ch-aw-recv=-1;max-red=0\r\n"+
+			"a=rtpmap:96 telephone-event/16000\r\n"+
+			"a=fmtp:96 0-15\r\n"+
 			"a=rtpmap:101 telephone-event/8000\r\n"+
 			"a=fmtp:101 0-15\r\n"+
-			"a=rtpmap:0 PCMU/8000\r\n"+
-			sdpQoSReservedLocal +
+			sdpQoSReservedLocal+
 			"a=sendrecv\r\n"+
 			"a=ptime:20\r\n"+
-			"a=maxptime:20\r\n",
-		sessionID, sessionID, ipFamily, ip, ipFamily, ip, port))
+			"a=maxptime:240\r\n"+
+			"a=rtcp:%d\r\n",
+		sessionID, sessionID, ipFamily, ip, ipFamily, ip, port, port+1))
 }
 
 func (a *Agent) localAddr() string {

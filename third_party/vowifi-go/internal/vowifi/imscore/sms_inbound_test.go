@@ -35,7 +35,7 @@ func TestInboundSMSDeliversEventAndSendsRPAck(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("dispatchInboundSIP: %v", err)
 	}
-	if !strings.HasPrefix(response, "SIP/2.0 200") {
+	if !strings.HasPrefix(response, "SIP/2.0 202") {
 		t.Fatalf("SIP response = %q", response)
 	}
 

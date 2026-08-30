@@ -84,7 +84,7 @@ func TestInboundMemoryFullSendsRPError22ThenSMMA(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(response, "SIP/2.0 200") {
+	if !strings.HasPrefix(response, "SIP/2.0 202") {
 		t.Fatalf("SIP response = %q", response)
 	}
 	select {
@@ -290,7 +290,7 @@ func TestInboundDummyMSISDNWithoutFeatureCapsIsDiscarded(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(response, "SIP/2.0 200") {
+	if !strings.HasPrefix(response, "SIP/2.0 202") {
 		t.Fatalf("SIP response = %q", response)
 	}
 	select {
