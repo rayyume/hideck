@@ -86,9 +86,11 @@ func (a *Agent) handleIMSResponseCallback(
 		return nil
 	}
 	cseq := response.CSeq()
-	if cseq == nil || responseCSeqNumber(response) == 0 ||
-		cseq.MethodName != sip.INVITE || response.StatusCode == 100 {
+	if cseq == nil || responseCSeqNumber(response) == 0 || cseq.MethodName != sip.INVITE {
 		return nil
+	}
+	if response.StatusCode == 100 {
+		return a.handleIMS1xxResponse(ctx, call, publicVoiceSIPResponse(response))
 	}
 	updateCallDialogFromResponse(call, response)
 	if response.StatusCode < 200 {

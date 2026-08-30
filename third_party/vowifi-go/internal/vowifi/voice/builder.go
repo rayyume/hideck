@@ -351,7 +351,15 @@ func buildIMSCalledPartyURI(phone, publicIdentity, fallbackDomain string) string
 	if domain == "" {
 		return ""
 	}
-	return "sip:" + user + "@" + domain + ";user=phone"
+	uri := "sip:" + user + "@" + domain + ";user=phone"
+	// TS 24.229 5.1.2A.1.1: a local number (no leading +) must carry
+	// phone-context. The home network domain is the specified value.
+	if !strings.HasPrefix(normalized, "+") {
+		if context := strings.TrimSpace(domain); context != "" {
+			uri += ";phone-context=" + context
+		}
+	}
+	return uri
 }
 
 func publicIdentityDomain(identity string) string {

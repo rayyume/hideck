@@ -101,6 +101,36 @@ func TestSIPTransactionDeliversProvisionalBeforeFinalResponse(t *testing.T) {
 	}
 }
 
+func TestSIPInviteTimerBStopsAfterProvisional(t *testing.T) {
+	transport := newSIPTransport()
+	transport.timers.bf = 50 * time.Millisecond
+	request := transactionRequest("INVITE", "invite-timer-b")
+	transport.SetSendFn(func(req string) error {
+		if strings.HasPrefix(req, "INVITE ") {
+			transport.DeliverResponse(transactionResponse(request, 100))
+		}
+		return nil
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		_, err := transport.roundTripWithProvisional(ctx, request, func(*sipResponse) error { return nil })
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		t.Fatalf("INVITE finished before Timer B window: %v", err)
+	case <-time.After(80 * time.Millisecond):
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("INVITE did not return after context cancel")
+	}
+}
+
 func TestSIPTransactionTimeoutRemovesWaiter(t *testing.T) {
 	transport := newSIPTransport()
 	transport.SetSendFn(func(string) error { return nil })

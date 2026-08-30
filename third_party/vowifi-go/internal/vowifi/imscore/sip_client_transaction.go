@@ -116,6 +116,7 @@ func (t *sipTransport) waitClientTransaction(
 	timers := t.transactionTimers()
 	timeout := time.NewTimer(timers.bf)
 	defer timeout.Stop()
+	timeoutC := timeout.C
 	retransmit, retransmitAt := newRetransmitTimer(transaction, timers.t1)
 	defer stopTransactionTimer(retransmit)
 
@@ -132,6 +133,13 @@ func (t *sipTransport) waitClientTransaction(
 				transaction.markProceeding()
 				stopTransactionTimer(retransmit)
 				retransmit = nil
+				// RFC 3261 17.1.1.2: 1xx moves INVITE Calling → Proceeding and
+				// cancels Timer B. The TU (voiceInviteTimeout / CANCEL) then
+				// owns how long to wait for a final response.
+				if transaction.invite && timeoutC != nil {
+					stopTransactionTimer(timeout)
+					timeoutC = nil
+				}
 				if err := notifyProvisional(transaction, response); err != nil {
 					return nil, t.failTransaction(transaction, err)
 				}
@@ -192,7 +200,7 @@ func (t *sipTransport) waitClientTransaction(
 			retransmit.Reset(retransmitAt)
 		case err := <-transaction.terminated:
 			return nil, t.failTransaction(transaction, err)
-		case <-timeout.C:
+		case <-timeoutC:
 			err := fmt.Errorf("imscore: SIP %s transaction timed out: %w", transaction.key.Method, sip.ErrTransactionTimeout)
 			if cancelCause != nil {
 				err = errors.Join(cancelCause, err)

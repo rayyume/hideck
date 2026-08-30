@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/emiago/sipgo/sip"
+	"github.com/iniwex5/vowifi-go/internal/vowifi/logging"
 )
 
 // SMSReceiverStatus is a snapshot of the live SIP receiver.
@@ -169,6 +170,12 @@ func (s *Service) dispatchInboundSIPMessageWithPeer(
 	switch parsed := message.(type) {
 	case *sip.Response:
 		s.inboundSIPParsedResp.Add(1)
+		cseq := ""
+		if parsed.CSeq() != nil {
+			cseq = parsed.CSeq().Value()
+		}
+		logging.Debug("IMS inbound SIP response",
+			"device", s.DeviceID(), "status", parsed.StatusCode, "reason", parsed.Reason, "cseq", cseq)
 		s.publishIMSEvent(s.buildIMSEventFromResponse(parsed))
 		s.transport.DeliverResponse(newSIPResponse(parsed))
 		return nil

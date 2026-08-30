@@ -15,6 +15,8 @@ func (s *Service) logRegisterFlowNegotiation(response *sipResponse) {
 	supported := strings.ToLower(strings.Join(response.HeaderValues("Supported"), ","))
 	require := strings.ToLower(strings.Join(response.HeaderValues("Require"), ","))
 	path := strings.ToLower(strings.Join(response.HeaderValues("Path"), ","))
+	serviceRoutes := response.HeaderValues("Service-Route")
+	serviceRouteText := strings.Join(serviceRoutes, ",")
 	contact := strings.ToLower(strings.Join(response.HeaderValues("Contact"), ","))
 	requiredOutbound := containsHeaderToken(require, "outbound")
 	viaKeep := viaHasKeepParameter(response.HeaderValues("Via"))
@@ -34,7 +36,29 @@ func (s *Service) logRegisterFlowNegotiation(response *sipResponse) {
 		"via_keep", viaKeep,
 		"path_present", strings.TrimSpace(path) != "",
 		"path_ob", pathOB,
+		"service_route_count", serviceRouteHeaderHopCount(serviceRouteText),
+		"service_route_orig", serviceRouteHeaderHasOrig(serviceRouteText),
 		"contact_reg_id", contactRegID)
+}
+
+func serviceRouteHeaderHopCount(value string) int {
+	count := 0
+	for _, item := range strings.Split(value, ",") {
+		if strings.TrimSpace(item) != "" {
+			count++
+		}
+	}
+	return count
+}
+
+func serviceRouteHeaderHasOrig(value string) bool {
+	for _, item := range strings.Split(strings.ToLower(value), ",") {
+		item = strings.TrimSpace(item)
+		if strings.Contains(item, "sip:orig@") || strings.Contains(item, "sip:orig;") {
+			return true
+		}
+	}
+	return false
 }
 
 func parseFlowTimerHeader(values []string) time.Duration {

@@ -26,7 +26,11 @@ func (a *Agent) handleIMS1xxResponse(
 	call *Call,
 	response imscore.SIPResponse,
 ) (resultErr error) {
-	if call == nil || response.StatusCode <= 100 || response.StatusCode >= 200 {
+	if call == nil || response.StatusCode >= 200 {
+		return nil
+	}
+	if response.StatusCode <= 100 {
+		logging.Info("IMS INVITE 100 Trying", "status", response.StatusCode, "reason", response.Reason)
 		return nil
 	}
 	logOutboundInviteResponse("IMS INVITE 临时响应", response)

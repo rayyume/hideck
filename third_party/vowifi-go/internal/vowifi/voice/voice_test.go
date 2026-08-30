@@ -673,6 +673,16 @@ func TestBuildIMSCalledPartyURIUsesAssociatedPublicDomain(t *testing.T) {
 	}
 }
 
+func TestBuildIMSCalledPartyURIAddsPhoneContextForLocalNumber(t *testing.T) {
+	got := buildIMSCalledPartyURI(
+		"191", "sip:+447840844894@ims.mnc015.mcc234.3gppnetwork.org", "ims.mnc015.mcc234.3gppnetwork.org",
+	)
+	want := "sip:191@ims.mnc015.mcc234.3gppnetwork.org;user=phone;phone-context=ims.mnc015.mcc234.3gppnetwork.org"
+	if got != want {
+		t.Fatalf("local called party URI = %q, want %q", got, want)
+	}
+}
+
 func TestBuildIMSBye(t *testing.T) {
 	agent := newTestAgent(t)
 	call := NewCall(agent, callstate.DirectionOutbound, "call-1", "+8613800000000")
