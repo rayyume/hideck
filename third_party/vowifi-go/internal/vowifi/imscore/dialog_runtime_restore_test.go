@@ -79,6 +79,38 @@ func TestDialogACKKeepsInviteCSeqAfterInDialogRequests(t *testing.T) {
 	}
 }
 
+func TestDialogACKUsesLatestReinviteCSeq(t *testing.T) {
+	service := newRegisteredClientInviteService(t)
+	dialog := testClientDialog(t, service, "dialog-reinvite-ack-cseq")
+	writes := make(chan string, 4)
+	service.transport.SetSendFn(func(request string) error {
+		writes <- request
+		service.transport.DeliverResponse(mustTransactionResponse(t, request, 200))
+		return nil
+	})
+	if _, err := service.SendDialogRequest(
+		t.Context(), service.DeviceID(), dialog, testDialogTemplate(t, sip.INVITE),
+		imsendpoint.DialogRequestOptions{Timeout: int64(time.Second)},
+	); err != nil {
+		t.Fatal(err)
+	}
+	reinvite := waitTransactionWrite(t, writes)
+	reinviteCSeq := rawSIPHeaderValue(reinvite, "CSeq")
+	sequence, _, err := parseSIPCSeq(reinviteCSeq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.SendDialogRequest(
+		t.Context(), service.DeviceID(), dialog, testDialogTemplate(t, sip.ACK),
+		imsendpoint.DialogRequestOptions{Timeout: int64(time.Second)},
+	); err != nil {
+		t.Fatal(err)
+	}
+	if got := rawSIPHeaderValue(waitTransactionWrite(t, writes), "CSeq"); got != fmt.Sprintf("%d ACK", sequence) {
+		t.Fatalf("re-INVITE ACK CSeq = %q, want %d ACK", got, sequence)
+	}
+}
+
 func TestSendDialogRequestOwnsHeadersAndSerializesCSeq(t *testing.T) {
 	service := newRegisteredClientInviteService(t)
 	dialog := testClientDialog(t, service, "dialog-send")

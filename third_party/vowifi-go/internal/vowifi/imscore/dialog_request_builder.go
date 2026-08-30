@@ -92,15 +92,21 @@ func applyDialogCoreHeaders(s *Service, request *sip.Request, handle *imscoreDia
 
 func nextDialogCSeqLocked(handle *imscoreDialogHandle, method sip.RequestMethod) uint32 {
 	// RFC 3261 12.2.1.1 / 17.1.1.3: ACK and CANCEL reuse the INVITE
-	// sequence number. PRACK/UPDATE/re-INVITE advance localCSeq, so a
-	// later ACK must not pick up that later value.
+	// sequence number. Track the latest local INVITE separately so ACK for
+	// a re-INVITE does not fall back to the dialog-creating INVITE.
 	if method == sip.ACK || method == sip.CANCEL {
+		if handle.localInviteCSeq > 0 {
+			return handle.localInviteCSeq
+		}
 		if handle.inviteRequest != nil && handle.inviteRequest.CSeq() != nil {
 			return handle.inviteRequest.CSeq().SeqNo
 		}
 		return handle.localCSeq
 	}
 	handle.localCSeq++
+	if method == sip.INVITE {
+		handle.localInviteCSeq = handle.localCSeq
+	}
 	return handle.localCSeq
 }
 

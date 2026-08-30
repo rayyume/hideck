@@ -23,22 +23,23 @@ type imscoreDialogHandle struct {
 	client *sipgo.DialogClientSession
 	server *sipgo.DialogServerSession
 
-	mu             sync.Mutex
-	callID         string
-	fromTag        string
-	toTag          string
-	inviteRequest  *sip.Request
-	inviteResponse *sip.Response
-	routeSet       []string
-	localContact   *sip.ContactHeader
-	remoteTarget   sip.Uri
-	sender         func(string) error
-	localCSeq      uint32
-	remoteCSeq     uint32
-	confirmed      bool
-	confirmedCh    chan struct{}
-	inviteTx       sip.ServerTransaction
-	closed         bool
+	mu              sync.Mutex
+	callID          string
+	fromTag         string
+	toTag           string
+	inviteRequest   *sip.Request
+	inviteResponse  *sip.Response
+	routeSet        []string
+	localContact    *sip.ContactHeader
+	remoteTarget    sip.Uri
+	sender          func(string) error
+	localCSeq       uint32
+	localInviteCSeq uint32
+	remoteCSeq      uint32
+	confirmed       bool
+	confirmedCh     chan struct{}
+	inviteTx        sip.ServerTransaction
+	closed          bool
 }
 
 // DialogID returns the dialog ID.
