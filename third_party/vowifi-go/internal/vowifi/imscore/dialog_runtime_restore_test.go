@@ -2,6 +2,8 @@ package imscore
 
 import (
 	"context"
+	"fmt"
+	"net"
 	"reflect"
 	"sort"
 	"strings"
@@ -43,6 +45,37 @@ func TestDialogHandleRetainsOriginalFieldPrefix(t *testing.T) {
 	}
 	if service.NextCSeq() != 1 || service.NextCSeq() != 2 {
 		t.Fatal("NextCSeq did not atomically advance")
+	}
+}
+
+func TestDialogACKKeepsInviteCSeqAfterInDialogRequests(t *testing.T) {
+	service := newRegisteredClientInviteService(t)
+	dialog := testClientDialog(t, service, "dialog-ack-cseq")
+	inviteCSeq := dialog.inviteRequest.CSeq().SeqNo
+	writes := make(chan string, 8)
+	service.transport.SetSendFn(func(request string) error {
+		writes <- request
+		service.transport.DeliverResponse(mustTransactionResponse(t, request, 200))
+		return nil
+	})
+	if _, err := service.SendDialogRequest(
+		t.Context(), service.DeviceID(), dialog, testDialogTemplate(t, sip.PRACK),
+		imsendpoint.DialogRequestOptions{Timeout: int64(time.Second)},
+	); err != nil {
+		t.Fatal(err)
+	}
+	if got := rawSIPHeaderValue(waitTransactionWrite(t, writes), "CSeq"); got != fmt.Sprintf("%d PRACK", inviteCSeq+1) {
+		t.Fatalf("PRACK CSeq = %q", got)
+	}
+	if _, err := service.SendDialogRequest(
+		t.Context(), service.DeviceID(), dialog, testDialogTemplate(t, sip.ACK),
+		imsendpoint.DialogRequestOptions{Timeout: int64(time.Second)},
+	); err != nil {
+		t.Fatal(err)
+	}
+	ack := waitTransactionWrite(t, writes)
+	if got := rawSIPHeaderValue(ack, "CSeq"); got != fmt.Sprintf("%d ACK", inviteCSeq) {
+		t.Fatalf("ACK CSeq = %q, want INVITE sequence %d", got, inviteCSeq)
 	}
 }
 
@@ -105,6 +138,144 @@ func TestSendDialogRequestOwnsHeadersAndSerializesCSeq(t *testing.T) {
 			t.Fatalf("sequence[%d] = %d, want %d", index, sequence, want)
 		}
 	}
+}
+
+func TestSendDialogRequestUsesContactAndRecordRouteWhenContactIsPCSCF(t *testing.T) {
+	service := newRegisteredClientInviteService(t)
+	service.cfg.Transport = "tcp"
+	service.registrationRemote = &net.UDPAddr{IP: net.ParseIP("10.128.120.163"), Port: 50600}
+	service.regSession = &registerSession{
+		serviceRoute: "<sip:orig@scscf.ims.example;lr>",
+		security:     &securityAgreement{server: &securityMechanism{PortS: 50600}},
+	}
+	invite := mustClientInviteRequest(t, "b2bua-rr")
+	response := mustTransactionResponse(t, invite.String(), 200).parsed
+	response.AppendHeader(testContactHeader(t, "sip:term@10.128.120.163:50600"))
+	response.AppendHeader(sip.NewHeader("Record-Route", "<sip:10.128.120.163:50600;transport=tcp;lr>"))
+	dialog := newClientDialogHandle(invite, response)
+	service.storeClientDialog(dialog, invite, response)
+	writes := make(chan string, 4)
+	service.transport.SetSendFn(func(request string) error {
+		writes <- request
+		service.transport.DeliverResponse(mustTransactionResponse(t, request, 200))
+		return nil
+	})
+	if _, err := service.SendDialogRequest(
+		t.Context(), service.DeviceID(), dialog, testDialogTemplate(t, sip.INVITE),
+		imsendpoint.DialogRequestOptions{Timeout: int64(time.Second)},
+	); err != nil {
+		t.Fatal(err)
+	}
+	request := waitTransactionWrite(t, writes)
+	// RFC 3261 12.2.1.1: Request-URI is the remote target, Route is RR only.
+	if got := strings.Split(request, "\r\n")[0]; got != "INVITE sip:term@10.128.120.163:50600 SIP/2.0" {
+		t.Fatalf("Request-URI = %q", got)
+	}
+	routes := allRawSIPHeaderValues(request, "Route")
+	wantRoutes := []string{"<sip:10.128.120.163:50600;transport=tcp;lr>"}
+	if !reflect.DeepEqual(routes, wantRoutes) {
+		t.Fatalf("Route = %#v, want %#v", routes, wantRoutes)
+	}
+
+	if _, err := service.SendDialogRequest(
+		t.Context(), service.DeviceID(), dialog, testDialogTemplate(t, sip.INFO),
+		imsendpoint.DialogRequestOptions{Timeout: int64(time.Second)},
+	); err != nil {
+		t.Fatal(err)
+	}
+	info := waitTransactionWrite(t, writes)
+	if got := strings.Split(info, "\r\n")[0]; got != "INFO sip:term@10.128.120.163:50600 SIP/2.0" {
+		t.Fatalf("INFO Request-URI = %q", got)
+	}
+	if !reflect.DeepEqual(allRawSIPHeaderValues(info, "Route"), wantRoutes) {
+		t.Fatalf("INFO Route = %#v, want %#v", allRawSIPHeaderValues(info, "Route"), wantRoutes)
+	}
+
+	if _, err := service.SendDialogRequest(
+		t.Context(), service.DeviceID(), dialog, testDialogTemplate(t, sip.BYE),
+		imsendpoint.DialogRequestOptions{Timeout: int64(time.Second)},
+	); err != nil {
+		t.Fatal(err)
+	}
+	bye := waitTransactionWrite(t, writes)
+	if got := strings.Split(bye, "\r\n")[0]; got != "BYE sip:term@10.128.120.163:50600 SIP/2.0" {
+		t.Fatalf("BYE Request-URI = %q", got)
+	}
+	if !reflect.DeepEqual(allRawSIPHeaderValues(bye, "Route"), wantRoutes) {
+		t.Fatalf("BYE Route = %#v, want %#v", allRawSIPHeaderValues(bye, "Route"), wantRoutes)
+	}
+	if strings.Contains(bye, "orig@scscf.ims.example") {
+		t.Fatalf("BYE stacked REGISTER Service-Route: %s", bye)
+	}
+}
+
+func TestFillDialogRecipientPortFromMatchingRoute(t *testing.T) {
+	recipient := sip.Uri{Scheme: "sip", User: "term", Host: "10.128.120.163"}
+	fillDialogRecipientPortFromRoute(&recipient, []string{
+		"<sip:10.128.120.163:50600;transport=tcp;lr>",
+	})
+	if recipient.Port != 50600 {
+		t.Fatalf("port = %d", recipient.Port)
+	}
+	if transport, ok := recipient.UriParams.Get("transport"); !ok || transport != "tcp" {
+		t.Fatalf("transport = %q present=%t", transport, ok)
+	}
+}
+
+func TestSendDialogRequestUsesRemoteTargetAsRequestURI(t *testing.T) {
+	service := newRegisteredClientInviteService(t)
+	dialog := testClientDialog(t, service, "dialog-ruri")
+	writes := make(chan string, 4)
+	service.transport.SetSendFn(func(request string) error {
+		writes <- request
+		service.transport.DeliverResponse(mustTransactionResponse(t, request, 200))
+		return nil
+	})
+	template := testDialogTemplate(t, sip.INVITE)
+	template.Recipient = sip.Uri{Scheme: "sip", User: "191", Host: "ims.mnc015.mcc234.3gppnetwork.org"}
+	if _, err := service.SendDialogRequest(
+		t.Context(), service.DeviceID(), dialog, template,
+		imsendpoint.DialogRequestOptions{Timeout: int64(time.Second)},
+	); err != nil {
+		t.Fatal(err)
+	}
+	request := waitTransactionWrite(t, writes)
+	if got := strings.Split(request, "\r\n")[0]; got != "INVITE sip:callee@192.0.2.20:5060 SIP/2.0" {
+		t.Fatalf("Request-URI = %q", got)
+	}
+}
+
+func TestSendDialogRequestKeepsEarlyRouteSetAfter2xxWithoutRecordRoute(t *testing.T) {
+	service := newRegisteredClientInviteService(t)
+	invite := mustClientInviteRequest(t, "keep-early-rr")
+	early := testReliableInviteResponse(t, invite.String(), 183).parsed
+	dialog := newClientDialogHandle(invite, early)
+	service.storeClientDialog(dialog, invite, early)
+	wantRoutes := append([]string(nil), dialog.routeSet...)
+	if len(wantRoutes) == 0 {
+		t.Fatal("early dialog did not learn Record-Route")
+	}
+	final := mustTransactionResponse(t, invite.String(), 200)
+	final.parsed.AppendHeader(testContactHeader(t, "sip:callee@192.0.2.20:5060"))
+	service.storeClientDialog(dialog, invite, final.parsed)
+	if !reflect.DeepEqual(dialog.routeSet, wantRoutes) {
+		t.Fatalf("2xx without Record-Route wiped route set: %#v", dialog.routeSet)
+	}
+
+	writes := make(chan string, 4)
+	service.transport.SetSendFn(func(request string) error {
+		writes <- request
+		service.transport.DeliverResponse(mustTransactionResponse(t, request, 200))
+		return nil
+	})
+	if _, err := service.SendDialogRequest(
+		t.Context(), service.DeviceID(), dialog, testDialogTemplate(t, sip.INVITE),
+		imsendpoint.DialogRequestOptions{Timeout: int64(time.Second)},
+	); err != nil {
+		t.Fatal(err)
+	}
+	request := waitTransactionWrite(t, writes)
+	assertRestoredDialogRequest(t, request, dialog, "2 INVITE")
 }
 
 func TestSendDialogRequestUsesProductionRegistrationSocket(t *testing.T) {
@@ -287,6 +458,39 @@ func TestRetainClientInviteEarlyDialogReplacesForkedTag(t *testing.T) {
 	}
 	if service.dialogs().load(firstID) != nil || !first.closed {
 		t.Fatal("replaced early dialog remained live")
+	}
+	if service.dialogs().len() != 1 {
+		t.Fatalf("dialog registry size = %d, want 1", service.dialogs().len())
+	}
+}
+
+func TestRetainClientInviteEarlyDialogReusesSameToTag(t *testing.T) {
+	service := newRegisteredClientInviteService(t)
+	request := mustClientInviteRequest(t, "same-early")
+	invite := &imscoreInviteHandle{
+		initialRequest: request,
+		transaction:    &clientSIPTransaction{send: func(string) error { return nil }},
+	}
+	firstResponse := testReliableInviteResponse(t, request.String(), 183)
+	setResponseToTag(firstResponse.parsed, "early-same")
+	service.retainClientInviteEarlyDialog(invite, firstResponse)
+	first := service.dialogs().load(clientInviteDialogID(invite))
+	if first == nil {
+		t.Fatal("first early dialog was not retained")
+	}
+	first.mu.Lock()
+	first.localCSeq = 8
+	first.mu.Unlock()
+
+	secondResponse := testReliableInviteResponse(t, request.String(), 183)
+	setResponseToTag(secondResponse.parsed, "early-same")
+	service.retainClientInviteEarlyDialog(invite, secondResponse)
+	second := service.dialogs().load(clientInviteDialogID(invite))
+	if second != first {
+		t.Fatal("same To-tag created a replacement dialog")
+	}
+	if second.localCSeq != 8 {
+		t.Fatalf("same-tag 183 reset localCSeq = %d", second.localCSeq)
 	}
 	if service.dialogs().len() != 1 {
 		t.Fatalf("dialog registry size = %d, want 1", service.dialogs().len())

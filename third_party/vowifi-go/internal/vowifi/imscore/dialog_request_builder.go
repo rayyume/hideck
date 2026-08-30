@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/emiago/sipgo/sip"
+	"github.com/iniwex5/vowifi-go/internal/vowifi/imsheaders"
 )
 
 var dialogOwnedHeaders = [...]string{
@@ -20,14 +21,59 @@ func stripDialogOwnedHeaders(request *sip.Request) *sip.Request {
 }
 
 func applyDialogRecipient(request *sip.Request, handle *imscoreDialogHandle) {
-	if request.Recipient.Host == "" && handle.remoteTarget.Host != "" {
-		request.Recipient = *handle.remoteTarget.Clone()
+	// RFC 3261 12.2.1.1 / TS 24.229 5.1.2A: in-dialog Request-URI is the
+	// remote target (Contact). Do not rewrite it back to the initial callee
+	// when Contact equals the P-CSCF; that was an unverified ALG workaround.
+	if handle.remoteTarget.Host == "" {
+		return
+	}
+	request.Recipient = *handle.remoteTarget.Clone()
+	fillDialogRecipientPortFromRoute(&request.Recipient, handle.routeSet)
+}
+
+func dialogRouteSetForRequest(handle *imscoreDialogHandle) []string {
+	// RFC 3261 12.2.1.1: Route is the learned Record-Route set. Do not
+	// skip a same-hop Route, and do not substitute REGISTER Service-Route
+	// for the dialog route set.
+	if handle == nil || len(handle.routeSet) == 0 {
+		return nil
+	}
+	return append([]string(nil), handle.routeSet...)
+}
+
+func fillDialogRecipientPortFromRoute(recipient *sip.Uri, routes []string) {
+	if recipient == nil || recipient.Port > 0 || recipient.Host == "" {
+		return
+	}
+	host := strings.ToLower(strings.Trim(recipient.Host, "[]"))
+	for _, route := range routes {
+		uri, ok := imsheaders.ParseRouteURI(route)
+		if !ok || uri.Port <= 0 {
+			continue
+		}
+		if strings.ToLower(strings.Trim(uri.Host, "[]")) != host {
+			continue
+		}
+		recipient.Port = uri.Port
+		if uri.UriParams != nil {
+			if transport, exists := uri.UriParams.Get("transport"); exists && transport != "" {
+				params := recipient.UriParams
+				if params == nil {
+					params = sip.NewParams()
+				}
+				if !params.Has("transport") {
+					params = params.Add("transport", transport)
+				}
+				recipient.UriParams = params
+			}
+		}
+		return
 	}
 }
 
 func applyDialogCoreHeaders(s *Service, request *sip.Request, handle *imscoreDialogHandle) {
 	request.PrependHeader(newDialogVia(s, handle))
-	for _, route := range handle.routeSet {
+	for _, route := range dialogRouteSetForRequest(handle) {
 		request.AppendHeader(sip.NewHeader("Route", route))
 	}
 	request.AppendHeader(dialogFromHeader(handle))
@@ -45,9 +91,16 @@ func applyDialogCoreHeaders(s *Service, request *sip.Request, handle *imscoreDia
 }
 
 func nextDialogCSeqLocked(handle *imscoreDialogHandle, method sip.RequestMethod) uint32 {
-	if method != sip.ACK && method != sip.CANCEL {
-		handle.localCSeq++
+	// RFC 3261 12.2.1.1 / 17.1.1.3: ACK and CANCEL reuse the INVITE
+	// sequence number. PRACK/UPDATE/re-INVITE advance localCSeq, so a
+	// later ACK must not pick up that later value.
+	if method == sip.ACK || method == sip.CANCEL {
+		if handle.inviteRequest != nil && handle.inviteRequest.CSeq() != nil {
+			return handle.inviteRequest.CSeq().SeqNo
+		}
+		return handle.localCSeq
 	}
+	handle.localCSeq++
 	return handle.localCSeq
 }
 
