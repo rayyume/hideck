@@ -6,6 +6,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/iniwex5/vowifi-go/internal/vowifi/policy"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/sipkit"
@@ -219,12 +220,55 @@ func (s *Service) advanceRegistrarForNextRetry(reason string) bool {
 	if len(s.registrarCandidates) < 2 {
 		return false
 	}
-	next := (s.registrarIndex + 1) % len(s.registrarCandidates)
-	selected := strings.TrimSpace(s.registrarCandidates[next])
-	if selected == "" || selected == s.registrar {
+	now := time.Now()
+	for offset := 1; offset < len(s.registrarCandidates); offset++ {
+		next := (s.registrarIndex + offset) % len(s.registrarCandidates)
+		selected := strings.TrimSpace(s.registrarCandidates[next])
+		if selected == "" || selected == s.registrar || s.registrarUnavailableLocked(selected, now) {
+			continue
+		}
+		s.registrarIndex = next
+		s.registrar = selected
+		return true
+	}
+	return false
+}
+
+func (s *Service) markRegistrarUnavailableAndAdvance(
+	expected string,
+	until time.Time,
+) (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if strings.TrimSpace(s.registrar) != strings.TrimSpace(expected) {
+		return "", false
+	}
+	if s.registrarUnavailable == nil {
+		s.registrarUnavailable = make(map[string]time.Time)
+	}
+	s.registrarUnavailable[s.registrar] = until
+	now := time.Now()
+	for offset := 1; offset < len(s.registrarCandidates); offset++ {
+		next := (s.registrarIndex + offset) % len(s.registrarCandidates)
+		candidate := strings.TrimSpace(s.registrarCandidates[next])
+		if candidate == "" || s.registrarUnavailableLocked(candidate, now) {
+			continue
+		}
+		s.registrarIndex = next
+		s.registrar = candidate
+		return candidate, true
+	}
+	return "", true
+}
+
+func (s *Service) registrarUnavailableLocked(candidate string, now time.Time) bool {
+	until, exists := s.registrarUnavailable[candidate]
+	if !exists {
 		return false
 	}
-	s.registrarIndex = next
-	s.registrar = selected
-	return true
+	if until.IsZero() || now.Before(until) {
+		return true
+	}
+	delete(s.registrarUnavailable, candidate)
+	return false
 }

@@ -68,10 +68,20 @@ func assignedPCSCF(snapshot swu.SessionSnapshot, localIP net.IP) string {
 	if localIP != nil && localIP.To4() != nil {
 		servers = snapshot.PCSCFv4
 	}
-	if len(servers) == 0 || servers[0] == nil {
-		return ""
+	candidates := make([]string, 0, len(servers))
+	seen := make(map[string]struct{}, len(servers))
+	for _, server := range servers {
+		if server == nil {
+			continue
+		}
+		candidate := net.JoinHostPort(server.String(), fmt.Sprint(defaultIMSSIPPort))
+		if _, exists := seen[candidate]; exists {
+			continue
+		}
+		seen[candidate] = struct{}{}
+		candidates = append(candidates, candidate)
 	}
-	return net.JoinHostPort(servers[0].String(), fmt.Sprint(defaultIMSSIPPort))
+	return strings.Join(candidates, ";")
 }
 
 func convertRegisterTemplate(

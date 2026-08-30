@@ -245,7 +245,10 @@ func TestBuildIMSConfigUsesNegotiatedPCSCFAndCarrierRuntimeFields(t *testing.T) 
 	result := &SessionResult{
 		LocalAddr: "10.0.0.2",
 		Snapshot: swu.SessionSnapshot{
-			PCSCFv4: []net.IP{net.ParseIP("192.0.2.10")},
+			PCSCFv4: []net.IP{
+				net.ParseIP("192.0.2.10"), nil, net.ParseIP("192.0.2.11"),
+				net.ParseIP("192.0.2.10"),
+			},
 			PCSCFv6: []net.IP{net.ParseIP("2001:db8::10")},
 		},
 	}
@@ -255,7 +258,7 @@ func TestBuildIMSConfigUsesNegotiatedPCSCFAndCarrierRuntimeFields(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if config.Registrar != "192.0.2.10:5060" {
+	if config.Registrar != "192.0.2.10:5060;192.0.2.11:5060" {
 		t.Fatalf("registrar = %q", config.Registrar)
 	}
 	if config.KeepaliveInterval != 37*time.Second {

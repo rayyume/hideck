@@ -288,24 +288,26 @@ type Service struct {
 }
 
 type registrationRuntime struct {
-	callID              string
-	fromTag             string
-	cseq                atomic.Uint32
-	expires             uint32
-	authRealm           string
-	challengeRealm      string
-	registrar           string
-	registrarCandidates []string
-	registrarIndex      int
-	registrarSource     string
-	regStatus           atomic.Int32
-	nextRegister        time.Time
-	lastSIPCode         atomic.Int32
-	lastSIPText         string
-	reRegisterPending   atomic.Bool
-	regFailCount        atomic.Int32
-	OnReconnectNeeded   func()
-	reconnectTriggering atomic.Bool
+	callID               string
+	fromTag              string
+	cseq                 atomic.Uint32
+	expires              uint32
+	authRealm            string
+	challengeRealm       string
+	registrar            string
+	registrarCandidates  []string
+	registrarIndex       int
+	registrarSource      string
+	registrarUnavailable map[string]time.Time
+	regStatus            atomic.Int32
+	nextRegister         time.Time
+	lastSIPCode          atomic.Int32
+	lastSIPText          string
+	reRegisterPending    atomic.Bool
+	regFailCount         atomic.Int32
+	OnReconnectNeeded    func()
+	reconnectTriggering  atomic.Bool
+	pcscfRecoveryPending atomic.Bool
 }
 
 type pingState struct {
