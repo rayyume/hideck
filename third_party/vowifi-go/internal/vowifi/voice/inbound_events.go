@@ -136,6 +136,8 @@ func inboundRequestFromEvent(
 		Supported:      requestHeaderValue(request, "Supported"),
 		MinSE:          requestHeaderValue(request, "Min-SE"),
 		Replaces:       requestHeaderValue(request, "Replaces"),
+		HistoryInfo:    requestHeaderValue(request, "History-Info"),
+		Event:          requestHeaderValue(request, "Event"),
 		Body:           append([]byte(nil), request.Body()...), Request: request.Clone(),
 		ServerInvite: handle, Session: session,
 	}
@@ -204,6 +206,12 @@ func endpointResponseHeaders(response imscore.InboundVoiceResponse) []sip.Header
 	}
 	if value := strings.TrimSpace(response.SessionExpires); value != "" {
 		headers = append(headers, sip.NewHeader("Session-Expires", value))
+	}
+	if value := strings.TrimSpace(response.AlertInfo); value != "" {
+		headers = append(headers, sip.NewHeader("Alert-Info", value))
+	}
+	if value := strings.TrimSpace(response.Reason); value != "" {
+		headers = append(headers, sip.NewHeader("Reason", value))
 	}
 	return headers
 }

@@ -46,6 +46,7 @@ func (a *Agent) AnswerWithSDP(callID, clientSDP string) (InboundAnswer, error) {
 		}
 	}
 	call.StopOutboundNoAnswerTimer()
+	call.stopTUECWTimer()
 	a.startVoiceSessionTimer(call)
 	_ = a.SwitchCall(call.CallID())
 	answer.State = call.CallState().String()
@@ -127,18 +128,11 @@ func (a *Agent) startInboundNoAnswerTimer(call *Call) {
 
 func (a *Agent) sendInboundTimeout(call *Call) error {
 	cause := errors.New("voice: inbound call timed out")
-	responder := call.inboundResponseWriter()
-	if responder == nil && !call.hasServerInvite() {
-		return cause
+	if call != nil && call.waitingIndication {
+		cause = errors.New("voice: call waiting timed out")
 	}
-	structured, err := a.rejectStoredServerInvite(call, 480)
-	if err != nil {
+	if err := a.sendStatusResponseResult(480, "Temporarily Unavailable", call); err != nil {
 		return errors.Join(cause, err)
-	}
-	if !structured && responder != nil {
-		if err := responder.Respond(imscore.InboundVoiceResponse{StatusCode: 480}); err != nil {
-			return errors.Join(cause, fmt.Errorf("send 480 response: %w", err))
-		}
 	}
 	return cause
 }
@@ -147,6 +141,7 @@ func (a *Agent) releaseInboundCall(call *Call, cause error, canceled bool) {
 	if call == nil || !call.claimTerminalFinalization() {
 		return
 	}
+	call.stopTUECWTimer()
 	_ = call.TransitionChecked(callstate.StateTerminating)
 	cleanupErr := a.closeCallDialogForCleanup(call)
 	if canceled {
@@ -167,6 +162,7 @@ func (a *Agent) handleInboundBye(call *Call) (imscore.InboundVoiceResult, error)
 	if call == nil {
 		return voiceResult(481), nil
 	}
+	call.stopTUECWTimer()
 	call.inboundDecisionMu.Lock()
 	defer call.inboundDecisionMu.Unlock()
 	if call.CallState() != callstate.StateConnected {

@@ -57,6 +57,7 @@ func (a *Agent) reserveInboundCall(request imscore.InboundVoiceRequest, replacin
 		return nil, false, false, errors.Join(errors.New("voice: busy"), releaseUnregisteredCall(call))
 	}
 	waiting := a.activeCall != nil && !a.activeCall.IsTerminalState()
+	call.waitingIndication = waiting
 	a.registerLiveCallLocked(call, waiting)
 	a.mu.Unlock()
 	return call, true, waiting, nil

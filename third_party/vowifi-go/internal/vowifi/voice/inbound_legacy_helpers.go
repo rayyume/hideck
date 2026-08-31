@@ -53,9 +53,16 @@ func (a *Agent) sendStatusResponseResult(status int, reason string, call *Call) 
 	if responder == nil {
 		return errInboundResponseUnavailable
 	}
-	return responder.Respond(imscore.InboundVoiceResponse{
+	response := imscore.InboundVoiceResponse{
 		StatusCode: status, ToTag: call.inboundLocalTagValue(),
-	})
+	}
+	if status == 180 && call.waitingIndication {
+		response.AlertInfo = "<urn:alert:service:call-waiting>"
+	}
+	if status == 480 && call.waitingIndication {
+		response.Reason = `Q.850;cause=19;text="User alerting, no answer"`
+	}
+	return responder.Respond(response)
 }
 
 func (a *Agent) sendStatusResponseWithSDP(

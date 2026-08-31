@@ -116,6 +116,61 @@ func (a *Agent) sendReferNotify(call *Call, sipfrag string, terminated bool) err
 	return err
 }
 
+func buildIMSRefer(agent *Agent, call *Call, referTo string) string {
+	if agent == nil || call == nil {
+		return ""
+	}
+	ensureBuilderVoiceDialog(agent, call)
+	dialog := call.advanceVoiceCSeq()
+	request := buildVoiceRequest(dialog, call.CallID(), "REFER", voiceBranch(), "")
+	extra := "Refer-To: " + strings.TrimSpace(referTo) + "\r\n"
+	if strings.TrimSpace(dialog.localURI) != "" {
+		extra += "Referred-By: <" + dialog.localURI + ">\r\n"
+	}
+	return strings.Replace(request, "Content-Length:", extra+"Content-Length:", 1)
+}
+
+func formatNameAddr(uri string) string {
+	uri = strings.TrimSpace(uri)
+	if uri == "" {
+		return ""
+	}
+	if strings.HasPrefix(uri, "<") {
+		return uri
+	}
+	return "<" + uri + ">"
+}
+
+func (c *Call) armReferSipfrag() <-chan string {
+	if c == nil {
+		ch := make(chan string)
+		close(ch)
+		return ch
+	}
+	ch := make(chan string, 1)
+	c.mu.Lock()
+	c.referSipfrag = ch
+	c.mu.Unlock()
+	return ch
+}
+
+func (c *Call) completeReferSipfrag(sipfrag string) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	ch := c.referSipfrag
+	c.referSipfrag = nil
+	c.mu.Unlock()
+	if ch == nil {
+		return
+	}
+	select {
+	case ch <- sipfrag:
+	default:
+	}
+}
+
 func buildIMSReferNotify(agent *Agent, call *Call, sipfrag string, terminated bool) string {
 	if agent == nil || call == nil {
 		return ""

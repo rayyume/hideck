@@ -12,13 +12,15 @@ import (
 // IncomingCall describes a pending or renegotiated IMS call. OfferSDP points
 // to the local RTP relay and is safe to pass to the client media engine.
 type IncomingCall struct {
-	DeviceID   string
-	CallID     string
-	Caller     string
-	Callee     string
-	OfferSDP   string
-	ReceivedAt time.Time
-	State      string
+	DeviceID          string
+	CallID            string
+	Caller            string
+	Callee            string
+	OfferSDP          string
+	ReceivedAt        time.Time
+	State             string
+	OriginalCalledURI string
+	HistoryInfo       []voice.HistoryInfoEntry
 }
 
 // AnswerRequest supplies the client media answer for an inbound call.
@@ -251,6 +253,8 @@ func incomingCallFromVoice(call voice.IncomingCall) IncomingCall {
 	return IncomingCall{
 		DeviceID: call.DeviceID, CallID: call.CallID, Caller: call.Caller,
 		Callee: call.Callee, OfferSDP: call.OfferSDP, ReceivedAt: call.ReceivedAt, State: call.State,
+		OriginalCalledURI: call.OriginalCalledURI,
+		HistoryInfo:       append([]voice.HistoryInfoEntry(nil), call.HistoryInfo...),
 	}
 }
 

@@ -71,6 +71,8 @@ func (a *Agent) HandleInboundVoiceRequest(request imscore.InboundVoiceRequest) (
 		return a.handleInboundUpdate(request, call)
 	case "REFER":
 		return a.handleInboundRefer(request, call)
+	case "NOTIFY":
+		return a.handleInboundNotify(request, call)
 	default:
 		return imscore.InboundVoiceResult{}, nil
 	}
@@ -157,12 +159,17 @@ func (a *Agent) beginInboundInvite(call *Call, request imscore.InboundVoiceReque
 		a.releaseInboundCall(call, err, false)
 		return 488, nil
 	}
+	call.storeHistoryInfo(parseHistoryInfoHeader(request.HistoryInfo, request.Request))
 	if err := a.respondInboundProvisional(call, 180); err != nil {
 		a.releaseInboundCall(call, err, false)
 		return 0, err
 	}
 	call.markInboundPrepared()
-	a.startInboundNoAnswerTimer(call)
+	if call.waitingIndication {
+		a.startTUECWTimer(call)
+	} else {
+		a.startInboundNoAnswerTimer(call)
+	}
 	return 0, nil
 }
 
@@ -179,6 +186,7 @@ func (a *Agent) handleInboundCancel(request imscore.InboundVoiceRequest, call *C
 	}
 	call.inboundDecisionMu.Lock()
 	defer call.inboundDecisionMu.Unlock()
+	call.stopTUECWTimer()
 	if call.CallState() != callstate.StateRinging {
 		return voiceResult(481), nil
 	}

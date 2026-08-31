@@ -89,11 +89,23 @@ func (a *Agent) outboundRemoteURI(number string, profile imscore.SIPDialogProfil
 			return urn, nil
 		}
 	}
+	if uri := absoluteVoiceURI(number); uri != "" {
+		return uri, nil
+	}
 	remoteURI := buildIMSCalledPartyURI(number, profile.LocalURI, profile.Domain)
 	if remoteURI == "" {
 		return "", errors.New("voice: callee is empty")
 	}
 	return remoteURI, nil
+}
+
+func absoluteVoiceURI(value string) string {
+	value = strings.Trim(strings.TrimSpace(value), "<>")
+	lower := strings.ToLower(value)
+	if strings.HasPrefix(lower, "sip:") || strings.HasPrefix(lower, "sips:") || strings.HasPrefix(lower, "tel:") {
+		return value
+	}
+	return ""
 }
 
 func (a *Agent) emergencyOriginatingEnabled() bool {

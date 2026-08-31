@@ -72,6 +72,12 @@ func (a *Agent) rejectStoredServerInviteWithReason(
 		reason = strings.TrimSpace(imscore.SIPStatusText(statusCode))
 	}
 	response := call.BuildResponse(statusCode, reason)
+	if statusCode == 180 && call.waitingIndication {
+		response.AppendHeader(sip.NewHeader("Alert-Info", "<urn:alert:service:call-waiting>"))
+	}
+	if statusCode == 480 && call.waitingIndication {
+		response.AppendHeader(sip.NewHeader("Reason", `Q.850;cause=19;text="User alerting, no answer"`))
+	}
 	err := a.dialog.RejectServerInvite(
 		context.Background(), a.deviceID, invite,
 		imsendpoint.ServerInviteRejectOptions{Response: response, Code: statusCode, Reason: reason},

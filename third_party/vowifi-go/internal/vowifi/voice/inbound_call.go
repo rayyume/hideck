@@ -212,10 +212,22 @@ func (c *Call) localSDPs() (string, string) {
 func (c *Call) incomingSnapshot() IncomingCall {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
+	original := ""
+	for _, entry := range c.historyInfo {
+		if entry.Index == "1" && entry.URI != "" {
+			original = entry.URI
+			break
+		}
+	}
+	if original == "" && len(c.historyInfo) > 0 {
+		original = c.historyInfo[0].URI
+	}
 	return IncomingCall{
 		DeviceID: c.agent.DeviceID(), CallID: c.callID, Caller: c.peer,
 		Callee: c.callee, OfferSDP: c.clientRemoteSDP,
 		ReceivedAt: c.startTime, State: callstate.State(c.State).String(),
+		OriginalCalledURI: original,
+		HistoryInfo:       append([]HistoryInfoEntry(nil), c.historyInfo...),
 	}
 }
 

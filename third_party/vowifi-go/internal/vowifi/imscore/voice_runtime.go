@@ -53,6 +53,8 @@ type InboundVoiceRequest struct {
 	Supported        string
 	MinSE            string
 	Replaces         string
+	HistoryInfo      string
+	Event            string
 }
 
 // InboundVoiceResponse is one provisional or final response to an inbound
@@ -64,6 +66,8 @@ type InboundVoiceResponse struct {
 	Contact        string
 	ToTag          string
 	SessionExpires string
+	AlertInfo      string
+	Reason         string
 }
 
 // InboundVoiceResponder retains the network transaction used by an inbound
@@ -240,6 +244,8 @@ func (s *Service) handleInboundVoice(dispatch inboundSIPDispatch) (inboundSIPRes
 		Supported:      rawSIPHeaderValue(dispatch.raw, "Supported"),
 		MinSE:          rawSIPHeaderValue(dispatch.raw, "Min-SE"),
 		Replaces:       rawSIPHeaderValue(dispatch.raw, "Replaces"),
+		HistoryInfo:    rawSIPHeaderValue(dispatch.raw, "History-Info"),
+		Event:          rawSIPHeaderValue(dispatch.raw, "Event"),
 		Body:           body, Responder: newInboundVoiceResponder(dispatch.raw, dispatch.reply),
 		Dialog: dialogRead.handle, DialogMatched: dialogRead.matched,
 		DialogResponded: dialogRead.responded, DialogTerminated: dialogRead.terminated,

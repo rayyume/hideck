@@ -31,7 +31,7 @@ func (a *Agent) cannotAddCallLockedIgnoring(ignored *Call) bool {
 	n := 0
 	connected := false
 	for _, call := range live {
-		if call == nil || call == ignored {
+		if call == nil || call == ignored || call.conference {
 			continue
 		}
 		n++

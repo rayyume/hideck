@@ -51,6 +51,8 @@ type Agent struct {
 	outboundCancelSettle time.Duration
 	allowEmergencyCalls  bool
 	waitingCall          *Call
+	conferenceFactoryURI string
+	cwTimeout            time.Duration
 }
 
 // Call is one voice call (inbound or outbound).
@@ -81,28 +83,34 @@ type Call struct {
 	peer         string
 	callee       string
 
-	noAnswerTimer *time.Timer
-	prackTimer    *time.Timer
+	noAnswerTimer     *time.Timer
+	cwTimer           *time.Timer
+	waitingIndication bool
+	historyInfo       []HistoryInfoEntry
+	conference        bool
+	conferenceInfo    *ConferenceInfo
+	referSipfrag      chan string
+	prackTimer        *time.Timer
 
 	prackGeneration uint64
 	prackRetransmit func()
 	prackDeadline   time.Time
 
-	imsDialog         *imscore.DialogHandle
-	imsInvite         *imscore.InviteHandle
-	imsServerInvite   imsendpoint.ServerInviteHandle
-	imsInviteRequest  *sip.Request
-	routeSet          []string
-	rtpRelay          *media.RTPRelay
-	comfortNoise      *media.ComfortNoiseGenerator
-	sipDialog         *voiceSIPDialog
-	inboundResponder  imscore.InboundVoiceResponder
-	remoteSDP         string
-	clientRemoteSDP   string
-	clientLocalSDP    string
-	imsLocalSDP       string
-	outboundInvite    string
-	inboundDecisionMu sync.Mutex
+	imsDialog          *imscore.DialogHandle
+	imsInvite          *imscore.InviteHandle
+	imsServerInvite    imsendpoint.ServerInviteHandle
+	imsInviteRequest   *sip.Request
+	routeSet           []string
+	rtpRelay           *media.RTPRelay
+	comfortNoise       *media.ComfortNoiseGenerator
+	sipDialog          *voiceSIPDialog
+	inboundResponder   imscore.InboundVoiceResponder
+	remoteSDP          string
+	clientRemoteSDP    string
+	clientLocalSDP     string
+	imsLocalSDP        string
+	outboundInvite     string
+	inboundDecisionMu  sync.Mutex
 	dialogPrecondition map[string]bool
 	restrictCallerID   bool
 
@@ -246,13 +254,15 @@ type AgentSnapshot struct {
 // IncomingCall is the business-facing view of a pending IMS call. OfferSDP
 // points at the client side of the allocated RTP relay.
 type IncomingCall struct {
-	DeviceID   string
-	CallID     string
-	Caller     string
-	Callee     string
-	OfferSDP   string
-	ReceivedAt time.Time
-	State      string
+	DeviceID          string
+	CallID            string
+	Caller            string
+	Callee            string
+	OfferSDP          string
+	ReceivedAt        time.Time
+	State             string
+	OriginalCalledURI string
+	HistoryInfo       []HistoryInfoEntry
 }
 
 // InboundAnswer describes the established inbound call.

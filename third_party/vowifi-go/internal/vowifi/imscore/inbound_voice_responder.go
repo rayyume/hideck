@@ -77,6 +77,18 @@ func buildSIPVoiceResponse(request, localTag string, response InboundVoiceRespon
 		}
 		fmt.Fprintf(&out, "Session-Expires: %s\r\n", value)
 	}
+	if value := strings.TrimSpace(response.AlertInfo); value != "" {
+		if strings.ContainsAny(value, "\r\n") {
+			return "", errors.New("imscore: invalid SIP Alert-Info response header")
+		}
+		fmt.Fprintf(&out, "Alert-Info: %s\r\n", value)
+	}
+	if value := strings.TrimSpace(response.Reason); value != "" {
+		if strings.ContainsAny(value, "\r\n") {
+			return "", errors.New("imscore: invalid SIP Reason response header")
+		}
+		fmt.Fprintf(&out, "Reason: %s\r\n", value)
+	}
 	if len(response.Body) > 0 {
 		contentType := strings.TrimSpace(response.ContentType)
 		if contentType == "" || strings.ContainsAny(contentType, "\r\n") {
