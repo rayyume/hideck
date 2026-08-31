@@ -16,7 +16,13 @@ perform their historical action with the arguments they expose.
 | Inbound SMS | Validates SIP MESSAGE and 3GPP payloads, decodes RP-DATA and SMS-DELIVER, responds over the inbound SIP path, publishes the message event, and sends RP acknowledgement or error. |
 | Multipart SMS | Splits outbound text, reassembles inbound parts by sender/reference, rejects conflicting duplicates, expires incomplete groups, and persists delivery updates. |
 | USSI/USSD | Uses real INVITE, ACK, INFO, and BYE transactions and routes inbound INFO/BYE to the active session. |
-| Voice signaling and media | Uses real outbound and inbound INVITE/ACK/BYE/CANCEL transactions. New inbound calls are exposed through the runtime gateway, ring with `180`, can be answered or rejected over the retained network transaction, renegotiate SDP, and relay RTP in both directions with payload-type mapping. The legacy timed call allocates a non-zero IMS RTP endpoint and transmits 20 ms PCMU media until BYE. Dialogs, timers, sockets, and runtime bindings are released on failure, cancel, or hangup. |
+| Voice signaling and media | Uses real outbound and inbound INVITE/ACK/BYE/CANCEL transactions. New inbound calls are exposed through the runtime gateway, ring with `180`, can be answered or rejected over the retained network transaction, renegotiate SDP, and relay RTP in both directions with payload-type mapping. The legacy timed call allocates a non-zero IMS RTP endpoint and transmits 20 ms PCMU media until BYE. Dialogs, timers, sockets, and runtime bindings are released on failure, cancel, or hangup. Two connected user calls can stay live; `SwitchCall` changes focus. Hold/resume sends a TS 24.610 re-INVITE. |
+| Conference factory / conference-info | `MergeConference` INVITEs the factory URI, REFERs both connected user calls into the focus, and SUBSCRIBEs `Event: conference`. Missing factory URI returns `ErrConferenceFactoryUnavailable`. NOTIFY `conference-info` is parsed. |
+| Consultative transfer (ECT) | `TransferConsultative` sends an in-dialog REFER with `Refer-To` `Replaces`, waits for NOTIFY sipfrag, then BYEs both local dialogs. Missing dialog tags returns `ErrECTRequiresReplaces` instead of a silent blind transfer. |
+| Inbound Replaces | INVITE Replaces is parsed; matched dialogs are terminated. |
+| XCAP / Ut (TS 24.623) | XCAP simservs GET/PUT with If-Match. A distinct `xcap_apn` starts slot `xcap` on the same ePDG after IMS; Ut HTTP dials that PDN and does not fall back to IMS. USSI is still not Ut. |
+| Second SWu / extra PDN | Default remains one IMS session. `RunSession` calls `attachAdditionalPDNs` when `xcap_apn` differs. A failed extra PDN is stopped without tearing down IMS. |
+| Overlapping IKE reauth | New IKE_SA_INIT/IKE_AUTH while the old SA forwards; INITIAL_CONTACT omitted until cutover. |
 | E911 | Uses the carrier entitlement endpoint over real HTTP, propagates transport and HTTP failures, and executes multi-round TS.43 EAP-AKA/AKA' identity, challenge, notification, authentication-reject, synchronization, and reauthentication exchanges before opening the carrier websheet. |
 
 ## Explicit Capability Boundaries
@@ -55,14 +61,9 @@ perform their historical action with the arguments they expose.
 
 | Area | Status |
 | --- | --- |
-| XCAP / Ut (TS 24.623) | XCAP simservs client plus `/ut` page. Needs an XCAP PDN; USSI is still not Ut. |
-| Conference factory / conference-info | `MergeConference` INVITEs the factory URI, REFERs both connected user calls into the focus, and SUBSCRIBEs `Event: conference`. Missing factory URI returns `ErrConferenceFactoryUnavailable`. NOTIFY `conference-info` is parsed. |
-| Consultative transfer (ECT) | `TransferConsultative` sends an in-dialog REFER with `Refer-To` `Replaces`, waits for NOTIFY sipfrag, then BYEs both local dialogs. Missing dialog tags returns `ErrECTRequiresReplaces` instead of a silent blind transfer. |
-| Inbound Replaces | INVITE Replaces is parsed; matched dialogs are terminated. |
-| Second SWu / XCAP PDN | Default remains one IMS session. A distinct `xcap_apn` starts slot `xcap` on the same ePDG. |
 | OMA-DM / ANDSF / TS.32 | Architecture choice: static presets only. Annex B fields are YAML/API configuration. |
-| Overlapping IKE reauth | New IKE_SA_INIT/IKE_AUTH while the old SA forwards; INITIAL_CONTACT omitted until cutover. |
 | Emergency originating | Construction exists; `AllowEmergencyRegistration` and `AllowEmergencyCalls` stay off. No PSAP call. |
+| Phone merge/transfer UI | Voice `MergeConference` / `TransferConsultative` exist. HTTP phone API has hold/resume/switch only; no merge or transfer endpoint. |
 
 No SMS, registration, USSI, or voice transaction reports network success
 before receiving the corresponding final SIP response.
