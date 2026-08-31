@@ -43,6 +43,55 @@ func TestPeerDeleteOfActiveIKESAIsAcknowledgedAndSurfaced(t *testing.T) {
 	}
 }
 
+func TestShutdownSendsDeleteChildThenIKEWhileKeysLive(t *testing.T) {
+	session, transport := newEstablishedControlSession(t)
+	session.sendEstablishedDeletes()
+	childRaw := receiveFragmentPacket(t, transport.sentIKE)
+	childPacket, err := ikev2.DecodePacket(childRaw)
+	if err != nil {
+		t.Fatalf("decode CHILD Delete: %v", err)
+	}
+	childPayloads, err := session.decryptAndParse(childPacket)
+	if err != nil || len(childPayloads) != 1 {
+		t.Fatalf("CHILD Delete payloads=%d err=%v", len(childPayloads), err)
+	}
+	childDelete := childPayloads[0].(*ikev2.EncryptedPayloadDelete)
+	if childDelete.ProtocolID != ikev2.ProtoESP {
+		t.Fatalf("first Delete protocol = %d, want ESP", childDelete.ProtocolID)
+	}
+	ikeRaw := receiveFragmentPacket(t, transport.sentIKE)
+	ikePacket, err := ikev2.DecodePacket(ikeRaw)
+	if err != nil {
+		t.Fatalf("decode IKE Delete: %v", err)
+	}
+	ikePayloads, err := session.decryptAndParse(ikePacket)
+	if err != nil || len(ikePayloads) != 1 {
+		t.Fatalf("IKE Delete payloads=%d err=%v", len(ikePayloads), err)
+	}
+	ikeDelete := ikePayloads[0].(*ikev2.EncryptedPayloadDelete)
+	if ikeDelete.ProtocolID != ikev2.ProtoIKE {
+		t.Fatalf("second Delete protocol = %d, want IKE", ikeDelete.ProtocolID)
+	}
+	session.Shutdown()
+}
+
+func TestShutdownInvokesEstablishedDeletes(t *testing.T) {
+	session, transport := newEstablishedControlSession(t)
+	session.Shutdown()
+	for i := 0; i < 2; i++ {
+		raw := receiveFragmentPacket(t, transport.sentIKE)
+		packet, err := ikev2.DecodePacket(raw)
+		if err != nil || packet.Header.ExchangeType != ikev2.INFORMATIONAL {
+			t.Fatalf("shutdown packet %d type=%v err=%v", i, packet, err)
+		}
+	}
+}
+
+func TestShutdownSkipsDeleteWhenSessionNeverEstablished(t *testing.T) {
+	session := NewSession(&Config{})
+	session.Shutdown()
+}
+
 func TestSendDeleteChildSAEncodesEverySPI(t *testing.T) {
 	session, transport := newEstablishedControlSession(t)
 	defer stopControlTestSession(session)

@@ -337,6 +337,7 @@ type Session struct {
 	doneOnce        sync.Once
 	sessionDownOnce sync.Once
 	cleanupOnce     sync.Once
+	deleteOnce      sync.Once
 
 	mu                sync.RWMutex
 	childSAMu         sync.RWMutex
@@ -604,6 +605,7 @@ func (s *Session) failSession(err error) {
 	s.mu.RLock()
 	wasEstablished := s.state == stateEstablished
 	s.mu.RUnlock()
+	s.sendEstablishedDeletes()
 	s.setTerminalError(err)
 	if wasEstablished {
 		s.notifySessionDown()
@@ -889,8 +891,31 @@ func (s *Session) Shutdown() {
 	s.state = stateShutdown
 	s.mu.Unlock()
 
+	s.sendEstablishedDeletes()
 	s.cleanupResources(false)
 	s.clearSessionResumptionMemory()
+}
+
+// sendEstablishedDeletes emits Delete CHILD_SA then Delete IKE_SA while the
+// transport and keys are still valid. Failures are logged and do not block
+// cleanup. Unestablished sessions skip the exchange.
+func (s *Session) sendEstablishedDeletes() {
+	if s == nil {
+		return
+	}
+	s.deleteOnce.Do(func() {
+		if s.transport() == nil || s.ikeKeys == nil {
+			return
+		}
+		if spi := s.espLocalSPI; spi != 0 {
+			if err := s.sendDeleteChildSA([]uint32{spi}); err != nil {
+				s.Logger.Warn("send CHILD_SA Delete before shutdown", zap.Error(err))
+			}
+		}
+		if err := s.sendDeleteIKE(); err != nil {
+			s.Logger.Warn("send IKE_SA Delete before shutdown", zap.Error(err))
+		}
+	})
 }
 
 func (s *Session) cleanupResources(preserveResume bool) {
@@ -977,6 +1002,9 @@ func (s *Session) InnerNetwork() InnerNetworkConfig {
 }
 
 func (s *Session) primaryInnerIP() net.IP {
+	if s.innerIPv6 != nil && s.innerIPv6.To4() == nil {
+		return s.innerIPv6
+	}
 	if s.innerIP != nil {
 		return s.innerIP
 	}
