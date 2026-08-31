@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	voiceInviteSupported = "100rel, timer, replaces, norefersub, early-session, sec-agree, precondition"
+	voiceInviteSupported = "100rel, 199, timer, replaces, norefersub, early-session, sec-agree, precondition"
 	// TS 24.229 5.1.3.1: initial INVITE Accept must include SDP and the 3GPP
 	// IM CN subsystem XML body MIME type.
 	voiceInviteAccept = "application/sdp, application/3gpp-ims+xml"
@@ -150,5 +150,6 @@ func buildIMSCancel(agent *Agent, call *Call) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("voice: build CANCEL from INVITE: %w", err)
 	}
+	cancel.AppendHeader(sip.NewHeader("Reason", `RELEASE_CAUSE;cause=31;text="Normal unspecified"`))
 	return cancel.String(), nil
 }

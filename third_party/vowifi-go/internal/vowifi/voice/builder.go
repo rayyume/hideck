@@ -35,7 +35,25 @@ func buildIMSPreconditionUpdate(agent *Agent, call *Call, sdp string) string {
 		return ""
 	}
 	dialog := call.advanceVoiceCSeq()
-	return buildVoiceRequest(dialog, call.CallID(), "UPDATE", voiceBranch(), sdp)
+	request := buildVoiceRequest(dialog, call.CallID(), "UPDATE", voiceBranch(), sdp)
+	if call.dialogRequiresPrecondition(dialog.remoteTag) {
+		request = insertSIPHeader(request, "Require: precondition")
+	}
+	return request
+}
+
+func insertSIPHeader(message, header string) string {
+	header = strings.TrimSpace(header)
+	if header == "" || strings.TrimSpace(message) == "" {
+		return message
+	}
+	if !strings.HasSuffix(header, "\r\n") {
+		header += "\r\n"
+	}
+	if idx := strings.Index(message, "\r\n\r\n"); idx >= 0 {
+		return message[:idx+2] + header + message[idx+2:]
+	}
+	return message
 }
 
 func buildIMSReinvite(agent *Agent, call *Call, sdp string) string {
@@ -138,9 +156,14 @@ func buildVoiceRequestWithContent(dialog voiceSIPDialog, callID, method, branch,
 	if body != "" && strings.TrimSpace(contentType) != "" {
 		fmt.Fprintf(&request, "Content-Type: %s\r\n", contentType)
 	}
+	if method == "BYE" || method == "CANCEL" {
+		fmt.Fprintf(&request, "Reason: RELEASE_CAUSE;cause=31;text=\"Normal unspecified\"\r\n")
+	}
 	fmt.Fprintf(&request, "Content-Length: %d\r\n\r\n%s", len(body), body)
 	return request.String()
 }
+
+
 
 func writeVoiceDialogHeaders(out *strings.Builder, dialog voiceSIPDialog, callID, method, branch string) {
 	writeVoiceCoreHeaders(out, dialog, callID, method, branch)

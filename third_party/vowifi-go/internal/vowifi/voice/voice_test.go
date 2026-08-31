@@ -672,6 +672,7 @@ func TestBuildIMSCancelUsesStoredInitialInviteTransaction(t *testing.T) {
 		"CSeq: 15 CANCEL",
 		"Max-Forwards: 70",
 		"Content-Length: 0",
+		`Reason: RELEASE_CAUSE;cause=31;text="Normal unspecified"`,
 	} {
 		if !strings.Contains(cancel, want) {
 			t.Errorf("CANCEL missing %q: %s", want, cancel)
@@ -743,6 +744,9 @@ func TestBuildIMSBye(t *testing.T) {
 	}
 	if !strings.Contains(bye, "CSeq: 2 BYE") {
 		t.Errorf("bye missing CSeq: %q", bye)
+	}
+	if !strings.Contains(bye, `Reason: RELEASE_CAUSE;cause=31;text="Normal unspecified"`) {
+		t.Errorf("bye missing RELEASE_CAUSE: %q", bye)
 	}
 }
 
