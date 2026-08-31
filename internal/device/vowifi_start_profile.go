@@ -45,18 +45,7 @@ func (p *Pool) buildVoWiFiStartProfile(worker *Worker, traceID string) (identity
 	imei := strings.TrimSpace(status.IMEI)
 	iccid := strings.TrimSpace(status.ICCID)
 
-	smscCtx, smscCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	smsc, smscErr := worker.getSMSCWithContext(smscCtx)
-	smscCancel()
-	smsc = strings.TrimSpace(smsc)
-	switch {
-	case smsc != "":
-		logger.Info("VoWiFi 启动前获取 SMSC 成功", "trace_id", traceID, "device", worker.ID, "smsc", smsc)
-	case smscErr != nil:
-		logger.Warn("VoWiFi 启动前获取 SMSC 失败，将以空 SMSC 继续启动", "trace_id", traceID, "device", worker.ID, "err", smscErr)
-	default:
-		logger.Warn("VoWiFi 启动前未获取到 SMSC，将以空 SMSC 继续启动", "trace_id", traceID, "device", worker.ID)
-	}
+	smsc := p.resolveVoWiFiSMSC(worker, imsi, iccid, traceID)
 
 	logger.Info("VoWiFi 启动画像将基于实时 IMSI 构建",
 		"trace_id", traceID,
@@ -72,6 +61,53 @@ func (p *Pool) buildVoWiFiStartProfile(worker *Worker, traceID string) (identity
 		"imei", imei)
 
 	return buildVoWiFiRawProfile(imsi, mcc, mnc, imei, smsc), nil
+}
+
+func (p *Pool) resolveVoWiFiSMSC(worker *Worker, imsi, iccid, traceID string) string {
+	if worker == nil {
+		return ""
+	}
+	cacheKey := strings.TrimSpace(imsi)
+	if cacheKey == "" {
+		cacheKey = strings.TrimSpace(iccid)
+	}
+	read := func() (string, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		value, err := worker.getSMSCWithContext(ctx)
+		return strings.TrimSpace(value), err
+	}
+	smsc, err := read()
+	if smsc == "" {
+		smsc, err = read()
+	}
+	if smsc != "" {
+		if p != nil && cacheKey != "" {
+			p.smscCacheMu.Lock()
+			if p.smscCache == nil {
+				p.smscCache = make(map[string]string)
+			}
+			p.smscCache[cacheKey] = smsc
+			p.smscCacheMu.Unlock()
+		}
+		logger.Info("VoWiFi 启动前获取 SMSC 成功", "trace_id", traceID, "device", worker.ID)
+		return smsc
+	}
+	if p != nil && cacheKey != "" {
+		p.smscCacheMu.RLock()
+		cached := p.smscCache[cacheKey]
+		p.smscCacheMu.RUnlock()
+		if cached != "" {
+			logger.Warn("VoWiFi 启动前读取 SMSC 失败，使用缓存", "trace_id", traceID, "device", worker.ID, "err", err)
+			return cached
+		}
+	}
+	if err != nil {
+		logger.Warn("VoWiFi 启动前获取 SMSC 失败，将以空 SMSC 继续启动", "trace_id", traceID, "device", worker.ID, "err", err)
+	} else {
+		logger.Warn("VoWiFi 启动前未获取到 SMSC，将以空 SMSC 继续启动", "trace_id", traceID, "device", worker.ID)
+	}
+	return ""
 }
 
 func buildVoWiFiRawProfile(imsi, mcc, mnc, imei, smsc string) identity.Profile {

@@ -221,6 +221,9 @@ type Pool struct {
 	vowifiMWIMu sync.RWMutex
 	vowifiMWI   map[string]VoWiFiMWIState
 
+	smscCacheMu sync.RWMutex
+	smscCache   map[string]string
+
 	// 概览监控页面流定阅数统计
 	overviewSubs atomic.Int32
 
@@ -271,6 +274,7 @@ func NewPoolWithDynamicInterfaceMapper(cfg *config.Config, mapper DynamicInterfa
 		pcscService:            pcsc.New(),
 		runtimeQMIAttachments:  make(map[string]config.DeviceConfig),
 		vowifiMWI:              make(map[string]VoWiFiMWIState),
+		smscCache:              make(map[string]string),
 	}
 	p.transportRecovery = NewTransportRecoveryController(p)
 	p.voWiFiHost().ConfigureAdapter(p)
