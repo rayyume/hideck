@@ -56,6 +56,7 @@ type IMSConfig struct {
 	PAccessNetworkCountry      string
 	RegisterTemplate           IMSRegisterTemplate
 	AllowEmergencyRegistration bool
+	OnLocalAddressChange       func(oldIP, newIP net.IP) error
 }
 
 type IMScoreConfig struct {

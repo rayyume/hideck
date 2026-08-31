@@ -60,6 +60,12 @@ func buildIMSConfig(input imsConfigInput) (*imscore.IMSConfig, error) {
 	value.EventBus, value.TraceID = input.eventBus, input.session.TraceID
 	value.PAccessNetworkCountry = imscore.CountryISO2FromMCC(prepared.Profile.MCC)
 	value.RegisterTemplate = convertRegisterTemplate(imsPlan.RegisterTemplate, imsPlan.Transport)
+	if input.result != nil && input.result.Session != nil {
+		session := input.result.Session
+		value.OnLocalAddressChange = func(oldIP, newIP net.IP) error {
+			return session.UpdateAddresses(oldIP, newIP)
+		}
+	}
 	return &value, nil
 }
 

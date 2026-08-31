@@ -470,6 +470,9 @@ func imscoreFromPrepared(req StartRequest, tunnel Tunnel) (*imscore.Service, err
 		),
 		PAccessNetworkCountry: imscore.CountryISO2FromMCC(req.Prepared.Profile.MCC),
 		RegisterTemplate:      registerTemplate,
+		OnLocalAddressChange: func(oldIP, newIP net.IP) error {
+			return tunnel.UpdateAddresses(oldIP, newIP)
+		},
 	}
 	cfg.SetEnableIPSec3GPP(true)
 	eventBus := imscore.NewEventBus()

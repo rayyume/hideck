@@ -97,6 +97,76 @@ func TestUDPSTUNMappedAddressChangeFailsFlow(t *testing.T) {
 	}
 }
 
+func TestUDPSTUNMappedAddressChangeTriesMOBIKEBeforeReregister(t *testing.T) {
+	registrar, service := newUDPKeepaliveTestService(t)
+	var sawOld, sawNew net.IP
+	service.cfg.OnLocalAddressChange = func(oldIP, newIP net.IP) error {
+		sawOld, sawNew = append(net.IP(nil), oldIP...), append(net.IP(nil), newIP...)
+		return nil
+	}
+	reply := func(addr *net.UDPAddr) {
+		buf := make([]byte, 1500)
+		_ = registrar.SetReadDeadline(time.Now().Add(time.Second))
+		n, remote, err := registrar.ReadFromUDP(buf)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		msg, err := parseSTUNMessage(buf[:n])
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		_, _ = registrar.WriteToUDP(buildSTUNBindingSuccess(msg.TxID, addr), remote)
+	}
+	go reply(&net.UDPAddr{IP: net.IPv4(192, 0, 2, 1), Port: 5060})
+	if err := service.sendIMSKeepalive(); err != nil {
+		t.Fatalf("first STUN: %v", err)
+	}
+	go reply(&net.UDPAddr{IP: net.IPv4(192, 0, 2, 9), Port: 5060})
+	if err := service.sendIMSKeepalive(); err != nil {
+		t.Fatalf("MOBIKE mapped-address change = %v", err)
+	}
+	if !sawOld.Equal(net.IPv4(192, 0, 2, 1)) || !sawNew.Equal(net.IPv4(192, 0, 2, 9)) {
+		t.Fatalf("MOBIKE addrs old=%v new=%v", sawOld, sawNew)
+	}
+	service.recordIMSKeepaliveResult(nil, time.Now())
+	if service.reRegisterPending.Load() {
+		t.Fatal("successful MOBIKE scheduled REGISTER refresh")
+	}
+}
+
+func TestUDPSTUNMappedAddressChangeFallsBackWhenMOBIKEFails(t *testing.T) {
+	registrar, service := newUDPKeepaliveTestService(t)
+	service.cfg.OnLocalAddressChange = func(net.IP, net.IP) error {
+		return errors.New("mobike rejected")
+	}
+	reply := func(addr *net.UDPAddr) {
+		buf := make([]byte, 1500)
+		_ = registrar.SetReadDeadline(time.Now().Add(time.Second))
+		n, remote, err := registrar.ReadFromUDP(buf)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		msg, err := parseSTUNMessage(buf[:n])
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		_, _ = registrar.WriteToUDP(buildSTUNBindingSuccess(msg.TxID, addr), remote)
+	}
+	go reply(&net.UDPAddr{IP: net.IPv4(192, 0, 2, 1), Port: 5060})
+	if err := service.sendIMSKeepalive(); err != nil {
+		t.Fatalf("first STUN: %v", err)
+	}
+	go reply(&net.UDPAddr{IP: net.IPv4(192, 0, 2, 9), Port: 5060})
+	err := service.sendIMSKeepalive()
+	if !errors.Is(err, errSTUNMappedChanged) {
+		t.Fatalf("failed MOBIKE error = %v", err)
+	}
+}
+
 func TestSTUNKeepaliveFailuresScheduleRegistrationRefresh(t *testing.T) {
 	service := newProtectedKeepaliveTestService(t)
 	service.mu.Lock()

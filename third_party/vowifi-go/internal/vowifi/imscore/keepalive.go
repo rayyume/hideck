@@ -207,6 +207,9 @@ func (s *Service) keepaliveFailureRequiresRefresh(err error) bool {
 	if err == nil || errors.Is(err, errOPTIONSKeepalive) {
 		return false
 	}
+	if errors.Is(err, errSTUNMappedChanged) {
+		return true
+	}
 	if errors.Is(err, errTCPCRLFPongTimeout) && !s.expectsCRLFPong() {
 		return false
 	}
@@ -381,9 +384,24 @@ func (s *Service) finishSTUNKeepalive(result stunKeepaliveResult) error {
 	s.stunMappedAddr = cloneUDPAddr(result.mapped)
 	s.mu.Unlock()
 	if previous != nil && !sameUDPAddr(previous, result.mapped) {
+		if s.migrateOnMappedAddressChange(previous, result.mapped) {
+			return nil
+		}
 		return errSTUNMappedChanged
 	}
 	return nil
+}
+
+func (s *Service) migrateOnMappedAddressChange(oldAddr, newAddr *net.UDPAddr) bool {
+	if s == nil || s.cfg == nil || s.cfg.OnLocalAddressChange == nil || oldAddr == nil || newAddr == nil {
+		return false
+	}
+	if err := s.cfg.OnLocalAddressChange(oldAddr.IP, newAddr.IP); err != nil {
+		logging.WarnRate("ims-mobike", "IMS mapped-address MOBIKE failed", "device", s.DeviceID(), "err", err)
+		return false
+	}
+	logging.Info("IMS mapped-address migrated with MOBIKE", "device", s.DeviceID())
+	return true
 }
 
 func (s *Service) handleInboundSTUN(pkt []byte) {
