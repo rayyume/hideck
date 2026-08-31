@@ -57,7 +57,7 @@ perform their historical action with the arguments they expose.
 | --- | --- |
 | XCAP / Ut (TS 24.623) | XCAP simservs client plus `/ut` page. Needs an XCAP PDN; USSI is still not Ut. |
 | Conference factory / conference-info | `MergeConference` INVITEs the factory URI, REFERs both connected user calls into the focus, and SUBSCRIBEs `Event: conference`. Missing factory URI returns `ErrConferenceFactoryUnavailable`. NOTIFY `conference-info` is parsed. |
-| Consultative transfer (ECT) | Outbound REFER with Replaces is not implemented. |
+| Consultative transfer (ECT) | `TransferConsultative` sends an in-dialog REFER with `Refer-To` `Replaces`, waits for NOTIFY sipfrag, then BYEs both local dialogs. Missing dialog tags returns `ErrECTRequiresReplaces` instead of a silent blind transfer. |
 | Inbound Replaces | INVITE Replaces is parsed; matched dialogs are terminated. |
 | Second SWu / XCAP PDN | Default remains one IMS session. A distinct `xcap_apn` starts slot `xcap` on the same ePDG. |
 | OMA-DM / ANDSF / TS.32 | Architecture choice: static presets only. Annex B fields are YAML/API configuration. |

@@ -110,6 +110,10 @@ func (c *Call) replacesDialogID() (callID, fromTag, toTag string) {
 	callID = firstNonEmpty(c.DialogState.IMSCallID, c.DialogState.CallID, c.callID)
 	fromTag = firstNonEmpty(c.DialogState.IMSFromTag, c.DialogState.FromTag)
 	toTag = firstNonEmpty(c.DialogState.IMSToTag, c.DialogState.ToTag)
+	if c.sipDialog != nil {
+		fromTag = firstNonEmpty(fromTag, c.sipDialog.localTag)
+		toTag = firstNonEmpty(toTag, c.sipDialog.remoteTag)
+	}
 	return callID, fromTag, toTag
 }
 
