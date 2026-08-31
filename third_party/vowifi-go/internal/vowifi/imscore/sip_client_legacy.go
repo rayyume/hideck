@@ -31,6 +31,10 @@ func (s *Service) StartClientInvite(
 	var handle *imscoreInviteHandle
 	callbacks := sipTransactionCallbacks{
 		onProvisional: func(response *sipResponse) error {
+			if response != nil && response.StatusCode == 199 {
+				s.closeEarlyDialogForResponse(handle, response)
+				return callClientInviteResponseHandler(options.OnResponse, response)
+			}
 			dialog := s.retainClientInviteEarlyDialog(handle, response)
 			if dialog != nil && options.OnEarlyDialog != nil {
 				if err := options.OnEarlyDialog(dialog); err != nil {
@@ -265,6 +269,20 @@ func (s *Service) closeClientInviteDialog(invite *imscoreInviteHandle) {
 	}
 }
 
+func (s *Service) closeEarlyDialogForResponse(invite *imscoreInviteHandle, response *sipResponse) {
+	if s == nil || response == nil || response.parsed == nil {
+		return
+	}
+	dialog := s.retainMatchingEarlyDialog(invite, response.parsed)
+	if dialog == nil {
+		return
+	}
+	logging.Info("IMS early dialog terminated by 199",
+		"to_tag", toHeaderTag(response.parsed.To()),
+		"dialog", dialogTokenOf(dialog.id))
+	_ = s.closeDialogHandle(dialog)
+}
+
 func (s *Service) retainClientInviteEarlyDialog(
 	invite *imscoreInviteHandle,
 	response *sipResponse,
@@ -284,12 +302,9 @@ func (s *Service) retainClientInviteEarlyDialog(
 		s.storeClientDialog(dialog, invite.initialRequest, response.parsed)
 	}
 	invite.mu.Lock()
-	previous := invite.dialog
 	invite.dialog = dialog.client
 	invite.mu.Unlock()
-	if previous != nil {
-		s.closeReplacedEarlyDialog(previous.ID, dialog.id)
-	}
+	// Forked 18x responses keep independent early dialogs until 199 or 2xx.
 	return dialog
 }
 

@@ -465,7 +465,7 @@ func TestReliableProvisionalPRACKUsesEarlyDialog(t *testing.T) {
 	}
 }
 
-func TestRetainClientInviteEarlyDialogReplacesForkedTag(t *testing.T) {
+func TestRetainClientInviteEarlyDialogKeepsForkedTags(t *testing.T) {
 	service := newRegisteredClientInviteService(t)
 	request := mustClientInviteRequest(t, "forked-early")
 	invite := &imscoreInviteHandle{
@@ -486,14 +486,45 @@ func TestRetainClientInviteEarlyDialogReplacesForkedTag(t *testing.T) {
 	service.retainClientInviteEarlyDialog(invite, secondResponse)
 	secondID := clientInviteDialogID(invite)
 	if secondID == firstID || service.dialogs().load(secondID) == nil {
-		t.Fatalf("replacement early dialog ID = %q, first = %q", secondID, firstID)
+		t.Fatalf("forked early dialog ID = %q, first = %q", secondID, firstID)
 	}
-	if service.dialogs().load(firstID) != nil || !first.closed {
-		t.Fatal("replaced early dialog remained live")
+	if service.dialogs().load(firstID) == nil || first.closed {
+		t.Fatal("first forked early dialog was closed by latest-wins")
 	}
-	if service.dialogs().len() != 1 {
-		t.Fatalf("dialog registry size = %d, want 1", service.dialogs().len())
+	if service.dialogs().len() != 2 {
+		t.Fatalf("dialog registry size = %d, want 2 parallel early dialogs", service.dialogs().len())
 	}
+}
+
+func Test199ClosesOnlyMatchingEarlyDialog(t *testing.T) {
+	service := newRegisteredClientInviteService(t)
+	request := mustClientInviteRequest(t, "forked-199")
+	invite := &imscoreInviteHandle{
+		initialRequest: request,
+		transaction:    &clientSIPTransaction{send: func(string) error { return nil }},
+	}
+	first := testReliableInviteResponse(t, request.String(), 183)
+	setResponseToTag(first.parsed, "early-a")
+	service.retainClientInviteEarlyDialog(invite, first)
+	second := testReliableInviteResponse(t, request.String(), 183)
+	setResponseToTag(second.parsed, "early-b")
+	service.retainClientInviteEarlyDialog(invite, second)
+	terminated := testReliableInviteResponse(t, request.String(), 199)
+	setResponseToTag(terminated.parsed, "early-a")
+	service.closeEarlyDialogForResponse(invite, terminated)
+	firstID := sipDialogIDForTest(t, request, "early-a")
+	secondID := sipDialogIDForTest(t, request, "early-b")
+	if firstHandle := service.dialogs().load(firstID); firstHandle != nil && !firstHandle.closed {
+		t.Fatal("199 left the matching early dialog live")
+	}
+	if service.dialogs().load(secondID) == nil {
+		t.Fatal("199 closed the other early dialog")
+	}
+}
+
+func sipDialogIDForTest(t *testing.T, request *sip.Request, toTag string) string {
+	t.Helper()
+	return sip.DialogIDMake(request.CallID().Value(), toTag, fromHeaderTag(request.From()))
 }
 
 func TestRetainClientInviteEarlyDialogReusesSameToTag(t *testing.T) {
