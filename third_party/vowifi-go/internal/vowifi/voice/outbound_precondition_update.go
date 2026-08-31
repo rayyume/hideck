@@ -5,9 +5,25 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/iniwex5/vowifi-go/internal/vowifi/logging"
 )
+
+func (a *Agent) queuePreconditionStatusUpdate(call *Call, remoteSDP string) {
+	if a == nil || call == nil || strings.TrimSpace(remoteSDP) == "" {
+		return
+	}
+	a.runCallTask(call, "precondition_update", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), voiceHangupTimeout)
+		defer cancel()
+		if err := a.sendPreconditionStatusUpdate(ctx, call, remoteSDP); err != nil {
+			logging.WarnRate("ims-precondition-update:"+call.CallID(), 10*time.Second,
+				"IMS precondition UPDATE failed; INVITE can still complete",
+				"device", a.deviceID, "connected", call.IsConnected(), "err", err)
+		}
+	})
+}
 
 func (a *Agent) sendPreconditionStatusUpdate(
 	ctx context.Context,

@@ -71,7 +71,8 @@ func (a *Agent) handleIMS1xxResponse(
 		}
 	}
 	if !sipHeaderHasToken(voiceResponseHeader(response.Headers, "Require"), "100rel") {
-		return a.sendPreconditionStatusUpdate(ctx, call, preconditionSDP)
+		a.queuePreconditionStatusUpdate(call, preconditionSDP)
+		return nil
 	}
 	rseq, err := reliableProvisionalRSeq(response)
 	if err != nil {
@@ -86,7 +87,8 @@ func (a *Agent) handleIMS1xxResponse(
 	if err := a.sendReliableProvisionalPRACK(ctx, call, rseq); err != nil {
 		return err
 	}
-	return a.sendPreconditionStatusUpdate(ctx, call, preconditionSDP)
+	a.queuePreconditionStatusUpdate(call, preconditionSDP)
+	return nil
 }
 
 func logOutboundInviteRequest(raw string) {

@@ -35,6 +35,7 @@ type reliableProvisionalRegistrar struct {
 	provisionalExpires  string
 	provisionalSDP      string
 	updateSDP           string
+	updateDelay         time.Duration
 }
 
 type sipTestResponse struct {
@@ -51,6 +52,7 @@ type reliableRegistrarOptions struct {
 	provisionalSessionExpires string
 	provisionalSDP            string
 	updateSDP                 string
+	updateDelay               time.Duration
 }
 
 type earlyMediaProbe struct {
@@ -94,6 +96,7 @@ func startReliableProvisionalRegistrarWithOptions(
 		provisionalExpires:  options.provisionalSessionExpires,
 		provisionalSDP:      options.provisionalSDP,
 		updateSDP:           options.updateSDP,
+		updateDelay:         options.updateDelay,
 	}
 	t.Cleanup(func() { _ = conn.Close() })
 	go registrar.serve()
@@ -131,9 +134,19 @@ func (r *reliableProvisionalRegistrar) serve() {
 			if r.updateSDP != "" {
 				extra = "Content-Type: application/sdp\r\n"
 			}
-			r.writeResponse(sipTestResponse{
-				request: request, remote: remote, status: 200, extra: extra, body: r.updateSDP,
-			})
+			writeUpdate := func() {
+				r.writeResponse(sipTestResponse{
+					request: request, remote: remote, status: 200, extra: extra, body: r.updateSDP,
+				})
+			}
+			if r.updateDelay > 0 {
+				go func() {
+					time.Sleep(r.updateDelay)
+					writeUpdate()
+				}()
+				continue
+			}
+			writeUpdate()
 		default:
 			r.writeResponse(sipTestResponse{request: request, remote: remote, status: 200})
 		}
@@ -242,6 +255,50 @@ func TestAgentSendsPreconditionUpdateAfterReliableProvisional(t *testing.T) {
 	case duplicate := <-registrar.update:
 		t.Fatalf("duplicate precondition UPDATE: %q", duplicate)
 	default:
+	}
+}
+
+func TestPreconditionUpdateDoesNotBlockInvite200(t *testing.T) {
+	const updateDelay = 400 * time.Millisecond
+	registrar := startReliableProvisionalRegistrarWithOptions(t, reliableRegistrarOptions{
+		prackResponsesAfter: 1,
+		provisionalSDP:      reliablePreconditionSDP,
+		updateSDP:           reliablePreconditionSDP,
+		updateDelay:         updateDelay,
+	})
+	agent := newVoiceTestAgent(t, registrar.conn)
+	if err := agent.StartCurrent(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = agent.Stop() })
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	started := time.Now()
+	call, err := agent.dialContext(ctx, "+447942985429", "")
+	elapsed := time.Since(started)
+	if err != nil {
+		t.Fatalf("dialContext: %v", err)
+	}
+	if elapsed >= updateDelay {
+		t.Fatalf("INVITE 200 waited for precondition UPDATE: %s", elapsed)
+	}
+	if call.CallState() != callstate.StateConnected {
+		t.Fatalf("state=%s", call.CallState())
+	}
+	select {
+	case ack := <-registrar.ack:
+		if !strings.HasSuffix(voiceTestHeader(ack, "CSeq"), " ACK") {
+			t.Fatalf("ACK CSeq = %q", voiceTestHeader(ack, "CSeq"))
+		}
+	case <-ctx.Done():
+		t.Fatal("INVITE 200 was not ACKed")
+	}
+	select {
+	case update := <-registrar.update:
+		assertPreconditionStatusUpdate(t, update)
+	case <-ctx.Done():
+		t.Fatal("precondition status UPDATE was not sent")
 	}
 }
 
