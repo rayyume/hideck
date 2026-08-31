@@ -51,6 +51,7 @@ func buildIMSInviteWithSDPChecked(agent *Agent, call *Call, sdp string) (string,
 	}
 	options := voiceIMSRequestOptions(dialog, voiceInitialRequest{
 		callID: call.CallID(), from: from, to: recipient, sdp: sdp,
+		restrictCallerID: call.RestrictCallerID(),
 	})
 	request, err := sipkit.BuildIMSRequest(sip.INVITE, recipient, options)
 	if err != nil {
@@ -60,10 +61,11 @@ func buildIMSInviteWithSDPChecked(agent *Agent, call *Call, sdp string) (string,
 }
 
 type voiceInitialRequest struct {
-	callID string
-	from   sip.Uri
-	to     sip.Uri
-	sdp    string
+	callID           string
+	from             sip.Uri
+	to               sip.Uri
+	sdp              string
+	restrictCallerID bool
 }
 
 func voiceIMSRequestOptions(dialog voiceSIPDialog, input voiceInitialRequest) sipkit.IMSRequestOptions {
@@ -80,11 +82,12 @@ func voiceIMSRequestOptions(dialog voiceSIPDialog, input voiceInitialRequest) si
 	}
 	headers = append(headers, sip.NewHeader("Accept", voiceInviteAccept))
 	headers = append(headers, sip.NewHeader("P-Early-Media", "supported"))
-	headers = append(headers, sip.NewHeader("Privacy", "none"))
-	headers = append(headers, sip.NewHeader("Feature-Caps", voiceFeatureCaps))
-	if strings.TrimSpace(dialog.remoteURI) != "" {
-		headers = append(headers, sip.NewHeader("History-Info", "<"+strings.TrimSpace(dialog.remoteURI)+">;index=1"))
+	privacy := "none"
+	if input.restrictCallerID {
+		privacy = "id"
 	}
+	headers = append(headers, sip.NewHeader("Privacy", privacy))
+	headers = append(headers, sip.NewHeader("Feature-Caps", voiceFeatureCaps))
 	if emergency.IsEmergencyDestination(dialog.remoteURI) {
 		headers = append(headers, sip.NewHeader("Priority", "emergency"))
 	}

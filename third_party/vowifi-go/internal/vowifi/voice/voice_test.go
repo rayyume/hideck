@@ -593,9 +593,21 @@ func TestBuildIMSInvite(t *testing.T) {
 		t.Errorf("INVITE qos/precondition/session-timer offer is not IR.92 reserved-local: %q", invite)
 	}
 	if !strings.Contains(invite, "Privacy: none") ||
-		!strings.Contains(invite, "Feature-Caps: "+voiceFeatureCaps) ||
-		!strings.Contains(invite, "History-Info:") {
-		t.Errorf("INVITE missing Privacy/Feature-Caps/History-Info: %q", invite)
+		!strings.Contains(invite, "Feature-Caps: "+voiceFeatureCaps) {
+		t.Errorf("INVITE missing Privacy/Feature-Caps: %q", invite)
+	}
+	if strings.Contains(invite, "History-Info:") {
+		t.Errorf("non-forwarded INVITE should not attach History-Info: %q", invite)
+	}
+}
+
+func TestBuildIMSInvitePrivacyIDWhenOIREnabled(t *testing.T) {
+	agent := newTestAgent(t)
+	call := NewCall(agent, callstate.DirectionOutbound, "oir-call", "+8613800000000")
+	call.SetRestrictCallerID(true)
+	invite := BuildIMSInvite(agent, call)
+	if !strings.Contains(invite, "Privacy: id") || strings.Contains(invite, "Privacy: none") {
+		t.Fatalf("OIR INVITE Privacy = %q", voiceTestHeader(invite, "Privacy"))
 	}
 }
 

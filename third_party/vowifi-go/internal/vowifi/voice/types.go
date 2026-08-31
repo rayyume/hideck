@@ -104,6 +104,7 @@ type Call struct {
 	outboundInvite    string
 	inboundDecisionMu sync.Mutex
 	dialogPrecondition map[string]bool
+	restrictCallerID   bool
 
 	ackSent                bool
 	inviteFinalSeen        bool

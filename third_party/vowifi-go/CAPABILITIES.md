@@ -51,5 +51,18 @@ perform their historical action with the arguments they expose.
   incomplete challenges return an explicit error; they do not open a websheet
   as though authentication succeeded.
 
+## Not Implemented On The Production Path
+
+| Area | Status |
+| --- | --- |
+| XCAP / Ut (TS 24.623) | No XCAP client. USSI MMI codes are not Ut. |
+| Conference factory / conference-info | Not implemented. Needs multi-call Agent first. |
+| Consultative transfer (ECT) | Outbound REFER with Replaces is not implemented. |
+| Inbound Replaces | Supported advertises `replaces` but RFC 3891 parsing is incomplete. |
+| Second SWu / XCAP PDN | One SWu session per device. |
+| OMA-DM / ANDSF / TS.32 | Architecture choice: static presets only. |
+| Overlapping IKE reauth | Timer recycles the runtime sequentially (FOLLOWUP-01). |
+| Emergency originating | Construction exists; `AllowEmergencyRegistration` and `AllowEmergencyCalls` stay off. No PSAP call. |
+
 No SMS, registration, USSI, or voice transaction reports network success
 before receiving the corresponding final SIP response.

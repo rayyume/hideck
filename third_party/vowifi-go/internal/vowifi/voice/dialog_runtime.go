@@ -172,6 +172,24 @@ func (c *Call) advanceVoiceInviteCSeq() voiceSIPDialog {
 	return copy
 }
 
+func (c *Call) RestrictCallerID() bool {
+	if c == nil {
+		return false
+	}
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.restrictCallerID
+}
+
+func (c *Call) SetRestrictCallerID(enabled bool) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	c.restrictCallerID = enabled
+	c.mu.Unlock()
+}
+
 func (c *Call) terminateEarlyDialog(toTag string) {
 	if c == nil {
 		return
