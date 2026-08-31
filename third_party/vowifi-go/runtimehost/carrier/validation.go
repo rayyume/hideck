@@ -56,8 +56,8 @@ func validateTunnelConfig(config EffectiveCarrierConfig) error {
 	if config.NATKeepaliveSeconds <= 0 {
 		return fmt.Errorf("carrier: NAT keepalive must be positive")
 	}
-	if config.DPDIntervalSeconds < 20 || config.DPDIntervalSeconds > 1800 {
-		return fmt.Errorf("carrier: DPD interval must be between 20 and 1800 seconds")
+	if config.DPDIntervalSeconds < 20 || config.DPDIntervalSeconds > 120 {
+		return fmt.Errorf("carrier: DPD interval must be between 20 and 120 seconds")
 	}
 	if config.ReauthIntervalSeconds < 0 {
 		return fmt.Errorf("carrier: reauth interval must not be negative")

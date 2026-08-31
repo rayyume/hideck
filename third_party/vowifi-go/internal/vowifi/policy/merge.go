@@ -6,6 +6,18 @@ import (
 	"github.com/iniwex5/vowifi-go/internal/vowifi/common"
 )
 
+const ir51MaxDPDIntervalSeconds = 120
+
+func clampIR51DPDInterval(seconds int) int {
+	if seconds < 20 {
+		return 20
+	}
+	if seconds > ir51MaxDPDIntervalSeconds {
+		return ir51MaxDPDIntervalSeconds
+	}
+	return seconds
+}
+
 func GetGlobalDefaultConfig(mcc, mnc string) EffectiveCarrierConfig {
 	mcc, mnc = common.Plmn3(mcc), common.Plmn3(mnc)
 	template := DefaultIMSRegisterTemplate()
@@ -72,8 +84,8 @@ func mergePresetIKE(config *EffectiveCarrierConfig, preset CarrierPreset) {
 	setStringIfPresent(&config.AKAIdentityMode, preset.AKAIdentityMode)
 	setStringIfPresent(&config.DeviceIdentityIMEI, preset.DeviceIdentityIMEI)
 	applyIntPtr(&config.NATKeepaliveSeconds, preset.NATKeepaliveSeconds)
-	if preset.DPDIntervalSeconds != nil && *preset.DPDIntervalSeconds >= 20 && *preset.DPDIntervalSeconds <= 1800 {
-		config.DPDIntervalSeconds = *preset.DPDIntervalSeconds
+	if preset.DPDIntervalSeconds != nil && *preset.DPDIntervalSeconds >= 20 {
+		config.DPDIntervalSeconds = clampIR51DPDInterval(*preset.DPDIntervalSeconds)
 	}
 	applyBoolPtr(&config.DeviceIdentityEnabled, preset.DeviceIdentityEnabled)
 	applyBoolPtr(&config.EnableLegacyCiphers, preset.EnableLegacyCiphers)
@@ -87,7 +99,10 @@ func mergePresetIKE(config *EffectiveCarrierConfig, preset CarrierPreset) {
 		config.ESPProposals = normalizeStringList(preset.ESPProposals)
 	}
 	if preset.DPDKeepaliveIntervalSeconds > 0 {
-		config.DPDKeepaliveIntervalSeconds = preset.DPDKeepaliveIntervalSeconds
+		config.DPDKeepaliveIntervalSeconds = clampIR51DPDInterval(preset.DPDKeepaliveIntervalSeconds)
+		if config.DPDIntervalSeconds <= 0 {
+			config.DPDIntervalSeconds = config.DPDKeepaliveIntervalSeconds
+		}
 	}
 	if preset.ReauthIntervalSeconds > 0 {
 		config.ReauthIntervalSeconds = preset.ReauthIntervalSeconds

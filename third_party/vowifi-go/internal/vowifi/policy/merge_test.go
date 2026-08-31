@@ -36,7 +36,8 @@ func TestMergeFromPresetPortAndTimerBoundaries(t *testing.T) {
 	}{
 		{name: "below", value: 19, want: 120},
 		{name: "minimum", value: 20, want: 20},
-		{name: "maximum", value: 1800, want: 1800},
+		{name: "operator_600", value: 600, want: 120},
+		{name: "legacy_1800", value: 1800, want: 120},
 		{name: "above", value: 1801, want: 120},
 	}
 	for _, test := range dpdCases {
@@ -47,6 +48,15 @@ func TestMergeFromPresetPortAndTimerBoundaries(t *testing.T) {
 				t.Fatalf("DPD interval = %d, want %d", config.DPDIntervalSeconds, test.want)
 			}
 		})
+	}
+}
+
+func TestDPDKeepaliveIntervalWiresWhenDPDIntervalMissing(t *testing.T) {
+	config := GetGlobalDefaultConfig("310", "260")
+	config.DPDIntervalSeconds = 0
+	config.MergeFromPreset(CarrierPreset{DPDKeepaliveIntervalSeconds: 600})
+	if config.DPDKeepaliveIntervalSeconds != 120 || config.DPDIntervalSeconds != 120 {
+		t.Fatalf("keepalive DPD wiring = interval %d keepalive %d", config.DPDIntervalSeconds, config.DPDKeepaliveIntervalSeconds)
 	}
 }
 
