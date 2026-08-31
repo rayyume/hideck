@@ -676,6 +676,22 @@ func parseAssignedInnerConfig(payloads []ikev2.Payload) (assignedInnerConfig, er
 	if err != nil {
 		return result, err
 	}
+
+	// T-Mobile 可能通过 3GPP 私有属性 16390 下发 IPv6 P-CSCF。
+	// 通用 IKE 解析器支持该属性，但 SWu 会话原本没有复制它。
+	if raw, ok := cpAttributeValue(cp, ikev2.ASSIGNED_PCSCF_IP6_ADDRESS); ok {
+		if len(raw) != net.IPv6len {
+			return result, fmt.Errorf(
+				"swu: invalid assigned P-CSCF IPv6 length %d",
+				len(raw),
+			)
+		}
+		result.pcscf = append(
+			result.pcscf,
+			append(net.IP(nil), raw...),
+		)
+	}
+	
 	if result.ipv4 == nil && result.ipv6 == nil {
 		return result, fmt.Errorf("swu: CFG_REPLY omitted an assigned address (attributes=%s)", cpAttributeSummary(cp))
 	}
