@@ -133,9 +133,12 @@ func TestInboundRPAckDoesNotRotateURIAfter488(t *testing.T) {
 	if len(targets) == 0 || service.mtAckSendOK.Load() != 0 {
 		t.Fatalf("ok=%d err=%d targets=%v", service.mtAckSendOK.Load(), service.mtAckSendErr.Load(), targets)
 	}
+	if len(targets) == 0 || strings.Contains(targets[0], "sip:ipsmgw@ims.example") || !strings.Contains(targets[0], "sip:smsc@ims.example") {
+		t.Fatalf("first RP-ACK left PAI: %v", targets)
+	}
 	for _, target := range targets {
-		if strings.Contains(target, "sip:ipsmgw@ims.example") || !strings.Contains(target, "sip:smsc@ims.example") {
-			t.Fatalf("RP-ACK rotated off PAI after 488: %v", targets)
+		if strings.Contains(target, "sip:ipsmgw@ims.example") {
+			t.Fatalf("RP-ACK rotated to Contact after 488: %v", targets)
 		}
 	}
 }

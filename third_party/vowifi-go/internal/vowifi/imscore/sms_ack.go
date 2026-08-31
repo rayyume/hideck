@@ -13,12 +13,13 @@ import (
 )
 
 type rpReportRequest struct {
-	Inbound     string
-	Body        []byte
-	RPMR        byte
-	Fingerprint string
-	RemoteURI   string
-	ContentType string
+	Inbound       string
+	Body          []byte
+	RPMR          byte
+	Fingerprint   string
+	RemoteURI     string
+	ContentType   string
+	OmitBinaryCTE bool
 }
 
 type rpReportRejectError struct {
@@ -68,7 +69,7 @@ func (s *Service) recordMTAckAudit(audit mtAckAudit, err error) {
 }
 
 func (s *Service) sendRPReport(report rpReportRequest) error {
-	request, err := s.buildRPAckMESSAGE(report.Inbound, report.Body, report.RemoteURI, report.ContentType)
+	request, err := s.buildRPAckMESSAGE(report.Inbound, report.Body, report.RemoteURI, report.ContentType, report.OmitBinaryCTE)
 	if err != nil {
 		s.mtAckSendErr.Add(1)
 		return err
@@ -155,25 +156,99 @@ func (s *Service) sendRPReportWithRetryPolicy(
 		current.RemoteURI = targets[0]
 	}
 	delay := retryDelay
+	attempts := 0
 	var lastErr error
-	for attempt := 0; attempt < rpReportMaxAttempts; attempt++ {
-		if attempt > 0 && delay > 0 && !s.waitSMSRetryDelay(delay) {
-			if lastErr != nil {
+	for _, variant := range rpAckRequestVariants(current) {
+		for {
+			if attempts > 0 && delay > 0 && !s.waitSMSRetryDelay(delay) {
+				if lastErr != nil {
+					return lastErr
+				}
+				return errRPReportAborted
+			}
+			attempts++
+			lastErr = s.sendRPReport(variant)
+			if lastErr == nil {
+				return nil
+			}
+			if rpReportFallbackStatus(lastErr) {
+				if delay <= 0 {
+					delay = retryDelay
+				} else {
+					delay *= 2
+				}
+				break
+			}
+			if !rpReportRetryable(lastErr) || attempts >= rpReportMaxAttempts {
 				return lastErr
 			}
-			return errRPReportAborted
-		}
-		lastErr = s.sendRPReport(current)
-		if lastErr == nil {
-			return nil
-		}
-		if delay <= 0 {
-			delay = retryDelay
-		} else {
-			delay *= 2
+			if delay <= 0 {
+				delay = retryDelay
+			} else {
+				delay *= 2
+			}
 		}
 	}
 	return lastErr
+}
+
+func rpReportRetryable(err error) bool {
+	if err == nil {
+		return false
+	}
+	status := rpReportRejectStatus(err)
+	if status == 0 {
+		return true
+	}
+	return status == 408 || status >= 500
+}
+
+func rpReportFallbackStatus(err error) bool {
+	switch rpReportRejectStatus(err) {
+	case 406, 415, 488:
+		return true
+	default:
+		return false
+	}
+}
+
+func rpAckRequestVariants(report rpReportRequest) []rpReportRequest {
+	variants := []rpReportRequest{report}
+	if !report.OmitBinaryCTE {
+		withoutCTE := report
+		withoutCTE.OmitBinaryCTE = true
+		variants = append(variants, withoutCTE)
+	}
+	hostOnly := sipURIWithoutUser(report.RemoteURI)
+	if hostOnly != "" && !strings.EqualFold(hostOnly, strings.TrimSpace(report.RemoteURI)) {
+		fallback := report
+		fallback.RemoteURI = hostOnly
+		fallback.OmitBinaryCTE = true
+		variants = append(variants, fallback)
+	}
+	return variants
+}
+
+func sipURIWithoutUser(uri string) string {
+	uri = strings.TrimSpace(uri)
+	scheme, rest, ok := strings.Cut(uri, ":")
+	if !ok {
+		return ""
+	}
+	switch strings.ToLower(scheme) {
+	case "sip", "sips":
+	default:
+		return ""
+	}
+	at := strings.LastIndex(rest, "@")
+	if at < 0 {
+		return ""
+	}
+	host := strings.TrimSpace(rest[at+1:])
+	if host == "" {
+		return ""
+	}
+	return scheme + ":" + host
 }
 
 func (report rpReportRequest) ackTargets() []string {

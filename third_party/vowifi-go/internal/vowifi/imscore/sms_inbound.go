@@ -381,7 +381,7 @@ func (s *Service) rpReportForInbound(raw string, message inboundSMS, rpdu []byte
 	return report
 }
 
-func (s *Service) buildInboundSMSControlRequest(inbound string, body []byte, remoteURI, contentType string) (string, error) {
+func (s *Service) buildInboundSMSControlRequest(inbound string, body []byte, remoteURI, contentType string, omitBinaryCTE bool) (string, error) {
 	remoteURI = strings.TrimSpace(remoteURI)
 	if remoteURI == "" {
 		targets := resolveRpAckTargets(
@@ -402,10 +402,11 @@ func (s *Service) buildInboundSMSControlRequest(inbound string, body []byte, rem
 		return "", errors.New("IMS RP-ACK In-Reply-To is unavailable")
 	}
 	return s.buildSMSMESSAGEWithOptions(smsMESSAGEOptions{
-		RemoteURI:   remoteURI,
-		Body:        body,
-		InReplyTo:   callID,
-		ContentType: contentType,
+		RemoteURI:     remoteURI,
+		Body:          body,
+		InReplyTo:     callID,
+		ContentType:   contentType,
+		OmitBinaryCTE: omitBinaryCTE,
 	})
 }
 
