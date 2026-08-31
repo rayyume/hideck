@@ -57,6 +57,10 @@ func (config *EffectiveCarrierConfig) MergeFromPreset(preset CarrierPreset) {
 	if preset.ForceSMSCAuth != nil {
 		config.ForceSMSCAuth = *preset.ForceSMSCAuth
 	}
+	if value := strings.TrimSpace(preset.XCAPAPN); value != "" {
+		config.XCAPAPN = value
+	}
+	applyAnnexB(config, preset.MediaTypeRestrictionPolicy, preset.PreferredAccessNetworks, preset.ToConRef, preset.AllowHandoverPDNWLANAndEPS)
 	syncCompatibilityProjection(config)
 }
 

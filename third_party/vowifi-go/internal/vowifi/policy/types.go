@@ -148,6 +148,11 @@ type CarrierOverride struct {
 	SMSRoutingMethod              string                      `yaml:"sms_routing_method"`
 	SMSRoutingGW                  string                      `yaml:"sms_routing_gw"`
 	ForceSMSCAuth                 *bool                       `yaml:"force_smsc_auth"`
+	XCAPAPN                       string                      `yaml:"xcap_apn"`
+	MediaTypeRestrictionPolicy    string                      `yaml:"media_type_restriction_policy"`
+	PreferredAccessNetworks       []string                    `yaml:"preferred_access_networks"`
+	ToConRef                      string                      `yaml:"to_con_ref"`
+	AllowHandoverPDNWLANAndEPS    *bool                       `yaml:"allow_handover_pdn_connection_wlan_and_eps"`
 
 	// Compatibility selectors used by the interim slice API.
 	MCC, MNC, PresetID string              `yaml:"-"`
@@ -183,6 +188,11 @@ type CarrierPreset struct {
 	IPStackType                      string `json:"ip_stack,omitempty" yaml:"ip_stack,omitempty"`
 	SMSRoutingMethod, SMSRoutingGW   string
 	ForceSMSCAuth                    *bool
+	XCAPAPN                          string   `yaml:"xcap_apn"`
+	MediaTypeRestrictionPolicy       string   `yaml:"media_type_restriction_policy"`
+	PreferredAccessNetworks          []string `yaml:"preferred_access_networks"`
+	ToConRef                         string   `yaml:"to_con_ref"`
+	AllowHandoverPDNWLANAndEPS       *bool    `yaml:"allow_handover_pdn_connection_wlan_and_eps"`
 }
 
 type EffectiveCarrierConfig struct {
@@ -210,6 +220,13 @@ type EffectiveCarrierConfig struct {
 	SMSRoutingMethod, SMSRoutingGW                     string
 	ForceSMSCAuth                                      bool
 	AKAPrimePreferred                                  bool
+	XCAPAPN                                            string
+	MediaTypeRestrictionPolicy                         string
+	PreferredAccessNetworks                            []string
+	ToConRef                                           string
+	AllowHandoverPDNWLANAndEPS                         bool
+	AllowHandoverPDNWLANAndEPSSet                      bool
+	AnnexBRejection                                    string
 
 	IMS IMSRegisterTemplate
 }
@@ -222,7 +239,16 @@ type E911Plan struct {
 type EPDGPlan struct {
 	IPStackType, Addr, AddrSource, EmergencyAddr string
 	Port                                         uint16
-	APN, DNSServer                               string
+	APN, DNSServer, XCAPAPN                      string
+}
+
+type AnnexBPlan struct {
+	MediaTypeRestrictionPolicy    string
+	PreferredAccessNetworks       []string
+	ToConRef                      string
+	AllowHandoverPDNWLANAndEPS    bool
+	AllowHandoverPDNWLANAndEPSSet bool
+	Rejection                     string
 }
 type IKEPlan struct {
 	NATKeepaliveSeconds, DPDIntervalSeconds            int
@@ -257,4 +283,5 @@ type CarrierPlan struct {
 	IMS      IMSPlan
 	SMS      SMSPlan
 	Device   DeviceIdentityPlan
+	AnnexB   AnnexBPlan
 }

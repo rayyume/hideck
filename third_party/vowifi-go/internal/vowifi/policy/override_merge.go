@@ -30,6 +30,10 @@ func NormalizeCarrierOverride(override CarrierOverride) CarrierOverride {
 	override.IMSIdentitySource = strings.TrimSpace(override.IMSIdentitySource)
 	override.SMSRoutingMethod = strings.TrimSpace(override.SMSRoutingMethod)
 	override.SMSRoutingGW = strings.TrimSpace(override.SMSRoutingGW)
+	override.XCAPAPN = strings.TrimSpace(override.XCAPAPN)
+	override.MediaTypeRestrictionPolicy = strings.TrimSpace(override.MediaTypeRestrictionPolicy)
+	override.ToConRef = strings.TrimSpace(override.ToConRef)
+	override.PreferredAccessNetworks = normalizeOptionalStringList(override.PreferredAccessNetworks)
 	override.IMSRegisterTemplate = normalizeIMSRegisterTemplateOverride(override.IMSRegisterTemplate)
 	applyCompatibilityOverride(&override)
 	return override
@@ -75,6 +79,12 @@ func applyCarrierOverride(preset CarrierPreset, override CarrierOverride) Carrie
 	preset.IMSRegisterTemplate = applyIMSRegisterTemplateOverride(preset.IMSRegisterTemplate, override.IMSRegisterTemplate)
 	setStringIfPresent(&preset.SMSRoutingMethod, override.SMSRoutingMethod)
 	setStringIfPresent(&preset.SMSRoutingGW, override.SMSRoutingGW)
+	setStringIfPresent(&preset.XCAPAPN, override.XCAPAPN)
+	setStringIfPresent(&preset.MediaTypeRestrictionPolicy, override.MediaTypeRestrictionPolicy)
+	setStringIfPresent(&preset.ToConRef, override.ToConRef)
+	if len(override.PreferredAccessNetworks) > 0 {
+		preset.PreferredAccessNetworks = cloneStrings(override.PreferredAccessNetworks)
+	}
 	return preset
 }
 
@@ -114,6 +124,10 @@ func copyOverridePointers(preset *CarrierPreset, override CarrierOverride) {
 	if override.ForceSMSCAuth != nil {
 		value := *override.ForceSMSCAuth
 		preset.ForceSMSCAuth = &value
+	}
+	if override.AllowHandoverPDNWLANAndEPS != nil {
+		value := *override.AllowHandoverPDNWLANAndEPS
+		preset.AllowHandoverPDNWLANAndEPS = &value
 	}
 }
 
