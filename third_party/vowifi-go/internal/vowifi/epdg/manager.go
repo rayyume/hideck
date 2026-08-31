@@ -54,6 +54,10 @@ func (m *Manager) SwapDefault(deviceID, slot string) (*swu.Session, error) {
 	return m.mgr.SwapDefault(deviceID, slot)
 }
 
+func (m *Manager) GetSlot(deviceID, slot string) (*swu.Session, bool) {
+	return m.mgr.GetSlot(deviceID, slot)
+}
+
 func (m *Manager) Snapshot(deviceID string) (swu.SessionSnapshot, bool) {
 	return m.SnapshotSlot(deviceID, swu.DefaultSessionSlot)
 }

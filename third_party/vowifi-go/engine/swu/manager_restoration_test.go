@@ -80,3 +80,25 @@ func TestSessionManagerOverlappingSlotKeepsDefault(t *testing.T) {
 	}
 	primary.Shutdown()
 }
+
+func TestSessionManagerStopSlotLeavesOtherPDN(t *testing.T) {
+	manager := NewSessionManager()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ims, err := manager.Start(ctx, "device-2", &Config{APN: "ims"})
+	if err != nil {
+		t.Fatalf("Start IMS: %v", err)
+	}
+	if _, err := manager.StartSlot(ctx, "device-2", "xcap", &Config{APN: "xcap"}); err != nil {
+		t.Fatalf("StartSlot XCAP: %v", err)
+	}
+	if err := manager.StopSlot("device-2", "xcap"); err != nil {
+		t.Fatalf("StopSlot XCAP: %v", err)
+	}
+	if got, ok := manager.Get("device-2"); !ok || got != ims {
+		t.Fatal("XCAP PDN failure/stop took down the IMS session")
+	}
+	if err := manager.Stop("device-2"); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+}
