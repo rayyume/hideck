@@ -572,7 +572,8 @@ func TestBuildIMSInvite(t *testing.T) {
 		t.Errorf("invite missing Call-ID: %q", invite)
 	}
 	if strings.Contains(invite, "m=audio 0 ") ||
-		!strings.Contains(invite, "m=audio 12000 RTP/AVP 104 110 102 108 106 96 101") ||
+		!strings.Contains(invite, "m=audio 12000 RTP/AVP 104 110 102 108 96 101") ||
+		strings.Contains(invite, "EVS") ||
 		strings.Contains(invite, "a=rtpmap:0 PCMU") ||
 		!strings.Contains(invite, "a=rtpmap:96 telephone-event/16000") ||
 		!strings.Contains(invite, "a=maxptime:240") {
