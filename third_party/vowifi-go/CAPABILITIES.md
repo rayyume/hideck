@@ -58,7 +58,7 @@ perform their historical action with the arguments they expose.
 | XCAP / Ut (TS 24.623) | XCAP simservs client plus `/ut` page. Needs an XCAP PDN; USSI is still not Ut. |
 | Conference factory / conference-info | Not implemented. Needs multi-call Agent first. |
 | Consultative transfer (ECT) | Outbound REFER with Replaces is not implemented. |
-| Inbound Replaces | Supported advertises `replaces` but RFC 3891 parsing is incomplete. |
+| Inbound Replaces | INVITE Replaces is parsed; matched dialogs are terminated. Conference/ECT still need the remaining rows. |
 | Second SWu / XCAP PDN | Default remains one IMS session. A distinct `xcap_apn` starts slot `xcap` on the same ePDG. |
 | OMA-DM / ANDSF / TS.32 | Architecture choice: static presets only. Annex B fields are YAML/API configuration. |
 | Overlapping IKE reauth | New IKE_SA_INIT/IKE_AUTH while the old SA forwards; INITIAL_CONTACT omitted until cutover. |

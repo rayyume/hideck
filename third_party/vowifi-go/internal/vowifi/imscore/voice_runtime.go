@@ -52,6 +52,7 @@ type InboundVoiceRequest struct {
 	ReferSub         string
 	Supported        string
 	MinSE            string
+	Replaces         string
 }
 
 // InboundVoiceResponse is one provisional or final response to an inbound
@@ -238,6 +239,7 @@ func (s *Service) handleInboundVoice(dispatch inboundSIPDispatch) (inboundSIPRes
 		ReferSub:       rawSIPHeaderValue(dispatch.raw, "Refer-Sub"),
 		Supported:      rawSIPHeaderValue(dispatch.raw, "Supported"),
 		MinSE:          rawSIPHeaderValue(dispatch.raw, "Min-SE"),
+		Replaces:       rawSIPHeaderValue(dispatch.raw, "Replaces"),
 		Body:           body, Responder: newInboundVoiceResponder(dispatch.raw, dispatch.reply),
 		Dialog: dialogRead.handle, DialogMatched: dialogRead.matched,
 		DialogResponded: dialogRead.responded, DialogTerminated: dialogRead.terminated,

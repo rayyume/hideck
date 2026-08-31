@@ -84,6 +84,10 @@ func (a *Agent) handleInboundInvite(request imscore.InboundVoiceRequest, call *C
 		}
 		return a.handleReinvite(request, call)
 	}
+	replaced, status := a.replacedCallForInvite(request)
+	if status != 0 {
+		return voiceResult(status), nil
+	}
 	if strings.TrimSpace(request.CallID) == "" || voiceHeaderURI(request.From) == "" || voiceHeaderURI(request.To) == "" {
 		return voiceResult(400), nil
 	}
@@ -95,7 +99,7 @@ func (a *Agent) handleInboundInvite(request imscore.InboundVoiceRequest, call *C
 	}
 	var created, waiting bool
 	var err error
-	call, created, waiting, err = a.reserveInboundCall(request)
+	call, created, waiting, err = a.reserveInboundCall(request, replaced)
 	if err != nil {
 		a.emitCallBusy(request)
 		return voiceResult(486), nil
@@ -104,7 +108,7 @@ func (a *Agent) handleInboundInvite(request imscore.InboundVoiceRequest, call *C
 		a.maybeStartInboundClient(call)
 		return voiceResult(0), nil
 	}
-	status, err := a.beginInboundInvite(call, request)
+	status, err = a.beginInboundInvite(call, request)
 	if status != 0 || err != nil {
 		return voiceResult(status), err
 	}
@@ -115,6 +119,9 @@ func (a *Agent) handleInboundInvite(request imscore.InboundVoiceRequest, call *C
 	a.emitCallRinging(call)
 	a.notifyIncomingCall(call)
 	a.maybeStartInboundClient(call)
+	if replaced != nil {
+		go a.terminateReplacedCall(replaced)
+	}
 	return voiceResult(0), nil
 }
 

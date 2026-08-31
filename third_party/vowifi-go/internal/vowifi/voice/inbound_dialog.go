@@ -24,17 +24,25 @@ func (a *Agent) prepareInboundVoiceDialog(call *Call, request imscore.InboundVoi
 	if remoteTarget == "" {
 		remoteTarget = remoteURI
 	}
+	localTag := inboundLocalTag(call, request.Responder)
+	remoteTag := voiceHeaderTag(request.From)
 	call.setVoiceDialog(&voiceSIPDialog{
 		localURI: voiceHeaderURI(request.To), remoteURI: remoteURI, remoteTarget: remoteTarget,
 		contactURI: profile.ContactURI, localAddress: profile.LocalAddress, transport: profile.Transport,
 		serviceRoute: splitVoiceHeaderValues(request.RecordRoute), securityVerify: profile.SecurityVerify,
-		pani: profile.PANI, userAgent: profile.UserAgent, localTag: inboundLocalTag(call, request.Responder),
-		remoteTag: voiceHeaderTag(request.From), cseq: cseq,
+		pani: profile.PANI, userAgent: profile.UserAgent, localTag: localTag,
+		remoteTag: remoteTag, cseq: cseq,
 	})
+	call.mu.Lock()
+	call.DialogState.FromTag = remoteTag
+	if strings.TrimSpace(call.DialogState.CallID) == "" {
+		call.DialogState.CallID = request.CallID
+	}
+	call.mu.Unlock()
 	return nil
 }
 
-func (a *Agent) reserveInboundCall(request imscore.InboundVoiceRequest) (*Call, bool, bool, error) {
+func (a *Agent) reserveInboundCall(request imscore.InboundVoiceRequest, replacing *Call) (*Call, bool, bool, error) {
 	call := a.newInboundCall(request)
 	if err := call.TransitionChecked(callstate.StateRinging); err != nil {
 		return nil, false, false, errors.Join(err, releaseUnregisteredCall(call))
@@ -44,7 +52,7 @@ func (a *Agent) reserveInboundCall(request imscore.InboundVoiceRequest) (*Call, 
 		a.mu.Unlock()
 		return existing, false, false, releaseUnregisteredCall(call)
 	}
-	if a.cannotAddCallLocked() {
+	if a.cannotAddCallLockedIgnoring(replacing) {
 		a.mu.Unlock()
 		return nil, false, false, errors.Join(errors.New("voice: busy"), releaseUnregisteredCall(call))
 	}

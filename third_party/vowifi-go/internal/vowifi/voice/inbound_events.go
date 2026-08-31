@@ -135,6 +135,7 @@ func inboundRequestFromEvent(
 		ReferSub:       requestHeaderValue(request, "Refer-Sub"),
 		Supported:      requestHeaderValue(request, "Supported"),
 		MinSE:          requestHeaderValue(request, "Min-SE"),
+		Replaces:       requestHeaderValue(request, "Replaces"),
 		Body:           append([]byte(nil), request.Body()...), Request: request.Clone(),
 		ServerInvite: handle, Session: session,
 	}

@@ -23,19 +23,29 @@ func (a *Agent) liveCallsLocked() []*Call {
 }
 
 func (a *Agent) cannotAddCallLocked() bool {
+	return a.cannotAddCallLockedIgnoring(nil)
+}
+
+func (a *Agent) cannotAddCallLockedIgnoring(ignored *Call) bool {
 	live := a.liveCallsLocked()
-	if len(live) >= maxConcurrentCalls {
-		return true
-	}
-	if len(live) == 0 {
-		return false
-	}
+	n := 0
+	connected := false
 	for _, call := range live {
+		if call == nil || call == ignored {
+			continue
+		}
+		n++
 		if call.CallState() == callstate.StateConnected {
-			return false
+			connected = true
 		}
 	}
-	return true
+	if n >= maxConcurrentCalls {
+		return true
+	}
+	if n == 0 {
+		return false
+	}
+	return !connected
 }
 
 func (a *Agent) registerLiveCallLocked(call *Call, waiting bool) {
