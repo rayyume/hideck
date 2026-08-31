@@ -384,12 +384,23 @@ func TestRegisterFlowNegotiationEnablesCRLFPong(t *testing.T) {
 	}
 }
 
-func TestRegistrationRefreshDelayMatchesRecoveredClient(t *testing.T) {
-	if got, want := registrationRefreshDelay(time.Hour), 59*time.Minute; got != want {
-		t.Fatalf("hour refresh delay = %s, want %s", got, want)
+func TestRegistrationRefreshDelayFollowsTS24229(t *testing.T) {
+	tests := []struct {
+		expires time.Duration
+		want    time.Duration
+	}{
+		{expires: time.Hour, want: 50 * time.Minute},
+		{expires: 1200 * time.Second, want: 600 * time.Second},
+		{expires: 600 * time.Second, want: 300 * time.Second},
+		{expires: time.Second, want: 500 * time.Millisecond},
 	}
-	if got, want := registrationRefreshDelay(time.Second), 500*time.Millisecond; got != want {
-		t.Fatalf("short refresh delay = %s, want %s", got, want)
+	for _, test := range tests {
+		if got := registrationRefreshDelay(test.expires); got != test.want {
+			t.Fatalf("registrationRefreshDelay(%s) = %s, want %s", test.expires, got, test.want)
+		}
+	}
+	if got := subscriptionRefreshDelay(time.Hour); got != 59*time.Minute {
+		t.Fatalf("subscription refresh must stay on the 60s advance: %s", got)
 	}
 }
 

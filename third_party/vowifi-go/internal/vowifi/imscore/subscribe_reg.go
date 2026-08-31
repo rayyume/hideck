@@ -554,8 +554,8 @@ func subscriptionStateTerminated(raw string) bool {
 }
 
 func subscriptionRefreshDelay(expires time.Duration) time.Duration {
-	if expires > imsRegistrationRefreshAdvance {
-		return expires - imsRegistrationRefreshAdvance
+	if expires > imsSubscriptionRefreshAdvance {
+		return expires - imsSubscriptionRefreshAdvance
 	}
 	return 0
 }

@@ -30,7 +30,9 @@ const (
 	imsKeepaliveFailureLimit       = 3
 	imsMaintenancePollInterval     = 5 * time.Second
 	imsMaintenanceMinimumDelay     = 100 * time.Millisecond
-	imsRegistrationRefreshAdvance  = 60 * time.Second
+	imsLongRegistrationThreshold   = 1200 * time.Second
+	imsLongRegistrationRefreshLead = 600 * time.Second
+	imsSubscriptionRefreshAdvance  = 60 * time.Second
 	imsKeepaliveFlow               = "options_keepalive"
 	imsKeepaliveSupported          = "path, 100rel, replaces, outbound, gruu"
 	imsProtectedKeepaliveSupported = "path, sec-agree, 100rel, replaces, outbound, gruu"
@@ -50,6 +52,7 @@ const (
 	imsMaintenanceSubscribe
 	imsMaintenanceSubscribeMWI
 	imsMaintenanceKeepalive
+	imsMaintenanceCapability
 )
 
 func (s *Service) startIMSKeepalive() {
@@ -79,6 +82,8 @@ func (s *Service) keepaliveLoop() {
 			s.refreshMWISubscription()
 		case imsMaintenanceKeepalive:
 			s.handleIMSKeepaliveTick()
+		case imsMaintenanceCapability:
+			s.discoverPeerCapabilitiesOnce()
 		}
 	}
 }
@@ -132,6 +137,13 @@ func (s *Service) computeNextWakeTime(now time.Time) time.Time {
 	if keepaliveAt.Before(next) {
 		next = keepaliveAt
 	}
+	s.mu.RLock()
+	capabilityAt := s.peerCapabilityAfter
+	capabilityDone := s.peerCapabilityDone
+	s.mu.RUnlock()
+	if !capabilityDone && !capabilityAt.IsZero() && capabilityAt.Before(next) {
+		next = capabilityAt
+	}
 	return next
 }
 
@@ -154,6 +166,9 @@ func (s *Service) nextIMSMaintenanceAction(now time.Time) imsMaintenanceAction {
 	}
 	if s.lastPingAt.IsZero() || !now.Before(s.lastPingAt.Add(s.keepaliveIntervalLocked())) {
 		return imsMaintenanceKeepalive
+	}
+	if !s.peerCapabilityDone && !s.peerCapabilityAfter.IsZero() && !now.Before(s.peerCapabilityAfter) {
+		return imsMaintenanceCapability
 	}
 	return imsMaintenanceIdle
 }
@@ -204,7 +219,7 @@ func (s *Service) recordIMSKeepaliveResult(err error, completedAt time.Time) {
 }
 
 func (s *Service) keepaliveFailureRequiresRefresh(err error) bool {
-	if err == nil || errors.Is(err, errOPTIONSKeepalive) {
+	if err == nil || errors.Is(err, errOPTIONSKeepalive) || errors.Is(err, errOPTIONSCapabilityDiscovery) {
 		return false
 	}
 	if errors.Is(err, errSTUNMappedChanged) {
@@ -255,11 +270,15 @@ func logRegisterRetryAttemptFailure(device, phase string, err error) {
 }
 
 func registrationRefreshDelay(expires time.Duration) time.Duration {
-	if expires > imsRegistrationRefreshAdvance {
-		return expires - imsRegistrationRefreshAdvance
+	if expires <= 0 {
+		return time.Second
 	}
-	if expires > 0 && expires/2 > 0 {
-		return expires / 2
+	// TS 24.229 5.1.1.4.1: >1200s refresh 600s before expiry; otherwise at half-time.
+	if expires > imsLongRegistrationThreshold {
+		return expires - imsLongRegistrationRefreshLead
+	}
+	if half := expires / 2; half > 0 {
+		return half
 	}
 	return time.Second
 }
