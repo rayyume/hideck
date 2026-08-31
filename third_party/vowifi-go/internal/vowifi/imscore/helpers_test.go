@@ -79,6 +79,29 @@ func TestGenerateStablePAccessNetworkInfo(t *testing.T) {
 	}
 }
 
+func TestGeneratePAccessNetworkInfoPrefersRealBSSID(t *testing.T) {
+	got := GeneratePAccessNetworkInfo("user@example.com", "AA:BB:CC:DD:EE:FF")
+	if got != `IEEE-802.11; i-wlan-node-id="aabbccddeeff"` {
+		t.Fatalf("real BSSID PANI = %q", got)
+	}
+	if GeneratePAccessNetworkInfo("user@example.com", "") != GenerateStablePAccessNetworkInfo("user@example.com") {
+		t.Fatal("empty BSSID should fall back to identity-derived node id")
+	}
+}
+
+func TestGenerateDefaultCellularNetworkInfoOmitsSyntheticCell(t *testing.T) {
+	if got := GenerateDefaultCellularNetworkInfo("234", "15"); got != "" {
+		t.Fatalf("default CNI = %q, want omitted", got)
+	}
+	got := FormatCellularNetworkInfo("234", "15", "00ab", "1234", 12)
+	if got != "3GPP-E-UTRAN-FDD;utran-cell-id-3gpp=2341500AB1234;cell-info-age=12" {
+		t.Fatalf("real CNI = %q", got)
+	}
+	if FormatCellularNetworkInfo("234", "15", "", "1234", 12) != "" {
+		t.Fatal("CNI with empty TAC should be omitted")
+	}
+}
+
 func TestGenerateStableWlanNodeID(t *testing.T) {
 	id := GenerateStableWlanNodeID("user@example.com")
 	if id != "b6c9a289323b" {

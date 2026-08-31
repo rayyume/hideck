@@ -4,7 +4,7 @@
 
 ## 规范基线
 
-- 本次 SIP/SDP 对齐基线固定为 GSMA IR.51 v9.0 与 GSMA IR.92 v21.0；后续版本升级必须同步更新本表和对应回归测试。
+- 本次 SIP/SDP 对齐基线固定为 GSMA IR.51 v10.0 与 GSMA IR.92 v21.0；后续版本升级必须同步更新本表和对应回归测试。
 - GSMA IR.51：IMS over untrusted Wi-Fi，VoWiFi IMS 功能继承 IR.92 要求。
 - GSMA IR.92：IMS voice and SMS profile，包含 SIP precondition、会话定时器、语音媒体和 SMS over IP 要求。
 - 3GPP TS 24.302：EPC via non-3GPP access。
@@ -30,6 +30,8 @@
 | SIP session timer | RFC 4028、IR.92 2.2.8 | `voice/session_timer.go` | session timer 与 422/UPDATE/re-INVITE 测试 | 已实现 |
 | SMS over IMS | TS 24.341 | `sms`、`imscore/sms*` | RP-DATA、RP-ACK、状态报告和 SMMA 测试 | 已实现 |
 | IMS 紧急注册、紧急 URI 和 emergency ePDG 选择 | TS 24.229、IR.51 | `imscore/emergency_register.go`、`voice/emergency*`、`startup.SelectEmergencyEPDG` | emergency 单元测试 | 协议构造已实现但默认禁用；普通启动和拨号路径不调用 |
+| P-Access-Network-Info `i-wlan-node-id` | TS 24.229 7.2A.4.3 NOTE 3 | `imscore/helpers.go` `GenerateStableWlanNodeID` | `TestGenerateStableWlanNodeID`、`TestGeneratePAccessNetworkInfoPrefersRealBSSID` | **已知偏差**：本形态无 802.11 关联，使用身份派生的本地管理 MAC；若宿主能读到真实 BSSID 则优先使用。不得写成已对齐。该值也是紧急定位标识，合成值不可用于 PSAP 定位。 |
+| Cellular-Network-Info | TS 24.229 R.3.1.1A / 7.2.15.1 | `imscore/helpers.go` `GenerateDefaultCellularNetworkInfo` | `TestGenerateDefaultCellularNetworkInfoOmitsSyntheticCell` | VoWiFi 关射频时省略该头；有真实小区时用 `FormatCellularNetworkInfo`。禁止随机 TAC/CellID。 |
 
 ## 验证边界
 

@@ -243,7 +243,7 @@ func IsFatalNetworkError(err error) bool {
 // GenerateStablePAccessNetworkInfo builds the WLAN P-Access-Network-Info
 // value used by the recovered implementation.
 func GenerateStablePAccessNetworkInfo(seed string) string {
-	return fmt.Sprintf(`IEEE-802.11; i-wlan-node-id="%s"`, GenerateStableWlanNodeID(seed))
+	return GeneratePAccessNetworkInfo(seed, "")
 }
 
 // GenerateStablePAccessNetworkInfoByIdentity builds PANI from an identity.
@@ -267,6 +267,9 @@ func AppendPAccessNetworkCountry(pani, iso2 string) string {
 }
 
 // GenerateStableWlanNodeID derives a stable WLAN node ID from an identity.
+// This host has no 802.11 association, so the value is a locally administered
+// MAC derived from identity rather than a real AP BSSID (TS 24.229 7.2A.4.3
+// NOTE 3). Callers that have a real BSSID should pass it via PAccessNetworkInfo.
 func GenerateStableWlanNodeID(seed string) string {
 	seed = strings.TrimSpace(seed)
 	if seed == "" {
@@ -276,6 +279,19 @@ func GenerateStableWlanNodeID(seed string) string {
 	// Present the stable value as a locally administered unicast MAC address.
 	digest[0] = digest[0]&^byte(1) | byte(2)
 	return fmt.Sprintf("%x", digest[:6])
+}
+
+// GeneratePAccessNetworkInfo prefers a real BSSID when the host can read one.
+func GeneratePAccessNetworkInfo(seed, bssid string) string {
+	nodeID := strings.ReplaceAll(strings.ToLower(strings.TrimSpace(bssid)), ":", "")
+	nodeID = strings.ReplaceAll(nodeID, "-", "")
+	if nodeID == "" {
+		nodeID = GenerateStableWlanNodeID(seed)
+	}
+	if nodeID == "" {
+		return ""
+	}
+	return fmt.Sprintf(`IEEE-802.11; i-wlan-node-id="%s"`, nodeID)
 }
 
 func stablePANIGenerationSeed(candidates []string) string {
@@ -303,18 +319,30 @@ func GenerateRandomIMEIForModel(model string) string {
 	return prefix + string(imeiCheckDigit(prefix))
 }
 
-// GenerateDefaultCellularNetworkInfo builds a default cellular network info
-// string from the SIM profile.
+// GenerateDefaultCellularNetworkInfo omits Cellular-Network-Info when the
+// radio is off and no real cell is available (TS 24.229 R.3.1.1A).
 func GenerateDefaultCellularNetworkInfo(mcc, mnc string) string {
+	return ""
+}
+
+// FormatCellularNetworkInfo builds the header from a real camped cell.
+// Empty TAC or CellID returns an empty string so the header is omitted.
+func FormatCellularNetworkInfo(mcc, mnc, tac, cellID string, ageSeconds int) string {
 	mcc = strings.TrimSpace(mcc)
 	mncValue, err := strconv.Atoi(strings.TrimSpace(mnc))
 	if err != nil || len(mcc) != 3 || mncValue < 0 || mncValue > 999 {
 		return ""
 	}
-	// Proper E-UTRAN FDD cell identity: MCC(3) + MNC(2) + TAC(4 hex) + CellID(4 hex).
-	// O2/giffgaff UK uses FDD, and a well-formed 13-char cell id.
-	cellID := fmt.Sprintf("%s%02d%s%s", mcc, mncValue, strings.ToUpper(randomHex(4)), strings.ToUpper(randomHex(4)))
-	return fmt.Sprintf("3GPP-E-UTRAN-FDD;utran-cell-id-3gpp=%s;cell-info-age=3600", cellID)
+	tac = strings.TrimSpace(tac)
+	cellID = strings.TrimSpace(cellID)
+	if tac == "" || cellID == "" {
+		return ""
+	}
+	if ageSeconds < 0 {
+		ageSeconds = 0
+	}
+	identity := fmt.Sprintf("%s%02d%s%s", mcc, mncValue, strings.ToUpper(tac), strings.ToUpper(cellID))
+	return fmt.Sprintf("3GPP-E-UTRAN-FDD;utran-cell-id-3gpp=%s;cell-info-age=%d", identity, ageSeconds)
 }
 
 func imeiCheckDigit(prefix string) byte {
