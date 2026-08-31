@@ -32,10 +32,31 @@ func (s *Service) inboundOPTIONSAllow() string {
 }
 
 func (s *Service) inboundOPTIONSSupported() string {
+	base := "path,sec-agree,outbound,precondition"
 	if s != nil && s.cfg != nil {
-		if supported := strings.TrimSpace(registerSupportedHeader(s.cfg)); supported != "" {
-			return supported
+		if supported := strings.TrimSpace(s.cfg.RegisterTemplate.SupportedHeader); supported != "" {
+			return mergeSIPOptionTags(base, supported)
 		}
 	}
-	return "path,sec-agree,outbound"
+	return base
+}
+
+func mergeSIPOptionTags(values ...string) string {
+	seen := make(map[string]struct{}, 8)
+	out := make([]string, 0, 8)
+	for _, value := range values {
+		for _, token := range strings.Split(value, ",") {
+			token = strings.TrimSpace(token)
+			if token == "" {
+				continue
+			}
+			key := strings.ToLower(token)
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			seen[key] = struct{}{}
+			out = append(out, token)
+		}
+	}
+	return strings.Join(out, ",")
 }
