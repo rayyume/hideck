@@ -67,6 +67,27 @@ func TestBuildSubmitTPDUsUsesProvidedConcatReference(t *testing.T) {
 	}
 }
 
+func TestBuildSubmitTPDUsSetsStatusReportRequestBit(t *testing.T) {
+	plain, _, err := BuildSubmitTPDUsWithOptions("85075", "INFO", SubmitOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	withSRR, _, err := BuildSubmitTPDUsWithOptions("85075", "INFO", SubmitOptions{StatusReport: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plain[0][0]&0x20 != 0 {
+		t.Fatalf("default first octet 0x%02x has TP-SRR set", plain[0][0])
+	}
+	if withSRR[0][0]&0x20 == 0 {
+		t.Fatalf("status-report first octet 0x%02x missing TP-SRR", withSRR[0][0])
+	}
+	plain[0][0] |= 0x20
+	if plain[0][0] != withSRR[0][0] {
+		t.Fatalf("SRR path changed more than TP-SRR: default|0x20=0x%02x got=0x%02x", plain[0][0], withSRR[0][0])
+	}
+}
+
 func TestSetSubmitMessageReference(t *testing.T) {
 	encoded, _, err := BuildSubmitTPDUs("85075", "INFO")
 	if err != nil {

@@ -22,7 +22,7 @@ func TestEvaluateSMSReadinessRequiresEveryPrerequisite(t *testing.T) {
 		{name: "profile", registered: true, transport: true, receiver: true, smsc: "+123", reason: smsReadyReasonProfileNotReady},
 		{name: "transport", registered: true, profile: true, receiver: true, smsc: "+123", reason: smsReadyReasonTransportNotReady},
 		{name: "receiver", registered: true, profile: true, transport: true, smsc: "+123", reason: smsReadyReasonReceiverNotReady},
-		{name: "smsc", registered: true, profile: true, transport: true, receiver: true, reason: smsReadyReasonSMSCNotConfigured},
+		{name: "smsc", registered: true, profile: true, transport: true, receiver: true, ready: true, reason: smsReadyReasonSMSCNotConfigured},
 		{name: "ready", registered: true, profile: true, transport: true, receiver: true, smsc: "+123", ready: true, reason: smsReadyReasonReady},
 	}
 	for _, test := range tests {

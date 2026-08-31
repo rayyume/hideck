@@ -20,6 +20,7 @@ const (
 type SubmitOptions struct {
 	Encoding        SMSEncoding
 	ConcatReference int
+	StatusReport    bool
 }
 
 type fixedConcatCounter int
@@ -83,6 +84,12 @@ func BuildSubmitTPDUsWithOptions(to, text string, opts SubmitOptions) ([][]byte,
 		b, err := pdu.MarshalBinary()
 		if err != nil {
 			return nil, nil, err
+		}
+		if opts.StatusReport {
+			if len(b) == 0 {
+				return nil, nil, errors.New("TPDU 空，无法置 TP-SRR")
+			}
+			b[0] |= 0x20
 		}
 		bytesList = append(bytesList, b)
 		lenList = append(lenList, len(b))

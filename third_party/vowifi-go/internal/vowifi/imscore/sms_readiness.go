@@ -103,10 +103,13 @@ func evaluateSMSReadiness(registered, profileReady, transportReady, receiverRead
 		readiness.Reason = smsReadyReasonTransportNotReady
 	case !readiness.ReceiverReady:
 		readiness.Reason = smsReadyReasonReceiverNotReady
-	case !readiness.SMSCPresent:
-		readiness.Reason = smsReadyReasonSMSCNotConfigured
 	default:
 		readiness.Ready = true
+		if !readiness.SMSCPresent {
+			readiness.Reason = smsReadyReasonSMSCNotConfigured
+			break
+		}
+		readiness.MOReady = true
 		readiness.Reason = smsReadyReasonReady
 	}
 	return readiness

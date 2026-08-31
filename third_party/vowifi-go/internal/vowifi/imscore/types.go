@@ -329,6 +329,7 @@ type SMSReadiness struct {
 	ReceiverReady  bool
 	SMSCPresent    bool
 	Ready          bool
+	MOReady        bool
 	Reason         string
 }
 
