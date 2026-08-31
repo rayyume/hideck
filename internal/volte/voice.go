@@ -331,6 +331,10 @@ func (c *Controller) ResumeCall(context.Context, string, string) error {
 	return errors.New("volte: native hold is not supported")
 }
 
+func (c *Controller) SwitchCall(string, string) error {
+	return errors.New("volte: native call switch is not supported")
+}
+
 func (c *Controller) SendCallDTMF(deviceID, id, digit string) error {
 	call, ok := c.lookup(deviceID, id)
 	if !ok {

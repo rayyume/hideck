@@ -122,6 +122,11 @@ func (g *fakeVoiceGateway) HoldCall(_ context.Context, _, callID string) error {
 	return nil
 }
 
+func (g *fakeVoiceGateway) SwitchCall(_, callID string) error {
+	g.holdCalls <- callID + ":switch"
+	return nil
+}
+
 func (g *fakeVoiceGateway) ResumeCall(_ context.Context, _, callID string) error {
 	g.holdCalls <- callID + ":resume"
 	g.emitEvent(voicehost.CallEvent{

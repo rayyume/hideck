@@ -79,6 +79,7 @@ func TestStructuredOutboundInviteRejectsBusyAndMissingOffer(t *testing.T) {
 
 	agent.mu.Lock()
 	agent.activeCall = nil
+	delete(agent.calls, busy.CallID())
 	agent.mu.Unlock()
 	missingOfferTx := newVoiceServerTransaction()
 	agent.HandleOutboundInvite(

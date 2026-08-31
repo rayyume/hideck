@@ -176,6 +176,17 @@ func (s *Service) Resume(ctx context.Context, owner, callID, lease string) error
 	return s.setCallHold(ctx, owner, callID, lease, false)
 }
 
+func (s *Service) Switch(owner, callID, lease string) error {
+	call, err := s.controlledCall(owner, callID, lease)
+	if err != nil {
+		return err
+	}
+	s.mu.RLock()
+	deviceID, resolvedCallID := call.view.DeviceID, call.view.CallID
+	s.mu.RUnlock()
+	return s.gateway.SwitchCall(deviceID, resolvedCallID)
+}
+
 func (s *Service) setCallHold(ctx context.Context, owner, callID, lease string, hold bool) error {
 	call, err := s.controlledCall(owner, callID, lease)
 	if err != nil {

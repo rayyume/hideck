@@ -51,19 +51,23 @@ func (a *Agent) validateAndCleanExistingCall(
 	request *sip.Request,
 	transaction sip.ServerTransaction,
 ) bool {
-	a.mu.RLock()
-	existing := a.activeCall
-	a.mu.RUnlock()
-	if existing == nil {
+	a.mu.Lock()
+	if !a.cannotAddCallLocked() {
+		a.mu.Unlock()
 		return true
 	}
-	age := time.Since(existing.StartTime())
-	if !existing.IsTerminalState() && age < legacyCallOccupancyWindow {
-		a.respondClientRequestWithFallback(request, transaction, 486, "Busy Here")
-		return false
+	live := a.liveCallsLocked()
+	a.mu.Unlock()
+	if len(live) == 1 {
+		existing := live[0]
+		age := time.Since(existing.StartTime())
+		if existing.IsTerminalState() || age >= legacyCallOccupancyWindow {
+			a.releaseStaleOutboundCall(existing)
+			return true
+		}
 	}
-	a.releaseStaleOutboundCall(existing)
-	return true
+	a.respondClientRequestWithFallback(request, transaction, 486, "Busy Here")
+	return false
 }
 
 func (a *Agent) releaseStaleOutboundCall(call *Call) {
@@ -85,8 +89,11 @@ func (a *Agent) newClientOutboundCall(
 		return nil, errors.Join(err, releaseUnregisteredCall(call))
 	}
 	a.mu.Lock()
-	a.calls[call.CallID()] = call
-	a.activeCall = call
+	if a.cannotAddCallLocked() {
+		a.mu.Unlock()
+		return nil, errors.Join(errors.New("voice: busy"), releaseUnregisteredCall(call))
+	}
+	a.registerLiveCallLocked(call, false)
 	a.mu.Unlock()
 	return call, nil
 }

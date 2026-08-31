@@ -31,6 +31,7 @@ type VoiceGateway interface {
 	SendCallDTMF(string, string, string) error
 	HoldCall(context.Context, string, string) error
 	ResumeCall(context.Context, string, string) error
+	SwitchCall(string, string) error
 	StartCallCapture(string, string, string) error
 }
 

@@ -47,6 +47,7 @@ func (a *Agent) AnswerWithSDP(callID, clientSDP string) (InboundAnswer, error) {
 	}
 	call.StopOutboundNoAnswerTimer()
 	a.startVoiceSessionTimer(call)
+	_ = a.SwitchCall(call.CallID())
 	answer.State = call.CallState().String()
 	a.emitCallAnswered(call)
 	return answer, nil

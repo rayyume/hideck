@@ -44,30 +44,14 @@ func (a *Agent) reserveInboundCall(request imscore.InboundVoiceRequest) (*Call, 
 		a.mu.Unlock()
 		return existing, false, false, releaseUnregisteredCall(call)
 	}
-	if a.activeCall != nil && !a.activeCall.IsTerminalState() {
-		if a.canAcceptWaitingCallLocked() {
-			a.calls[request.CallID] = call
-			a.waitingCall = call
-			a.mu.Unlock()
-			return call, true, true, nil
-		}
+	if a.cannotAddCallLocked() {
 		a.mu.Unlock()
 		return nil, false, false, errors.Join(errors.New("voice: busy"), releaseUnregisteredCall(call))
 	}
-	a.calls[request.CallID] = call
-	a.activeCall = call
+	waiting := a.activeCall != nil && !a.activeCall.IsTerminalState()
+	a.registerLiveCallLocked(call, waiting)
 	a.mu.Unlock()
-	return call, true, false, nil
-}
-
-func (a *Agent) canAcceptWaitingCallLocked() bool {
-	if a.activeCall == nil || a.activeCall.IsTerminalState() {
-		return false
-	}
-	if a.activeCall.CallState() != callstate.StateConnected {
-		return false
-	}
-	return a.waitingCall == nil || a.waitingCall.IsTerminalState()
+	return call, true, waiting, nil
 }
 
 func (a *Agent) newInboundCall(request imscore.InboundVoiceRequest) *Call {

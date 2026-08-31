@@ -105,6 +105,14 @@ func (g *Gateway) ResumeCall(ctx context.Context, deviceID, callID string) error
 	return agent.ResumeCall(ctx, strings.TrimSpace(callID))
 }
 
+func (g *Gateway) SwitchCall(deviceID, callID string) error {
+	agent := g.internalAgent(deviceID)
+	if agent == nil {
+		return errors.New("voicehost: voice is unavailable for device " + strings.TrimSpace(deviceID))
+	}
+	return agent.SwitchCall(strings.TrimSpace(callID))
+}
+
 // StartCallCapture enables automatic paired PCAP/audio capture.
 func (g *Gateway) StartCallCapture(deviceID, callID, basePath string) error {
 	agent := g.internalAgent(deviceID)

@@ -29,6 +29,7 @@ func (s *stubBackend) HangupCall(context.Context, string, string) error { return
 func (s *stubBackend) SendCallDTMF(string, string, string) error        { return nil }
 func (s *stubBackend) HoldCall(context.Context, string, string) error   { return nil }
 func (s *stubBackend) ResumeCall(context.Context, string, string) error { return nil }
+func (s *stubBackend) SwitchCall(string, string) error                  { return nil }
 func (s *stubBackend) StartCallCapture(string, string, string) error    { return nil }
 func (s *stubBackend) DeviceStatus(string) map[string]interface{} {
 	return map[string]interface{}{"backend": s.name}

@@ -277,6 +277,11 @@ func (g *phoneRouteGatewayStub) HoldCall(_ context.Context, _, callID string) er
 	return nil
 }
 
+func (g *phoneRouteGatewayStub) SwitchCall(_, callID string) error {
+	g.dtmf = callID + ":switch"
+	return nil
+}
+
 func (g *phoneRouteGatewayStub) ResumeCall(_ context.Context, _, callID string) error {
 	g.dtmf = callID + ":resume"
 	g.emit(voicehost.CallEvent{

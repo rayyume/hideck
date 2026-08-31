@@ -347,12 +347,11 @@ func (a *Agent) startOutboundCall(number string) (*Call, error) {
 		return nil, errors.Join(err, releaseUnregisteredCall(call))
 	}
 	a.mu.Lock()
-	if a.activeCall != nil && !a.activeCall.IsTerminalState() {
+	if a.cannotAddCallLocked() {
 		a.mu.Unlock()
 		return nil, errors.Join(errors.New("voice: busy"), releaseUnregisteredCall(call))
 	}
-	a.calls[call.CallID()] = call
-	a.activeCall = call
+	a.registerLiveCallLocked(call, false)
 	a.mu.Unlock()
 	return call, nil
 }
@@ -851,6 +850,7 @@ func (a *Agent) finalizeActiveCall(call *Call) error {
 			delete(a.calls, callID)
 		}
 	}
+	a.promoteLiveCallLocked()
 	a.mu.Unlock()
 	return err
 }
