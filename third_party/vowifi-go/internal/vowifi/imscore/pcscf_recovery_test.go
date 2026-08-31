@@ -23,6 +23,9 @@ func TestDecidePCSCF503RecoveryFollowsTimerB(t *testing.T) {
 		{name: "short", retryAfter: "10", want: false},
 		{name: "equal", retryAfter: "32", want: false},
 		{name: "long", retryAfter: "60 (maintenance)", want: true, wantUntil: now.Add(time.Minute)},
+		// Long Retry-After still failovers because waiting past Timer B would
+		// strand the originating INVITE. IR.92 2.2.1 only mandates this when
+		// Retry-After is absent; this extra branch is documented tolerance.
 		{name: "invalid", retryAfter: "later", want: true},
 	}
 	for _, test := range tests {

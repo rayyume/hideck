@@ -32,6 +32,7 @@
 | IMS 紧急注册、紧急 URI 和 emergency ePDG 选择 | TS 24.229、IR.51 | `imscore/emergency_register.go`、`voice/emergency*`、`startup.SelectEmergencyEPDG` | emergency 单元测试 | 协议构造已实现但默认禁用；普通启动和拨号路径不调用 |
 | P-Access-Network-Info `i-wlan-node-id` | TS 24.229 7.2A.4.3 NOTE 3 | `imscore/helpers.go` `GenerateStableWlanNodeID` | `TestGenerateStableWlanNodeID`、`TestGeneratePAccessNetworkInfoPrefersRealBSSID` | **已知偏差**：本形态无 802.11 关联，使用身份派生的本地管理 MAC；若宿主能读到真实 BSSID 则优先使用。不得写成已对齐。该值也是紧急定位标识，合成值不可用于 PSAP 定位。 |
 | Cellular-Network-Info | TS 24.229 R.3.1.1A / 7.2.15.1 | `imscore/helpers.go` `GenerateDefaultCellularNetworkInfo` | `TestGenerateDefaultCellularNetworkInfoOmitsSyntheticCell` | VoWiFi 关射频时省略该头；有真实小区时用 `FormatCellularNetworkInfo`。禁止随机 TAC/CellID。 |
+| P-CSCF 503 failover | IR.92 2.2.1 / IR.51 4.9 | `imscore/pcscf_recovery.go` `decidePCSCF503Recovery` | `TestDecidePCSCF503RecoveryFollowsTimerB` | 无 Retry-After 时换 P-CSCF 并重新初始注册。Retry-After ≤ Timer B 则等待。Retry-After > Timer B 时仍切换并标记不可用，避免主叫 INVITE 卡死；这是刻意容错，不是规范最小集。 |
 
 ## 验证边界
 

@@ -37,6 +37,10 @@ func decidePCSCF503Recovery(
 	if retryAfter <= timerB {
 		return pcscf503RecoveryDecision{retryAfter: retryAfter}
 	}
+	// IR.92 2.2.1 only requires a new initial registration when 503 has no
+	// Retry-After. Waiting longer than Timer B would strand the INVITE, so
+	// this host still fails over and remembers the P-CSCF as unavailable
+	// until Retry-After elapses.
 	return pcscf503RecoveryDecision{
 		recover: true, retryAfter: retryAfter, unavailableUntil: now.Add(retryAfter),
 	}
