@@ -299,16 +299,12 @@ func TestRPAckFallsBackWithoutBinaryCTEAfter488(t *testing.T) {
 	}
 }
 
-func TestRPAckFallsBackToHostOnlyURIAfter488(t *testing.T) {
+func TestRPAckKeepsPAIAfterCTEFallbackStill488(t *testing.T) {
 	service, _, _ := newInboundSMSTestService(t)
-	var targets []string
+	var requests []string
 	service.transport.SetSendFn(func(raw string) error {
-		targets = append(targets, strings.SplitN(raw, "\r\n", 2)[0])
-		status := 488
-		if len(targets) == 3 {
-			status = 202
-		}
-		service.transport.DeliverResponse(registerResponseForRequest(raw, status, nil))
+		requests = append(requests, raw)
+		service.transport.DeliverResponse(registerResponseForRequest(raw, 488, nil))
 		return nil
 	})
 	raw := inboundSMSRequest(t, imsSMSContentType, inboundRPData(t, 0x35, "+447700900123", "ack"))
@@ -318,26 +314,16 @@ func TestRPAckFallsBackToHostOnlyURIAfter488(t *testing.T) {
 	err := service.sendRPReportWithRetryPolicy(rpReportRequest{
 		Inbound: raw, Body: smscodec.BuildRPAck(0x35), RPMR: 0x35,
 	}, 0, 0)
-	if err != nil || len(targets) != 3 {
-		t.Fatalf("attempts=%d error=%v targets=%v", len(targets), err, targets)
+	if err == nil || len(requests) != 2 {
+		t.Fatalf("attempts=%d error=%v", len(requests), err)
 	}
-	if !strings.Contains(targets[0], "sip:+447802002606@ipsmms1mc06.ims.example") {
-		t.Fatalf("first target = %q", targets[0])
+	for i, request := range requests {
+		if got := strings.SplitN(request, "\r\n", 2)[0]; !strings.Contains(got, "sip:+447802002606@ipsmms1mc06.ims.example") {
+			t.Fatalf("request %d left PAI: %q", i, got)
+		}
 	}
-	if !strings.HasPrefix(targets[2], "MESSAGE sip:ipsmms1mc06.ims.example SIP/2.0") {
-		t.Fatalf("host-only target = %q", targets[2])
-	}
-}
-
-func TestSipURIWithoutUser(t *testing.T) {
-	if got := sipURIWithoutUser("sip:+447802002606@ipsmms1mc06.ims.example;transport=tcp"); got != "sip:ipsmms1mc06.ims.example;transport=tcp" {
-		t.Fatalf("got %q", got)
-	}
-	if got := sipURIWithoutUser("sip:ipsmms1mc06.ims.example"); got != "" {
-		t.Fatalf("host-only = %q", got)
-	}
-	if got := sipURIWithoutUser("tel:+447802002606"); got != "" {
-		t.Fatalf("tel = %q", got)
+	if rpReportRejectStatus(err) != 488 {
+		t.Fatalf("error = %v", err)
 	}
 }
 

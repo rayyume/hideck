@@ -219,36 +219,7 @@ func rpAckRequestVariants(report rpReportRequest) []rpReportRequest {
 		withoutCTE.OmitBinaryCTE = true
 		variants = append(variants, withoutCTE)
 	}
-	hostOnly := sipURIWithoutUser(report.RemoteURI)
-	if hostOnly != "" && !strings.EqualFold(hostOnly, strings.TrimSpace(report.RemoteURI)) {
-		fallback := report
-		fallback.RemoteURI = hostOnly
-		fallback.OmitBinaryCTE = true
-		variants = append(variants, fallback)
-	}
 	return variants
-}
-
-func sipURIWithoutUser(uri string) string {
-	uri = strings.TrimSpace(uri)
-	scheme, rest, ok := strings.Cut(uri, ":")
-	if !ok {
-		return ""
-	}
-	switch strings.ToLower(scheme) {
-	case "sip", "sips":
-	default:
-		return ""
-	}
-	at := strings.LastIndex(rest, "@")
-	if at < 0 {
-		return ""
-	}
-	host := strings.TrimSpace(rest[at+1:])
-	if host == "" {
-		return ""
-	}
-	return scheme + ":" + host
 }
 
 func (report rpReportRequest) ackTargets() []string {
