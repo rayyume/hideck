@@ -32,6 +32,9 @@ func (a *Agent) startVoiceClientInvite(
 		OnStarted: func(handle imsendpoint.InviteHandle) error {
 			return call.storeInviteHandle(handle)
 		},
+		OnEarlyDialog: func(handle imsendpoint.DialogHandle) error {
+			return call.storeDialogHandle(handle)
+		},
 		OnResponse: func(response *sip.Response) error {
 			value := publicVoiceSIPResponse(response)
 			if value.StatusCode < 200 {

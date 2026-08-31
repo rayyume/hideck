@@ -17,6 +17,12 @@ import (
 
 const reliableEarlyMediaSDP = "v=0\r\no=- 2 2 IN IP4 127.0.0.1\r\ns=ims\r\nc=IN IP4 127.0.0.1\r\nt=0 0\r\nm=audio 33000 RTP/AVP 104\r\na=rtpmap:104 AMR-WB/16000\r\n"
 
+const reliablePreconditionSDP = reliableEarlyMediaSDP +
+	"a=curr:qos local sendrecv\r\n" +
+	"a=curr:qos remote sendrecv\r\n" +
+	"a=des:qos optional local sendrecv\r\n" +
+	"a=des:qos mandatory remote sendrecv\r\n"
+
 type reliableProvisionalRegistrar struct {
 	conn                *net.UDPConn
 	prack               chan string
@@ -28,6 +34,7 @@ type reliableProvisionalRegistrar struct {
 	sessionExpires      string
 	provisionalExpires  string
 	provisionalSDP      string
+	updateSDP           string
 }
 
 type sipTestResponse struct {
@@ -43,6 +50,7 @@ type reliableRegistrarOptions struct {
 	finalSessionExpires       string
 	provisionalSessionExpires string
 	provisionalSDP            string
+	updateSDP                 string
 }
 
 type earlyMediaProbe struct {
@@ -85,6 +93,7 @@ func startReliableProvisionalRegistrarWithOptions(
 		sessionExpires:      options.finalSessionExpires,
 		provisionalExpires:  options.provisionalSessionExpires,
 		provisionalSDP:      options.provisionalSDP,
+		updateSDP:           options.updateSDP,
 	}
 	t.Cleanup(func() { _ = conn.Close() })
 	go registrar.serve()
@@ -118,7 +127,13 @@ func (r *reliableProvisionalRegistrar) serve() {
 			r.ack <- request
 		case "UPDATE":
 			r.update <- request
-			r.writeResponse(sipTestResponse{request: request, remote: remote, status: 200})
+			extra := ""
+			if r.updateSDP != "" {
+				extra = "Content-Type: application/sdp\r\n"
+			}
+			r.writeResponse(sipTestResponse{
+				request: request, remote: remote, status: 200, extra: extra, body: r.updateSDP,
+			})
 		default:
 			r.writeResponse(sipTestResponse{request: request, remote: remote, status: 200})
 		}
@@ -196,12 +211,47 @@ func TestAgentPRACKsReliableProvisionalBeforeFinalInvite(t *testing.T) {
 	}
 }
 
+func TestAgentSendsPreconditionUpdateAfterReliableProvisional(t *testing.T) {
+	registrar := startReliableProvisionalRegistrarWithOptions(t, reliableRegistrarOptions{
+		prackResponsesAfter: 1,
+		provisionalSDP:      reliablePreconditionSDP,
+		updateSDP:           reliablePreconditionSDP,
+	})
+	agent := newVoiceTestAgent(t, registrar.conn)
+	if err := agent.StartCurrent(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = agent.Stop() })
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	call, err := agent.dialContext(ctx, "+447942985429", "")
+	if err != nil {
+		t.Fatalf("dialContext: %v", err)
+	}
+	select {
+	case update := <-registrar.update:
+		assertPreconditionStatusUpdate(t, update)
+	case <-ctx.Done():
+		t.Fatal("precondition status UPDATE was not sent")
+	}
+	if !call.preconditionMetValue() || call.CallState() != callstate.StateConnected {
+		t.Fatalf("state=%s precondition_met=%t", call.CallState(), call.preconditionMetValue())
+	}
+	select {
+	case duplicate := <-registrar.update:
+		t.Fatalf("duplicate precondition UPDATE: %q", duplicate)
+	default:
+	}
+}
+
 func TestLocalClientOwnsReliableProvisionalPRACK(t *testing.T) {
 	clientMedia := listenVoiceUDP(t)
 	imsMedia := listenVoiceUDP(t)
 	registrar := startReliableProvisionalRegistrarWithOptions(t, reliableRegistrarOptions{
 		prackResponsesAfter: 1,
-		provisionalSDP:      voiceTestSDP("ims", imsMedia.LocalAddr().(*net.UDPAddr).Port, 104),
+		provisionalSDP:      voiceTestPreconditionSDP("ims", imsMedia.LocalAddr().(*net.UDPAddr).Port, 104),
+		updateSDP:           voiceTestPreconditionSDP("ims", imsMedia.LocalAddr().(*net.UDPAddr).Port, 104),
 	})
 	agent := newVoiceTestAgent(t, registrar.conn)
 	if err := agent.StartCurrent(); err != nil {
@@ -252,6 +302,12 @@ func TestLocalClientOwnsReliableProvisionalPRACK(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("local PRACK was not forwarded to IMS")
 	}
+	select {
+	case update := <-registrar.update:
+		assertPreconditionStatusUpdate(t, update)
+	case <-time.After(time.Second):
+		t.Fatal("local PRACK did not trigger the IMS precondition UPDATE")
+	}
 	waitVoiceResponse(t, inviteTx, 200)
 }
 
@@ -261,6 +317,14 @@ func voiceTestSDP(name string, port, payloadType int) string {
 			"t=0 0\r\nm=audio %d RTP/AVP %d\r\na=rtpmap:%d AMR-WB/16000\r\n",
 		name, port, payloadType, payloadType,
 	)
+}
+
+func voiceTestPreconditionSDP(name string, port, payloadType int) string {
+	return voiceTestSDP(name, port, payloadType) +
+		"a=curr:qos local sendrecv\r\n" +
+		"a=curr:qos remote sendrecv\r\n" +
+		"a=des:qos optional local sendrecv\r\n" +
+		"a=des:qos mandatory remote sendrecv\r\n"
 }
 
 func assertEarlyMediaRelayed(t *testing.T, probe earlyMediaProbe) {
@@ -441,5 +505,25 @@ func assertReliableProvisionalPRACK(t *testing.T, request string, registrarPort,
 	second := strings.Index(request, "Route: <sip:edge-one.example;lr>")
 	if first < 0 || second < first {
 		t.Fatalf("PRACK route set is not reversed: %q", request)
+	}
+}
+
+func assertPreconditionStatusUpdate(t *testing.T, request string) {
+	t.Helper()
+	if got := voiceTestHeader(request, "Content-Type"); got != "application/sdp" {
+		t.Fatalf("UPDATE Content-Type = %q", got)
+	}
+	for _, want := range []string{
+		"m=audio ", "RTP/AVP 104", "a=curr:qos local sendrecv", "a=curr:qos remote sendrecv",
+	} {
+		if !strings.Contains(request, want) {
+			t.Fatalf("precondition UPDATE missing %q: %q", want, request)
+		}
+	}
+	if strings.Contains(request, "a=rtpmap:110") || strings.Contains(request, "a=curr:qos remote none") {
+		t.Fatalf("precondition UPDATE kept an unselected codec or stale QoS: %q", request)
+	}
+	if !strings.HasSuffix(voiceTestHeader(request, "CSeq"), " UPDATE") {
+		t.Fatalf("UPDATE CSeq = %q", voiceTestHeader(request, "CSeq"))
 	}
 }

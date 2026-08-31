@@ -30,6 +30,14 @@ func buildIMSSessionUpdate(agent *Agent, call *Call) string {
 	return attachSessionTimerHeaders(call, buildVoiceRequest(dialog, call.CallID(), "UPDATE", voiceBranch(), ""))
 }
 
+func buildIMSPreconditionUpdate(agent *Agent, call *Call, sdp string) string {
+	if agent == nil || call == nil || strings.TrimSpace(sdp) == "" {
+		return ""
+	}
+	dialog := call.advanceVoiceCSeq()
+	return buildVoiceRequest(dialog, call.CallID(), "UPDATE", voiceBranch(), sdp)
+}
+
 func buildIMSReinvite(agent *Agent, call *Call, sdp string) string {
 	if agent == nil || call == nil {
 		return ""

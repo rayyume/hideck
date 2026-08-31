@@ -148,11 +148,12 @@ type ServerInviteHandle interface {
 
 // ClientInviteOptions controls one client INVITE transaction.
 type ClientInviteOptions struct {
-	Request    *sip.Request
-	Contact    *sip.ContactHeader
-	Timeout    int64
-	OnStarted  func(InviteHandle) error
-	OnResponse func(*sip.Response) error
+	Request       *sip.Request
+	Contact       *sip.ContactHeader
+	Timeout       int64
+	OnStarted     func(InviteHandle) error
+	OnEarlyDialog func(DialogHandle) error
+	OnResponse    func(*sip.Response) error
 }
 
 // DialogRequestOptions controls one in-dialog transaction.

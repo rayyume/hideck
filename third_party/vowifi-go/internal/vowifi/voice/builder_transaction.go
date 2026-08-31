@@ -15,7 +15,7 @@ const (
 	// TS 24.229 5.1.3.1: initial INVITE Accept must include SDP and the 3GPP
 	// IM CN subsystem XML body MIME type.
 	voiceInviteAccept = "application/sdp, application/3gpp-ims+xml"
-	voiceInviteAllow  = "INVITE, ACK, CANCEL, BYE, UPDATE, REFER, NOTIFY, MESSAGE, OPTIONS"
+	voiceInviteAllow  = "OPTIONS, NOTIFY, INVITE, ACK, BYE, CANCEL, UPDATE, PRACK, REFER, INFO, MESSAGE"
 	voiceFeatureCaps  = `*;+g.3gpp.icsi-ref="urn%3Aurn-7%3A3gpp-service.ims.icsi.mmtel"`
 )
 

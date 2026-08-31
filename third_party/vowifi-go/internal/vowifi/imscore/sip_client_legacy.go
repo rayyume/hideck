@@ -31,7 +31,12 @@ func (s *Service) StartClientInvite(
 	var handle *imscoreInviteHandle
 	callbacks := sipTransactionCallbacks{
 		onProvisional: func(response *sipResponse) error {
-			s.retainClientInviteEarlyDialog(handle, response)
+			dialog := s.retainClientInviteEarlyDialog(handle, response)
+			if dialog != nil && options.OnEarlyDialog != nil {
+				if err := options.OnEarlyDialog(dialog); err != nil {
+					return err
+				}
+			}
 			return callClientInviteResponseHandler(options.OnResponse, response)
 		},
 		onFinalRetransmit: func(response *sipResponse) error {
@@ -263,12 +268,12 @@ func (s *Service) closeClientInviteDialog(invite *imscoreInviteHandle) {
 func (s *Service) retainClientInviteEarlyDialog(
 	invite *imscoreInviteHandle,
 	response *sipResponse,
-) {
+) *imscoreDialogHandle {
 	if invite == nil || response == nil || response.parsed == nil || response.StatusCode <= 100 {
-		return
+		return nil
 	}
 	if response.parsed.To() == nil || toHeaderTag(response.parsed.To()) == "" {
-		return
+		return nil
 	}
 	dialog := s.retainMatchingEarlyDialog(invite, response.parsed)
 	if dialog == nil {
@@ -285,6 +290,7 @@ func (s *Service) retainClientInviteEarlyDialog(
 	if previous != nil {
 		s.closeReplacedEarlyDialog(previous.ID, dialog.id)
 	}
+	return dialog
 }
 
 func (s *Service) retainMatchingEarlyDialog(

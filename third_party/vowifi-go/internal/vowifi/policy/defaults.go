@@ -11,9 +11,9 @@ const (
 	defaultIMSExpires            = 600000
 	defaultTemporaryRetrySeconds = 60
 	defaultSupportedHeader       = "path,sec-agree,outbound"
-	defaultAllowHeader           = "OPTIONS, REGISTER, SUBSCRIBE, NOTIFY, PUBLISH, INVITE, ACK, BYE, CANCEL, UPDATE, PRACK, REFER, INFO, MESSAGE"
+	defaultAllowHeader           = "OPTIONS, NOTIFY, INVITE, ACK, BYE, CANCEL, UPDATE, PRACK, REFER, INFO, MESSAGE"
 	defaultVoiceSupportedHeader  = "100rel, timer, replaces, norefersub, early-session"
-	defaultVoiceAllowHeader      = "INVITE, ACK, CANCEL, BYE, UPDATE, REFER, NOTIFY, MESSAGE, OPTIONS"
+	defaultVoiceAllowHeader      = "OPTIONS, NOTIFY, INVITE, ACK, BYE, CANCEL, UPDATE, PRACK, REFER, INFO, MESSAGE"
 	defaultVoiceAcceptContact    = `*;+g.3gpp.icsi-ref="urn%3Aurn-7%3A3gpp-service.ims.icsi.mmtel"`
 	defaultVoicePreferredService = "urn:urn-7:3gpp-service.ims.icsi.mmtel"
 	defaultICSIRef               = "urn%3Aurn-7%3A3gpp-service.ims.icsi.mmtel," +

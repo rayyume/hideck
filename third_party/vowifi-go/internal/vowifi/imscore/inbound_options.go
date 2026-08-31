@@ -5,6 +5,8 @@ import (
 	"strings"
 )
 
+const inboundSIPAllowHeader = "OPTIONS, NOTIFY, INVITE, ACK, BYE, CANCEL, UPDATE, PRACK, REFER, INFO, MESSAGE"
+
 const inboundOPTIONSAccept = "application/sdp, application/reginfo+xml, application/simple-message-summary"
 
 func (s *Service) buildInboundOPTIONSResponse(request string) (string, error) {
@@ -26,12 +28,7 @@ func (s *Service) buildInboundOPTIONSResponse(request string) (string, error) {
 }
 
 func (s *Service) inboundOPTIONSAllow() string {
-	if s != nil && s.cfg != nil {
-		if allow := registerConfiguredAllowHeader(s.cfg); allow != "" {
-			return allow
-		}
-	}
-	return "OPTIONS, REGISTER, SUBSCRIBE, NOTIFY, PUBLISH, INVITE, ACK, BYE, CANCEL, UPDATE, PRACK, REFER, INFO, MESSAGE"
+	return inboundSIPAllowHeader
 }
 
 func (s *Service) inboundOPTIONSSupported() string {

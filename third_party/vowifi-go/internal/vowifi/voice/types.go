@@ -104,25 +104,26 @@ type Call struct {
 	outboundInvite    string
 	inboundDecisionMu sync.Mutex
 
-	ackSent              bool
-	inviteFinalSeen      bool
-	inviteProvisional    bool
-	localCancelSent      bool
-	reliableProvisional  bool
-	outboundCancelReason string
-	clientInviteRequest  *sip.Request
-	clientInviteResponse *sip.Response
-	inboundClientStarted bool
-	inboundPrepared      bool
-	inboundClientBridge  *client.Bridge
-	clientCancelSent     bool
-	clientByeSent        bool
-	clientFinalSent      bool
-	terminalFinalized    bool
-	captureBasePath      string
-	cleanupOnce          sync.Once
-	finalizedEventOnce   sync.Once
-	cleanupErr           error
+	ackSent                bool
+	inviteFinalSeen        bool
+	inviteProvisional      bool
+	localCancelSent        bool
+	reliableProvisional    bool
+	preconditionUpdateSent bool
+	outboundCancelReason   string
+	clientInviteRequest    *sip.Request
+	clientInviteResponse   *sip.Response
+	inboundClientStarted   bool
+	inboundPrepared        bool
+	inboundClientBridge    *client.Bridge
+	clientCancelSent       bool
+	clientByeSent          bool
+	clientFinalSent        bool
+	terminalFinalized      bool
+	captureBasePath        string
+	cleanupOnce            sync.Once
+	finalizedEventOnce     sync.Once
+	cleanupErr             error
 
 	sessionRefresher string
 	sessionMinSE     int

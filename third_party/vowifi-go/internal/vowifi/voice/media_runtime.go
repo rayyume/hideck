@@ -126,6 +126,7 @@ func (a *Agent) prepareOutboundMedia(call *Call, clientOffer string) (string, er
 		relay.Stop()
 		return "", err
 	}
+	imsOffer = []byte(ensureOriginatingPreconditions(string(imsOffer)))
 	call.setLocalSDP(clientOffer, string(imsOffer))
 	return string(imsOffer), nil
 }

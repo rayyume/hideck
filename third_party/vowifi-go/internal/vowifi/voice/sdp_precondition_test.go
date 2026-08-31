@@ -7,9 +7,9 @@ import (
 	"github.com/iniwex5/vowifi-go/internal/vowifi/voice/callstate"
 )
 
-func TestReservedLocalOfferDoesNotNeedSegmentedUpdate(t *testing.T) {
+func TestReservedLocalOfferStartsWithSatisfiedLocalQoS(t *testing.T) {
 	if !sdpPreconditionsSatisfied(sdpQoSReservedLocal) {
-		t.Fatal("reserved-local first offer still waits for a segmented UPDATE")
+		t.Fatal("reserved-local first offer marks available Wi-Fi resources as unavailable")
 	}
 	if strings.Contains(sdpQoSReservedLocal, "a=curr:qos local none") {
 		t.Fatal("reserved-local offer advertised unmet local qos")
@@ -75,12 +75,40 @@ func TestApplyCallPreconditionsMovesEarlyMediaToWait(t *testing.T) {
 	if err := call.TransitionChecked(callstate.StateEarlyMedia); err != nil {
 		t.Fatal(err)
 	}
-	agent.applyCallPreconditions(call, "a=curr:qos local none\r\na=curr:qos remote none\r\n")
+	agent.applyCallPreconditions(call, "a=curr:qos local none\r\na=curr:qos remote none\r\n"+
+		"a=des:qos mandatory local sendrecv\r\n")
 	if call.CallState() != callstate.StatePreconditionWait || call.preconditionMetValue() {
 		t.Fatalf("state=%s met=%v", call.CallState(), call.preconditionMetValue())
 	}
-	agent.applyCallPreconditions(call, "a=curr:qos remote sendrecv\r\n")
+	agent.applyCallPreconditions(call, "a=curr:qos remote sendrecv\r\n"+
+		"a=des:qos mandatory remote sendrecv\r\n")
 	if call.CallState() != callstate.StateEarlyMedia || !call.preconditionMetValue() {
 		t.Fatalf("after met state=%s met=%v", call.CallState(), call.preconditionMetValue())
+	}
+}
+
+func TestSDPPreconditionsRequireEveryMandatoryStatus(t *testing.T) {
+	unmet := "a=curr:qos local sendrecv\r\na=curr:qos remote none\r\n" +
+		"a=des:qos mandatory local sendrecv\r\na=des:qos mandatory remote sendrecv\r\n"
+	if sdpPreconditionsSatisfied(unmet) {
+		t.Fatal("one satisfied mandatory segment hid an unmet segment")
+	}
+	optionalRemote := strings.Replace(unmet, "mandatory remote", "optional remote", 1)
+	if !sdpPreconditionsSatisfied(optionalRemote) {
+		t.Fatal("optional remote reservation blocked session establishment")
+	}
+}
+
+func TestEnsureOriginatingPreconditionsAddsAudioAttributes(t *testing.T) {
+	raw := "v=0\r\nm=audio 12000 RTP/AVP 104\r\na=rtpmap:104 AMR-WB/16000\r\n" +
+		"m=video 12002 RTP/AVP 96\r\na=rtpmap:96 H264/90000\r\n"
+	got := ensureOriginatingPreconditions(raw)
+	audioQoS := strings.Index(got, "a=curr:qos local sendrecv")
+	video := strings.Index(got, "m=video")
+	if audioQoS < 0 || video < audioQoS {
+		t.Fatalf("audio preconditions were not inserted before the next media section: %q", got)
+	}
+	if again := ensureOriginatingPreconditions(got); again != got {
+		t.Fatal("precondition insertion is not idempotent")
 	}
 }

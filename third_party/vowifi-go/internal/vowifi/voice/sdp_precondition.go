@@ -6,24 +6,17 @@ import (
 	"github.com/iniwex5/vowifi-go/internal/vowifi/voice/callstate"
 )
 
-// sdpQoSReservedLocal is the RFC 3312 / 3GPP 24.229 originating offer once the
-// access bearer is already up. GSMA IR.92 requires the precondition option
-// tag and qos attributes; VoWiFi has SWu/IPsec before INVITE, so current
-// local status must be sendrecv. Advertising "local none" plus "des
-// mandatory" makes the callee wait for a segmented UPDATE that this stack
-// does not send. Desired local stays mandatory (already satisfied). Remote
-// stays optional. Do not put Require: precondition on the INVITE.
+// sdpQoSReservedLocal is the RFC 3312 / IR.51 originating offer after the
+// Wi-Fi access resources are available. IR.51 still requires preconditions in
+// this state, and IR.92 requires a later UPDATE for the status/codec update.
 const sdpQoSReservedLocal = "" +
 	"a=curr:qos local sendrecv\r\n" +
 	"a=curr:qos remote none\r\n" +
 	"a=des:qos mandatory local sendrecv\r\n" +
 	"a=des:qos optional remote sendrecv\r\n"
 
-// sdpQoSEstablishedRemote is the RFC 3312 current remote status after the
-// initial session is already up. TS 24.610 Table A.1.3-1 hold re-INVITE uses
-// "curr:qos remote sendrecv". Replaying the first-offer "remote none" on a
-// mid-dialog hold tells the peer mandatory/segmented preconditions are still
-// open (RFC 3312 §6); IR.92 2.4.1 then expects a SIP UPDATE we do not send.
+// sdpQoSEstablishedRemote is the RFC 3312 current remote status learned from
+// the early offer/answer exchange and used by the status UPDATE and re-INVITEs.
 const sdpQoSEstablishedRemote = "a=curr:qos remote sendrecv"
 
 func sdpHasPreconditions(sdp string) bool {
@@ -65,6 +58,36 @@ func advertiseEstablishedSessionQoS(sdp string) string {
 	return rewritten.String()
 }
 
+func ensureOriginatingPreconditions(sdp string) string {
+	if strings.TrimSpace(sdp) == "" || sdpHasPreconditions(sdp) {
+		return sdp
+	}
+	lines := splitSDPTextLines(sdp)
+	audioIndex := -1
+	for index, line := range lines {
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(line)), "m=audio ") {
+			audioIndex = index
+			break
+		}
+	}
+	if audioIndex < 0 {
+		return sdp
+	}
+	insertAt := len(lines)
+	for index := audioIndex + 1; index < len(lines); index++ {
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(lines[index])), "m=") {
+			insertAt = index
+			break
+		}
+	}
+	qosLines := splitSDPTextLines(sdpQoSReservedLocal)
+	result := make([]string, 0, len(lines)+len(qosLines))
+	result = append(result, lines[:insertAt]...)
+	result = append(result, qosLines...)
+	result = append(result, lines[insertAt:]...)
+	return strings.Join(result, "\r\n") + "\r\n"
+}
+
 func markLocalSDPSessionEstablished(call *Call) {
 	if call == nil {
 		return
@@ -81,9 +104,54 @@ func sdpPreconditionsSatisfied(remoteSDP string) bool {
 	if !sdpHasPreconditions(remoteSDP) {
 		return true
 	}
-	remote := sdpQoSCurrent(remoteSDP, "remote")
-	local := sdpQoSCurrent(remoteSDP, "local")
-	return remote == "sendrecv" || local == "sendrecv"
+	current, mandatory := parseSDPQoSStatus(remoteSDP)
+	for statusType, desired := range mandatory {
+		if current[statusType]&desired != desired {
+			return false
+		}
+	}
+	return true
+}
+
+func parseSDPQoSStatus(sdp string) (map[string]uint8, map[string]uint8) {
+	current := make(map[string]uint8)
+	mandatory := make(map[string]uint8)
+	for _, source := range splitSDPTextLines(sdp) {
+		fields := strings.Fields(strings.ToLower(strings.TrimSpace(source)))
+		switch {
+		case len(fields) == 3 && fields[0] == "a=curr:qos":
+			current[fields[1]] |= sdpQoSDirectionMask(fields[2])
+		case len(fields) == 4 && fields[0] == "a=des:qos" && fields[1] == "mandatory":
+			mandatory[fields[2]] |= sdpQoSDirectionMask(fields[3])
+		}
+	}
+	return current, mandatory
+}
+
+func sdpQoSDirectionMask(direction string) uint8 {
+	switch strings.ToLower(strings.TrimSpace(direction)) {
+	case "send":
+		return 1
+	case "recv":
+		return 2
+	case "sendrecv":
+		return 3
+	default:
+		return 0
+	}
+}
+
+func (c *Call) claimPreconditionStatusUpdate() bool {
+	if c == nil {
+		return false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.preconditionUpdateSent {
+		return false
+	}
+	c.preconditionUpdateSent = true
+	return true
 }
 
 func (c *Call) setPreconditionMet(met bool) {

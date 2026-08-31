@@ -46,17 +46,22 @@ func (a *Agent) handleIMS1xxResponse(
 	}
 	call.learnVoiceDialog(response)
 	call.applyVoiceSessionExpires(voiceResponseHeader(response.Headers, "Session-Expires"))
+	preconditionSDP := ""
 	if isVoiceSDPContentType(voiceResponseHeader(response.Headers, "Content-Type")) && len(response.Body) > 0 {
 		if err := a.updateRemoteMedia(call, response); err != nil {
 			logging.WarnRate("ims-invite-provisional-sdp", "IMS INVITE 临时响应 SDP 处理失败",
 				"status", response.StatusCode, "err", err)
 		}
 		if !confirmed {
-			a.applyCallPreconditions(call, string(response.Body))
+			remoteSDP := string(response.Body)
+			a.applyCallPreconditions(call, remoteSDP)
+			if sdpHasPreconditions(remoteSDP) {
+				preconditionSDP = remoteSDP
+			}
 		}
 	}
 	if !sipHeaderHasToken(voiceResponseHeader(response.Headers, "Require"), "100rel") {
-		return nil
+		return a.sendPreconditionStatusUpdate(ctx, call, preconditionSDP)
 	}
 	rseq, err := reliableProvisionalRSeq(response)
 	if err != nil {
@@ -68,7 +73,10 @@ func (a *Agent) handleIMS1xxResponse(
 	if call.hasLocalInviteTransaction() && !confirmed {
 		return nil
 	}
-	return a.sendReliableProvisionalPRACK(ctx, call, rseq)
+	if err := a.sendReliableProvisionalPRACK(ctx, call, rseq); err != nil {
+		return err
+	}
+	return a.sendPreconditionStatusUpdate(ctx, call, preconditionSDP)
 }
 
 func logOutboundInviteRequest(raw string) {
