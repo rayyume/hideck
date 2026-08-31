@@ -186,12 +186,19 @@ func (s *Session) addLegacyRoutes(transaction *legacyNetTxn, iface string, route
 }
 
 func (s *Session) tunnelMTU() int {
-	mtu := s.cfg.TUNMTU
+	mtu := 0
+	if s != nil && s.cfg != nil {
+		mtu = s.cfg.TUNMTU
+	}
 	if mtu <= 0 {
 		mtu = defaultTunnelMTU
 	}
-	if s.innerIPv6 != nil && mtu < minimumIPv6MTU {
-		return minimumIPv6MTU
+	if s == nil || s.innerIPv6 == nil || s.innerIPv6.To4() != nil {
+		return mtu
+	}
+	const ipv6HeaderExtra = 20
+	if mtu-ipv6HeaderExtra < minimumIPv6MTU {
+		return minimumIPv6MTU + ipv6HeaderExtra
 	}
 	return mtu
 }

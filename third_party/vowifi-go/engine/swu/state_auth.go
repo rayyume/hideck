@@ -131,6 +131,25 @@ func (s *Session) buildCPRequestPayload() *ikev2.EncryptedPayloadCP {
 
 // buildTrafficSelectorsForIPStack builds the TSi/TSr traffic selectors for the
 // inner IP stack (RFC 7296 §3.13).
+func (s *Session) childTrafficSelectors() (*ikev2.EncryptedPayloadTS, *ikev2.EncryptedPayloadTS) {
+	if s == nil {
+		return buildTrafficSelectorsForIPStack(nil)
+	}
+	var initiator, responder []*ikev2.TrafficSelector
+	if ip4 := s.innerIP.To4(); len(ip4) == net.IPv4len {
+		initiator = append(initiator, ikev2.NewTrafficSelectorIPV4(ip4, 0, 0, 0xffff))
+		responder = append(responder, anyIPv4Selector())
+	}
+	if s.innerIPv6 != nil && s.innerIPv6.To4() == nil {
+		initiator = append(initiator, ikev2.NewTrafficSelectorIPV6(s.innerIPv6, 0, 0, 0xffff))
+		responder = append(responder, anyIPv6Selector())
+	}
+	if len(initiator) == 0 {
+		return buildTrafficSelectorsForIPStack(nil)
+	}
+	return trafficSelectorPayloads(initiator, responder)
+}
+
 func buildTrafficSelectorsForIPStack(innerIP net.IP) (*ikev2.EncryptedPayloadTS, *ikev2.EncryptedPayloadTS) {
 	if innerIP == nil {
 		return trafficSelectorPayloads(

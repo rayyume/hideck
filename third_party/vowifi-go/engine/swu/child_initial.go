@@ -35,7 +35,7 @@ func (s *Session) createInitialChildSA(ctx context.Context) error {
 			crypto.Wipe(childDH.SharedKey)
 		}
 	}()
-	tsi, tsr := buildTrafficSelectorsForIPStack(s.primaryInnerIP())
+	tsi, tsr := s.childTrafficSelectors()
 	payloads := []ikev2.Payload{
 		&ikev2.EncryptedPayloadSA{Proposals: espProposals},
 		&ikev2.EncryptedPayloadNonce{NonceData: ni},

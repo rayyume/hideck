@@ -170,6 +170,38 @@ func TestTrafficSelectorsUseFullAnyRanges(t *testing.T) {
 	}
 }
 
+func TestChildTrafficSelectorsCoverBothInnerFamilies(t *testing.T) {
+	session := NewSession(&Config{})
+	session.innerIP = net.IPv4(10, 0, 0, 2)
+	session.innerIPv6 = net.ParseIP("2001:db8::2")
+	tsi, tsr := session.childTrafficSelectors()
+	if len(tsi.TrafficSelectors) != 2 || len(tsr.TrafficSelectors) != 2 {
+		t.Fatalf("dual-stack selector counts = %d/%d", len(tsi.TrafficSelectors), len(tsr.TrafficSelectors))
+	}
+	if !bytes.Equal(tsi.TrafficSelectors[0].StartAddr, session.innerIP.To4()) {
+		t.Fatalf("IPv4 TSi = %v", tsi.TrafficSelectors[0].StartAddr)
+	}
+	if !bytes.Equal(tsi.TrafficSelectors[1].StartAddr, session.innerIPv6) {
+		t.Fatalf("IPv6 TSi = %v", tsi.TrafficSelectors[1].StartAddr)
+	}
+	if session.primaryInnerIP().Equal(session.innerIP) {
+		t.Fatal("primaryInnerIP preferred IPv4 while IMS binds IPv6")
+	}
+}
+
+func TestTunnelMTUKeepsIPv6PayloadAtLeast1280(t *testing.T) {
+	session := NewSession(&Config{TUNMTU: 1280})
+	session.innerIPv6 = net.ParseIP("2001:db8::1")
+	if got := session.tunnelMTU(); got < minimumIPv6MTU+20 {
+		t.Fatalf("IPv6 tunnel MTU = %d, want at least %d after 20-byte extra header", got, minimumIPv6MTU+20)
+	}
+	session.innerIPv6 = nil
+	session.innerIP = net.IPv4(10, 0, 0, 2)
+	if got := session.tunnelMTU(); got != 1280 {
+		t.Fatalf("IPv4 tunnel MTU = %d", got)
+	}
+}
+
 func TestSessionStateTransitions(t *testing.T) {
 	s := NewSession(&Config{IMSI: "310260123456789"})
 	if s.State() != stateIdle {
@@ -196,6 +228,7 @@ func TestSessionStateTransitions(t *testing.T) {
 
 func TestIKEReauthTimerSignalsFreshRuntimeRequirement(t *testing.T) {
 	s := NewSession(&Config{ReauthSeconds: time.Millisecond})
+	s.reauthOverlapGrace = 20 * time.Millisecond
 	s.setState(stateEstablished)
 	s.startIKEReauthTimer()
 
