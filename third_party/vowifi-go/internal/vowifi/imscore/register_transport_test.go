@@ -664,3 +664,88 @@ func sipHeaderValue(message, name string) string {
 	}
 	return ""
 }
+
+func TestProtectedServerPushClosureSchedulesReRegister(t *testing.T) {
+	service := newProtectedKeepaliveTestService(t)
+	service.mu.Lock()
+	service.registrationRefreshAt = time.Now().Add(time.Hour)
+	service.mu.Unlock()
+
+	client, server := net.Pipe()
+	t.Cleanup(func() {
+		_ = client.Close()
+		_ = server.Close()
+	})
+	if !service.trackProtectedConnection(client) {
+		t.Fatal("trackProtectedConnection")
+	}
+	service.untrackProtectedConnection(client)
+	service.handleProtectedServerPushClosed()
+
+	if !service.reRegisterPending.Load() {
+		t.Fatal("last port-s close did not schedule re-REGISTER")
+	}
+	if service.RegState() != regRegistered {
+		t.Fatalf("outbound registration dropped: %s", service.RegState())
+	}
+	if action := service.nextIMSMaintenanceAction(time.Now()); action != imsMaintenanceRefresh {
+		t.Fatalf("maintenance action = %d, want refresh", action)
+	}
+}
+
+func TestProtectedServerPushClosureKeepsOtherInboundFlows(t *testing.T) {
+	service := newProtectedKeepaliveTestService(t)
+	service.mu.Lock()
+	service.registrationRefreshAt = time.Now().Add(time.Hour)
+	service.mu.Unlock()
+
+	closed, closedPeer := net.Pipe()
+	alive, alivePeer := net.Pipe()
+	t.Cleanup(func() {
+		_ = closed.Close()
+		_ = closedPeer.Close()
+		_ = alive.Close()
+		_ = alivePeer.Close()
+	})
+	if !service.trackProtectedConnection(closed) || !service.trackProtectedConnection(alive) {
+		t.Fatal("trackProtectedConnection")
+	}
+	service.untrackProtectedConnection(closed)
+	service.handleProtectedServerPushClosed()
+	if service.reRegisterPending.Load() {
+		t.Fatal("still-open port-s flow scheduled re-REGISTER")
+	}
+}
+
+func TestServeProtectedSIPConnectionReRegistersOnReset(t *testing.T) {
+	service := newProtectedKeepaliveTestService(t)
+	service.mu.Lock()
+	service.registrationRefreshAt = time.Now().Add(time.Hour)
+	service.mu.Unlock()
+
+	client, server := net.Pipe()
+	defer server.Close()
+	if !service.trackProtectedConnection(client) {
+		t.Fatal("trackProtectedConnection")
+	}
+	service.networkDone.Add(1)
+	done := make(chan struct{})
+	go func() {
+		service.serveProtectedSIPConnection(client)
+		close(done)
+	}()
+	if err := server.Close(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("serveProtectedSIPConnection did not return after reset")
+	}
+	if !service.reRegisterPending.Load() {
+		t.Fatal("port-s reset did not schedule re-REGISTER")
+	}
+	if service.RegState() != regRegistered {
+		t.Fatalf("outbound registration dropped: %s", service.RegState())
+	}
+}

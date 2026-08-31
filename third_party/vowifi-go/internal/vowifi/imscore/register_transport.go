@@ -256,12 +256,30 @@ func (s *Service) acceptProtectedSIP(listener net.Listener) {
 
 func (s *Service) serveProtectedSIPConnection(conn net.Conn) {
 	defer s.networkDone.Done()
-	defer s.untrackProtectedConnection(conn)
 	defer conn.Close()
-	if err := s.readRegistrationStreamSync(conn); err != nil && !s.stopped() {
+	err := s.readRegistrationStreamSync(conn)
+	s.untrackProtectedConnection(conn)
+	if err != nil && !s.stopped() {
 		logging.WarnRate("ims-protected-server-stream-"+s.DeviceID(),
 			"IMS protected server push connection closed", "err", err)
+		s.handleProtectedServerPushClosed()
 	}
+}
+
+// handleProtectedServerPushClosed re-registers when the last P-CSCF inbound
+// TCP (port-s) flow is gone. Outbound REGISTER TCP can still look healthy, so
+// MT SMS/INVITE would otherwise stay undeliverable until the next refresh.
+func (s *Service) handleProtectedServerPushClosed() {
+	if s == nil || s.stopped() {
+		return
+	}
+	s.protectedConnMu.Lock()
+	remaining := len(s.protectedConns)
+	s.protectedConnMu.Unlock()
+	if remaining > 0 {
+		return
+	}
+	s.triggerRegisterImmediate("protected server push closed")
 }
 
 func (s *Service) trackProtectedConnection(conn net.Conn) bool {
