@@ -42,11 +42,12 @@ func (s *Session) handleRuntimeRedirect(address string) {
 }
 
 func (s *Session) triggerReauthentication() {
-	if s.OnReauthNeeded == nil {
-		s.finishReauthentication()
-		return
+	// RFC 7296 2.8.3: reauthentication starts a new IKE_SA_INIT/IKE_AUTH.
+	// The host creates that runtime via OnReauthNeeded. This session never
+	// injects EAP onto the existing IKE SA.
+	if s.OnReauthNeeded != nil {
+		go s.OnReauthNeeded()
 	}
-	go s.OnReauthNeeded()
 	grace := s.reauthOverlapGrace
 	if grace <= 0 {
 		grace = defaultReauthOverlapGrace
@@ -59,8 +60,6 @@ func (s *Session) triggerReauthentication() {
 }
 
 func (s *Session) finishReauthentication() {
-	if err := s.sendDeleteIKE(); err != nil {
-		s.Logger.Warn("send IKE Delete before reauthentication", zap.Error(err))
-	}
+	s.sendEstablishedDeletes()
 	s.failEstablishedControl(ErrFreshRuntimeRequired)
 }

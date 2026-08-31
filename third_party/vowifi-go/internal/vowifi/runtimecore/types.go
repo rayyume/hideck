@@ -170,6 +170,7 @@ type RuntimeStartRequest struct {
 	voiceBinding        *voiceLifecycleBinding
 	redirectHops        int
 	redirectSeen        []string
+	fastReauth          FastReauthStore
 }
 
 type VoiceLifecycle interface {

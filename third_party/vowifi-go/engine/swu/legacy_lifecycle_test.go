@@ -9,6 +9,25 @@ import (
 	"github.com/iniwex5/vowifi-go/engine/ikev2"
 )
 
+func TestReauthenticationNeverInjectsEAPOnExistingSA(t *testing.T) {
+	session, transport := newEstablishedControlSession(t)
+	session.reauthOverlapGrace = 40 * time.Millisecond
+	session.triggerReauthentication()
+	select {
+	case pkt := <-transport.sentIKE:
+		t.Fatalf("existing IKE SA sent a packet during reauth overlap: %d bytes", len(pkt))
+	case <-time.After(20 * time.Millisecond):
+	}
+	waitCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := session.WaitDoneContext(waitCtx); err != nil {
+		t.Fatalf("session did not close after overlap: %v", err)
+	}
+	if !errors.Is(session.TerminalError(), ErrFreshRuntimeRequired) {
+		t.Fatalf("terminal error = %v", session.TerminalError())
+	}
+}
+
 func TestLegacyReauthCallbackGetsOverlapGrace(t *testing.T) {
 	callback := make(chan struct{}, 1)
 	session := NewSession(&Config{ReauthSeconds: time.Millisecond})

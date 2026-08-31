@@ -139,7 +139,7 @@ func sessionConfigFromRequest(
 	prepared profile.PreparedSession,
 	notifier *imsRegisteredNotifier,
 ) SessionConfig {
-	return SessionConfig{
+	config := SessionConfig{
 		Ctx: ctx, DeviceID: req.DeviceID, TraceID: req.TraceID, Prepared: prepared,
 		SIM: req.SIM, DataplaneMode: firstNonEmpty(req.Dataplane.Mode, swu.DataplaneModeUserspace),
 		TUNName: req.Dataplane.TUNName,
@@ -152,6 +152,8 @@ func sessionConfigFromRequest(
 		},
 		OnProgress: req.OnProgress,
 	}
+	req.fastReauth.Apply(&config)
+	return config
 }
 
 func emitEstablished(

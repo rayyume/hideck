@@ -200,13 +200,16 @@ func TestBuildSWUConfigCarriesRuntimeState(t *testing.T) {
 	config := BuildSWUConfig(SessionConfig{
 		DeviceID: "dev-1", Prepared: prepared, SIM: testSIMAdapter{aka: provider},
 		DataplaneMode: swu.DataplaneModeUserspace,
-		ResumeTicket:  ticket, FastReauthMK: []byte{3, 4},
+		ResumeTicket: ticket, FastReauthID: "reauth@example", FastReauthMK: []byte{3, 4},
 	})
 	if config.AKAProvider != provider || config.EPDGAddr != "epdg.example.com" || config.EpDGPort != 4500 {
 		t.Fatalf("SWu config missing production fields: %+v", config)
 	}
 	if config.ReauthSeconds != 180*time.Second || config.DataplaneMode != swu.DataplaneModeUserspace {
 		t.Fatalf("SWu timers/dataplane = %+v", config)
+	}
+	if config.FastReauthID != "reauth@example" || !bytes.Equal(config.FastReauthMK, []byte{3, 4}) {
+		t.Fatalf("FastReauth material = %q %v", config.FastReauthID, config.FastReauthMK)
 	}
 	prepared.CarrierPlan.IKE.AKAPrimePreferred = true
 	if !BuildSWUConfig(SessionConfig{Prepared: prepared, SIM: testSIMAdapter{aka: provider}}).AKAPrimePreferred {
@@ -219,6 +222,20 @@ func TestBuildSWUConfigCarriesRuntimeState(t *testing.T) {
 	ticket[0] = 9
 	if !bytes.Equal(config.ResumeTicket, []byte{1, 2}) {
 		t.Fatal("BuildSWUConfig() retained resume ticket alias")
+	}
+}
+
+func TestFastReauthStoreReusesIdentityOnNewIKESession(t *testing.T) {
+	var store FastReauthStore
+	store.Capture()("reauth@example", []byte{1}, []byte{2}, []byte{3})
+	cfg := SessionConfig{}
+	store.Apply(&cfg)
+	if cfg.FastReauthID != "reauth@example" || !bytes.Equal(cfg.FastReauthMK, []byte{1}) {
+		t.Fatalf("applied FastReauth = %+v", cfg)
+	}
+	swuCfg := BuildSWUConfig(cfg)
+	if swuCfg.FastReauthID != "reauth@example" {
+		t.Fatalf("new IKE SA identity = %q", swuCfg.FastReauthID)
 	}
 }
 
@@ -264,7 +281,7 @@ func TestBuildIMSConfigUsesNegotiatedPCSCFAndCarrierRuntimeFields(t *testing.T) 
 	if config.KeepaliveInterval != 37*time.Second {
 		t.Fatalf("keepalive = %s", config.KeepaliveInterval)
 	}
-	if config.CellularNetworkInfo == "" || config.PAccessNetworkCountry != "GB" {
+	if config.CellularNetworkInfo != "" || config.PAccessNetworkCountry != "GB" {
 		t.Fatalf("network identity = %q country=%q", config.CellularNetworkInfo, config.PAccessNetworkCountry)
 	}
 }
