@@ -32,6 +32,9 @@ func defaultStopSession(ctx context.Context, result *SessionResult) {
 			zap.S().Warnw("failed to stop ePDG session", "device", result.DeviceID, "error", err)
 		}
 	}
+	if result.XCAPNetwork != nil && result.XCAPNetwork != result.IMSNetwork {
+		_ = result.XCAPNetwork.Close()
+	}
 	if result.IMSNetwork != nil {
 		_ = result.IMSNetwork.Close()
 	}

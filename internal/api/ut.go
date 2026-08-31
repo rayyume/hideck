@@ -110,7 +110,21 @@ func (s *Server) lookupUtClient(deviceID string) (*xcap.Client, utIdentity, erro
 	if s != nil && s.utClient != nil {
 		return s.utClient(deviceID)
 	}
-	return nil, utIdentity{}, errUtXCAPPDN
+	if s == nil || s.pool == nil {
+		return nil, utIdentity{}, errUtXCAPPDN
+	}
+	inst := s.pool.GetVoWiFiAppForDevice(deviceID)
+	if inst == nil {
+		return nil, utIdentity{}, errUtXCAPPDN
+	}
+	access, err := inst.UtAccess()
+	if err != nil {
+		if strings.Contains(err.Error(), "public identity") {
+			return nil, utIdentity{}, errUtIdentity
+		}
+		return nil, utIdentity{}, errUtXCAPPDN
+	}
+	return access.Client, utIdentity{XUI: access.XUI, Fallback: access.More}, nil
 }
 
 func (req utPatchRequest) changeCount() int {

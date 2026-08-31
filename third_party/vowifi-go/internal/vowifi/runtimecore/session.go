@@ -42,6 +42,7 @@ func RunSession(ctx context.Context, cfg SessionConfig) (*SessionResult, error) 
 		defaultStopSession(context.Background(), result)
 		return nil, err
 	}
+	attachAdditionalPDNs(ctx, cfg, result)
 	return result, nil
 }
 
