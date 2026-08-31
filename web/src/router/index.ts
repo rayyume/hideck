@@ -29,6 +29,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/ut',
+      name: 'UtServices',
+      component: () => import('../views/UtServices.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/devices',
       name: 'Devices',
       component: () => import('../views/Devices.vue'),

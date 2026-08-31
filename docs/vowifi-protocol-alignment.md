@@ -36,10 +36,10 @@
 | INVITE forking 早期对话 | TS 24.229 5.1.3 / IR.92 2.2 | `imscore/sip_client_legacy.go` `retainClientInviteEarlyDialog` | `TestRetainClientInviteEarlyDialogKeepsForkedTags`、`Test199ClosesOnlyMatchingEarlyDialog` | 不同 To-tag 的 18x 并行保留早期对话，不再 latest-wins。199 只关对应 To-tag。2xx 仍会收拢到确认对话。 |
 
 | 紧急业务 | IR.51 5.3 / TS 24.229 5.1.6 | `emergency_register.go`、`AllowEmergencyRegistration` | emergency 单元测试 | **协议构造就绪，生产禁用**。默认不启紧急 ePDG、不拨 PSAP。PANI 为合成值，无 Geolocation/PIDF-LO，不得声称真实位置上报。 |
-| XCAP Ut 补充业务 | IR.92 2.3.2 / TS 24.623 | 无生产 XCAP 客户端 | — | **未实现**。USSI/MMI `*21*` 不是 Ut。 |
+| XCAP Ut 补充业务 | IR.92 2.3.2 / TS 24.623 | `xcap`、`internal/api/ut.go`、`web/src/views/UtServices.vue` | `TestGetFallsBackToSecondXUIOn404`、`TestUtGetAndPutUseRealXCAPDocument` | XCAP GET/PUT simservs，If-Match，404 换 XUI。无 XCAP PDN 时页面显示真实错误，不用 USSI。 |
 | 临时会议 / ECT | IR.92 2.3.3 / 2.3.11 | `voice/refer.go` | — | **未实现**。依赖多路 Agent（DEV-27）与入向 Replaces（DEV-26）。Supported 含 `replaces` 但入向 Replaces 尚未解析。 |
-| 多 PDN / 第二 SWu | IR.51 4.5 / 4.7.4 | `swu.SessionManager` | — | **未实现**。每设备一条会话。 |
-| Annex B 动态下发 | IR.51 Annex B / TS.32 | 静态 preset | — | **不支持 OMA-DM/ANDSF**。参数只能静态配置。 |
+| 多 PDN / 第二 SWu | IR.51 4.5 / 4.7.4 | `swu.SessionManager.StartSlot`、`policy.AdditionalPDNs` | `TestSessionManagerOverlappingSlotKeepsDefault`、`TestAdditionalPDNsOnlyWhenXCAPAPNDiffers` | 默认仍是每设备一条 IMS 会话。配置了不同于 IMS APN 的 `xcap_apn` 时可在同一 ePDG 上并行第二条 SWu。 |
+| Annex B 动态下发 | IR.51 Annex B / TS.32 | 静态 preset `annex_b.go` | `TestMergeAnnexBAppliesValidFields` | **不支持 OMA-DM/ANDSF**。四个 Annex B 字段只能静态配置；非法值记入 `AnnexBRejection` 且不改默认。 |
 | IKE 重叠重认证 | RFC 7296 2.8.3 | `legacy_lifecycle.go`、`runtime_reauth.go` | `TestOverlappingReauthKeepsOldSessionUntilSuccessorIsUp`、`TestOverlappingReauthOmitsInitialContact` | 主机在旧 SA 仍转发时启动新的 IKE_SA_INIT/IKE_AUTH；新 IKE 与 Child SA 起来后再 Delete 旧 SA；新 AUTH 省略 INITIAL_CONTACT 并携带 FastReauthID。新 runtime 失败则保留旧 SA。 |
 
 ## SHOULD / OPTIONAL 已知偏差

@@ -77,10 +77,11 @@ type Server struct {
 	cfg                     config.ServerConfig // HTTP 服务器配置
 	fullCfg                 *config.Config      // 完整配置引用
 	pool                    *device.Pool        // 设备工作器池
-	auth                    config.WebConfig    // Web 认证配置
-	fs                      http.FileSystem     // 静态文件系统
-	configPath              string              // 配置文件路径
-	proxyMgr                *server.Manager     // 代理实例管理器
+	utClient                utClientFunc
+	auth                    config.WebConfig // Web 认证配置
+	fs                      http.FileSystem  // 静态文件系统
+	configPath              string           // 配置文件路径
+	proxyMgr                *server.Manager  // 代理实例管理器
 	trafficRT               realtimeTrafficSubscriber
 	proxyRepo               repo.ProxyInstanceRepository
 	proxySyncMu             sync.Mutex
@@ -357,6 +358,7 @@ func (s *Server) newRouter() *gin.Engine {
 		api.GET("/health", s.handleHealth)                          // 健康检查（外部监控用）
 		api.GET("/traffic/analysis", s.handleTrafficAnalysis)       // 流量分析统计
 		s.registerPhoneRoutes(api)
+		s.registerUtRoutes(api)
 
 		// ===== 短信 =====
 		api.POST("/sms/send", s.handleSendSMS)                    // 发送短信（自动选择 AT 或 VoWiFi）
