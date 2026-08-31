@@ -103,6 +103,7 @@ type Call struct {
 	imsLocalSDP       string
 	outboundInvite    string
 	inboundDecisionMu sync.Mutex
+	dialogPrecondition map[string]bool
 
 	ackSent                bool
 	inviteFinalSeen        bool

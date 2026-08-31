@@ -36,6 +36,11 @@ func (a *Agent) handleIMS1xxResponse(
 		logging.Info("IMS INVITE 100 Trying", "status", response.StatusCode, "reason", response.Reason)
 		return nil
 	}
+	if response.StatusCode == 199 {
+		call.terminateEarlyDialog(voiceHeaderTag(voiceResponseHeader(response.Headers, "To")))
+		logging.Info("IMS INVITE 199 early dialog terminated", "reason", response.Reason)
+		return nil
+	}
 	logOutboundInviteResponse("IMS INVITE 临时响应", response)
 	confirmed := call.CallState() == callstate.StateConnected
 	if !confirmed {
@@ -45,6 +50,11 @@ func (a *Agent) handleIMS1xxResponse(
 		}
 	}
 	call.learnVoiceDialog(response)
+	toTag := voiceHeaderTag(voiceResponseHeader(response.Headers, "To"))
+	if isVoiceSDPContentType(voiceResponseHeader(response.Headers, "Content-Type")) &&
+		sipHeaderHasToken(voiceResponseHeader(response.Headers, "Require"), "precondition") {
+		call.noteDialogPrecondition(toTag, true)
+	}
 	call.applyVoiceSessionExpires(voiceResponseHeader(response.Headers, "Session-Expires"))
 	preconditionSDP := ""
 	if isVoiceSDPContentType(voiceResponseHeader(response.Headers, "Content-Type")) && len(response.Body) > 0 {

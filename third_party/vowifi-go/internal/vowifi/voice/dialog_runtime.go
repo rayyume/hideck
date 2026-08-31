@@ -172,6 +172,40 @@ func (c *Call) advanceVoiceInviteCSeq() voiceSIPDialog {
 	return copy
 }
 
+func (c *Call) terminateEarlyDialog(toTag string) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	toTag = strings.TrimSpace(toTag)
+	if toTag == "" {
+		return
+	}
+	delete(c.dialogPrecondition, toTag)
+}
+
+func (c *Call) noteDialogPrecondition(toTag string, required bool) {
+	if c == nil || strings.TrimSpace(toTag) == "" {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.dialogPrecondition == nil {
+		c.dialogPrecondition = make(map[string]bool)
+	}
+	c.dialogPrecondition[toTag] = required
+}
+
+func (c *Call) dialogRequiresPrecondition(toTag string) bool {
+	if c == nil {
+		return false
+	}
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.dialogPrecondition[strings.TrimSpace(toTag)]
+}
+
 func (c *Call) learnVoiceDialog(response imscore.SIPResponse) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
