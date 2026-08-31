@@ -210,6 +210,35 @@ func TestIKEAuthLifetimeControlsRecoveredRekeyIntervals(t *testing.T) {
 	}
 }
 
+func TestDefaultIKERekeyIntervalIs18Hours(t *testing.T) {
+	if defaultIKERekeyInterval != 64800*time.Second {
+		t.Fatalf("defaultIKERekeyInterval = %s, want 18h", defaultIKERekeyInterval)
+	}
+}
+
+func TestRekeyDelayStaysInIR51ProportionalBand(t *testing.T) {
+	interval := 100 * time.Second
+	minimum := interval * 3 / 4
+	maximum := interval * 5 / 4
+	seenBelowOldJitter := false
+	seenAboveMean := false
+	for i := 0; i < 400; i++ {
+		got := rekeyDelay(interval)
+		if got < minimum || got > maximum {
+			t.Fatalf("rekeyDelay = %s, want [%s, %s]", got, minimum, maximum)
+		}
+		if got < interval-10*time.Second {
+			seenBelowOldJitter = true
+		}
+		if got > interval {
+			seenAboveMean = true
+		}
+	}
+	if !seenBelowOldJitter || !seenAboveMean {
+		t.Fatal("rekeyDelay still looks like one-sided absolute jitter")
+	}
+}
+
 func TestRecoveredRekeyIntervalDefaultsAndOverrides(t *testing.T) {
 	session := NewSession(&Config{})
 	ikeInterval, childInterval := session.rekeyIntervals()
@@ -221,6 +250,13 @@ func TestRecoveredRekeyIntervalDefaultsAndOverrides(t *testing.T) {
 	ikeInterval, childInterval = session.rekeyIntervals()
 	if ikeInterval != 7*time.Minute || childInterval != 11*time.Minute {
 		t.Fatalf("overrides = %s/%s", ikeInterval, childInterval)
+	}
+	session.cfg.RekeyIKESeconds = 0
+	session.cfg.RekeyChildSeconds = 0
+	session.authLifetime = 1000
+	ikeInterval, childInterval = session.rekeyIntervals()
+	if ikeInterval != 800*time.Second || childInterval != 875*time.Second+childRekeyStartOffset {
+		t.Fatalf("AUTH_LIFETIME derivation = %s/%s", ikeInterval, childInterval)
 	}
 }
 

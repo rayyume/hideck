@@ -10,11 +10,10 @@ import (
 )
 
 const (
-	defaultIKERekeyInterval   = 5000 * time.Second
+	// IR.51 4.4: 18-hour fallback when the ePDG omits AUTH_LIFETIME.
+	defaultIKERekeyInterval   = 64800 * time.Second
 	defaultChildRekeyInterval = 1800 * time.Second
 	childRekeyStartOffset     = 30 * time.Second
-	ikeRekeyJitterSeconds     = 5
-	childRekeyJitterSeconds   = 10
 	rekeyMaxFailures          = 2
 	rekeyRetryInterval        = 60 * time.Second
 )
@@ -22,7 +21,6 @@ const (
 type rekeyTimerSpec struct {
 	name          string
 	interval      time.Duration
-	jitterSeconds int64
 	reset         <-chan struct{}
 	target        **time.Timer
 	action        func() error
@@ -62,7 +60,7 @@ func (s *Session) startIKESARekeyTimer(interval time.Duration) {
 	s.rekeyResetCh = reset
 	s.mu.Unlock()
 	s.startRekeyTimer(rekeyTimerSpec{
-		name: "IKE SA", interval: interval, jitterSeconds: ikeRekeyJitterSeconds,
+		name: "IKE SA", interval: interval,
 		reset: reset, target: &s.ikeRekeyTimer, action: s.RekeyIKESA,
 	})
 }
@@ -74,7 +72,7 @@ func (s *Session) startChildSARekeyTimer(interval time.Duration) {
 	s.childRekeyResetCh = reset
 	s.mu.Unlock()
 	s.startRekeyTimer(rekeyTimerSpec{
-		name: "CHILD_SA", interval: interval, jitterSeconds: childRekeyJitterSeconds,
+		name: "CHILD_SA", interval: interval,
 		reset: reset, target: &s.childRekeyTimer, action: s.RekeyChildSA,
 		immediateFail: isChildSANotFoundError,
 	})
@@ -89,7 +87,7 @@ func (s *Session) startRekeyTimer(spec rekeyTimerSpec) {
 	if spec.interval <= 0 || spec.action == nil || spec.target == nil || s.ctx.Err() != nil {
 		return
 	}
-	timer := time.NewTimer(rekeyDelay(spec.interval, spec.jitterSeconds))
+	timer := time.NewTimer(rekeyDelay(spec.interval))
 	s.timersMu.Lock()
 	if previous := *spec.target; previous != nil {
 		previous.Stop()
@@ -111,14 +109,14 @@ func (s *Session) runRekeyTimer(timer *time.Timer, spec rekeyTimerSpec) {
 			return
 		case <-spec.reset:
 			failures = 0
-			if !s.resetRekeyTimer(timer, rekeyDelay(spec.interval, spec.jitterSeconds)) {
+			if !s.resetRekeyTimer(timer, rekeyDelay(spec.interval)) {
 				return
 			}
 		case <-timer.C:
 			err := spec.action()
 			if err == nil {
 				failures = 0
-				if !s.resetRekeyTimer(timer, rekeyDelay(spec.interval, spec.jitterSeconds)) {
+				if !s.resetRekeyTimer(timer, rekeyDelay(spec.interval)) {
 					return
 				}
 				continue
@@ -155,10 +153,17 @@ func (s *Session) resetRekeyTimer(timer *time.Timer, delay time.Duration) bool {
 	return true
 }
 
-func rekeyDelay(interval time.Duration, jitterSeconds int64) time.Duration {
-	maximumJitter := time.Duration(jitterSeconds) * time.Second
-	if jitterSeconds <= 0 || interval <= maximumJitter {
+// rekeyDelay returns the next rekey wait in the IR.51 4.4 band of 75%–125%
+// of the mean interval. Absolute one-sided jitter is not used.
+func rekeyDelay(interval time.Duration) time.Duration {
+	if interval <= 0 {
 		return interval
 	}
-	return interval - time.Duration(rand.Int63n(jitterSeconds))*time.Second
+	minimum := interval * 3 / 4
+	maximum := interval * 5 / 4
+	span := maximum - minimum
+	if span <= 0 {
+		return interval
+	}
+	return minimum + time.Duration(rand.Int63n(int64(span)+1))
 }
