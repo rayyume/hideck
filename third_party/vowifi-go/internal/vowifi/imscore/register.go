@@ -149,6 +149,7 @@ func (s *Service) registerLocked(ctx context.Context) error {
 	s.startRegistrationSubscription()
 	s.startMWISubscription()
 	s.startIMSKeepalive()
+	s.schedulePeerCapabilityDiscovery()
 	return nil
 }
 

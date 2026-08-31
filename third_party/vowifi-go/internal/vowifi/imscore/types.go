@@ -215,6 +215,10 @@ type Service struct {
 	stunKeepaliveWait         chan stunKeepaliveResult
 	stunKeepaliveTxID         [12]byte
 	stunMappedAddr            *net.UDPAddr
+	peerAllow                 []string
+	peerICSI                  []string
+	peerCapabilityAfter       time.Time
+	peerCapabilityDone        bool
 	stunRTO                   time.Duration
 	stunRc                    int
 	stunKeepaliveInterval     time.Duration
