@@ -40,7 +40,7 @@
 | 临时会议 / ECT | IR.92 2.3.3 / 2.3.11 | `voice/refer.go` | — | **未实现**。依赖多路 Agent（DEV-27）与入向 Replaces（DEV-26）。Supported 含 `replaces` 但入向 Replaces 尚未解析。 |
 | 多 PDN / 第二 SWu | IR.51 4.5 / 4.7.4 | `swu.SessionManager` | — | **未实现**。每设备一条会话。 |
 | Annex B 动态下发 | IR.51 Annex B / TS.32 | 静态 preset | — | **不支持 OMA-DM/ANDSF**。参数只能静态配置。 |
-| IKE 重叠重认证 | RFC 7296 2.8.3 | `legacy_lifecycle.go` | `TestReauthenticationNeverInjectsEAPOnExistingSA` | **缺口**：当前先停旧 runtime 再 startOnce（FOLLOWUP-01）。 |
+| IKE 重叠重认证 | RFC 7296 2.8.3 | `legacy_lifecycle.go`、`runtime_reauth.go` | `TestOverlappingReauthKeepsOldSessionUntilSuccessorIsUp`、`TestOverlappingReauthOmitsInitialContact` | 主机在旧 SA 仍转发时启动新的 IKE_SA_INIT/IKE_AUTH；新 IKE 与 Child SA 起来后再 Delete 旧 SA；新 AUTH 省略 INITIAL_CONTACT 并携带 FastReauthID。新 runtime 失败则保留旧 SA。 |
 
 ## SHOULD / OPTIONAL 已知偏差
 

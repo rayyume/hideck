@@ -246,6 +246,29 @@ func TestIKEReauthTimerSignalsFreshRuntimeRequirement(t *testing.T) {
 	s.Shutdown()
 }
 
+func TestIKEReauthTimerKeepsOldSAWhenHostHandlesOverlap(t *testing.T) {
+	needed := make(chan struct{}, 1)
+	s := NewSession(&Config{ReauthSeconds: time.Millisecond})
+	s.OnReauthNeeded = func() { needed <- struct{}{} }
+	s.reauthOverlapGrace = time.Hour
+	s.setState(stateEstablished)
+	s.startIKEReauthTimer()
+	select {
+	case <-needed:
+	case <-time.After(time.Second):
+		t.Fatal("reauth timer did not signal the host")
+	}
+	if s.State() != stateEstablished {
+		t.Fatalf("state = %q, want established", s.State())
+	}
+	select {
+	case <-s.done:
+		t.Fatal("old SA closed while the host still needed it")
+	default:
+	}
+	s.Shutdown()
+}
+
 func TestNewSessionInitializesDefaultAlgorithms(t *testing.T) {
 	s := NewSession(&Config{})
 	if s.initErr != nil {

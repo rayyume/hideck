@@ -61,7 +61,7 @@ perform their historical action with the arguments they expose.
 | Inbound Replaces | Supported advertises `replaces` but RFC 3891 parsing is incomplete. |
 | Second SWu / XCAP PDN | One SWu session per device. |
 | OMA-DM / ANDSF / TS.32 | Architecture choice: static presets only. |
-| Overlapping IKE reauth | Timer recycles the runtime sequentially (FOLLOWUP-01). |
+| Overlapping IKE reauth | New IKE_SA_INIT/IKE_AUTH while the old SA forwards; INITIAL_CONTACT omitted until cutover. |
 | Emergency originating | Construction exists; `AllowEmergencyRegistration` and `AllowEmergencyCalls` stay off. No PSAP call. |
 
 No SMS, registration, USSI, or voice transaction reports network success

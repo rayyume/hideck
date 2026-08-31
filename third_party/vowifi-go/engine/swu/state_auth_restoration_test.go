@@ -99,6 +99,22 @@ func TestInitialIKEAuthRestoresNotifyOrderAndDeviceIdentity(t *testing.T) {
 	}
 }
 
+func TestOverlappingReauthOmitsInitialContact(t *testing.T) {
+	session := NewSession(&Config{
+		IMSI: "234102356143376", APN: "ims", OmitInitialContact: true,
+	})
+	payloads, err := session.buildIKEAuthInitPayloads()
+	if err != nil {
+		t.Fatalf("buildIKEAuthInitPayloads: %v", err)
+	}
+	for _, payload := range payloads {
+		notification, ok := payload.(*ikev2.EncryptedPayloadNotify)
+		if ok && notification.NotifyType == ikev2.INITIAL_CONTACT {
+			t.Fatal("overlapping IKE_AUTH included INITIAL_CONTACT")
+		}
+	}
+}
+
 func TestSpoofAppleIMEIRestoresFixedTACAndLuhn(t *testing.T) {
 	if got := spoofAppleIMEI("234102356143376"); got != "358983361433761" {
 		t.Fatalf("spoofAppleIMEI = %q", got)

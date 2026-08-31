@@ -150,7 +150,7 @@ func sessionConfigFromRequest(
 				req.Hooks.OnSMSReady(ctx)
 			}
 		},
-		OnProgress: req.OnProgress,
+		OnProgress: req.OnProgress, OmitInitialContact: req.omitInitialContact,
 	}
 	req.fastReauth.Apply(&config)
 	return config

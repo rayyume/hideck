@@ -11,6 +11,7 @@ import (
 
 func TestReauthenticationNeverInjectsEAPOnExistingSA(t *testing.T) {
 	session, transport := newEstablishedControlSession(t)
+	session.OnReauthNeeded = func() {}
 	session.reauthOverlapGrace = 40 * time.Millisecond
 	session.triggerReauthentication()
 	select {
@@ -18,17 +19,18 @@ func TestReauthenticationNeverInjectsEAPOnExistingSA(t *testing.T) {
 		t.Fatalf("existing IKE SA sent a packet during reauth overlap: %d bytes", len(pkt))
 	case <-time.After(20 * time.Millisecond):
 	}
-	waitCtx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	if err := session.WaitDoneContext(waitCtx); err != nil {
-		t.Fatalf("session did not close after overlap: %v", err)
+	if session.State() != stateEstablished {
+		t.Fatalf("old SA state = %q, want established while host starts a new IKE SA", session.State())
 	}
-	if !errors.Is(session.TerminalError(), ErrFreshRuntimeRequired) {
-		t.Fatalf("terminal error = %v", session.TerminalError())
+	select {
+	case <-session.done:
+		t.Fatal("old SA closed before the successor cut over")
+	default:
 	}
+	session.Shutdown()
 }
 
-func TestLegacyReauthCallbackGetsOverlapGrace(t *testing.T) {
+func TestLegacyReauthCallbackKeepsOldSAUntilHostCutsOver(t *testing.T) {
 	callback := make(chan struct{}, 1)
 	session := NewSession(&Config{ReauthSeconds: time.Millisecond})
 	session.OnReauthNeeded = func() { callback <- struct{}{} }
@@ -42,16 +44,14 @@ func TestLegacyReauthCallbackGetsOverlapGrace(t *testing.T) {
 	}
 	select {
 	case <-session.done:
-		t.Fatal("session closed before the overlap grace elapsed")
-	default:
+		t.Fatal("session closed before the host started a successor SA")
+	case <-time.After(40 * time.Millisecond):
 	}
-	waitCtx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	if err := session.WaitDoneContext(waitCtx); err != nil {
-		t.Fatalf("session did not close after overlap grace: %v", err)
+	if session.State() != stateEstablished {
+		t.Fatalf("state = %q, want established", session.State())
 	}
-	if !errors.Is(session.TerminalError(), ErrFreshRuntimeRequired) {
-		t.Fatalf("terminal error = %v", session.TerminalError())
+	if err := session.TerminalError(); err != nil {
+		t.Fatalf("old SA terminal error = %v", err)
 	}
 	session.Shutdown()
 }

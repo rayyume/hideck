@@ -60,6 +60,7 @@ func BuildSWUConfig(cfg SessionConfig) *swu.Config {
 		FastReauthKEncr:           append([]byte(nil), cfg.FastReauthKEncr...),
 		OnFastReauthUpdate:        cfg.OnFastReauthUpdate,
 		OnProgress:                cfg.OnProgress,
+		OmitInitialContact:        cfg.OmitInitialContact,
 	}
 	result.AKAProvider = result.SIM
 	if result.ReauthInterval > 0 {

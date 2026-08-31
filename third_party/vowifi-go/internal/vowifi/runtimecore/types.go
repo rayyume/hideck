@@ -124,6 +124,7 @@ type SessionConfig struct {
 	OnFastReauthUpdate func(string, []byte, []byte, []byte)
 	OnProgress         func(string)
 	OnTunnelReady      func(*SessionResult)
+	OmitInitialContact bool
 }
 
 type SessionResult struct {
@@ -134,6 +135,7 @@ type SessionResult struct {
 	IMSNetwork *netstack.Network
 	IMSService *imscore.Service
 	LocalAddr  string
+	interrupts chan InterruptOutcome
 }
 
 type Snapshot struct {
@@ -171,6 +173,7 @@ type RuntimeStartRequest struct {
 	redirectHops        int
 	redirectSeen        []string
 	fastReauth          FastReauthStore
+	omitInitialContact  bool
 }
 
 type VoiceLifecycle interface {

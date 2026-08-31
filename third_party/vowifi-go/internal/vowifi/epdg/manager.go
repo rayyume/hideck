@@ -33,12 +33,33 @@ func (m *Manager) Start(
 	return m.mgr.Start(ctx, deviceID, config)
 }
 
+func (m *Manager) StartSlot(
+	ctx context.Context,
+	deviceID string,
+	slot string,
+	config *swu.Config,
+) (*swu.Session, error) {
+	return m.mgr.StartSlot(ctx, deviceID, slot, config)
+}
+
 func (m *Manager) Stop(deviceID string) error {
 	return m.mgr.Stop(deviceID)
 }
 
+func (m *Manager) StopSlot(deviceID, slot string) error {
+	return m.mgr.StopSlot(deviceID, slot)
+}
+
+func (m *Manager) SwapDefault(deviceID, slot string) (*swu.Session, error) {
+	return m.mgr.SwapDefault(deviceID, slot)
+}
+
 func (m *Manager) Snapshot(deviceID string) (swu.SessionSnapshot, bool) {
-	session, exists := m.mgr.Get(deviceID)
+	return m.SnapshotSlot(deviceID, swu.DefaultSessionSlot)
+}
+
+func (m *Manager) SnapshotSlot(deviceID, slot string) (swu.SessionSnapshot, bool) {
+	session, exists := m.mgr.GetSlot(deviceID, slot)
 	if !exists || session == nil {
 		return swu.SessionSnapshot{}, false
 	}
@@ -50,12 +71,21 @@ func (m *Manager) Wait(
 	deviceID string,
 	timeout time.Duration,
 ) (swu.SessionSnapshot, error) {
+	return m.WaitSlot(ctx, deviceID, swu.DefaultSessionSlot, timeout)
+}
+
+func (m *Manager) WaitSlot(
+	ctx context.Context,
+	deviceID string,
+	slot string,
+	timeout time.Duration,
+) (swu.SessionSnapshot, error) {
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 	ticker := time.NewTicker(waitPollInterval)
 	defer ticker.Stop()
 	for {
-		if snapshot, done, err := m.waitResult(deviceID); done {
+		if snapshot, done, err := m.waitResultSlot(deviceID, slot); done {
 			return snapshot, err
 		}
 		select {
@@ -75,7 +105,11 @@ func ShouldRetryFreshTunnel(ctx context.Context, err error) bool {
 }
 
 func (m *Manager) waitResult(deviceID string) (swu.SessionSnapshot, bool, error) {
-	snapshot, exists := m.Snapshot(deviceID)
+	return m.waitResultSlot(deviceID, swu.DefaultSessionSlot)
+}
+
+func (m *Manager) waitResultSlot(deviceID, slot string) (swu.SessionSnapshot, bool, error) {
+	snapshot, exists := m.SnapshotSlot(deviceID, slot)
 	if !exists {
 		return swu.SessionSnapshot{}, false, nil
 	}

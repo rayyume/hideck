@@ -362,19 +362,26 @@ func (s *Session) buildIKEAuthInitPayloads() ([]ikev2.Payload, error) {
 	}
 	mobike := &ikev2.EncryptedPayloadNotify{NotifyType: ikev2.MOBIKE_SUPPORTED}
 	ticket := &ikev2.EncryptedPayloadNotify{NotifyType: ikev2.TICKET_REQUEST}
-	initialContact := &ikev2.EncryptedPayloadNotify{NotifyType: ikev2.INITIAL_CONTACT}
 	s.eapOnlyRequested = true
 
 	payloads := []ikev2.Payload{idi, idr, cp, sa2}
 	if childKE != nil {
 		payloads = append(payloads, childKE)
 	}
-	payloads = append(payloads, tsi, tsr, eapOnly, mobike, ticket, initialContact)
+	payloads = append(payloads, tsi, tsr, eapOnly, mobike, ticket)
+	payloads = append(payloads, s.initialContactNotify()...)
 	devicePayloads, err := s.deviceIdentityPayloads()
 	if err != nil {
 		return nil, err
 	}
 	return append(payloads, devicePayloads...), nil
+}
+
+func (s *Session) initialContactNotify() []ikev2.Payload {
+	if s.cfg != nil && s.cfg.OmitInitialContact {
+		return nil
+	}
+	return []ikev2.Payload{&ikev2.EncryptedPayloadNotify{NotifyType: ikev2.INITIAL_CONTACT}}
 }
 
 func (s *Session) prepareInitialChildDH(proposals []*ikev2.Proposal) (*ikev2.EncryptedPayloadKE, error) {

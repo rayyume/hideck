@@ -110,6 +110,9 @@ type Config struct {
 	FastReauthKEncr []byte
 	// OnFastReauthUpdate persists a newly issued reauthentication identity.
 	OnFastReauthUpdate func(reauthID string, mk, kAut, kEncr []byte)
+	// OmitInitialContact skips the IKE_AUTH INITIAL_CONTACT notify. RFC 7296
+	// 2.8.3 requires omitting it while an older IKE SA is still forwarding.
+	OmitInitialContact bool
 	// ResumeTicket and ResumeOldSKd restore the RFC 5723 cross-session
 	// credential. OnTicketUpdate persists replacement or invalidation.
 	ResumeTicket   []byte

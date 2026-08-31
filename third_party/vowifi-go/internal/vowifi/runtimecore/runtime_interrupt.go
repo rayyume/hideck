@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/iniwex5/vowifi-go/engine/swu"
+	"github.com/iniwex5/vowifi-go/internal/vowifi/logging"
 )
 
 func runUntilInterrupted(
@@ -14,20 +15,39 @@ func runUntilInterrupted(
 	req *RuntimeStartRequest,
 	session *SessionResult,
 ) error {
-	if req.Hooks.OnInterruptReady != nil {
-		req.Hooks.OnInterruptReady(ctx)
-	}
-	outcome := waitRuntimeInterruption(ctx, req, session)
 	stopper := req.StopSession
 	if stopper == nil {
 		stopper = defaultStopSession
 	}
-	stopper(context.Background(), session)
-	if req.voiceBinding != nil {
-		req.voiceBinding.Detach()
+	current := session
+	for {
+		bindSessionInterrupts(ctx, req, current)
+		if req.Hooks.OnInterruptReady != nil {
+			req.Hooks.OnInterruptReady(ctx)
+		}
+		outcome := waitRuntimeInterruption(ctx, req, current)
+		if outcome.Kind == "reauth" {
+			successor, err := startOverlappingReauth(ctx, req)
+			if err != nil {
+				logging.Info("overlapping IKE reauth failed; keeping old SA",
+					"device", req.DeviceID, "trace_id", req.TraceID, "error", err)
+				continue
+			}
+			old := current
+			current = successor
+			if req.voiceBinding != nil && successor != nil && successor.IMSService != nil {
+				req.voiceBinding.AttachIfReady(successor.IMSService)
+			}
+			stopper(context.Background(), old)
+			continue
+		}
+		stopper(context.Background(), current)
+		if req.voiceBinding != nil {
+			req.voiceBinding.Detach()
+		}
+		emitStopped(ctx, req, current)
+		return interruptionError(ctx, outcome, current)
 	}
-	emitStopped(ctx, req, session)
-	return interruptionError(ctx, outcome, session)
 }
 
 func interruptionError(
@@ -61,16 +81,11 @@ func waitRuntimeInterruption(
 	req *RuntimeStartRequest,
 	result *SessionResult,
 ) InterruptOutcome {
-	outcomes := make(chan InterruptOutcome, 3)
 	var session *swu.Session
 	if result != nil {
 		session = result.Session
 	}
-	if session != nil {
-		chainSessionCallbacks(sessionCallbackConfig{
-			ctx: ctx, request: req, session: session, outcomes: outcomes,
-		})
-	}
+	outcomes := bindSessionInterrupts(ctx, req, result)
 	var imsErrors <-chan error
 	if result != nil && result.IMSService != nil {
 		imsErrors = result.IMSService.RegistrationErrors()
@@ -101,6 +116,24 @@ func waitRuntimeInterruption(
 		emitInterrupted(ctx, req, result, outcome)
 		return outcome
 	}
+}
+
+func bindSessionInterrupts(
+	ctx context.Context,
+	req *RuntimeStartRequest,
+	result *SessionResult,
+) <-chan InterruptOutcome {
+	if result == nil || result.Session == nil {
+		return nil
+	}
+	if result.interrupts != nil {
+		return result.interrupts
+	}
+	result.interrupts = make(chan InterruptOutcome, 3)
+	chainSessionCallbacks(sessionCallbackConfig{
+		ctx: ctx, request: req, session: result.Session, outcomes: result.interrupts,
+	})
+	return result.interrupts
 }
 
 type sessionCallbackConfig struct {

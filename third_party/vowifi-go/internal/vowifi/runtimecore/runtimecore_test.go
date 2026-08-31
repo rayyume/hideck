@@ -200,7 +200,7 @@ func TestBuildSWUConfigCarriesRuntimeState(t *testing.T) {
 	config := BuildSWUConfig(SessionConfig{
 		DeviceID: "dev-1", Prepared: prepared, SIM: testSIMAdapter{aka: provider},
 		DataplaneMode: swu.DataplaneModeUserspace,
-		ResumeTicket: ticket, FastReauthID: "reauth@example", FastReauthMK: []byte{3, 4},
+		ResumeTicket:  ticket, FastReauthID: "reauth@example", FastReauthMK: []byte{3, 4},
 	})
 	if config.AKAProvider != provider || config.EPDGAddr != "epdg.example.com" || config.EpDGPort != 4500 {
 		t.Fatalf("SWu config missing production fields: %+v", config)
@@ -210,6 +210,9 @@ func TestBuildSWUConfigCarriesRuntimeState(t *testing.T) {
 	}
 	if config.FastReauthID != "reauth@example" || !bytes.Equal(config.FastReauthMK, []byte{3, 4}) {
 		t.Fatalf("FastReauth material = %q %v", config.FastReauthID, config.FastReauthMK)
+	}
+	if BuildSWUConfig(SessionConfig{Prepared: prepared, OmitInitialContact: true}).OmitInitialContact != true {
+		t.Fatal("BuildSWUConfig() dropped OmitInitialContact")
 	}
 	prepared.CarrierPlan.IKE.AKAPrimePreferred = true
 	if !BuildSWUConfig(SessionConfig{Prepared: prepared, SIM: testSIMAdapter{aka: provider}}).AKAPrimePreferred {
