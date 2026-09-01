@@ -91,10 +91,12 @@ LABEL org.opencontainers.image.title="HiDeck" \
 # - opencore-amr / vo-amrwbenc: AMR 与 AMR-WB 实时编解码
 # - lame-libs: 双向混音录音的 MP3 编码
 # - psmisc: 提供 fuser，用于安全释放串口占用
+# - libqmi: QMI Proxy 模式需要的 /usr/libexec/qmi-proxy
 RUN apk add --no-cache \
       ca-certificates \
       gcompat \
       lame-libs \
+      libqmi \
       opencore-amr \
       psmisc \
       tzdata \
@@ -102,7 +104,8 @@ RUN apk add --no-cache \
     test -e /usr/lib/libopencore-amrnb.so.0 && \
     test -e /usr/lib/libopencore-amrwb.so.0 && \
     test -e /usr/lib/libvo-amrwbenc.so.0 && \
-    test -e /usr/lib/libmp3lame.so.0
+    test -e /usr/lib/libmp3lame.so.0 && \
+    test -x /usr/libexec/qmi-proxy
 
 # 管理 HTTP、电话 HTTPS、WebRTC UDP mux
 EXPOSE 7575/tcp 7576/tcp 7580/udp

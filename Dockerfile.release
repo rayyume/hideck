@@ -1,5 +1,5 @@
 # 发版镜像：不再编译、不再 apk。把 dist/ 里已经打好的二进制放进运行时底包。
-# 需要先有 hideck_<VERSION>_linux_amd64 和 linux_arm64，例如 hideck_v2.1.1_linux_amd64。
+# 需要先有 hideck_<VERSION>_linux_amd64 和 linux_arm64，例如 hideck_v2.1.2_linux_amd64。
 FROM yibaiba/hideck-runtime:3.24
 ARG VERSION=unknown
 ARG BUILDTIME=unknown

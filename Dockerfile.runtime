@@ -7,10 +7,12 @@ WORKDIR /app
 # lame-libs：MP3 录音
 # psmisc：fuser，释放串口
 # gcompat：UPX 压缩后的 Go 二进制在 musl 上需要
+# libqmi：/usr/libexec/qmi-proxy，容器里走 QMI Proxy 模式需要
 RUN apk add --no-cache \
       ca-certificates \
       gcompat \
       lame-libs \
+      libqmi \
       opencore-amr \
       psmisc \
       tzdata \
@@ -19,6 +21,7 @@ RUN apk add --no-cache \
     test -e /usr/lib/libopencore-amrwb.so.0 && \
     test -e /usr/lib/libvo-amrwbenc.so.0 && \
     test -e /usr/lib/libmp3lame.so.0 && \
+    test -x /usr/libexec/qmi-proxy && \
     mkdir -p /app/config /app/data /app/logs
 
 EXPOSE 7575/tcp 7576/tcp 7580/udp

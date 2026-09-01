@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.2 - 2026-09-01
+
+### 修复
+
+- Docker 运行时镜像带上 `libqmi` / `qmi-proxy`，容器里可以走 QMI Proxy，不必再回退直接打开 `/dev/cdc-wdm*`。
+
 ## 2.1.1 - 2026-09-01
 
 ### eSIM

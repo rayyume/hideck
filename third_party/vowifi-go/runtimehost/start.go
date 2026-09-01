@@ -13,6 +13,7 @@ import (
 	"github.com/iniwex5/vowifi-go/internal/vowifi/common"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/epdg"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/imscore"
+	"github.com/iniwex5/vowifi-go/internal/vowifi/logging"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/netstack"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/profile"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/runtimecore"
@@ -433,6 +434,10 @@ func imscoreFromPrepared(req StartRequest, tunnel Tunnel) (*imscore.Service, err
 	if innerIP == nil || tunnel.InnerPacketIO() == nil {
 		return nil, errors.New("runtimehost: SWu tunnel has no usable inner packet network")
 	}
+	logging.Info("IMS inner address selected",
+		"device", req.DeviceID, "ip", innerIP.String(), "prefix", prefixLen,
+		"ipv4", inner.IPv4.To4() != nil,
+		"ipv6", inner.IPv6 != nil && inner.IPv6.To4() == nil)
 	dns := common.ToStrings(inner.DNS)
 	imsNetwork, err := netstack.NewTunnelNetwork(innerIP, prefixLen, dns, tunnel.InnerPacketIO())
 	if err != nil {

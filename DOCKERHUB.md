@@ -96,7 +96,7 @@ Web 入口：`http://YOUR_IP:7575`
 
 原来的源码构建还在：根目录 `Dockerfile` + `docker-compose.source.yml`。更新 Alpine/录音库等依赖时走这条，或先重建 `hideck-runtime`，后面的发版镜像才会用到新底包。
 
-运行时底包（`ca-certificates`、AMR/MP3、`gcompat`）只在依赖变化时重建：
+运行时底包（`ca-certificates`、AMR/MP3、`gcompat`、`qmi-proxy`）只在依赖变化时重建：
 
 ```bash
 docker compose -f docker-compose.runtime.yml build --builder hideck-release --push
@@ -113,8 +113,8 @@ docker buildx build --builder hideck-release --allow network.host \
 每次发版：
 
 ```bash
-# 先 make / 本地编出 dist/hideck_v2.1.1_linux_amd64 和 linux_arm64
-export HIDECK_VERSION=2.1.1
+# 先 make / 本地编出 dist/hideck_v2.1.2_linux_amd64 和 linux_arm64
+export HIDECK_VERSION=2.1.2
 export HIDECK_MINOR_VERSION=2.1
 export HIDECK_REVISION="$(git rev-parse HEAD)"
 export HIDECK_BUILDTIME="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
@@ -128,7 +128,7 @@ docker buildx imagetools inspect "yibaiba/hideck:${HIDECK_VERSION}"
 从源码完整构建（更新依赖或不用预编译二进制）：
 
 ```bash
-export HIDECK_VERSION=2.1.1
+export HIDECK_VERSION=2.1.2
 export HIDECK_MINOR_VERSION=2.1
 export HIDECK_REVISION="$(git rev-parse HEAD)"
 export HIDECK_BUILDTIME="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
