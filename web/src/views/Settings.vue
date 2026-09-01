@@ -604,7 +604,7 @@ onMounted(() => {
       <section class="notify-card p-4 sm:p-6 lg:p-8">
          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
             <div class="flex items-center gap-3">
-               <div class="w-12 h-12 rounded-md bg-teal-50 dark:bg-teal-500/10 flex items-center justify-center text-teal-700 dark:text-teal-300">
+               <div class="w-12 h-12 rounded-md bg-[var(--ui-selected)] flex items-center justify-center text-[var(--ui-accent)]">
                   <el-icon size="24"><Alert24Regular /></el-icon>
                </div>
                <div>

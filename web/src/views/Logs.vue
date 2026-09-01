@@ -116,12 +116,12 @@ function exportLogs() {
 // 日志级别颜色
 function getLevelClass(level: string): string {
   switch (level.toLowerCase()) {
-    case 'debug': return 'text-gray-400'
-    case 'info': return 'text-blue-500'
-    case 'warn': return 'text-yellow-500'
-    case 'error': return 'text-red-500'
-    case 'fatal': return 'text-red-600 font-bold'
-    default: return 'text-gray-500'
+    case 'debug': return 'log-level-debug'
+    case 'info': return 'log-level-info'
+    case 'warn': return 'log-level-warn'
+    case 'error': return 'log-level-error'
+    case 'fatal': return 'log-level-fatal'
+    default: return 'log-level-debug'
   }
 }
 
@@ -214,9 +214,9 @@ watch(levelFilter, () => {
         </header>
       <div
         ref="logContainer"
-        class="log-console h-[calc(100dvh-150px)] min-h-[470px] overflow-auto font-mono text-sm text-gray-100 p-4"
+        class="log-console h-[calc(100dvh-150px)] min-h-[470px] overflow-auto font-mono text-sm p-4"
       >
-        <div v-if="filteredLogs.length === 0" class="text-gray-500 text-center py-8">
+        <div v-if="filteredLogs.length === 0" class="log-empty text-center py-8">
           {{ connected ? '等待日志...' : '未连接到日志流' }}
         </div>
         <div
@@ -224,11 +224,11 @@ watch(levelFilter, () => {
           :key="idx"
           class="log-row py-0.5 px-2 -mx-2 whitespace-nowrap"
         >
-          <span class="text-gray-500">[{{ formatDateTime(log.time) }}]</span>
+          <span class="log-time">[{{ formatDateTime(log.time) }}]</span>
           <span class="font-bold ml-1 inline-block w-14" :class="getLevelClass(log.level)">{{ log.level.toUpperCase().padEnd(5) }}</span>
-          <span class="text-cyan-400 inline-block w-48 truncate align-bottom" :title="log.caller">{{ log.caller }}</span>
-          <span class="text-gray-100 ml-1">{{ log.message }}</span>
-          <span v-if="log.fields" class="text-amber-300/70 ml-1">{{ log.fields }}</span>
+          <span class="log-caller inline-block w-48 truncate align-bottom" :title="log.caller">{{ log.caller }}</span>
+          <span class="log-message ml-1">{{ log.message }}</span>
+          <span v-if="log.fields" class="log-fields ml-1">{{ log.fields }}</span>
         </div>
       </div>
       </section>
@@ -321,8 +321,8 @@ watch(levelFilter, () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid #263a40;
-  background: #081014;
+  border-bottom: 1px solid var(--ui-border);
+  background: var(--ui-nav);
 }
 
 .log-console-header small {
@@ -362,11 +362,35 @@ watch(levelFilter, () => {
 
 .log-console {
   background:
-    linear-gradient(90deg, rgba(92, 234, 177, .025) 1px, transparent 1px),
-    #060b0e;
+    linear-gradient(90deg, color-mix(in srgb, var(--ui-accent) 6%, transparent) 1px, transparent 1px),
+    var(--ui-nav);
   background-size: 36px 100%;
+  color: var(--ui-nav-text);
   font-variant-numeric: tabular-nums;
 }
+
+.log-empty,
+.log-time {
+  color: var(--ui-nav-muted);
+}
+
+.log-caller {
+  color: var(--ui-accent);
+}
+
+.log-message {
+  color: var(--ui-nav-text);
+}
+
+.log-fields {
+  color: color-mix(in srgb, var(--ui-warning) 70%, var(--ui-nav-text));
+}
+
+.log-level-debug { color: var(--ui-nav-muted); }
+.log-level-info { color: var(--ui-communication); }
+.log-level-warn { color: var(--ui-warning); }
+.log-level-error,
+.log-level-fatal { color: var(--ui-danger); }
 
 .log-row {
   border-left: 2px solid transparent;
@@ -374,8 +398,8 @@ watch(levelFilter, () => {
 }
 
 .log-row:hover {
-  border-left-color: #38bdb4;
-  background: rgba(255, 255, 255, .045);
+  border-left-color: var(--ui-accent);
+  background: color-mix(in srgb, var(--ui-nav-text) 4.5%, transparent);
 }
 
 @keyframes logs-workspace-enter {

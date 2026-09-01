@@ -53,7 +53,7 @@ withDefaults(defineProps<{
   border-radius: 24px;
   background:
     radial-gradient(circle at 61% 54%, color-mix(in srgb, var(--ui-primary) 13%, transparent), transparent 27%),
-    linear-gradient(125deg, var(--ui-surface) 0 54%, color-mix(in srgb, var(--ui-surface) 88%, #06120e));
+    linear-gradient(125deg, var(--ui-surface) 0 54%, color-mix(in srgb, var(--ui-surface) 88%, var(--ui-nav)));
   animation: workspace-stage-enter 240ms var(--ui-ease-out) both;
 }
 

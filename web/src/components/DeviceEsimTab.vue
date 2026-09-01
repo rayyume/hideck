@@ -687,10 +687,10 @@ onBeforeUnmount(() => {
             <template v-for="eid in chipInfo.eids" :key="eid.eid">
               <span v-if="eid.eid === group.eid" class="inline-flex flex-col items-end gap-1">
                 <span class="inline-flex items-center gap-1">
-                  <span class="w-2 h-2 rounded-full" :class="eid.free_nvram_bytes > 100000 ? 'bg-green-500' : 'bg-yellow-500'" />
+                  <span class="w-2 h-2 rounded-full" :class="eid.free_nvram_bytes > 100000 ? 'bg-[var(--ui-success)]' : 'bg-[var(--ui-warning)]'" />
                   可用 {{ eid.free_nvram }}
                 </span>
-                <span v-if="recentSpaceDelta && normalizeAidHex(group.aid_hex) === recentSpaceDelta.aidHex" class="text-xs text-emerald-600 dark:text-emerald-400">
+                <span v-if="recentSpaceDelta && normalizeAidHex(group.aid_hex) === recentSpaceDelta.aidHex" class="text-xs text-[var(--ui-success)]">
                   {{ recentSpaceDelta.message }}
                 </span>
               </span>
@@ -735,7 +735,7 @@ onBeforeUnmount(() => {
             <!-- 正常显示模式 -->
             <template v-if="renaming !== p.iccid">
               <div class="flex items-center gap-2">
-                <span class="w-2 h-2 rounded-full flex-shrink-0" :class="p.state === 1 ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'" />
+                <span class="w-2 h-2 rounded-full flex-shrink-0" :class="p.state === 1 ? 'bg-[var(--ui-success)]' : 'bg-[var(--ui-border)]'" />
                 <span class="font-medium text-sm text-gray-900 dark:text-white truncate">{{ p.name || p.iccid }}</span>
                 <el-tag size="small" :type="p.state === 1 ? 'success' : 'info'" class="flex-shrink-0">
                   {{ p.state_text }}
@@ -1128,12 +1128,12 @@ onBeforeUnmount(() => {
 }
 
 .esim-orbit {
-  background: linear-gradient(135deg, #10b981, #0ea5a4);
+  background: linear-gradient(135deg, var(--ui-success), var(--ui-accent));
   animation: esim-orbit 2.2s ease-in-out infinite;
 }
 
 .esim-skeleton-line {
-  background: linear-gradient(90deg, rgba(148, 163, 184, 0.18), rgba(148, 163, 184, 0.34), rgba(148, 163, 184, 0.18));
+  background: linear-gradient(90deg, color-mix(in srgb, var(--ui-text-muted) 18%, transparent), color-mix(in srgb, var(--ui-text-muted) 34%, transparent), color-mix(in srgb, var(--ui-text-muted) 18%, transparent));
   background-size: 200% 100%;
   animation: esim-shimmer 1.4s linear infinite;
 }
@@ -1156,7 +1156,7 @@ onBeforeUnmount(() => {
   width: 7px;
   height: 7px;
   border-radius: 9999px;
-  background: #14b8a6;
+  background: var(--ui-accent);
   opacity: 0.3;
   animation: esim-dot-bounce 1.1s ease-in-out infinite;
 }
@@ -1185,8 +1185,8 @@ onBeforeUnmount(() => {
 }
 
 @keyframes esim-orbit {
-  0%, 100% { transform: scale(1); box-shadow: 0 8px 18px rgba(16, 185, 129, 0.25); }
-  50% { transform: scale(1.04); box-shadow: 0 10px 22px rgba(20, 184, 166, 0.35); }
+  0%, 100% { transform: scale(1); box-shadow: 0 8px 18px color-mix(in srgb, var(--ui-success) 25%, transparent); }
+  50% { transform: scale(1.04); box-shadow: 0 10px 22px color-mix(in srgb, var(--ui-accent) 35%, transparent); }
 }
 
 @media (max-width: 720px) {

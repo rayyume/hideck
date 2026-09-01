@@ -6,6 +6,11 @@ import type { AppError } from '../types/domain'
 import type { TrafficAnalysis, TrafficRange } from '../services/traffic'
 import { formatDeviceDate, formatDeviceDateTime, formatDeviceMonthDay, formatDeviceTime } from '../utils/deviceTime'
 
+function readThemeColor(token: string, fallback: string) {
+  if (typeof document === 'undefined') return fallback
+  return getComputedStyle(document.documentElement).getPropertyValue(token).trim() || fallback
+}
+
 type TrafficAnalysisMode = 'global' | 'device'
 type TooltipParam = {
   axisValue?: string | number
@@ -265,7 +270,7 @@ const chartOption = computed(() => {
     return {
       tooltip: {
         trigger: 'axis',
-        axisPointer: { type: 'cross', label: { backgroundColor: '#6a7985' } },
+        axisPointer: { type: 'cross', label: { backgroundColor: readThemeColor('--ui-text-muted', '#5B6B7A') } },
         formatter: (params: unknown) => {
           const list: TooltipParam[] = Array.isArray(params)
             ? params.filter((item): item is TooltipParam => !!item && typeof item === 'object')
@@ -294,15 +299,15 @@ const chartOption = computed(() => {
           type: 'category',
           boundaryGap: false,
           data: timestamps,
-          axisLine: { lineStyle: { color: '#4b5563' } }
+          axisLine: { lineStyle: { color: readThemeColor('--ui-text-muted', '#5B6B7A') } }
         }
       ],
       yAxis: [
         {
           type: 'value',
           name: `流量 (${unit.label})`,
-          splitLine: { lineStyle: { color: '#374151', type: 'dashed', opacity: 0.3 } },
-          axisLine: { lineStyle: { color: '#4b5563' } }
+          splitLine: { lineStyle: { color: readThemeColor('--ui-border', '#E3EAF0'), type: 'dashed', opacity: 0.3 } },
+          axisLine: { lineStyle: { color: readThemeColor('--ui-text-muted', '#5B6B7A') } }
         }
       ],
       dataZoom: [
@@ -351,7 +356,7 @@ const chartOption = computed(() => {
   return {
     tooltip: {
       trigger: 'axis',
-      axisPointer: { type: 'cross', label: { backgroundColor: '#6a7985' } },
+      axisPointer: { type: 'cross', label: { backgroundColor: readThemeColor('--ui-text-muted', '#5B6B7A') } },
       formatter: (params: unknown) => {
         const list: TooltipParam[] = Array.isArray(params)
           ? params.filter((item): item is TooltipParam => !!item && typeof item === 'object')
@@ -394,7 +399,7 @@ const chartOption = computed(() => {
     legend: {
       type: 'scroll',
       data: ['总流量', ...devices],
-      textStyle: { color: '#9ca3af' },
+      textStyle: { color: readThemeColor('--ui-text-muted', '#5B6B7A') },
       top: 0,
       left: 10,
       right: 10,
@@ -412,15 +417,15 @@ const chartOption = computed(() => {
         type: 'category',
         boundaryGap: false,
         data: timestamps,
-        axisLine: { lineStyle: { color: '#4b5563' } }
+        axisLine: { lineStyle: { color: readThemeColor('--ui-text-muted', '#5B6B7A') } }
       }
     ],
     yAxis: [
       {
         type: 'value',
         name: `流量 (${unit.label})`,
-        splitLine: { lineStyle: { color: '#374151', type: 'dashed', opacity: 0.3 } },
-        axisLine: { lineStyle: { color: '#4b5563' } }
+        splitLine: { lineStyle: { color: readThemeColor('--ui-border', '#E3EAF0'), type: 'dashed', opacity: 0.3 } },
+        axisLine: { lineStyle: { color: readThemeColor('--ui-text-muted', '#5B6B7A') } }
       }
     ],
     dataZoom: [
@@ -447,7 +452,7 @@ function buildCompactChartOption(timestamps: string[], rxBytes: number[], txByte
     data: values.map((value) => value / unit.divisor)
   })
   return {
-    color: ['#246bce', '#198754'],
+    color: [readThemeColor('--ui-communication', '#006BFF'), readThemeColor('--ui-success', '#1F7A4D')],
     tooltip: { trigger: 'axis' },
     legend: { data: ['下载', '上传'], top: 0, right: 8 },
     grid: { left: 12, right: 18, top: 38, bottom: 22, containLabel: true },
@@ -456,15 +461,15 @@ function buildCompactChartOption(timestamps: string[], rxBytes: number[], txByte
       boundaryGap: false,
       data: timestamps,
       axisTick: { show: false },
-      axisLine: { lineStyle: { color: '#9aabad' } }
+      axisLine: { lineStyle: { color: readThemeColor('--ui-text-muted', '#5B6B7A') } }
     }],
     yAxis: [{
       type: 'value',
       name: `流量 (${unit.label})`,
-      splitLine: { lineStyle: { color: '#9aabad', type: 'dashed', opacity: 0.28 } }
+      splitLine: { lineStyle: { color: readThemeColor('--ui-border', '#E3EAF0'), type: 'dashed', opacity: 0.28 } }
     }],
     dataZoom: [{ type: 'inside', filterMode: 'none' }],
-    series: [line('下载', '#246bce', rxBytes), line('上传', '#198754', txBytes)],
+    series: [line('下载', readThemeColor('--ui-communication', '#006BFF'), rxBytes), line('上传', readThemeColor('--ui-success', '#1F7A4D'), txBytes)],
     backgroundColor: 'transparent'
   }
 }

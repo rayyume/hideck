@@ -161,7 +161,7 @@ function stageStatusLabel(ready: boolean | undefined): string {
   border-radius: 22px;
   background:
     radial-gradient(circle at 56% 51%, color-mix(in srgb, var(--ui-primary) 13%, transparent), transparent 31%),
-    linear-gradient(132deg, var(--ui-surface) 0 48%, color-mix(in srgb, var(--ui-surface) 90%, #06120e) 100%);
+    linear-gradient(132deg, var(--ui-surface) 0 48%, color-mix(in srgb, var(--ui-surface) 90%, var(--ui-nav)) 100%);
   box-shadow: var(--ui-shadow-sm);
 }
 

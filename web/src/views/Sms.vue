@@ -875,7 +875,7 @@ async function confirmDeleteThread(thread: SmsThread) {
   position: fixed;
   inset: 0;
   z-index: 2200;
-  background: rgba(15, 23, 42, 0.36);
+  background: color-mix(in srgb, var(--ui-nav) 36%, transparent);
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -898,7 +898,7 @@ async function confirmDeleteThread(thread: SmsThread) {
 .sms-action-sheet-title {
   font-size: 12px;
   font-weight: 700;
-  color: rgb(107 114 128);
+  color: var(--ui-text-muted);
   text-align: center;
   letter-spacing: 0.03em;
 }
@@ -914,19 +914,19 @@ async function confirmDeleteThread(thread: SmsThread) {
 }
 
 :deep(.sms-danger-ghost-btn.el-button) {
-  color: rgb(185 28 28);
-  border-color: rgba(239, 68, 68, 0.24);
-  background: rgba(239, 68, 68, 0.09);
+  color: var(--ui-danger);
+  border-color: color-mix(in srgb, var(--ui-danger) 24%, var(--ui-border));
+  background: color-mix(in srgb, var(--ui-danger) 9%, transparent);
 }
 
 :deep(.sms-danger-ghost-btn.el-button:hover) {
-  color: rgb(153 27 27);
-  border-color: rgba(239, 68, 68, 0.38);
-  background: rgba(239, 68, 68, 0.15);
+  color: var(--ui-danger);
+  border-color: color-mix(in srgb, var(--ui-danger) 38%, var(--ui-border));
+  background: color-mix(in srgb, var(--ui-danger) 15%, transparent);
 }
 
 :deep(.sms-danger-ghost-btn.el-button:focus-visible) {
-  outline: 2px solid rgba(239, 68, 68, 0.25);
+  outline: 2px solid color-mix(in srgb, var(--ui-danger) 25%, transparent);
   outline-offset: 2px;
 }
 
@@ -990,15 +990,15 @@ async function confirmDeleteThread(thread: SmsThread) {
   background: transparent;
 }
 .sms-detail-scroll::-webkit-scrollbar-thumb {
-  background: rgba(144, 147, 153, 0.3);
+  background: color-mix(in srgb, var(--ui-text-muted) 30%, transparent);
   border-radius: 3px;
 }
 .sms-detail-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(144, 147, 153, 0.5);
+  background: color-mix(in srgb, var(--ui-text-muted) 50%, transparent);
 }
 /* Firefox */
 .sms-detail-scroll {
   scrollbar-width: thin;
-  scrollbar-color: rgba(144, 147, 153, 0.3) transparent;
+  scrollbar-color: color-mix(in srgb, var(--ui-text-muted) 30%, transparent) transparent;
 }
 </style>

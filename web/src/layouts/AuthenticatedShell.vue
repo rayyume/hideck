@@ -451,7 +451,7 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
 .sidebar-brand {
   height: 78px !important;
   flex: 0 0 78px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid color-mix(in srgb, var(--ui-nav-text) 8%, transparent);
 }
 
 .sidebar-brand-title {
@@ -498,9 +498,9 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
 .sidebar-account {
   min-height: 52px;
   padding: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid color-mix(in srgb, var(--ui-nav-text) 10%, transparent);
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.04);
+  background: color-mix(in srgb, var(--ui-nav-text) 4%, transparent);
 }
 
 .sidebar-account-compact {
@@ -524,9 +524,9 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
   height: 44px;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid color-mix(in srgb, var(--ui-nav-text) 10%, transparent);
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.035);
+  background: color-mix(in srgb, var(--ui-nav-text) 3.5%, transparent);
   color: var(--sidebar-menu-text);
   cursor: pointer;
 }
@@ -673,7 +673,7 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
     border: 1px solid color-mix(in srgb, var(--ui-text) 12%, transparent);
     border-radius: 18px;
     background: color-mix(in srgb, var(--ui-surface) 88%, transparent);
-    box-shadow: 0 1px 0 color-mix(in srgb, var(--ui-text) 7%, transparent) inset, 0 22px 64px rgba(0, 0, 0, .38);
+    box-shadow: 0 1px 0 color-mix(in srgb, var(--ui-text) 7%, transparent) inset, 0 22px 64px color-mix(in srgb, var(--ui-nav) 38%, transparent);
     backdrop-filter: blur(22px) saturate(1.2);
     overflow: hidden;
   }

@@ -83,17 +83,17 @@ const signalColor = computed<'green' | 'amber' | 'red' | 'gray'>(() => {
 })
 
 const signalColorClass = computed(() => ({
-  green: 'text-emerald-500 dark:text-emerald-400',
-  amber: 'text-amber-500 dark:text-amber-400',
-  red:   'text-red-500 dark:text-red-400',
-  gray:  'text-gray-400 dark:text-gray-500',
+  green: 'text-[var(--ui-success)]',
+  amber: 'text-[var(--ui-warning)]',
+  red:   'text-[var(--ui-danger)]',
+  gray:  'text-[var(--ui-text-muted)]',
 }[signalColor.value]))
 
 const signalBarColor = computed(() => ({
-  green: 'bg-emerald-500',
-  amber: 'bg-amber-500',
-  red:   'bg-red-500',
-  gray:  'bg-gray-300 dark:bg-gray-600',
+  green: 'bg-[var(--ui-success)]',
+  amber: 'bg-[var(--ui-warning)]',
+  red:   'bg-[var(--ui-danger)]',
+  gray:  'bg-[var(--ui-border)]',
 }[signalColor.value]))
 
 const controlOnline = computed(() => isControlOnline(props.device))
@@ -141,7 +141,7 @@ const networkPanelMessage = computed(() => {
         <!-- 运营商 hero（与 VoWiFi pill 统一样式） -->
         <div class="flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 mb-3 border"
           :class="isRegistered
-            ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-500/10 dark:border-emerald-500/25'
+            ? 'bg-[var(--ui-success-surface)] border-[color-mix(in_srgb,var(--ui-success)_28%,var(--ui-border))]'
             : controlOnline
               ? 'bg-amber-50 border-amber-200 dark:bg-amber-500/10 dark:border-amber-500/25'
               : 'bg-gray-100 border-gray-200 dark:bg-white/5 dark:border-white/10'"
@@ -150,7 +150,7 @@ const networkPanelMessage = computed(() => {
           <div class="flex-1 min-w-0">
             <div class="text-sm font-bold leading-tight"
               :class="isRegistered
-                ? 'text-emerald-700 dark:text-emerald-300'
+                ? 'text-[var(--ui-success)]'
                 : controlOnline
                   ? 'text-amber-700 dark:text-amber-300'
                   : 'text-gray-500 dark:text-gray-400'"

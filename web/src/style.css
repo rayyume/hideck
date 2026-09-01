@@ -275,12 +275,12 @@ button,
 ::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   border-radius: 6px;
-  background: #aebfc3;
+  background: color-mix(in srgb, var(--ui-text-muted) 62%, var(--ui-border));
   background-clip: padding-box;
 }
 
 html.dark ::-webkit-scrollbar-thumb {
-  background: #40575d;
+  background: color-mix(in srgb, var(--ui-text-muted) 55%, var(--ui-surface));
   background-clip: padding-box;
 }
 
@@ -553,7 +553,7 @@ html.dark .el-table td.el-table__cell {
 
 .el-menu {
   --el-menu-bg-color: transparent;
-  --el-menu-hover-bg-color: rgba(255, 255, 255, 0.07);
+  --el-menu-hover-bg-color: color-mix(in srgb, var(--ui-nav-text) 7%, transparent);
   --el-menu-active-color: var(--ui-nav-active);
   --el-menu-text-color: var(--ui-nav-muted);
 }

@@ -290,9 +290,9 @@ async function redirectAfterLogin() {
   justify-content: space-between;
   overflow: hidden;
   background:
-    radial-gradient(circle at 76% 46%, rgba(92, 234, 177, .16), transparent 28%),
-    linear-gradient(145deg, #071014, #0a1719 72%, #071012);
-  color: #f2fbfb;
+    radial-gradient(circle at 76% 46%, color-mix(in srgb, var(--ui-accent) 16%, transparent), transparent 28%),
+    linear-gradient(145deg, var(--ui-nav), color-mix(in srgb, var(--ui-nav) 86%, var(--ui-accent)));
+  color: var(--ui-nav-text);
 }
 
 .login-identity::before,
@@ -307,13 +307,13 @@ async function redirectAfterLogin() {
   opacity: .16;
   background-size: 54px 54px;
   background-image:
-    linear-gradient(rgba(121, 170, 174, .2) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(121, 170, 174, .2) 1px, transparent 1px);
+    linear-gradient(color-mix(in srgb, var(--ui-nav-muted) 20%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--ui-nav-muted) 20%, transparent) 1px, transparent 1px);
 }
 
 .login-identity::after {
   inset: 0;
-  background: rgba(4, 24, 27, .22);
+  background: color-mix(in srgb, var(--ui-nav) 22%, transparent);
 }
 
 .network-map {
@@ -327,7 +327,7 @@ async function redirectAfterLogin() {
   position: absolute;
   height: 1px;
   transform-origin: left center;
-  background: rgba(94, 194, 185, .42);
+  background: color-mix(in srgb, var(--ui-accent) 42%, transparent);
 }
 
 .line-a { top: 18%; left: 8%; width: 44%; transform: rotate(9deg); }
@@ -339,9 +339,9 @@ async function redirectAfterLogin() {
   position: absolute;
   width: 7px;
   height: 7px;
-  border: 1px solid #67d2ca;
-  background: #102a2e;
-  box-shadow: 0 0 0 3px rgba(103, 210, 202, .09);
+  border: 1px solid var(--ui-accent);
+  background: var(--ui-nav);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ui-accent) 9%, transparent);
 }
 
 .node-a { top: 21%; left: 27%; }
@@ -351,7 +351,7 @@ async function redirectAfterLogin() {
 
 .network-label {
   position: absolute;
-  color: rgba(131, 224, 216, .66);
+  color: color-mix(in srgb, var(--ui-accent) 66%, transparent);
   font: 9px/1 "v-mono", ui-monospace, monospace;
 }
 
@@ -377,10 +377,10 @@ async function redirectAfterLogin() {
   height: 38px;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(131, 224, 216, .45);
+  border: 1px solid color-mix(in srgb, var(--ui-accent) 45%, transparent);
   border-radius: 13px;
-  background: rgba(92, 234, 177, .12);
-  color: #8ff7cb;
+  background: color-mix(in srgb, var(--ui-accent) 12%, transparent);
+  color: var(--ui-accent);
   font-size: 18px;
   font-weight: 700;
 }
@@ -404,7 +404,7 @@ async function redirectAfterLogin() {
 
 .identity-topline div span {
   margin-top: 3px;
-  color: #86a5a9;
+  color: var(--ui-nav-muted);
   font-size: 9px;
 }
 
@@ -414,7 +414,7 @@ async function redirectAfterLogin() {
 
 .identity-kicker,
 .form-kicker {
-  color: #67d2ca;
+  color: var(--ui-accent);
   font-size: 11px;
   font-weight: 700;
 }
@@ -429,7 +429,7 @@ async function redirectAfterLogin() {
 
 .identity-copy p {
   margin: 0;
-  color: #a9bfc2;
+  color: var(--ui-nav-muted);
   font-size: 15px;
 }
 
@@ -440,9 +440,9 @@ async function redirectAfterLogin() {
   grid-template-columns: 38px 1fr auto;
   align-items: center;
   gap: 14px;
-  border: 1px solid rgba(255, 255, 255, .11);
+  border: 1px solid color-mix(in srgb, var(--ui-nav-text) 11%, transparent);
   border-radius: 16px;
-  background: rgba(255, 255, 255, .04);
+  background: color-mix(in srgb, var(--ui-nav-text) 4%, transparent);
 }
 
 .signal-bars {
@@ -455,7 +455,7 @@ async function redirectAfterLogin() {
 .signal-bars i {
   width: 5px;
   border-radius: 1px;
-  background: #67d2ca;
+  background: var(--ui-accent);
 }
 
 .signal-bars i:nth-child(1) { height: 8px; }
@@ -475,7 +475,7 @@ async function redirectAfterLogin() {
 }
 
 .signal-panel div span {
-  color: #86a5a9;
+  color: var(--ui-nav-muted);
   font-size: 11px;
 }
 
@@ -483,8 +483,8 @@ async function redirectAfterLogin() {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #4cc38a;
-  box-shadow: 0 0 0 4px rgba(76, 195, 138, .12);
+  background: var(--ui-success);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--ui-success) 12%, transparent);
 }
 
 .login-access {

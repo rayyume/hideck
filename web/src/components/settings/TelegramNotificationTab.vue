@@ -29,7 +29,7 @@ const recordingModeOptions = [
       <div class="flex min-w-0 items-center gap-2 text-sm">
         <span
           class="h-2.5 w-2.5 shrink-0 rounded-full"
-          :class="boundTarget ? 'bg-emerald-500' : 'bg-amber-500'"
+          :class="boundTarget ? 'bg-[var(--ui-success)]' : 'bg-[var(--ui-warning)]'"
           aria-hidden="true"
         />
         <span class="break-all text-gray-700 dark:text-gray-200">

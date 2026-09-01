@@ -91,3 +91,16 @@ test('boot script understands navy and classic storage keys', () => {
   assert.match(indexHtml, /classList.toggle\('classic', theme === 'classic'\)/)
   assert.match(indexHtml, /background: #FBF9F6;/)
 })
+
+test('login, logs, and AT terminal no longer leak the old teal palette', () => {
+  const login = source('../src/views/Login.vue')
+  const logs = source('../src/views/Logs.vue')
+  const atTerminal = source('../src/components/DeviceAtTab.vue')
+  const leftover = /#071014|#67d2ca|#8ff7cb|#263a40|#081014|#050706|#c8d5ce|#66e9ad|#38bdb4|#102a2e|#06120e|rgba\(\s*92,\s*234,\s*177/
+  assert.doesNotMatch(login, leftover)
+  assert.doesNotMatch(logs, leftover)
+  assert.doesNotMatch(atTerminal, leftover)
+  assert.match(login, /background:[\s\S]*var\(--ui-nav\)/)
+  assert.match(logs, /background: var\(--ui-nav\);/)
+  assert.match(atTerminal, /background: var\(--ui-nav\);/)
+})

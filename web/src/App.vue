@@ -110,7 +110,7 @@ function rejectDisclaimer() {
     headers: token ? { Authorization: `Bearer ${token}` } : undefined
   })
     .finally(() => {
-      document.body.innerHTML = '<div style="display:flex;height:100vh;background:#0a0a0a;align-items:center;justify-content:center;font-size:24px;color:#ef4444;font-weight:bold;font-family:sans-serif;flex-direction:column;gap:16px;"><div><svg style="width:64px;height:64px;" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg></div><div>软件已被卸载 / 服务已终止</div></div>'
+      document.body.innerHTML = '<div style="display:flex;height:100vh;background:var(--ui-bg);align-items:center;justify-content:center;font-size:24px;color:var(--ui-danger);font-weight:bold;font-family:sans-serif;flex-direction:column;gap:16px;"><div><svg style="width:64px;height:64px;" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg></div><div>软件已被卸载 / 服务已终止</div></div>'
     })
 }
 
@@ -249,7 +249,7 @@ function retryStartup() {
 
 .license-overlay {
   padding: 16px;
-  background: rgba(4, 17, 20, 0.72);
+  background: color-mix(in srgb, var(--ui-nav) 72%, transparent);
 }
 
 .license-dialog {
@@ -323,7 +323,7 @@ function retryStartup() {
 .license-accept {
   border-color: var(--ui-primary);
   background: var(--ui-primary-solid);
-  color: #fff;
+  color: var(--ui-nav-text);
 }
 
 .license-accept:hover {
@@ -361,16 +361,10 @@ function retryStartup() {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: color-mix(in srgb, var(--ui-text-muted) 55%, var(--ui-border));
   border-radius: 4px;
 }
-.dark ::-webkit-scrollbar-thumb {
-  background: #334155;
-}
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
-}
-.dark ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: color-mix(in srgb, var(--ui-text-muted) 75%, var(--ui-border));
 }
 </style>

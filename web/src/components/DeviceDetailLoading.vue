@@ -40,11 +40,11 @@
 <style scoped>
 .skeleton-block {
   position: relative;
-  background: rgba(148, 163, 184, 0.18);
+  background: color-mix(in srgb, var(--ui-text-muted) 18%, transparent);
 }
 
 html.dark .skeleton-block {
-  background: rgba(148, 163, 184, 0.14);
+  background: color-mix(in srgb, var(--ui-text-muted) 14%, transparent);
 }
 
 .shimmer-mask {
