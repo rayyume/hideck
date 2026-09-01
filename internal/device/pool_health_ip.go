@@ -58,6 +58,18 @@ func (p *Pool) suppressQMIUnhealthyEviction(worker *Worker) (bool, string) {
 	return false, ""
 }
 
+// qmiTransportDownOverridesSuppression reports whether a confirmed QMI
+// control-plane break should still rebuild the worker even though a
+// suppression window is active. native_volte_call / usb_quiet exist to
+// avoid yanking USB during a live call; once the unix socket is already
+// gone, hangup cannot succeed and the worker stays dead until restart.
+func qmiTransportDownOverridesSuppression(transportDown bool, reason string) bool {
+	if !transportDown {
+		return false
+	}
+	return reason == "native_volte_call" || reason == "native_volte_usb_quiet"
+}
+
 func shouldFastStartMissingQMIWorker(cfg config.DeviceConfig, live QMIDevice, discoveryAvailable bool) bool {
 	if !discoveryAvailable {
 		// 发现失败时，检查配置的设备文件是否真的存在，避免反复尝试打开不存在的路径。
@@ -125,11 +137,16 @@ func (p *Pool) runHealthCheckTick() bool {
 			actBackend = w.Backend.Mode()
 		}
 		isQMI := actBackend == "qmi" || strings.ToLower(strings.TrimSpace(w.Config.DeviceBackend)) == "qmi"
+		transportDown := isQMI && healthErr != nil && qmiErrorIndicatesTransportDown(healthErr.Error())
 
 		if isQMI {
 			if suppressed, reason := p.suppressQMIUnhealthyEviction(w); suppressed {
-				logger.Debug("QMI 节点当前处于恢复窗口，跳过本轮剥离判定", "device", w.ID, "reason", reason)
-				continue
+				if !qmiTransportDownOverridesSuppression(transportDown, reason) {
+					logger.Debug("QMI 节点当前处于恢复窗口，跳过本轮剥离判定", "device", w.ID, "reason", reason)
+					continue
+				}
+				logger.Warn("QMI 传输已断开，忽略通话中抑制并进入恢复",
+					"device", w.ID, "was", reason, "err", healthErr)
 			}
 		}
 
@@ -139,7 +156,6 @@ func (p *Pool) runHealthCheckTick() bool {
 		}
 		// 传输确认已断开（broken pipe/EOF/connection closed 等）时，重连前不可能探活成功，
 		// 没有必要再等满 3 次观察窗口——跳过等待，第一次失败就直接触发恢复。
-		transportDown := isQMI && healthErr != nil && qmiErrorIndicatesTransportDown(healthErr.Error())
 		if isQMI && strings.TrimSpace(w.Config.ControlDevice) != "" {
 			if failures < qmiHealthFailureThreshold && !transportDown {
 				logger.Warn("QMI 节点探活失败，进入连续失败观察窗口",

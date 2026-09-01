@@ -3,6 +3,8 @@ package device
 import (
 	"strings"
 
+	"github.com/iniwex5/vowifi-go/runtimehost/carrier"
+	"github.com/yibaiba/hideck/internal/cardpolicy"
 	"github.com/yibaiba/hideck/internal/config"
 )
 
@@ -34,6 +36,33 @@ func PhoneServiceEnabled(cfg config.DeviceConfig) bool {
 
 func cellularAlwaysData(cfg config.DeviceConfig) bool {
 	return strings.TrimSpace(cfg.PhoneMode) == PhoneModeCellular && strings.TrimSpace(cfg.DataStrategy) == "always"
+}
+
+// WorkerSoftwareIMSBlocked reports China MCC 460/461, which has no ePDG
+// software IMS path in this stack. Phone service must use native VoLTE.
+func WorkerSoftwareIMSBlocked(w *Worker) bool {
+	if w == nil {
+		return false
+	}
+	mcc := strings.TrimSpace(w.state.Identity.NativeMCC)
+	if carrier.IsVoWiFiBlockedMCC(mcc) {
+		return true
+	}
+	imsi := strings.TrimSpace(w.state.Identity.IMSI)
+	if len(imsi) >= 3 && carrier.IsVoWiFiBlockedMCC(imsi[:3]) {
+		return true
+	}
+	return false
+}
+
+func forceSoftwareIMSBlockedToVoLTE(w *Worker, pol cardpolicy.Policy) {
+	if w == nil || !PhoneServiceEnabled(w.Config) || !WorkerSoftwareIMSBlocked(w) {
+		return
+	}
+	w.Config.PhoneMode = PhoneModeVoLTE
+	if !pol.AirplaneEnabled {
+		w.Config.AirplaneEnabled = false
+	}
 }
 
 // applyPhoneRadioPolicy applies RF side-effects of turning phone service on.

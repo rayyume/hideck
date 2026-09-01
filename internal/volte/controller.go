@@ -194,6 +194,14 @@ func (c *Controller) Status(deviceID string) Status {
 	st := s.status
 	qpcmvFailed := s.qpcmvTried && !s.qpcmvOK
 	c.mu.Unlock()
+	if c.usbAudioUnusable(deviceID) {
+		st.UACUnusable = true
+		st.UACEnabled = false
+		st.AudioDevice = ""
+		st.RebootRequired = false
+		st.QPCMVFailed = false
+		return st
+	}
 	audio := ""
 	if c.host != nil {
 		audio = strings.TrimSpace(c.host.AudioDevice(deviceID))
@@ -285,24 +293,55 @@ func (c *Controller) ensureVoicePCM(deviceID string) {
 	}
 	s.qpcmvTried = true
 	c.mu.Unlock()
+	if c.usbAudioUnusable(deviceID) || strings.TrimSpace(c.host.AudioDevice(deviceID)) == "" {
+		c.mu.Lock()
+		s = c.ensureLocked(deviceID)
+		s.qpcmvOK = false
+		s.alsaUnavailable = true
+		s.status.UACUnusable = c.usbAudioUnusable(deviceID)
+		s.status.QPCMVFailed = false
+		c.mu.Unlock()
+		if c.usbAudioUnusable(deviceID) {
+			logger.Info("VoLTE 跳过不支持的模组声卡，继续无音频通话", "device", deviceID)
+		}
+		return
+	}
 	_, err := c.host.ExecuteAT(deviceID, "AT+QPCMV=1,2", 2*time.Second)
 	c.mu.Lock()
 	s = c.ensureLocked(deviceID)
 	s.qpcmvOK = err == nil
 	s.status.QPCMVFailed = err != nil
+	if err != nil {
+		s.alsaUnavailable = true
+	}
 	c.mu.Unlock()
 	if err != nil {
-		logger.Warn("VoLTE 无法把通话 PCM 接到 USB 声卡", "device", deviceID, "err", err)
+		logger.Warn("VoLTE 无法把通话 PCM 接到 USB 声卡，跳过打开 ALSA", "device", deviceID, "err", err)
 	}
 }
 
+func (c *Controller) usbAudioUnusable(deviceID string) bool {
+	if c == nil || c.host == nil {
+		return false
+	}
+	u, ok := c.host.(interface{ USBAudioUnusable(string) bool })
+	return ok && u.USBAudioUnusable(deviceID)
+}
+
 func (c *Controller) syncAudioStatus(deviceID string, nvUAC bool) {
+	unusable := c.usbAudioUnusable(deviceID)
 	audio := ""
-	if c.host != nil {
+	if !unusable && c.host != nil {
 		audio = strings.TrimSpace(c.host.AudioDevice(deviceID))
 	}
 	c.patch(deviceID, func(st *Status) {
+		st.UACUnusable = unusable
 		st.AudioDevice = audio
+		if unusable {
+			st.UACEnabled = false
+			st.RebootRequired = false
+			return
+		}
 		if audio != "" {
 			st.UACEnabled = true
 			st.RebootRequired = false

@@ -90,6 +90,11 @@ func (s *Server) handleDeviceVoWiFiPatch(c *gin.Context) {
 		// 落库：置 vowifi_enabled=true。若带 mode/data_strategy 则一并落库。
 		mode := normalizePhoneMode(req.Mode)
 		strategy := normalizeDataStrategy(req.DataStrategy)
+		forceVoLTE := false
+		if w := s.pool.GetWorker(deviceID); device.WorkerSoftwareIMSBlocked(w) {
+			mode = device.PhoneModeVoLTE
+			forceVoLTE = true
+		}
 		if device.PhoneModeCampsOnCell(mode) {
 			class, classifyErr := s.classifyLebaraUKForDevice(c.Request.Context(), deviceID)
 			if rejectLebaraUKRFUnlock(c, class, classifyErr) {
@@ -97,7 +102,7 @@ func (s *Server) handleDeviceVoWiFiPatch(c *gin.Context) {
 			}
 		}
 		if _, _, err := s.patchCardPolicyForDevice(deviceID, func(p *db.CardPolicy) {
-			if req.Mode != nil {
+			if req.Mode != nil || forceVoLTE {
 				p.PhoneMode = mode
 			}
 			if req.DataStrategy != nil {
@@ -120,7 +125,7 @@ func (s *Server) handleDeviceVoWiFiPatch(c *gin.Context) {
 			if prevStrategy == "" {
 				prevStrategy = "on_demand"
 			}
-			if req.Mode != nil {
+			if req.Mode != nil || forceVoLTE {
 				w.Config.PhoneMode = mode
 			}
 			if req.DataStrategy != nil {

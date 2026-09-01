@@ -85,6 +85,21 @@ func TestRunHealthCheckTickSkipsObservationWindowOnTransportDownError(t *testing
 
 // TestRunHealthCheckTickStillWaitsForThresholdOnTransientError 测试普通瞬时错误（非传输确认已断）
 // 仍然遵循原有的 3 次观察窗口，不应被这次改动误伤。
+func TestQMITransportDownOverridesNativeVoLTECallSuppression(t *testing.T) {
+	if !qmiTransportDownOverridesSuppression(true, "native_volte_call") {
+		t.Fatal("broken pipe during native VoLTE call should rebuild")
+	}
+	if !qmiTransportDownOverridesSuppression(true, "native_volte_usb_quiet") {
+		t.Fatal("broken pipe during USB quiet window should rebuild")
+	}
+	if qmiTransportDownOverridesSuppression(false, "native_volte_call") {
+		t.Fatal("live call without transport-down must stay suppressed")
+	}
+	if qmiTransportDownOverridesSuppression(true, "esim_switching") {
+		t.Fatal("esim switch must not be overridden")
+	}
+}
+
 func TestRunHealthCheckTickStillWaitsForThresholdOnTransientError(t *testing.T) {
 	p := NewPool(&config.Config{})
 	defer p.cancel()

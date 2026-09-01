@@ -85,14 +85,15 @@ func (s *Server) handlePhoneDevices(c *gin.Context) {
 			}
 			devices = append(devices, gin.H{
 				"id": worker.ID, "name": worker.Config.Name, "iccid": worker.CurrentICCID(),
-				"voice":           voice,
-				"phone_mode":      phoneMode,
-				"data_strategy":   worker.Config.DataStrategy,
-				"network_enabled": worker.Config.NetworkEnabled,
-				"vowifi_enabled":  worker.Config.VoWiFiEnabled,
-				"vowifi_active":   s.pool.IsVoWiFiActive(worker.ID),
-				"native_volte":    s.pool.NativeVoLTEStatus(worker.ID),
-				"rf_lock":         class.RFLock(),
+				"voice":                voice,
+				"phone_mode":           phoneMode,
+				"data_strategy":        worker.Config.DataStrategy,
+				"network_enabled":      worker.Config.NetworkEnabled,
+				"vowifi_enabled":       worker.Config.VoWiFiEnabled,
+				"vowifi_active":        s.pool.IsVoWiFiActive(worker.ID),
+				"native_volte":         s.pool.NativeVoLTEStatus(worker.ID),
+				"software_ims_blocked": device.WorkerSoftwareIMSBlocked(worker),
+				"rf_lock":              class.RFLock(),
 			})
 		}
 	}

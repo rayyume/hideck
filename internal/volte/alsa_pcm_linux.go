@@ -69,6 +69,8 @@ func configureALSA(f *os.File) error {
 	constrainALSAMask(&params, alsaParamFormat, alsaFormatS16LE)
 	constrainALSAInterval(&params, alsaParamChannels, 1)
 	constrainALSAInterval(&params, alsaParamRate, uint32(pcmuClockRate))
+	constrainALSAInterval(&params, alsaParamPeriodSz, uint32(pcmuFrameSamples))
+	constrainALSAInterval(&params, alsaParamBufferSz, uint32(pcmuFrameSamples*4))
 	if err := ioctl(f, alsaIoctlHWRefine, unsafe.Pointer(&params[0])); err != nil {
 		return err
 	}

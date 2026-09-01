@@ -16,6 +16,7 @@ export type PhoneDevice = {
     reboot_required?: boolean
     last_error?: string
     uac_enabled?: boolean
+    uac_unusable?: boolean
     provision_stage?: string
     plmn?: string
     mbn_name?: string
@@ -26,6 +27,7 @@ export type PhoneDevice = {
   network_enabled?: boolean
   vowifi_enabled?: boolean
   vowifi_active?: boolean
+  software_ims_blocked?: boolean
   rf_lock?: string
 }
 

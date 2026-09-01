@@ -60,6 +60,7 @@ func applyPolicyToWorker(w *Worker, p cardpolicy.Policy) error {
 			w.Config.NetworkEnabled = false
 		}
 	}
+	forceSoftwareIMSBlockedToVoLTE(w, p)
 	w.Config.IPVersion = strings.TrimSpace(p.IPVersion)
 	if w.Config.IPVersion == "" {
 		w.Config.IPVersion = "v4"

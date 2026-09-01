@@ -241,6 +241,10 @@ func (p *Pool) AudioDevice(deviceID string) string {
 	if w == nil {
 		return ""
 	}
+	if p.USBAudioUnusable(deviceID) {
+		w.Config.AudioDevice = ""
+		return ""
+	}
 	if dev := strings.TrimSpace(w.Config.AudioDevice); dev != "" {
 		return dev
 	}
@@ -253,6 +257,14 @@ func (p *Pool) AudioDevice(deviceID string) string {
 		w.Config.AudioDevice = dev
 	}
 	return dev
+}
+
+func (p *Pool) USBAudioUnusable(deviceID string) bool {
+	w := p.GetWorker(deviceID)
+	if w == nil {
+		return false
+	}
+	return modemUACUnusable(w.Config.USBPath)
 }
 
 func (p *Pool) VOICEDial(ctx context.Context, deviceID, number string) (uint8, error) {

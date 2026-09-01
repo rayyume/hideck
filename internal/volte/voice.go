@@ -253,7 +253,7 @@ func (c *Controller) HangupCall(ctx context.Context, deviceID, id string) error 
 	}
 	c.releaseCallAudio(id)
 	err := c.host.VOICEHangup(ctx, deviceID, call.QMI)
-	if err != nil && !qmi.VoiceCallAlreadyGone(err) {
+	if err != nil && !qmi.VoiceCallAlreadyGone(err) && !voiceControlLost(err) {
 		return err
 	}
 	c.finishLocalCall(deviceID, call, hangupReason(err))
@@ -281,7 +281,7 @@ func (c *Controller) RejectIncomingCall(request voicehost.RejectRequest) error {
 	}
 	c.releaseCallAudio(request.CallID)
 	err := c.host.VOICEHangup(context.Background(), request.DeviceID, call.QMI)
-	if err != nil && !qmi.VoiceCallAlreadyGone(err) {
+	if err != nil && !qmi.VoiceCallAlreadyGone(err) && !voiceControlLost(err) {
 		return err
 	}
 	c.finishLocalCall(request.DeviceID, call, "rejected")
@@ -293,6 +293,16 @@ func hangupReason(err error) string {
 		return "local_hangup"
 	}
 	return "already_ended"
+}
+
+func voiceControlLost(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "broken pipe") ||
+		strings.Contains(msg, "read failed: eof") ||
+		strings.Contains(msg, "connection closed")
 }
 
 func (c *Controller) finishLocalCall(deviceID string, call nativeCall, reason string) {
@@ -580,6 +590,9 @@ func startedAt(prev nativeCall, now time.Time) time.Time {
 }
 
 func audioError(st Status) string {
+	if st.UACUnusable {
+		return "模组 USB 声卡不可用，VoLTE 可打但没有模组音频"
+	}
 	if st.QPCMVFailed {
 		return "模组无法把通话 PCM 接到 USB 声卡（QPCMV 失败），能打通但没有声音"
 	}
@@ -621,19 +634,25 @@ func (c *Controller) callPCM(deviceID string) PCMPort {
 	if c == nil || c.host == nil {
 		return nullPCM{}
 	}
+	if c.usbAudioUnusable(deviceID) {
+		c.markALSAUnavailable(deviceID)
+		logger.Info("VoLTE 跳过不支持的模组声卡，继续无音频通话", "device", deviceID)
+		return nullPCM{}
+	}
 	c.ensureVoicePCM(deviceID)
 	if c.alsaUnavailable(deviceID) {
 		return nullPCM{}
 	}
 	dev := strings.TrimSpace(c.host.AudioDevice(deviceID))
 	if dev == "" {
-		logger.Warn("VoLTE 无模组声卡，本次通话无音频", "device", deviceID)
+		c.markALSAUnavailable(deviceID)
+		logger.Info("VoLTE 无模组声卡，本次通话无音频", "device", deviceID)
 		return nullPCM{}
 	}
 	pcm, err := openALSAPCMBounded(dev, alsaOpenBudget)
 	if err != nil {
 		c.markALSAUnavailable(deviceID)
-		logger.Warn("VoLTE 打开模组声卡失败，本次通话无音频，后续不再同步打开以免卡住拨号",
+		logger.Warn("VoLTE 打开模组声卡失败，本次通话无音频，后续不再打开",
 			"device", deviceID, "alsa", dev, "err", err)
 		return nullPCM{}
 	}

@@ -6,6 +6,27 @@ import (
 	"github.com/yibaiba/hideck/internal/config"
 )
 
+func TestWorkerSoftwareIMSBlockedChinaMCC(t *testing.T) {
+	if WorkerSoftwareIMSBlocked(nil) {
+		t.Fatal("nil worker")
+	}
+	china := &Worker{ID: "wwan1"}
+	china.state.Identity.NativeMCC = "460"
+	if !WorkerSoftwareIMSBlocked(china) {
+		t.Fatal("MCC 460 should block software IMS")
+	}
+	imsiOnly := &Worker{ID: "wwan1"}
+	imsiOnly.state.Identity.IMSI = "460011234567890"
+	if !WorkerSoftwareIMSBlocked(imsiOnly) {
+		t.Fatal("IMSI 460 should block software IMS")
+	}
+	vf := &Worker{ID: "wwan0"}
+	vf.state.Identity.NativeMCC = "234"
+	if WorkerSoftwareIMSBlocked(vf) {
+		t.Fatal("MCC 234 must keep software IMS")
+	}
+}
+
 func TestPhoneServiceEnabledReadsVoWiFiBit(t *testing.T) {
 	if PhoneServiceEnabled(config.DeviceConfig{}) {
 		t.Fatal("empty config is phone-off")

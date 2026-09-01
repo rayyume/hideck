@@ -23,6 +23,33 @@ func enableVoice(t *testing.T) (*Controller, *FakeModem) {
 	return ctl, host
 }
 
+func TestUnsupportedUACSkipsQPCMVAndKeepsVoLTE(t *testing.T) {
+	host := newFakeModem()
+	host.IMS, host.VoLTE = 1, 1
+	host.USB[len(host.USB)-1] = "1"
+	host.Audio = "hw:2,0"
+	host.UACUnusable = true
+	ctl := NewControllerWithBackup(host, t.TempDir())
+	if err := ctl.Enable(context.Background(), "wwan1"); err != nil {
+		t.Fatal(err)
+	}
+	for _, cmd := range host.Commands {
+		if cmd == "AT+QPCMV=1,2" {
+			t.Fatal("unsupported UAC must not send QPCMV")
+		}
+	}
+	st := ctl.Status("wwan1")
+	if !st.UACUnusable || st.UACEnabled || st.AudioDevice != "" || st.QPCMVFailed {
+		t.Fatalf("status=%+v", st)
+	}
+	if got := audioError(st); !strings.Contains(got, "声卡不可用") {
+		t.Fatalf("audioError=%q", got)
+	}
+	if !st.IMSEnabled {
+		t.Fatal("VoLTE must stay enabled without UAC")
+	}
+}
+
 func TestQPCMVFailureIsExposedAsSilentAudio(t *testing.T) {
 	host := newFakeModem()
 	host.IMS, host.VoLTE = 1, 1
@@ -36,6 +63,9 @@ func TestQPCMVFailureIsExposedAsSilentAudio(t *testing.T) {
 	st := ctl.Status("wwan1")
 	if !st.QPCMVFailed {
 		t.Fatalf("QPCMVFailed=%v want true", st.QPCMVFailed)
+	}
+	if !ctl.alsaUnavailable("wwan1") {
+		t.Fatal("QPCMV failure must skip opening ALSA")
 	}
 	if got := audioError(st); !strings.Contains(got, "QPCMV") {
 		t.Fatalf("audioError=%q", got)
@@ -258,6 +288,21 @@ func TestVoiceAgentDTMFUsesCallID(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = host
+}
+
+func TestHangupBrokenPipeClearsLocalCall(t *testing.T) {
+	ctl, host := enableVoice(t)
+	snap, err := ctl.BeginCall(context.Background(), voicehost.BeginCallRequest{DeviceID: "wwan1", Callee: "10086"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	host.hangupErr = errors.New("write failed: write unix @->@qmi-proxy: write: broken pipe")
+	if err := ctl.HangupCall(context.Background(), "wwan1", snap.CallID); err != nil {
+		t.Fatalf("hangup after control loss: %v", err)
+	}
+	if ctl.ActiveCall("wwan1") != nil {
+		t.Fatal("stale native call still blocks QMI recovery")
+	}
 }
 
 func TestRejectAlreadyGoneClearsCall(t *testing.T) {

@@ -27,6 +27,10 @@ export function deviceSupportsUt(device?: {
   return device.vowifi_enabled === true || device.vowifi_active === true
 }
 
+export function softwareIMSBlocked(device?: { software_ims_blocked?: boolean } | null): boolean {
+  return device?.software_ims_blocked === true
+}
+
 export function phoneModeLabel(mode?: string | null): string {
   const value = normalizePhoneMode(mode)
   if (value === 'volte') return 'VoLTE'

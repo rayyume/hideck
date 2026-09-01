@@ -129,6 +129,9 @@ async function toggleWifiCalling(rawVal: string | number | boolean) {
 
 async function changePhoneMode(mode: string) {
   if (!selectedDevice.value || !!call.value || modePending.value) return
+  if ((mode === 'wifi' || mode === 'cellular') && selected.value?.software_ims_blocked) {
+    mode = 'volte'
+  }
   if ((mode === 'cellular' || mode === 'volte') && selected.value?.rf_lock) {
     ElMessage.warning('这张 Lebara UK 分享卡不能切蜂窝或 VoLTE，驻国内网会切到 20404，WiFi calling 会废')
     return
@@ -344,8 +347,8 @@ async function sendDTMF(digit: string) {
                 size="small"
                 :disabled="!!call || modePending"
               >
-                <el-radio-button value="wifi" @click="void changePhoneMode('wifi')">WiFi calling</el-radio-button>
-                <el-radio-button value="cellular" :disabled="!!selected?.rf_lock" @click="void changePhoneMode('cellular')">蜂窝数据</el-radio-button>
+                <el-radio-button value="wifi" :disabled="!!selected?.software_ims_blocked" @click="void changePhoneMode('wifi')">WiFi calling</el-radio-button>
+                <el-radio-button value="cellular" :disabled="!!selected?.rf_lock || !!selected?.software_ims_blocked" @click="void changePhoneMode('cellular')">蜂窝数据</el-radio-button>
                 <el-radio-button value="volte" :disabled="!!selected?.rf_lock" @click="void changePhoneMode('volte')">VoLTE</el-radio-button>
               </el-radio-group>
               <el-select
@@ -365,9 +368,13 @@ async function sendDTMF(digit: string) {
                   : '会正常驻网，待机不走流量。打蜂窝电话会临时打开数据。' }}
               </p>
               <p v-if="selectedMode === 'volte'" class="phone-mode-hint">
-                {{ selected?.native_volte?.reboot_required
-                  ? '原生 IMS 已写入。UAC 声卡要重启模组后才出现，现在可以试信令，音频可能不可用。'
-                  : '会驻网并用模组原生 IMS 打电话，不走软件 WiFi calling。打开「网络」才会用上网流量。' }}
+                {{ selected?.software_ims_blocked
+                  ? '这张卡没有软件 IMS（WiFi calling / 蜂窝数据），只用模组原生 VoLTE。打开「网络」才会用上网流量。'
+                  : selected?.native_volte?.uac_unusable
+                    ? '这台模组的 USB 声卡不能开（会把 QMI 打挂）。VoLTE 信令能打，没有模组声音。'
+                    : selected?.native_volte?.reboot_required
+                      ? '原生 IMS 已写入。UAC 声卡要重启模组后才出现，现在可以试信令，音频可能不可用。'
+                      : '会驻网并用模组原生 IMS 打电话，不走软件 WiFi calling。打开「网络」才会用上网流量。' }}
               </p>
               <div
                 v-show="selectedMode === 'wifi'"

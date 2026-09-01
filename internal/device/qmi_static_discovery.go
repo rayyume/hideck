@@ -712,9 +712,41 @@ func sortTTYPaths(paths []string) {
 	})
 }
 
+// modemUACUnusable reports USB audio that enumerates but must not be opened.
+// DJI/Baiwang EC25 composites expose a 8 kHz card; opening PCM switches the
+// USB altsetting and kills QMI on the same device. VoLTE stays on signaling.
+func modemUACUnusable(usbPath string) bool {
+	usbPath = resolveUSBPath(usbPath)
+	if strings.TrimSpace(usbPath) == "" {
+		return false
+	}
+	for _, name := range []string{"product", "manufacturer"} {
+		if unusableUACName(readSysfsText(filepath.Join(usbPath, name))) {
+			return true
+		}
+	}
+	return false
+}
+
+func unusableUACName(value string) bool {
+	value = strings.ToLower(strings.TrimSpace(value))
+	return strings.Contains(value, "baiwang") || strings.Contains(value, "dji")
+}
+
+func readSysfsText(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
+}
+
 // findAudioDevice 在同一 USB 复合设备下关联 ALSA 声卡信息。
 // 这样上层就能把 modem 控制面和同设备的 USB Audio 能力关联起来。
 func findAudioDevice(usbPath string) (string, int) {
+	if modemUACUnusable(usbPath) {
+		return "", -1
+	}
 	usbName := filepath.Base(usbPath)
 	pattern := filepath.Join(usbPath, usbName+":1.*", "sound", "card*")
 	matches, err := filepath.Glob(pattern)

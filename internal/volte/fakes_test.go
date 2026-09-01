@@ -48,6 +48,7 @@ type FakeModem struct {
 	imsActive     bool
 	hangupErr     error
 	dialVoice     *qmi.VoiceAllCallInfo
+	UACUnusable   bool
 }
 
 func newFakeModem() *FakeModem {
@@ -269,7 +270,13 @@ func (f *FakeModem) fireIMSRegistration(info *qmi.IMSARegistrationStatus) {
 func (f *FakeModem) IMSAStatus(context.Context, string) (Registration, error) {
 	return f.Reg, f.RegErr
 }
-func (f *FakeModem) AudioDevice(string) string { return f.Audio }
+func (f *FakeModem) AudioDevice(string) string {
+	if f.UACUnusable {
+		return ""
+	}
+	return f.Audio
+}
+func (f *FakeModem) USBAudioUnusable(string) bool { return f.UACUnusable }
 func (f *FakeModem) VOICEDial(context.Context, string, string) (uint8, error) {
 	f.mu.Lock()
 	info := f.dialVoice

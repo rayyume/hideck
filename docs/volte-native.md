@@ -36,6 +36,7 @@
 - `CallSnapshot.ClientSDP` 是本机 PCMU 8 kHz 端点，网页 `MediaSession` 在接通后 Attach
 - `Mode` 为 GSM/UMTS 时记 `cs_fallback`，不当成 VoLTE 接通
 - 无 UAC 声卡时媒体仍给 PCMU 端点，上行是静音，录音错误说明缺声卡
+- 大疆改身份 EC25（USB 产品名 Baiwang）会枚举声卡，但不能打开：打开 PCM 会把同口 QMI 打挂。这种模组跳过 QPCMV/ALSA，VoLTE 信令照常，没有模组音频。能用的 UAC 不受影响。
 
 ## 回滚
 

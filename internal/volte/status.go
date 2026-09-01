@@ -17,6 +17,7 @@ type Status struct {
 	IMSRegistered     bool   `json:"ims_registered"`
 	VoiceAvailable    bool   `json:"voice_available"`
 	UACEnabled        bool   `json:"uac_enabled"`
+	UACUnusable       bool   `json:"uac_unusable,omitempty"`
 	AudioDevice       string `json:"audio_device,omitempty"`
 	QPCMVFailed       bool   `json:"qpcmv_failed,omitempty"`
 	RebootRequired    bool   `json:"reboot_required"`

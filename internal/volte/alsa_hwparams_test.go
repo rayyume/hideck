@@ -39,4 +39,14 @@ func TestConstrainALSAVoicePCM(t *testing.T) {
 	if min != 8000 || max != 8000 || flags != alsaIntervalInt {
 		t.Fatalf("rate min=%d max=%d flags=%d", min, max, flags)
 	}
+	constrainALSAInterval(&params, alsaParamPeriodSz, uint32(pcmuFrameSamples))
+	constrainALSAInterval(&params, alsaParamBufferSz, uint32(pcmuFrameSamples*4))
+	min, max, flags = alsaIntervalValue(params, alsaParamPeriodSz)
+	if min != uint32(pcmuFrameSamples) || max != uint32(pcmuFrameSamples) || flags != alsaIntervalInt {
+		t.Fatalf("period min=%d max=%d flags=%d", min, max, flags)
+	}
+	min, max, flags = alsaIntervalValue(params, alsaParamBufferSz)
+	if min != uint32(pcmuFrameSamples*4) || max != uint32(pcmuFrameSamples*4) {
+		t.Fatalf("buffer min=%d max=%d", min, max)
+	}
 }

@@ -436,3 +436,38 @@ func TestMergeQMIDeviceListsDedupsByControlPath(t *testing.T) {
 		t.Fatalf("expected second WWAN entry retained, got %+v", got[1])
 	}
 }
+
+func TestModemUACUnusableBaiwang(t *testing.T) {
+	root := t.TempDir()
+	usb := filepath.Join(root, "1-2.1")
+	if err := os.MkdirAll(filepath.Join(usb, "1-2.1:1.7", "sound", "card2"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(usb, "product"), []byte("Baiwang\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !modemUACUnusable(usb) {
+		t.Fatal("Baiwang USB audio must be treated as unusable")
+	}
+	if dev, n := findAudioDevice(usb); dev != "" || n != -1 {
+		t.Fatalf("findAudioDevice = %q/%d, want empty", dev, n)
+	}
+}
+
+func TestFindAudioDeviceKeepsOrdinaryCard(t *testing.T) {
+	root := t.TempDir()
+	usb := filepath.Join(root, "1-4")
+	if err := os.MkdirAll(filepath.Join(usb, "1-4:1.6", "sound", "card1"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(usb, "product"), []byte("EC25\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if modemUACUnusable(usb) {
+		t.Fatal("ordinary Quectel UAC must stay usable")
+	}
+	dev, n := findAudioDevice(usb)
+	if dev != "hw:1,0" || n != 1 {
+		t.Fatalf("findAudioDevice = %q/%d", dev, n)
+	}
+}

@@ -26,6 +26,21 @@ func TestApplyPolicyCellularAirplaneKeepsSoftwarePhone(t *testing.T) {
 	}
 }
 
+func TestApplyPolicyChinaUnicomForcesNativeVoLTE(t *testing.T) {
+	w := &Worker{ID: "wwan1"}
+	w.state.Identity.NativeMCC = "460"
+	w.state.Identity.IMSI = "460011234567890"
+	applyPolicyToWorker(w, cardpolicy.Policy{
+		ICCID: "x", VoWiFiEnabled: true, PhoneMode: "cellular", DataStrategy: "on_demand",
+	})
+	if w.Config.PhoneMode != PhoneModeVoLTE {
+		t.Fatalf("PhoneMode=%q want volte", w.Config.PhoneMode)
+	}
+	if w.Config.AirplaneEnabled || w.cellularRadioIsSuppressed() {
+		t.Fatalf("中国卡软件 IMS 不可用时应驻网走 VoLTE: %+v suppressed=%v", w.Config, w.cellularRadioIsSuppressed())
+	}
+}
+
 func TestApplyPolicyVoLTECampsWithoutForcingData(t *testing.T) {
 	w := &Worker{ID: "wwan1"}
 	applyPolicyToWorker(w, cardpolicy.Policy{
