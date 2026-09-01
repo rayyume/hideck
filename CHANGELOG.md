@@ -1,5 +1,30 @@
 # Changelog
 
+## 2.1.1 - 2026-09-01
+
+### eSIM
+
+- Lebara UK 分享卡连过国内网变成 `204/04` 后，不必再删卡重写。同一 ICCID 做停用/启用，或经停车 Profile 中转，连续读到英国 `23487` 后再开 VoWiFi。射频锁不变，也不会把错误身份送去英国 ePDG。
+
+### 原生 VoLTE
+
+- 支持保持/恢复。
+- 大疆/佰旺等 USB 声卡不能开时跳过，避免把 QMI 打挂；信令仍可走 VoLTE。
+- 中国卡继续走原生 IMS，不走软件 WiFi calling。
+- 启动失败会重试；LTE 信号优先显示 RSRP。
+
+### VoWiFi
+
+- 新增一批旅行/常用卡预设：Hotlink、AIS、Smart、Globe、KPN、MTN 等。
+- 对端挂断后停止来电振铃。
+- IMS REGISTER、短信 RP-ACK、IKE 重鉴权，以及会议 / 转接 / 呼叫等待等协议对齐。
+
+### 修复
+
+- WebRTC 在 NAT 后发布公网 ICE 候选。
+- P-CSCF 运行时路径。
+- Path 带 `ob` 时 REGISTER 尽快带 `reg-id`。
+
 ## 2.1.0 - 2026-08-28
 
 ### 原生 VoLTE
