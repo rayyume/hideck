@@ -15,21 +15,18 @@ import (
 
 const dnsQueryTimeout = 2 * time.Second
 
+// ResolveIP answers IMS/XCAP names only through ePDG-assigned DNS. Outer SWu
+// already rides the country SOCKS proxy; a system/LAN resolver would leak
+// 3GPP names onto the local network.
 func (n *Network) ResolveIP(ctx context.Context, host string, preferIPv6 bool) (net.IP, error) {
 	host = strings.Trim(strings.TrimSpace(host), "[]")
 	if ip := net.ParseIP(host); ip != nil {
 		return ip, nil
 	}
-	if len(n.dnsServers()) > 0 {
-		if ip, err := n.resolveViaDNSServers(ctx, host, preferIPv6); err == nil {
-			return ip, nil
-		}
+	if len(n.dnsServers()) == 0 {
+		return nil, errors.New("netstack: no DNS servers assigned by ePDG")
 	}
-	addresses, err := net.DefaultResolver.LookupIPAddr(ctx, host)
-	if err != nil {
-		return nil, err
-	}
-	return selectAddress(addresses, host, preferIPv6)
+	return n.resolveViaDNSServers(ctx, host, preferIPv6)
 }
 
 func selectAddress(addresses []net.IPAddr, host string, preferIPv6 bool) (net.IP, error) {

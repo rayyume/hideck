@@ -59,6 +59,9 @@ const commandTypographyFiles = [
   '../src/components/commands/BalanceMessage.vue',
   '../src/components/commands/RuleEditorDrawer.vue'
 ] as const
+const utTypographyFiles = [
+  '../src/views/UtServices.vue'
+] as const
 const sharedTypographyFiles = [
   '../src/App.vue',
   '../src/components/LoadingScreen.vue',
@@ -143,6 +146,13 @@ test('SMS workspace text does not declare font sizes below 12px', async () => {
 
 test('command workspace text does not declare font sizes below 12px', async () => {
   for (const path of commandTypographyFiles) {
+    const source = await readFile(new URL(path, import.meta.url), 'utf8')
+    assert.deepEqual(findUnreadableFontSizes(source), [], path)
+  }
+})
+
+test('Ut services text does not declare font sizes below 12px', async () => {
+  for (const path of utTypographyFiles) {
     const source = await readFile(new URL(path, import.meta.url), 'utf8')
     assert.deepEqual(findUnreadableFontSizes(source), [], path)
   }

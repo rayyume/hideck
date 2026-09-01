@@ -6,9 +6,23 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 )
+
+func TestWrapUnavailableHidesRequestURL(t *testing.T) {
+	err := wrapUnavailable(errors.New(`Get "https://xcap.example/users/sip:234159612768972@ims.example/simservs": context deadline exceeded (Client.Timeout exceeded while awaiting headers)`))
+	if !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("err = %v", err)
+	}
+	if strings.Contains(err.Error(), "234159612768972") || strings.Contains(err.Error(), "https://") {
+		t.Fatalf("leaked %q", err)
+	}
+	if !strings.Contains(err.Error(), "timed out") {
+		t.Fatalf("err = %v", err)
+	}
+}
 
 func TestGetFallsBackToSecondXUIOn404(t *testing.T) {
 	var seen []string
@@ -78,6 +92,33 @@ func TestPutMapsPreconditionFailed(t *testing.T) {
 	_, err := client.Put(context.Background(), Document{XUI: "sip:user@ims.example", ETag: "old"})
 	if !errors.Is(err, ErrPrecondition) {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestRootURIUsesPub3GPPHostFromIMSDomain(t *testing.T) {
+	xui := "sip:234159612768972@ims.mnc015.mcc234.3gppnetwork.org"
+	got := RootURI("", "ims.mnc015.mcc234.3gppnetwork.org", xui)
+	want := "https://xcap.ims.mnc015.mcc234.pub.3gppnetwork.org/" + simservsAUID + "/users/" + url.PathEscape(xui) + "/simservs"
+	if got != want {
+		t.Fatalf("RootURI = %q, want %q", got, want)
+	}
+	if got := xcapHostFromDomain("ims.example"); got != "xcap.ims.example" {
+		t.Fatalf("operator domain host = %q", got)
+	}
+	if got := RootURI("xcap.configured.example", "ims.mnc015.mcc234.3gppnetwork.org", "sip:user@ims.example"); !strings.Contains(got, "https://xcap.configured.example/") {
+		t.Fatalf("configured host lost: %q", got)
+	}
+}
+
+func TestRootURIUsesOnNetHostFromIMSDomain(t *testing.T) {
+	xui := "sip:user@ims.mnc015.mcc234.3gppnetwork.org"
+	got := rootURI("", "ims.mnc015.mcc234.3gppnetwork.org", xui, true)
+	want := "https://xcap.ims.mnc015.mcc234.3gppnetwork.org/" + simservsAUID + "/users/" + url.PathEscape(xui) + "/simservs"
+	if got != want {
+		t.Fatalf("on-net RootURI = %q, want %q", got, want)
+	}
+	if got := xcapOnNetHostFromDomain("ims.mnc015.mcc234.3gppnetwork.org"); got != "xcap.ims.mnc015.mcc234.3gppnetwork.org" {
+		t.Fatalf("on-net host = %q", got)
 	}
 }
 

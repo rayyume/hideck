@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -121,8 +122,19 @@ func TestUtGetWithoutClientReportsMissingPDN(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/devices/dev-1/ut/simservs", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	router.ServeHTTP(get, req)
-	if get.Code != http.StatusConflict || !strings.Contains(get.Body.String(), "XCAP PDN") {
+	if get.Code != http.StatusConflict || !strings.Contains(get.Body.String(), "XCAP 承载未建立") {
 		t.Fatalf("missing PDN = %d %s", get.Code, get.Body.String())
+	}
+}
+
+func TestUtPublicMessageHidesXCAPURL(t *testing.T) {
+	err := fmt.Errorf("%w: timed out", xcap.ErrUnavailable)
+	got := utPublicMessage(err)
+	if strings.Contains(got, "sip:") || strings.Contains(got, "https://") || strings.Contains(got, "23415") {
+		t.Fatalf("message = %q", got)
+	}
+	if !strings.Contains(got, "超时") {
+		t.Fatalf("message = %q", got)
 	}
 }
 

@@ -17,6 +17,16 @@ export function isWifiCallingEnabled(mode?: string | null, phoneEnabled?: boolea
   return !!phoneEnabled && !phoneModeCampsOnCell(mode)
 }
 
+/** Ut/XCAP 只挂在软件 IMS 上；原生 VoLTE 和未开 WiFi calling 的设备不展示。 */
+export function deviceSupportsUt(device?: {
+  vowifi_enabled?: boolean
+  vowifi_active?: boolean
+  phone_mode?: string
+} | null): boolean {
+  if (!device || isNativeVoLTEMode(device.phone_mode)) return false
+  return device.vowifi_enabled === true || device.vowifi_active === true
+}
+
 export function phoneModeLabel(mode?: string | null): string {
   const value = normalizePhoneMode(mode)
   if (value === 'volte') return 'VoLTE'

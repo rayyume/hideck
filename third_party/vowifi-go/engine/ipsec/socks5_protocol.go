@@ -80,6 +80,33 @@ func socks5UserPasswordAuth(conn io.ReadWriter, config *Socks5Config) error {
 	return nil
 }
 
+func socks5Connect(conn io.ReadWriter, host string, port uint16) error {
+	req, err := buildSocks5TargetRequest(socks5CmdConnect, host, port)
+	if err != nil {
+		return err
+	}
+	if _, err := conn.Write(req); err != nil {
+		return fmt.Errorf("write CONNECT request: %w", err)
+	}
+	if _, err := readSocks5Reply(conn); err != nil {
+		return fmt.Errorf("CONNECT reply: %w", err)
+	}
+	return nil
+}
+
+func buildSocks5TargetRequest(cmd byte, host string, port uint16) ([]byte, error) {
+	host = strings.Trim(strings.TrimSpace(host), "[]")
+	if ip := net.ParseIP(host); ip != nil {
+		return buildSocks5Request(cmd, ip, port), nil
+	}
+	if host == "" || len(host) > 255 {
+		return nil, fmt.Errorf("invalid SOCKS5 domain %q", host)
+	}
+	req := []byte{socks5Version, cmd, 0, socks5ATYPDomain, byte(len(host))}
+	req = append(req, host...)
+	return append(req, byte(port>>8), byte(port)), nil
+}
+
 // socks5UDPAssociate requests a UDP associate session (RFC 1928 §7) and
 // returns the relay address to send UDP datagrams to. target is the address
 // announced to the proxy (the local ePDG endpoint); a nil target uses

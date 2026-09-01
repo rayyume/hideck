@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { isNativeVoLTEMode, isWifiCallingEnabled, phoneModeCampsOnCell, phoneModeLabel } from '../src/utils/phoneMode'
+import { deviceSupportsUt, isNativeVoLTEMode, isWifiCallingEnabled, phoneModeCampsOnCell, phoneModeLabel } from '../src/utils/phoneMode'
 
 test('native volte is only the volte phone mode', () => {
   assert.equal(isNativeVoLTEMode('volte'), true)
@@ -26,4 +26,14 @@ test('phone mode labels', () => {
   assert.equal(phoneModeLabel('volte'), 'VoLTE')
   assert.equal(phoneModeLabel('cellular'), '蜂窝数据')
   assert.equal(phoneModeLabel('wifi'), 'WiFi calling')
+})
+
+test('Ut is only for software IMS WiFi calling devices', () => {
+  assert.equal(deviceSupportsUt({ vowifi_enabled: true, phone_mode: 'wifi' }), true)
+  assert.equal(deviceSupportsUt({ vowifi_active: true, phone_mode: 'wifi' }), true)
+  assert.equal(deviceSupportsUt({ vowifi_enabled: true, phone_mode: 'cellular' }), true)
+  assert.equal(deviceSupportsUt({ vowifi_enabled: true, phone_mode: 'volte' }), false)
+  assert.equal(deviceSupportsUt({ vowifi_enabled: false, phone_mode: 'wifi' }), false)
+  assert.equal(deviceSupportsUt({ phone_mode: 'wifi' }), false)
+  assert.equal(deviceSupportsUt(undefined), false)
 })

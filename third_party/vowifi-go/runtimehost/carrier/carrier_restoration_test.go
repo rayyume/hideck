@@ -61,6 +61,10 @@ func TestResolveRetainsOrderedProposalLists(t *testing.T) {
 		!reflect.DeepEqual(giffgaff.ESPProposals, []string{ESPProposalAES256SHA512}) {
 		t.Fatalf("giffgaff proposals = IKE %v ESP %v", giffgaff.IKEProposals, giffgaff.ESPProposals)
 	}
+	vodafoneUK := ResolveEffectiveCarrierConfig("234", "15")
+	if vodafoneUK.XCAPAPN != "xcap" {
+		t.Fatalf("vodafone uk xcap APN = %q", vodafoneUK.XCAPAPN)
+	}
 }
 
 func TestCurrentInputAPIUsesRecoveredResolver(t *testing.T) {

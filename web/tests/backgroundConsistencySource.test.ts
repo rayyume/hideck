@@ -16,6 +16,7 @@ const phone = source('../src/views/Phone.vue')
 const phoneHistory = source('../src/components/PhoneCallHistory.vue')
 const logs = source('../src/views/Logs.vue')
 const settings = source('../src/views/Settings.vue')
+const utServices = source('../src/views/UtServices.vue')
 const proxyMode = source('../src/components/proxy/ProxyModeSwitch.vue')
 const proxyInventory = source('../src/components/proxy/ProxyInventoryShell.vue')
 const ruleEditor = source('../src/components/commands/RuleEditorDrawer.vue')
@@ -30,6 +31,7 @@ test('migrated business workspaces use one continuous device-style surface', () 
   assert.match(phone, /class="phone-workspace ui-card ui-workspace-glow"/)
   assert.match(logs, /class="logs-workspace ui-card ui-workspace-glow"/)
   assert.match(settings, /class="settings-workspace-shell ui-card ui-workspace-glow"/)
+  assert.match(utServices, /class="ut-workspace ui-card ui-workspace-glow"/)
 })
 
 test('continuous workspace content does not repeat the outer card layer', () => {
@@ -44,6 +46,7 @@ test('continuous workspace content does not repeat the outer card layer', () => 
   assert.doesNotMatch(settings, /class="settings-security-card ui-card/)
   assert.doesNotMatch(settings, /class="settings-system-card ui-card/)
   assert.doesNotMatch(settings, /class="notify-card ui-card/)
+  assert.doesNotMatch(utServices, /class="ut-panel ui-card/)
 })
 
 test('continuous workspaces share the semantic primary glow', () => {

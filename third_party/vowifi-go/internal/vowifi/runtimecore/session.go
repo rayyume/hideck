@@ -33,7 +33,7 @@ func RunSession(ctx context.Context, cfg SessionConfig) (*SessionResult, error) 
 	}
 	result := &SessionResult{
 		DeviceID: cfg.DeviceID, EPDGMgr: manager, Session: session, Snapshot: snapshot,
-		LocalAddr: snapshotLocalAddress(snapshot),
+		LocalAddr: snapshotLocalAddress(snapshot), Proxy: cfg.Proxy,
 	}
 	if cfg.OnTunnelReady != nil {
 		cfg.OnTunnelReady(result)

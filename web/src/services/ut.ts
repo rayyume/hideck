@@ -34,6 +34,6 @@ export const utService = {
     })
   },
   message(err: unknown) {
-    return errorMessage(err, 'Ut 请求失败')
+    return errorMessage(err, '呼叫设置请求失败')
   }
 }

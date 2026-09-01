@@ -60,6 +60,17 @@ func TestCurrentCarrierDefaultsSurviveRoundTrip(t *testing.T) {
 	}
 }
 
+func TestVodafoneUKXCAPAPNSurvivesRoundTrip(t *testing.T) {
+	source := carrier.ResolveEffectiveCarrierConfig("234", "15")
+	if source.XCAPAPN != "xcap" {
+		t.Fatalf("resolved xcap APN = %q", source.XCAPAPN)
+	}
+	got := FromInternal(ToInternal(source))
+	if got.XCAPAPN != "xcap" {
+		t.Fatalf("round trip xcap APN = %q", got.XCAPAPN)
+	}
+}
+
 func populatedCarrierConfig() carrier.EffectiveCarrierConfig {
 	return carrier.EffectiveCarrierConfig{
 		MCC: "234", MNC: "10", PresetID: "preset", MatchedTemplate: "template",
@@ -70,7 +81,7 @@ func populatedCarrierConfig() carrier.EffectiveCarrierConfig {
 		},
 		IPStackType: "dual", EPDGAddr: "epdg.example", EPDGAddrSource: "carrier",
 		EmergencyEPDGAddr: "sos.epdg.example",
-		EPDGPort:          4500, APN: "ims", DNSServer: "192.0.2.53", NATKeepaliveSeconds: 20,
+		EPDGPort:          4500, APN: "ims", DNSServer: "192.0.2.53", XCAPAPN: "xcap", NATKeepaliveSeconds: 20,
 		DPDIntervalSeconds: 30, AKAChallengeMode: "relay", IKEIdentityMode: "impi",
 		AKAIdentityMode: "isim", IKEProposals: []string{"ike-a", "ike-b"},
 		ESPProposals: []string{"esp-a", "esp-b"}, EnableLegacyCiphers: true,

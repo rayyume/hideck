@@ -2,12 +2,15 @@ package runtimecore
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
 	"time"
 
+	"github.com/iniwex5/vowifi-go/engine/ipsec"
 	"github.com/iniwex5/vowifi-go/engine/swu"
+	vowifidns "github.com/iniwex5/vowifi-go/internal/vowifi/dns"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/logging"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/netstack"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/policy"
@@ -92,11 +95,46 @@ func attachAdditionalPDNs(ctx context.Context, cfg SessionConfig, result *Sessio
 		return
 	}
 	result.XCAPNetwork = network
+	logging.Info("XCAP PDN established", "device", cfg.DeviceID, "ipv4", snapshot.IPv4 != nil, "ipv6", snapshot.IPv6 != nil)
 }
 
-// XCAPDialContext returns a dialer on the XCAP PDN. If a distinct XCAP APN
-// was requested, the IMS inner network is not used as a fallback.
+var publicXCAPResolvers = []net.IP{
+	net.ParseIP("1.1.1.1"),
+	net.ParseIP("8.8.8.8"),
+}
+
+var lookupXCAPHost = func(ctx context.Context, host string) []net.IP {
+	return vowifidns.LookupHostIPViaDNSServers(ctx, host, false, nil, publicXCAPResolvers)
+}
+
+// XCAPDialContext returns a dialer for Ut/XCAP. A distinct XCAP APN stays on
+// that PDN. Otherwise a pub.3gppnetwork.org name that resolves to RFC1918
+// is dialed on the IMS SWu stack; a public address uses the country SOCKS
+// CONNECT so DNS and TCP leave from the home network.
 func (r *SessionResult) XCAPDialContext() func(context.Context, string, string) (net.Conn, error) {
+	if r == nil {
+		return nil
+	}
+	if r.XCAPRequired {
+		inner := r.innerRawDialContext()
+		if inner == nil {
+			return nil
+		}
+		return func(ctx context.Context, network, address string) (net.Conn, error) {
+			return dialXCAP(ctx, network, address, inner, nil)
+		}
+	}
+	inner := r.innerRawDialContext()
+	socks := socksXCAPDialContext(r.Proxy)
+	if inner == nil && socks == nil {
+		return nil
+	}
+	return func(ctx context.Context, network, address string) (net.Conn, error) {
+		return dialXCAP(ctx, network, address, inner, socks)
+	}
+}
+
+func (r *SessionResult) innerRawDialContext() func(context.Context, string, string) (net.Conn, error) {
 	if r == nil {
 		return nil
 	}
@@ -114,12 +152,143 @@ func (r *SessionResult) XCAPDialContext() func(context.Context, string, string) 
 	return adapter.DialContext
 }
 
+func (r *SessionResult) innerXCAPDialContext() func(context.Context, string, string) (net.Conn, error) {
+	return withPublicHostLookup(r.innerRawDialContext())
+}
+
+const xcapInnerDialTimeout = 5 * time.Second
+
+func dialXCAP(
+	ctx context.Context,
+	network, address string,
+	inner func(context.Context, string, string) (net.Conn, error),
+	socks func(context.Context, string, string) (net.Conn, error),
+) (net.Conn, error) {
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return nil, err
+	}
+	host = strings.Trim(host, "[]")
+	if inner != nil && net.ParseIP(host) == nil {
+		conn, innerErr := dialXCAPWithTimeout(ctx, xcapInnerDialTimeout, inner, network, address)
+		if innerErr == nil {
+			logging.Info("XCAP dialed via IMS DNS", "host", host, "port", port)
+			return conn, nil
+		}
+		logging.Info("XCAP IMS hostname dial failed", "host", host, "port", port, "err", innerErr)
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		if ips := lookupXCAPHost(ctx, host); len(ips) > 0 {
+			ip = ips[0]
+		}
+	}
+	if ip != nil && ip.IsPrivate() {
+		if inner == nil {
+			return nil, fmt.Errorf("netstack: private XCAP address %s needs IMS tunnel", ip)
+		}
+		conn, innerErr := dialXCAPWithTimeout(ctx, xcapInnerDialTimeout, inner, network, net.JoinHostPort(ip.String(), port))
+		if innerErr != nil {
+			logging.Info("XCAP IMS private dial failed", "ip", ip.String(), "port", port, "err", innerErr)
+			return nil, innerErr
+		}
+		logging.Info("XCAP dialed via IMS private address", "ip", ip.String(), "port", port)
+		return conn, nil
+	}
+	if socks != nil {
+		return socks(ctx, network, address)
+	}
+	if inner == nil {
+		return nil, errUtDialUnavailable
+	}
+	if ip != nil {
+		return inner(ctx, network, net.JoinHostPort(ip.String(), port))
+	}
+	return inner(ctx, network, address)
+}
+
+func dialXCAPWithTimeout(
+	ctx context.Context,
+	timeout time.Duration,
+	dial func(context.Context, string, string) (net.Conn, error),
+	network, address string,
+) (net.Conn, error) {
+	if dial == nil {
+		return nil, errUtDialUnavailable
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+	return dial(ctx, network, address)
+}
+
+var errUtDialUnavailable = errors.New("XCAP PDN is not established")
+
+func socksXCAPDialContext(proxy *ProxyConfig) func(context.Context, string, string) (net.Conn, error) {
+	if proxy == nil || !proxy.Enabled || strings.TrimSpace(proxy.Addr) == "" {
+		return nil
+	}
+	cfg := ipsec.Socks5Config{
+		ProxyAddr: strings.TrimSpace(proxy.Addr),
+		Username:  proxy.Username,
+		Password:  proxy.Password,
+	}
+	return func(ctx context.Context, network, address string) (net.Conn, error) {
+		return ipsec.DialSOCKS5(ctx, cfg, network, address)
+	}
+}
+
+func withPublicHostLookup(
+	inner func(context.Context, string, string) (net.Conn, error),
+) func(context.Context, string, string) (net.Conn, error) {
+	if inner == nil {
+		return nil
+	}
+	return func(ctx context.Context, network, address string) (net.Conn, error) {
+		host, port, err := net.SplitHostPort(address)
+		if err != nil {
+			return nil, err
+		}
+		host = strings.Trim(host, "[]")
+		if net.ParseIP(host) != nil {
+			return inner(ctx, network, address)
+		}
+		conn, err := inner(ctx, network, address)
+		if err == nil {
+			return conn, nil
+		}
+		ips := lookupXCAPHost(ctx, host)
+		if len(ips) == 0 {
+			return nil, err
+		}
+		last := err
+		for _, ip := range ips {
+			if ip == nil {
+				continue
+			}
+			conn, dialErr := inner(ctx, network, net.JoinHostPort(ip.String(), port))
+			if dialErr == nil {
+				return conn, nil
+			}
+			last = dialErr
+		}
+		return nil, last
+	}
+}
+
 func cloneSWUConfigForPDN(base *swu.Config, apn string) *swu.Config {
 	if base == nil {
-		return &swu.Config{APN: strings.TrimSpace(apn)}
+		return &swu.Config{APN: strings.TrimSpace(apn), OmitInitialContact: true}
 	}
 	cfg := *base
 	cfg.APN = strings.TrimSpace(apn)
 	cfg.TUNName = ""
+	cfg.LocalPort = 0
+	cfg.OmitInitialContact = true
 	return &cfg
 }

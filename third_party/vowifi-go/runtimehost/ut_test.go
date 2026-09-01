@@ -35,6 +35,17 @@ func TestUtAccessRequiresPublicIdentity(t *testing.T) {
 	}
 }
 
+func TestUtUsesPublicHostWhenXCAPPDNIsUp(t *testing.T) {
+	if utUsesOnNetHost(&runtimecore.SessionResult{
+		XCAPNetwork: &netstack.Network{}, IMSNetwork: &netstack.Network{},
+	}) {
+		t.Fatal("dedicated XCAP PDN should use the public XCAP name")
+	}
+	if !utUsesOnNetHost(&runtimecore.SessionResult{IMSNetwork: &netstack.Network{}}) {
+		t.Fatal("IMS-only Ut should use the on-net XCAP name")
+	}
+}
+
 func TestDomainFromXUI(t *testing.T) {
 	if got := domainFromXUI("sip:user@ims.example.com"); got != "ims.example.com" {
 		t.Fatalf("got %q", got)

@@ -36,6 +36,13 @@ func NewUserspaceIMSNetwork(
 	} else {
 		dns = append(cloneIPs(snapshot.DNSv6), snapshot.DNSv4...)
 	}
+	if len(dns) == 0 {
+		if snapshot.IPv4 != nil {
+			dns = append(cloneIPs(snapshot.PCSCFv4), snapshot.PCSCFv6...)
+		} else {
+			dns = append(cloneIPs(snapshot.PCSCFv6), snapshot.PCSCFv4...)
+		}
+	}
 	return netstack.NewNetwork(
 		ctx, cloneIP(snapshot.IPv4), cloneIP(snapshot.IPv6), prefix, mtu,
 		session.InnerPacketEndpoint(), nil, dns,

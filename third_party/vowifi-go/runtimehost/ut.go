@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/iniwex5/vowifi-go/internal/vowifi/runtimecore"
 	"github.com/iniwex5/vowifi-go/xcap"
 )
 
@@ -50,10 +51,21 @@ func (i *Instance) UtAccess() (UtAccess, error) {
 		return UtAccess{}, errors.New("IMS public identity is not registered")
 	}
 	return UtAccess{
-		Client: &xcap.Client{HTTP: client, Domain: domain},
-		XUI:    xui,
-		More:   append([]string(nil), xuis[1:]...),
+		Client: &xcap.Client{
+			HTTP: client, Domain: domain,
+			OnNet: utUsesOnNetHost(session),
+		},
+		XUI:  xui,
+		More: append([]string(nil), xuis[1:]...),
 	}, nil
+}
+
+// utUsesOnNetHost is for the IMS PDN, where operator DNS can answer
+// xcap.<ims-domain>. A dedicated XCAP APN instead uses the public
+// xcap.*.pub.3gppnetwork.org name and dials the RFC1918 A record on
+// that PDN (TS 23.003 13.9.1.2).
+func utUsesOnNetHost(session *runtimecore.SessionResult) bool {
+	return session != nil && session.XCAPNetwork == nil && session.IMSNetwork != nil
 }
 
 func domainFromXUI(xui string) string {

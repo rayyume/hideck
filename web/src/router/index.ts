@@ -30,9 +30,7 @@ const router = createRouter({
     },
     {
       path: '/ut',
-      name: 'UtServices',
-      component: () => import('../views/UtServices.vue'),
-      meta: { requiresAuth: true }
+      redirect: '/'
     },
     {
       path: '/devices',

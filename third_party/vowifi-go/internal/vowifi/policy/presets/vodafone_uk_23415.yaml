@@ -2,6 +2,7 @@ mcc: "234"
 mnc: "15"
 id: vodafone_uk_23415
 device_model: rmx3366
+xcap_apn: xcap
 dpd_interval_seconds: 120
 ike_proposals:
   - aes256-sha512-prfsha512-modp2048

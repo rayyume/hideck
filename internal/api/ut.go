@@ -58,12 +58,12 @@ func (s *Server) registerUtRoutes(api *gin.RouterGroup) {
 func (s *Server) handleUtGet(c *gin.Context) {
 	client, ident, err := s.lookupUtClient(deviceIDParam(c))
 	if err != nil {
-		c.JSON(utStatus(err), gin.H{"status": "error", "message": err.Error()})
+		writeUtError(c, err)
 		return
 	}
 	doc, err := client.Get(c.Request.Context(), ident.XUI, ident.Fallback)
 	if err != nil {
-		c.JSON(utStatus(err), gin.H{"status": "error", "message": err.Error()})
+		writeUtError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, utViewFromDocument(doc))
@@ -81,12 +81,12 @@ func (s *Server) handleUtPut(c *gin.Context) {
 	}
 	client, ident, err := s.lookupUtClient(deviceIDParam(c))
 	if err != nil {
-		c.JSON(utStatus(err), gin.H{"status": "error", "message": err.Error()})
+		writeUtError(c, err)
 		return
 	}
 	doc, err := client.Get(c.Request.Context(), ident.XUI, ident.Fallback)
 	if err != nil {
-		c.JSON(utStatus(err), gin.H{"status": "error", "message": err.Error()})
+		writeUtError(c, err)
 		return
 	}
 	if strings.TrimSpace(req.ETag) == "" || req.ETag != doc.ETag {
@@ -96,7 +96,7 @@ func (s *Server) handleUtPut(c *gin.Context) {
 	req.apply(&doc)
 	saved, err := client.Put(c.Request.Context(), doc)
 	if err != nil {
-		c.JSON(utStatus(err), gin.H{"status": "error", "message": err.Error()})
+		writeUtError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, utViewFromDocument(saved))
@@ -184,6 +184,32 @@ func utViewFromDocument(doc xcap.Document) utView {
 		view.OutgoingBarring = utToggle{Active: doc.OCB.Active}
 	}
 	return view
+}
+
+func writeUtError(c *gin.Context, err error) {
+	c.JSON(utStatus(err), gin.H{"status": "error", "message": utPublicMessage(err)})
+}
+
+func utPublicMessage(err error) string {
+	switch {
+	case errors.Is(err, xcap.ErrNotFound):
+		return "运营商没有这份补充业务文档"
+	case errors.Is(err, xcap.ErrPrecondition):
+		return "补充业务已被其他请求更新，请刷新后重试"
+	case errors.Is(err, errUtManyChanges):
+		return errUtManyChanges.Error()
+	case errors.Is(err, errUtIdentity):
+		return "IMS 未注册，无法读取补充业务"
+	case errors.Is(err, errUtXCAPPDN), errors.Is(err, errUtUnavailable):
+		return "XCAP 承载未建立"
+	case errors.Is(err, xcap.ErrUnavailable):
+		if strings.Contains(err.Error(), "timed out") {
+			return "运营商 Ut/XCAP 超时：补充业务服务器在运营商内网，当前 IMS 隧道连不上。"
+		}
+		return "运营商 Ut/XCAP 不可用"
+	default:
+		return "补充业务请求失败"
+	}
 }
 
 func utStatus(err error) int {

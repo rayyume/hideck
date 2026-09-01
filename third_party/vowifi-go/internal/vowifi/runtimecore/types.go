@@ -138,6 +138,7 @@ type SessionResult struct {
 	XCAPRequired bool
 	XCAPSession  *swu.Session
 	XCAPNetwork  *netstack.Network
+	Proxy        *ProxyConfig
 	interrupts   chan InterruptOutcome
 }
 

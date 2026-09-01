@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -38,6 +39,61 @@ func TestTunnelDNSResolvesAAndAAAAAndSRV(t *testing.T) {
 	}
 }
 
+func TestTunnelDNSDoesNotFallBackToSystemResolver(t *testing.T) {
+	packetIO := newChannelPacketIO()
+	adapter, err := NewTunnelNetwork(
+		net.IPv4(10, 0, 0, 2), 32, []string{"10.0.0.53"}, packetIO,
+	)
+	if err != nil {
+		t.Fatalf("NewTunnelNetwork: %v", err)
+	}
+	defer adapter.Close()
+	go func() {
+		for range 4 {
+			select {
+			case request := <-packetIO.outbound:
+				response, buildErr := emptyDNSResponsePacket(request)
+				if buildErr != nil {
+					t.Errorf("build empty DNS response: %v", buildErr)
+					return
+				}
+				packetIO.inbound <- response
+			case <-time.After(time.Second):
+				return
+			}
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	got, err := adapter.ResolveIP(ctx, "localhost")
+	if err == nil {
+		t.Fatalf("ResolveIP(localhost) = %v, want tunnel DNS miss without system fallback", got)
+	}
+	if !strings.Contains(err.Error(), "empty DNS answer") && !strings.Contains(err.Error(), "no DNS answer") {
+		t.Fatalf("ResolveIP error = %v, want ePDG DNS miss", err)
+	}
+}
+
+func TestTunnelDNSDoesNotUseSystemResolverWithoutEPDGDNS(t *testing.T) {
+	packetIO := newChannelPacketIO()
+	adapter, err := NewTunnelNetwork(net.IPv4(10, 0, 0, 2), 32, nil, packetIO)
+	if err != nil {
+		t.Fatalf("NewTunnelNetwork: %v", err)
+	}
+	defer adapter.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	got, err := adapter.ResolveIP(ctx, "localhost")
+	if err == nil {
+		t.Fatalf("ResolveIP(localhost) = %v, want missing ePDG DNS error", got)
+	}
+	if !strings.Contains(err.Error(), "no DNS servers assigned by ePDG") {
+		t.Fatalf("ResolveIP error = %v, want no ePDG DNS servers", err)
+	}
+}
+
 func serveDNSPackets(t *testing.T, packetIO *channelPacketIO, count int) {
 	t.Helper()
 	go func() {
@@ -58,15 +114,23 @@ func serveDNSPackets(t *testing.T, packetIO *channelPacketIO, count int) {
 	}()
 }
 
-func dnsResponsePacket(request []byte) ([]byte, error) {
-	if len(request) < header.IPv4MinimumSize+header.UDPMinimumSize {
-		return nil, fmt.Errorf("short request: %d", len(request))
+func emptyDNSResponsePacket(request []byte) ([]byte, error) {
+	ipHeader, udpHeader, query, err := unpackDNSQuery(request)
+	if err != nil {
+		return nil, err
 	}
-	ipHeader := header.IPv4(request)
-	headerLength := int(ipHeader.HeaderLength())
-	udpHeader := header.UDP(request[headerLength:])
-	query := new(mdns.Msg)
-	if err := query.Unpack(udpHeader.Payload()); err != nil {
+	response := new(mdns.Msg)
+	response.SetReply(query)
+	payload, err := response.Pack()
+	if err != nil {
+		return nil, err
+	}
+	return makeIPv4UDPResponse(ipHeader, udpHeader, payload), nil
+}
+
+func dnsResponsePacket(request []byte) ([]byte, error) {
+	ipHeader, udpHeader, query, err := unpackDNSQuery(request)
+	if err != nil {
 		return nil, err
 	}
 	if len(query.Question) != 1 {
@@ -105,6 +169,20 @@ func dnsResponsePacket(request []byte) ([]byte, error) {
 		return nil, err
 	}
 	return makeIPv4UDPResponse(ipHeader, udpHeader, payload), nil
+}
+
+func unpackDNSQuery(request []byte) (header.IPv4, header.UDP, *mdns.Msg, error) {
+	if len(request) < header.IPv4MinimumSize+header.UDPMinimumSize {
+		return nil, nil, nil, fmt.Errorf("short request: %d", len(request))
+	}
+	ipHeader := header.IPv4(request)
+	headerLength := int(ipHeader.HeaderLength())
+	udpHeader := header.UDP(request[headerLength:])
+	query := new(mdns.Msg)
+	if err := query.Unpack(udpHeader.Payload()); err != nil {
+		return nil, nil, nil, err
+	}
+	return ipHeader, udpHeader, query, nil
 }
 
 func makeIPv4UDPResponse(requestIP header.IPv4, requestUDP header.UDP, payload []byte) []byte {

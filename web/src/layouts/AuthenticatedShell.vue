@@ -19,8 +19,7 @@ import {
   DocumentText24Regular,
   Chat24Regular,
   CalendarClock24Regular,
-  Dialpad24Regular,
-  ArrowForward24Regular
+  Dialpad24Regular
 } from '@vicons/fluent'
 
 defineProps({
@@ -48,7 +47,6 @@ const menuItems = [
   { index: '/', label: '仪表盘', icon: Board24Regular },
   { index: '/devices', label: '设备管理', icon: Phone24Regular },
   { index: '/phone', label: '电话', icon: Dialpad24Regular },
-  { index: '/ut', label: '补充业务', icon: ArrowForward24Regular },
   { index: '/proxy', label: '代理管理', icon: Globe24Regular },
   { index: '/sms', label: '短信中心', icon: Mail24Regular },
   { index: '/commands', label: '命令中心', icon: Chat24Regular },

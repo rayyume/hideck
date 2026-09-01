@@ -134,6 +134,12 @@ func TestResolveEmbeddedCarrierPresets(t *testing.T) {
 	}) {
 		t.Fatalf("vodafone uk contact order = %v", vodafoneUK.IMSRegisterTemplate.ContactParamOrder)
 	}
+	if vodafoneUK.XCAPAPN != "xcap" {
+		t.Fatalf("vodafone uk xcap APN = %q", vodafoneUK.XCAPAPN)
+	}
+	if extra := AdditionalPDNs(vodafoneUK); len(extra) != 1 || extra[0].APN != "xcap" {
+		t.Fatalf("vodafone uk extra PDN = %+v", extra)
+	}
 	lebaraUK := ResolveEffectiveCarrierConfig("234", "87")
 	if lebaraUK.PresetID != "lebara_uk_23487" || lebaraUK.DeviceModel != "rmx3366" ||
 		lebaraUK.EPDGAddr != "epdg.epc.mnc087.mcc234.pub.3gppnetwork.org" ||

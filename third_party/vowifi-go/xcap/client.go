@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -29,22 +30,63 @@ type Client struct {
 	HTTP   *http.Client
 	Host   string
 	Domain string
+	// OnNet is true when the HTTP client dials the IMS/XCAP PDN. 23.003
+	// 13.9.1 then uses xcap.<ims-domain> (no .pub) so operator DNS can
+	// answer. The .pub name is for the public Internet.
+	OnNet bool
 }
 
 func RootURI(host, domain, xui string) string {
+	return rootURI(host, domain, xui, false)
+}
+
+func rootURI(host, domain, xui string, onNet bool) string {
 	host = strings.TrimSpace(host)
 	domain = strings.TrimSpace(domain)
 	xui = strings.TrimSpace(xui)
-	if host == "" && domain != "" {
-		host = "xcap." + strings.TrimPrefix(domain, "ims.")
-		if !strings.Contains(host, ".") {
-			host = "xcap." + domain
+	if host == "" {
+		if onNet {
+			host = xcapOnNetHostFromDomain(domain)
+		} else {
+			host = xcapHostFromDomain(domain)
 		}
 	}
 	if host == "" || xui == "" {
 		return ""
 	}
 	return "https://" + host + "/" + simservsAUID + "/users/" + url.PathEscape(xui) + "/simservs"
+}
+
+// xcapHostFromDomain follows 3GPP TS 23.003 13.9.1.2. An IMS domain that ends
+// in 3gppnetwork.org is published as xcap.<labels>.pub.3gppnetwork.org so the
+// name can be resolved on public DNS (via the country SOCKS proxy).
+func xcapHostFromDomain(domain string) string {
+	domain = strings.Trim(strings.TrimSpace(domain), ".")
+	if domain == "" {
+		return ""
+	}
+	const suffix = ".3gppnetwork.org"
+	lower := strings.ToLower(domain)
+	if strings.HasSuffix(lower, suffix) {
+		head := domain[:len(domain)-len(suffix)]
+		if strings.TrimSpace(head) != "" {
+			return "xcap." + head + ".pub.3gppnetwork.org"
+		}
+	}
+	return "xcap." + domain
+}
+
+// xcapOnNetHostFromDomain is TS 23.003 13.9.1 for the home IMS PDN: the
+// XCAP host is xcap.<IMS domain> and is resolved by operator DNS.
+func xcapOnNetHostFromDomain(domain string) string {
+	domain = strings.Trim(strings.TrimSpace(domain), ".")
+	if domain == "" {
+		return ""
+	}
+	if strings.HasPrefix(strings.ToLower(domain), "xcap.") {
+		return domain
+	}
+	return "xcap." + domain
 }
 
 func (c *Client) Get(ctx context.Context, xui string, fallback []string) (Document, error) {
@@ -85,7 +127,7 @@ func (c *Client) Put(ctx context.Context, doc Document) (Document, error) {
 	req.Header.Set("If-Match", `"`+doc.ETag+`"`)
 	resp, err := c.httpClient().Do(req)
 	if err != nil {
-		return Document{}, fmt.Errorf("%w: %v", ErrUnavailable, err)
+		return Document{}, wrapUnavailable(err)
 	}
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, maxBody))
@@ -113,7 +155,7 @@ func (c *Client) getOne(ctx context.Context, xui string) (Document, error) {
 	req.Header.Set("Accept", "application/vnd.etsi.simservs+xml, application/xml")
 	resp, err := c.httpClient().Do(req)
 	if err != nil {
-		return Document{}, fmt.Errorf("%w: %v", ErrUnavailable, err)
+		return Document{}, wrapUnavailable(err)
 	}
 	defer resp.Body.Close()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxBody))
@@ -131,12 +173,11 @@ func (c *Client) getOne(ctx context.Context, xui string) (Document, error) {
 }
 
 func (c *Client) documentURL(xui string) string {
-	host := ""
-	domain := ""
+	host, domain, onNet := "", "", false
 	if c != nil {
-		host, domain = c.Host, c.Domain
+		host, domain, onNet = c.Host, c.Domain, c.OnNet
 	}
-	return RootURI(host, domain, xui)
+	return rootURI(host, domain, xui, onNet)
 }
 
 func (c *Client) httpClient() *http.Client {
@@ -144,6 +185,28 @@ func (c *Client) httpClient() *http.Client {
 		return c.HTTP
 	}
 	return http.DefaultClient
+}
+
+func wrapUnavailable(err error) error {
+	if err == nil {
+		return ErrUnavailable
+	}
+	if isTimeout(err) {
+		return fmt.Errorf("%w: timed out", ErrUnavailable)
+	}
+	return fmt.Errorf("%w: transport failed", ErrUnavailable)
+}
+
+func isTimeout(err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+	lower := strings.ToLower(err.Error())
+	return strings.Contains(lower, "timeout") || strings.Contains(lower, "deadline exceeded")
 }
 
 func uniqueXUIs(values []string) []string {

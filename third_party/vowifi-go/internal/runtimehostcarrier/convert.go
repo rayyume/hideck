@@ -83,6 +83,7 @@ func toInternalBase(cfg carrier.EffectiveCarrierConfig) policy.EffectiveCarrierC
 		},
 		IPStackType: cfg.IPStackType, EPDGAddr: cfg.EPDGAddr, EPDGAddrSource: cfg.EPDGAddrSource,
 		EmergencyEPDGAddr: cfg.EmergencyEPDGAddr, EPDGPort: cfg.EPDGPort, APN: cfg.APN, DNSServer: cfg.DNSServer,
+		XCAPAPN: cfg.XCAPAPN,
 	}
 }
 
@@ -133,6 +134,7 @@ func fromInternalBase(cfg policy.EffectiveCarrierConfig) carrier.EffectiveCarrie
 		},
 		IPStackType: cfg.IPStackType, EPDGAddr: cfg.EPDGAddr, EPDGAddrSource: cfg.EPDGAddrSource,
 		EmergencyEPDGAddr: cfg.EmergencyEPDGAddr, EPDGPort: cfg.EPDGPort, APN: cfg.APN, DNSServer: cfg.DNSServer,
+		XCAPAPN: cfg.XCAPAPN,
 	}
 }
 

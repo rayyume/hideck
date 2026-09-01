@@ -118,6 +118,7 @@ type EffectiveCarrierConfig struct {
 	EPDGPort                      uint16
 	APN                           string
 	DNSServer                     string
+	XCAPAPN                       string
 	NATKeepaliveSeconds           int
 	DPDIntervalSeconds            int
 	AKAChallengeMode              string

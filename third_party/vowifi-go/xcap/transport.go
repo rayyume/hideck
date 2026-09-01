@@ -17,8 +17,8 @@ func NewHTTPClient(dial func(context.Context, string, string) (net.Conn, error))
 		Timeout: 20 * time.Second,
 		Transport: &http.Transport{
 			DialContext:       dial,
-			ForceAttemptHTTP2: true,
-			TLSClientConfig:   &tls.Config{MinVersion: tls.VersionTLS12},
+			ForceAttemptHTTP2: false,
+			TLSClientConfig:   &tls.Config{MinVersion: tls.VersionTLS12, NextProtos: []string{"http/1.1"}},
 		},
 	}
 }

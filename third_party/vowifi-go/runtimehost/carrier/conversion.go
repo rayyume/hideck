@@ -52,7 +52,7 @@ func carrierConfigBaseFromInternal(value policy.EffectiveCarrierConfig) Effectiv
 		IPStackType: value.IPStackType, EPDGAddr: value.EPDGAddr,
 		EPDGAddrSource: value.EPDGAddrSource, EmergencyEPDGAddr: value.EmergencyEPDGAddr,
 		EPDGPort: value.EPDGPort,
-		APN:      value.APN, DNSServer: value.DNSServer,
+		APN:      value.APN, DNSServer: value.DNSServer, XCAPAPN: value.XCAPAPN,
 	}
 }
 
