@@ -334,7 +334,7 @@ function focusNameInput() {
 .form-section > header > .el-icon { margin-top: 2px; color: var(--ui-primary); font-size: 18px; }
 .form-section h3, .form-section header span { display: block; }
 .form-section h3 { margin: 0; color: var(--ui-text); font-size: 15px; }
-.form-section header span { margin-top: 3px; color: var(--ui-text-subtle); font-size: var(--ui-font-body-sm); }
+.form-section header span { margin-top: 3px; color: var(--ui-muted); font-size: var(--ui-font-body-sm); }
 .task-form :deep(.el-form-item) { margin-bottom: 15px; }
 .task-form :deep(.el-input__wrapper), .task-form :deep(.el-button), .task-form :deep(.el-radio-button__inner) { min-height: 44px; }
 .task-form :deep(.el-select) { width: 100%; }
@@ -343,7 +343,7 @@ function focusNameInput() {
 .form-grid-identity { grid-template-columns: minmax(0, 1fr) minmax(160px, .5fr); }
 .form-grid-schedule { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .editor-footer { min-height: 70px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.editor-footer > span { color: var(--ui-text-subtle); font-size: var(--ui-font-body-sm); }
+.editor-footer > span { color: var(--ui-muted); font-size: var(--ui-font-body-sm); }
 .editor-footer > div { display: flex; gap: 8px; }
 .editor-footer :deep(.el-button) { min-height: 44px; margin: 0; }
 @media (max-width: 640px) {

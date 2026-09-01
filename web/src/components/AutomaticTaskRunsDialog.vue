@@ -173,7 +173,7 @@ function handleOpenChange(open: boolean) {
 .runs-toolbar { min-height: 68px; border-bottom: 1px solid var(--ui-border); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .runs-toolbar strong, .runs-toolbar span { display: block; }
 .runs-toolbar strong { color: var(--ui-text); font-size: 18px; }
-.runs-toolbar span { margin-top: 2px; color: var(--ui-text-subtle); font-size: var(--ui-font-caption); }
+.runs-toolbar span { margin-top: 2px; color: var(--ui-muted); font-size: var(--ui-font-caption); }
 .runs-toolbar :deep(.el-button) { min-height: 40px; }
 .runs-error { margin-top: 12px; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--ui-danger) 40%, var(--ui-border)); border-radius: 4px; background: color-mix(in srgb, var(--ui-danger) 7%, transparent); color: var(--ui-danger); display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: var(--ui-font-body-sm); }
 .runs-state { min-height: 220px; color: var(--ui-text-muted); display: grid; place-items: center; align-content: center; gap: 7px; text-align: center; }
@@ -195,7 +195,7 @@ function handleOpenChange(open: boolean) {
 .run-content > header strong { color: currentColor; font-size: var(--ui-font-body-sm); }
 .run-content p { margin: 8px 0; color: var(--ui-text); font-size: var(--ui-font-body); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .run-content p.run-error-text { color: var(--ui-danger); }
-.run-content dl { margin: 0; display: grid; grid-template-columns: auto 1fr auto 1fr auto 1fr; gap: 5px 8px; color: var(--ui-text-subtle); font-size: var(--ui-font-caption); }
+.run-content dl { margin: 0; display: grid; grid-template-columns: auto 1fr auto 1fr auto 1fr; gap: 5px 8px; color: var(--ui-muted); font-size: var(--ui-font-caption); }
 .run-content dl div { display: contents; }
 .run-content dd { min-width: 0; margin: 0; color: var(--ui-text-muted); overflow-wrap: anywhere; }
 .runs-pagination { padding-top: 16px; display: flex; justify-content: flex-end; }

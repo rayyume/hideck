@@ -241,12 +241,12 @@ function releaseRecording() {
 .recording-copy span {
   min-width: 0;
   overflow: hidden;
-  color: var(--ui-text-subtle);
+  color: var(--ui-muted);
   font: var(--ui-font-body-sm) "v-mono", ui-monospace, monospace;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.recording-format { color: var(--ui-text-subtle); font: var(--ui-font-caption) "v-mono", ui-monospace, monospace; }
+.recording-format { color: var(--ui-muted); font: var(--ui-font-caption) "v-mono", ui-monospace, monospace; }
 .audio-controls {
   min-width: 0;
   display: grid;
@@ -278,7 +278,7 @@ function releaseRecording() {
   outline: 2px solid var(--ui-primary);
   outline-offset: 2px;
 }
-.audio-controls time { color: var(--ui-text-subtle); font: var(--ui-font-caption) "v-mono", ui-monospace, monospace; }
+.audio-controls time { color: var(--ui-muted); font: var(--ui-font-caption) "v-mono", ui-monospace, monospace; }
 .playback-range, .volume-range {
   --range-progress: 0%;
   min-width: 0;

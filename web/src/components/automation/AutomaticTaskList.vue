@@ -162,13 +162,13 @@ function selectFromKeyboard(event: KeyboardEvent, task: AutomaticTask) {
 .task-summary { min-height: 36px; padding: 0 4px 12px; display: flex; align-items: center; flex-wrap: wrap; gap: 10px; color: var(--ui-text-muted); font-size: var(--ui-font-body-sm); }
 .task-summary span { white-space: nowrap; }
 .task-summary b, .task-summary strong { color: var(--ui-text); font-weight: 550; }
-.task-summary i { width: 3px; height: 3px; border-radius: 50%; background: var(--ui-text-subtle); }
+.task-summary i { width: 3px; height: 3px; border-radius: 50%; background: var(--ui-muted); }
 .task-state { min-height: 220px; border: 1px solid var(--ui-border); border-radius: 6px; background: linear-gradient(145deg, color-mix(in srgb, var(--ui-primary) 4%, transparent), transparent 42%), var(--ui-surface); color: var(--ui-text-muted); display: grid; place-items: center; align-content: center; gap: 8px; font-size: var(--ui-font-body); text-align: center; }
 .task-state strong { color: var(--ui-text); }
 .task-error { min-height: 72px; margin-bottom: 10px; padding: 12px; border-color: color-mix(in srgb, var(--ui-danger) 38%, var(--ui-border)); color: var(--ui-danger); grid-template-columns: minmax(0, 1fr) auto; text-align: left; }
 .task-table { min-width: 900px; border: 1px solid var(--ui-border); border-radius: 6px; background: var(--ui-surface); overflow: hidden; }
 .task-row { display: grid; grid-template-columns: minmax(130px, 1.15fr) minmax(130px, 1.05fr) minmax(105px, .85fr) minmax(132px, 1fr) minmax(118px, .9fr) minmax(90px, .7fr) 68px 176px; }
-.task-table-head { min-height: 42px; align-items: center; border-bottom: 1px solid var(--ui-border); background: color-mix(in srgb, var(--ui-surface-muted) 40%, transparent); color: var(--ui-text-subtle); font-size: var(--ui-font-caption); }
+.task-table-head { min-height: 42px; align-items: center; border-bottom: 1px solid var(--ui-border); background: color-mix(in srgb, var(--ui-surface-muted) 40%, transparent); color: var(--ui-muted); font-size: var(--ui-font-caption); }
 .task-table-head > span { padding: 10px; }
 .task-item { position: relative; min-height: 84px; border-bottom: 1px solid var(--ui-border); color: var(--ui-text-muted); cursor: pointer; transition: background-color 160ms ease, box-shadow 160ms ease, transform 160ms var(--ui-ease-out); }
 .task-item:last-child { border-bottom: 0; }
@@ -180,7 +180,7 @@ function selectFromKeyboard(event: KeyboardEvent, task: AutomaticTask) {
 .task-cell b, .task-cell small { min-width: 0; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .task-cell b { color: var(--ui-text); font-size: var(--ui-font-body-sm); font-weight: 550; }
 .task-identity b { font-size: var(--ui-font-body); }
-.task-cell small { margin-top: 4px; color: var(--ui-text-subtle); font-size: var(--ui-font-caption); }
+.task-cell small { margin-top: 4px; color: var(--ui-muted); font-size: var(--ui-font-caption); }
 .task-code { font-family: "v-mono", ui-monospace, monospace; }
 .task-status { display: inline-flex; align-items: center; gap: 5px; font-size: var(--ui-font-body-sm); white-space: nowrap; }
 .task-status .el-icon { font-size: 15px; }
@@ -204,7 +204,7 @@ function selectFromKeyboard(event: KeyboardEvent, task: AutomaticTask) {
   .task-item:last-child { border-bottom: 1px solid var(--ui-border); }
   .task-item.selected { border-color: color-mix(in srgb, var(--ui-primary) 68%, var(--ui-border)); box-shadow: none; }
   .task-cell { padding: 0; overflow: visible; }
-  .task-cell::before { content: attr(data-label); margin-bottom: 3px; color: var(--ui-text-subtle); font-size: var(--ui-font-caption); }
+  .task-cell::before { content: attr(data-label); margin-bottom: 3px; color: var(--ui-muted); font-size: var(--ui-font-caption); }
   .task-identity { grid-column: 1; }
   .task-identity::before, .task-toggle::before, .task-actions::before { display: none; }
   .task-cell:nth-child(2), .task-cell:nth-child(3), .task-cell:nth-child(4), .task-cell:nth-child(5), .task-cell:nth-child(6) { grid-column: 1; margin-top: 12px; }

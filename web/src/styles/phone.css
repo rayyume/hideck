@@ -1,7 +1,7 @@
 .phone-page { max-width: 1180px; margin: 0 auto; }
 .security-notice { margin-bottom: 16px; padding: 14px 16px; display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 14px; border: 1px solid color-mix(in srgb, var(--ui-warning) 38%, var(--ui-border)); border-radius: 10px; background: color-mix(in srgb, var(--ui-warning) 8%, var(--ui-surface)); }
 .notice-icon { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 8px; background: color-mix(in srgb, var(--ui-warning) 14%, var(--ui-surface)); color: var(--ui-warning); font-size: 20px; }
-.security-notice strong { font-size: 13px; }
+.security-notice strong { color: var(--ui-text); font-size: 13px; }
 .security-notice p { margin: 3px 0 0; color: var(--ui-text-muted); font-size: 12px; }
 .phone-error { margin-bottom: 16px; padding: 10px 12px; display: flex; justify-content: space-between; gap: 16px; border: 1px solid color-mix(in srgb, var(--ui-danger) 38%, var(--ui-border)); border-radius: 8px; background: color-mix(in srgb, var(--ui-danger) 8%, var(--ui-surface)); color: var(--ui-danger); font-size: 12px; }
 .phone-error button { width: 44px; height: 44px; margin: -7px -8px -7px 0; border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 20px; }
@@ -10,7 +10,7 @@
 .phone-console { min-height: 680px; overflow: hidden; border-right: 1px solid var(--ui-border); }
 .console-header { min-height: 82px; padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; gap: 18px; border-bottom: 1px solid var(--ui-border); }
 .console-header > div:first-child > span { color: var(--ui-primary); font-family: "v-mono", monospace; font-size: 9px; font-weight: 700; letter-spacing: .12em; }
-.console-header h2 { margin: 3px 0 0; font-size: 18px; }
+.console-header h2 { margin: 3px 0 0; color: var(--ui-text); font-size: 18px; }
 .device-selector { min-width: 220px; display: grid; gap: 4px; }
 .device-selector label, .number-field label { color: var(--ui-text-muted); font-size: 10px; font-weight: 600; }
 .device-selector :deep(.el-select) { width: 100%; }
@@ -80,7 +80,7 @@
 .active-call { padding: 28px 24px; display: grid; justify-items: center; gap: 22px; }
 .call-identity { width: 100%; text-align: center; }
 .call-identity > span { color: var(--ui-primary); font-family: "v-mono", monospace; font-size: 9px; font-weight: 700; letter-spacing: .16em; }
-.call-identity strong { margin-top: 8px; display: block; overflow-wrap: anywhere; font-family: "v-mono", monospace; font-size: clamp(26px, 4vw, 36px); }
+.call-identity strong { margin-top: 8px; display: block; overflow-wrap: anywhere; color: var(--ui-text); font-family: "v-mono", monospace; font-size: clamp(26px, 4vw, 36px); }
 .call-identity p { margin: 5px 0 0; color: var(--ui-text-muted); font-variant-numeric: tabular-nums; }
 .call-waiting-hint { margin: 8px 0 0; color: var(--ui-warning); font-size: 12px; }
 .call-meta { width: 100%; margin: 0; display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--ui-border); border-radius: 8px; overflow: hidden; }

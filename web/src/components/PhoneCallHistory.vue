@@ -112,7 +112,7 @@ onUnmounted(() => {
 .history-panel { min-height: 320px; overflow: hidden; background: transparent; }
 .history-panel > header { min-height: 68px; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--ui-border); }
 .history-panel header span { color: var(--ui-primary); font-family: "v-mono", monospace; font-size: 9px; font-weight: 700; letter-spacing: .12em; }
-.history-panel h2 { margin: 2px 0 0; font-size: 16px; }
+.history-panel h2 { margin: 2px 0 0; color: var(--ui-text); font-size: 16px; }
 .history-panel header > strong { min-width: 28px; padding: 3px 8px; border-radius: 20px; background: var(--ui-surface-muted); color: var(--ui-text-muted); text-align: center; }
 .history-list { max-height: 560px; overflow-y: auto; }
 .history-item { min-height: 76px; padding: 12px 14px; display: flex; align-items: flex-start; gap: 11px; border-bottom: 1px solid var(--ui-border-muted); }
@@ -121,7 +121,7 @@ onUnmounted(() => {
 .history-icon.is-busy { color: var(--ui-warning); }
 .history-copy { min-width: 0; flex: 1; }
 .history-primary { display: flex; justify-content: space-between; gap: 8px; }
-.history-primary strong { overflow: hidden; text-overflow: ellipsis; font-family: "v-mono", monospace; font-size: 13px; white-space: nowrap; }
+.history-primary strong { overflow: hidden; text-overflow: ellipsis; color: var(--ui-text); font-family: "v-mono", monospace; font-size: 13px; white-space: nowrap; }
 .history-primary time { color: var(--ui-text-muted); font-size: 11px; white-space: nowrap; }
 .history-secondary { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 5px 10px; color: var(--ui-text-muted); font-size: 11px; }
 .status-missed, .status-rejected, .status-failed { color: var(--ui-danger); }

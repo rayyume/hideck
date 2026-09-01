@@ -77,7 +77,7 @@ const emit = defineEmits<{
 .detail-panel dl > div { min-height: 42px; display: grid; grid-template-columns: minmax(112px, 1fr) minmax(0, auto); align-items: center; gap: 10px; border-bottom: 1px solid var(--ui-border); }
 .detail-panel dl > div:last-child { border-bottom: 0; }
 .detail-panel dt { color: var(--ui-text-muted); display: flex; align-items: center; gap: 8px; font-size: var(--ui-font-body-sm); }
-.detail-panel dt .el-icon { color: var(--ui-text-subtle); font-size: 17px; }
+.detail-panel dt .el-icon { color: var(--ui-muted); font-size: 17px; }
 .detail-panel dd { min-width: 0; margin: 0; color: var(--ui-text); font-size: var(--ui-font-body-sm); font-weight: 550; text-align: right; overflow-wrap: anywhere; }
 .detail-panel dd.enabled { color: var(--ui-success); }
 .detail-code { font-family: "v-mono", ui-monospace, monospace; }

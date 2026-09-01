@@ -26,7 +26,7 @@ defineProps<{ query: BalanceQuery }>()
 .balance-result-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .balance-result-row strong { color: currentColor; font-size: 16px; overflow-wrap: anywhere; }
 .balance-result-row span { color: currentColor; font-size: var(--ui-font-caption); }
-.balance-device { color: var(--ui-text-subtle); font: var(--ui-font-caption) "v-mono", monospace; }
+.balance-device { color: var(--ui-muted); font: var(--ui-font-caption) "v-mono", monospace; }
 .balance-message pre { margin: 1px 0 0; padding-top: 7px; border-top: 1px solid var(--ui-border); color: var(--ui-text-muted); font: var(--ui-font-body-sm)/1.5 "v-mono", monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 .balance-message p { margin: 0; color: var(--ui-danger); font-size: var(--ui-font-body-sm); overflow-wrap: anywhere; }
 .tone-waiting, .tone-running { color: var(--ui-warning); }

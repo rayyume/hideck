@@ -117,6 +117,39 @@ test('vue and class helpers no longer use generic Tailwind gray palette classes'
   assert.deepEqual(hits, [])
 })
 
+test('dashboard devices phone proxy commands and tasks use defined text tokens', () => {
+  const files = [
+    '../src/views/Dashboard.vue',
+    '../src/views/Devices.vue',
+    '../src/views/Phone.vue',
+    '../src/styles/phone.css',
+    '../src/views/Proxy.vue',
+    '../src/views/Commands.vue',
+    '../src/views/AutomaticTasks.vue',
+    '../src/components/PhoneCallHistory.vue',
+    '../src/components/commands/CommandChat.vue',
+    '../src/components/commands/CommandTimeline.vue',
+    '../src/components/commands/BalancePanel.vue',
+    '../src/components/automation/AutomaticTaskList.vue'
+  ]
+  for (const path of files) {
+    const text = source(path)
+    assert.doesNotMatch(text, /\b(?:text|bg|border)-gray-\d{2,3}\b/, path)
+    assert.doesNotMatch(text, /--ui-text-subtle/, path)
+  }
+
+  const dashboard = source('../src/views/Dashboard.vue')
+  const phoneCss = source('../src/styles/phone.css')
+  const history = source('../src/components/PhoneCallHistory.vue')
+  const tasks = source('../src/views/AutomaticTasks.vue')
+  assert.match(dashboard, /\.device-overview-toolbar h2 \{[^}]*color: var\(--ui-text\)/)
+  assert.match(phoneCss, /\.console-header h2 \{[^}]*color: var\(--ui-text\)/)
+  assert.match(history, /\.history-panel h2 \{[^}]*color: var\(--ui-text\)/)
+  assert.match(tasks, /\.page-heading h1 \{[^}]*color: var\(--ui-text\)/)
+  assert.match(source('../src/components/commands/CommandTimeline.vue'), /color: var\(--ui-muted\)/)
+  assert.match(source('../src/components/automation/AutomaticTaskList.vue'), /color: var\(--ui-muted\)/)
+})
+
 test('secondary copy and timestamps use --ui-muted instead of navy --ui-text', () => {
   const settings = source('../src/views/Settings.vue')
   const empty = source('../src/components/EmptyState.vue')
