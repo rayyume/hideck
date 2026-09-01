@@ -2,8 +2,10 @@ package device
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/iniwex5/quectel-qmi-go/pkg/qmi"
@@ -70,13 +72,56 @@ func (p *Pool) ScheduleNativeVoLTE(deviceID, reason string) {
 	p.scheduleNativeVoLTE(deviceID, reason)
 }
 
+const nativeVoLTEStartAttempts = 3
+
+func nativeVoLTERetryDelay(attempt int) time.Duration {
+	if attempt < 1 {
+		attempt = 1
+	}
+	return time.Duration(attempt) * 3 * time.Second
+}
+
+func isTransientVoLTEStartError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, volte.ErrNoUniqueProfile) ||
+		errors.Is(err, volte.ErrVIDPIDMismatch) ||
+		errors.Is(err, ErrLebaraUKRFLocked) {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "timeout") ||
+		strings.Contains(msg, "timed out") ||
+		strings.Contains(msg, "busy")
+}
+
 func (p *Pool) scheduleNativeVoLTE(deviceID, reason string) {
 	if p == nil || strings.TrimSpace(deviceID) == "" {
 		return
 	}
 	go func() {
-		if err := p.EnableNativeVoLTE(deviceID); err != nil {
-			logger.Warn("启动原生 VoLTE 失败", "device", deviceID, "reason", reason, "err", err)
+		var err error
+		for attempt := 1; attempt <= nativeVoLTEStartAttempts; attempt++ {
+			if !p.IsNativeVoLTE(deviceID) {
+				return
+			}
+			err = p.EnableNativeVoLTE(deviceID)
+			if err == nil {
+				return
+			}
+			if !isTransientVoLTEStartError(err) || attempt == nativeVoLTEStartAttempts {
+				logger.Warn("启动原生 VoLTE 失败", "device", deviceID, "reason", reason, "attempt", attempt, "err", err)
+				return
+			}
+			logger.Warn("启动原生 VoLTE 将重试", "device", deviceID, "reason", reason, "attempt", attempt, "err", err)
+			timer := time.NewTimer(nativeVoLTERetryDelay(attempt))
+			select {
+			case <-p.Context().Done():
+				timer.Stop()
+				return
+			case <-timer.C:
+			}
 		}
 	}()
 }
@@ -98,12 +143,29 @@ func (p *Pool) ExecuteAT(deviceID, cmd string, timeout time.Duration) (string, e
 	if port == "" {
 		return "", fmt.Errorf("设备 %s 没有 AT 口", deviceID)
 	}
+	unlock := p.lockDeviceAT(deviceID)
+	defer unlock()
 	session, err := modem.NewSerialAT(port, 115200, 8, 1, "N")
 	if err != nil {
 		return "", fmt.Errorf("打开 AT 口 %s: %w", port, err)
 	}
 	defer session.Close()
 	return session.Execute(cmd, timeout)
+}
+
+func (p *Pool) lockDeviceAT(deviceID string) func() {
+	p.atPortMu.Lock()
+	if p.atPortLocks == nil {
+		p.atPortLocks = map[string]*sync.Mutex{}
+	}
+	mu := p.atPortLocks[deviceID]
+	if mu == nil {
+		mu = &sync.Mutex{}
+		p.atPortLocks[deviceID] = mu
+	}
+	p.atPortMu.Unlock()
+	mu.Lock()
+	return mu.Unlock
 }
 
 func (p *Pool) StopSoftwareIMS(deviceID string) error {

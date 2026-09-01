@@ -304,7 +304,7 @@ func main() {
 			}
 		}
 
-		if err := pool.Shutdown(); err != nil {
+		if err := pool.ShutdownContext(shutdownCtx); err != nil {
 			logger.Error("关闭工作器池时出错", "err", err)
 		}
 		qmi.StopStartedProxy()

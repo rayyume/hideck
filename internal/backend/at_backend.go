@@ -80,7 +80,7 @@ func (a *ATBackend) GetSignalInfo(ctx context.Context) (*SignalInfo, error) {
 		info.SINR = cell.SINR
 	}
 
-	return info, nil
+	return normalizeSignalInfo(info), nil
 }
 
 func (a *ATBackend) GetServingSystem(ctx context.Context) (*ServingSystem, error) {

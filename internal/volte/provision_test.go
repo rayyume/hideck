@@ -280,3 +280,58 @@ func TestMidApplyUSBCFGFailureKeepsIMSWriteAndReportsStage(t *testing.T) {
 		t.Fatal("IMS write should have happened before USBCFG failure")
 	}
 }
+
+func TestEnsureDoesNotRereadMBNListBeforeApply(t *testing.T) {
+	modem := newFakeModem()
+	p := NewProvisioner(modem, &MemoryStore{})
+	if _, err := p.Ensure(context.Background(), "wwan1", Desired{IMSEnabled: boolPtr(true), VoLTEEnabled: boolPtr(true)}); err != nil {
+		t.Fatal(err)
+	}
+	lists := 0
+	for _, cmd := range modem.Commands {
+		if strings.HasPrefix(cmd, `AT+QCFG="ims",`) {
+			break
+		}
+		if cmd == MBNListQueryCommand() {
+			lists++
+		}
+	}
+	if lists != 1 {
+		t.Fatalf("want one MBN list before IMS write, got %d in %v", lists, modem.Commands)
+	}
+}
+
+func TestEnsureRetriesMBNListTimeout(t *testing.T) {
+	modem := newFakeModem()
+	modem.ListTimeouts = 1
+	p := NewProvisioner(modem, &MemoryStore{})
+	if _, err := p.Ensure(context.Background(), "wwan1", Desired{IMSEnabled: boolPtr(true), VoLTEEnabled: boolPtr(true)}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestEnsureSelectsMBNFromCapturedList(t *testing.T) {
+	modem := newFakeModem()
+	p := NewProvisioner(modem, &MemoryStore{})
+	res, err := p.Ensure(context.Background(), "wwan1", Desired{
+		IMSEnabled:   boolPtr(true),
+		VoLTEEnabled: boolPtr(true),
+		MCC:          "460",
+		MNC:          "00",
+	})
+	if err != nil && !errors.Is(err, ErrRebootRequired) {
+		t.Fatal(err)
+	}
+	if res.Target.MBNName != "Volte_OpenMkt-Commercial-CMCC" {
+		t.Fatalf("target MBN %q", res.Target.MBNName)
+	}
+	var sawSelect bool
+	for _, cmd := range modem.Commands {
+		if cmd == MBNSelectCommand("Volte_OpenMkt-Commercial-CMCC") {
+			sawSelect = true
+		}
+	}
+	if !sawSelect {
+		t.Fatalf("did not select CMCC profile: %v", modem.Commands)
+	}
+}

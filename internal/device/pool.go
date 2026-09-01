@@ -199,6 +199,8 @@ type Pool struct {
 
 	voiceGateway *voicehost.Gateway
 	volteCtl     *volte.Controller
+	atPortMu     sync.Mutex
+	atPortLocks  map[string]*sync.Mutex
 
 	// VoWiFi host 侧整合（多实例）
 	vowifiHost         *vowifihost.Manager
@@ -275,6 +277,7 @@ func NewPoolWithDynamicInterfaceMapper(cfg *config.Config, mapper DynamicInterfa
 		runtimeQMIAttachments:  make(map[string]config.DeviceConfig),
 		vowifiMWI:              make(map[string]VoWiFiMWIState),
 		smscCache:              make(map[string]string),
+		atPortLocks:            make(map[string]*sync.Mutex),
 	}
 	p.transportRecovery = NewTransportRecoveryController(p)
 	p.voWiFiHost().ConfigureAdapter(p)
@@ -474,7 +477,7 @@ func (w *Worker) collectRuntimeStatus(ctx context.Context, reason string) modem.
 		call(func() {
 			if sig, err := w.Backend.GetSignalInfo(ctx); err == nil && sig != nil {
 				mu.Lock()
-				status.SignalDBM = sig.RSSI
+				status.SignalDBM = backend.DisplaySignalDBM(sig.RSSI, sig.RSRP)
 				status.SignalRSRP = sig.RSRP
 				status.SignalRSRQ = sig.RSRQ
 				status.SignalSINR = sig.SINR
@@ -2153,7 +2156,7 @@ func (w *Worker) GetStats() map[string]interface{} {
 	var rssi int
 	if w.Backend != nil {
 		if sig, err := w.Backend.GetSignalInfo(context.Background()); err == nil && sig != nil {
-			rssi = sig.RSSI
+			rssi = backend.DisplaySignalDBM(sig.RSSI, sig.RSRP)
 		}
 	} else if w.Modem != nil {
 		rssi, _ = w.Modem.CheckSignal()
@@ -2391,14 +2394,21 @@ func (p *Pool) NotifyIPChanged(id, oldIP, newIP string, duration time.Duration) 
 }
 
 func (p *Pool) Shutdown() error {
+	return p.ShutdownContext(context.Background())
+}
+
+func (p *Pool) ShutdownContext(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	// 先关闭所有 VoWiFi 应用实例（确保 XFRMI 接口和 SA/SP 被清理）
 	devIDs := p.voWiFiHost().InstanceIDs()
 	for _, devID := range devIDs {
 		logger.Info("正在关闭 VoWiFi", "device", devID)
-		_ = p.stopVoWiFiAppForTeardown(context.Background(), devID, "shutdown")
+		_ = p.stopVoWiFiAppForTeardown(ctx, devID, "shutdown")
 	}
 
-	mappingErr := p.removeAllDynamicInterfaceMappings(context.Background())
+	mappingErr := p.removeAllDynamicInterfaceMappings(ctx)
 	p.mu.RLock()
 	for _, w := range p.workers {
 		w.stopOnce.Do(func() {
@@ -2461,6 +2471,9 @@ func (p *Pool) Shutdown() error {
 		logger.Info("所有工作器已正常关闭")
 		qmi.StopStartedProxy()
 		return mappingErr
+	case <-ctx.Done():
+		qmi.StopStartedProxy()
+		return errors.Join(mappingErr, ctx.Err())
 	case <-time.After(5 * time.Second):
 		qmi.StopStartedProxy()
 		return errors.Join(mappingErr, fmt.Errorf("关闭超时"))

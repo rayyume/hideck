@@ -386,6 +386,9 @@ func TestMBIMBackendSignalInfoFillsRsrpSinrFromV2(t *testing.T) {
 	if si.RSRP != -85 {
 		t.Fatalf("RSRP = %d, want -85", si.RSRP)
 	}
+	if si.RSSI != -85 {
+		t.Fatalf("RSSI = %d, want RSRP fallback -85", si.RSSI)
+	}
 	if si.SINR != 10 {
 		t.Fatalf("SINR = %d, want 10", si.SINR)
 	}

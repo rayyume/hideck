@@ -70,7 +70,7 @@ test('identity panel keeps production facts and existing operations', () => {
 })
 
 test('cellular signal panel hides invalid modem sentinel values', () => {
-  assert.match(overviewTab, /dbm > QMI_INVALID_SIGNAL_DBM/)
+  assert.match(overviewTab, /displaySignalDbm/)
   assert.match(overviewTab, /signalDbmDisplay/)
   assert.match(overviewTab, /signalMetricDisplay/)
   assert.doesNotMatch(overviewTab, /device\?\.modem\?\.signal_dbm \?\? '--'/)

@@ -313,7 +313,7 @@ func (q *QMIBackend) GetSignalInfo(ctx context.Context) (*SignalInfo, error) {
 	}
 
 	if hasSnapshotData {
-		return info, nil
+		return normalizeSignalInfo(info), nil
 	}
 
 	// 首先使用 NAS GetSignalInfo（字段最全，1 次 IPC）
@@ -352,7 +352,7 @@ func (q *QMIBackend) GetSignalInfo(ctx context.Context) (*SignalInfo, error) {
 		}
 	}
 
-	return info, nil
+	return normalizeSignalInfo(info), nil
 }
 
 func (q *QMIBackend) GetServingSystem(ctx context.Context) (*ServingSystem, error) {

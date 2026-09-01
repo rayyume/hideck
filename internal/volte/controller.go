@@ -111,7 +111,7 @@ func (c *Controller) Enable(ctx context.Context, deviceID string) error {
 		if err := c.host.StopSoftwareIMS(deviceID); err != nil {
 			return c.fail(deviceID, fmt.Errorf("stop software IMS: %w", err))
 		}
-		if _, err := c.host.ExecuteAT(deviceID, COPSNumericFormatCommand(), defaultATTimeout); err != nil {
+		if _, err := execAT(c.host, deviceID, COPSNumericFormatCommand()); err != nil {
 			logger.Debug("AT+COPS=3,2 失败，继续用当前 COPS 格式", "device", deviceID, "err", err)
 		}
 		if err := c.waitLTE(ctx, deviceID); err != nil {
@@ -225,17 +225,12 @@ func (c *Controller) provisionConfig(ctx context.Context, deviceID string) error
 		return c.fail(deviceID, fmt.Errorf("read serving PLMN: %w", plmnErr))
 	}
 	c.patch(deviceID, func(st *Status) { st.PLMN = NormalizePLMN(mcc, mnc) })
-	name, mbnErr := c.resolveMBN(deviceID, mcc, mnc)
-	if mbnErr != nil {
-		return c.fail(deviceID, mbnErr)
-	}
-	c.patch(deviceID, func(st *Status) { st.MBNName = name })
 	desired := Desired{
 		IMSEnabled:   boolPtr(true),
 		VoLTEEnabled: boolPtr(true),
 		UACEnabled:   boolPtr(true),
-		MBNSelect:    &name,
-		MBNAutoSel:   boolPtr(false),
+		MCC:          mcc,
+		MNC:          mnc,
 	}
 	res, err := c.provision.Ensure(ctx, deviceID, desired)
 	c.applyProvision(deviceID, res)
@@ -269,6 +264,11 @@ func (c *Controller) applyProvision(deviceID string, res Result) {
 		st.RebootRequired = res.RebootRequired || res.Current.UACEnabled
 		st.ProvisionStage = res.Stage
 		st.IMEITail = res.IMEITail
+		if name := strings.TrimSpace(res.Current.MBNName); name != "" {
+			st.MBNName = name
+		} else if name := strings.TrimSpace(res.Target.MBNName); name != "" {
+			st.MBNName = name
+		}
 	})
 }
 
@@ -436,28 +436,16 @@ func (c *Controller) patch(deviceID string, fn func(*Status)) {
 }
 
 func (c *Controller) readPLMN(deviceID string) (string, string, error) {
-	resp, err := c.host.ExecuteAT(deviceID, COPSQueryCommand(), defaultATTimeout)
+	resp, err := execAT(c.host, deviceID, COPSQueryCommand())
 	if err != nil {
 		return "", "", err
 	}
 	return ParseCOPS(resp)
 }
 
-func (c *Controller) resolveMBN(deviceID, mcc, mnc string) (string, error) {
-	resp, err := c.host.ExecuteAT(deviceID, MBNListQueryCommand(), defaultATTimeout)
-	if err != nil {
-		return "", err
-	}
-	entries, err := ParseMBNList(resp)
-	if err != nil {
-		return "", err
-	}
-	return UniqueMBN(mcc, mnc, entries)
-}
-
 func (c *Controller) waitLTE(ctx context.Context, deviceID string) error {
 	check := func() error {
-		resp, err := c.host.ExecuteAT(deviceID, CEREGQueryCommand(), defaultATTimeout)
+		resp, err := execAT(c.host, deviceID, CEREGQueryCommand())
 		if err != nil {
 			return fmt.Errorf("query CEREG: %w", err)
 		}
@@ -488,7 +476,7 @@ func (c *Controller) waitLTE(ctx context.Context, deviceID string) error {
 }
 
 func (c *Controller) activateIMSPDN(deviceID string) error {
-	resp, err := c.host.ExecuteAT(deviceID, CGDCONTQueryCommand(), defaultATTimeout)
+	resp, err := execAT(c.host, deviceID, CGDCONTQueryCommand())
 	if err != nil {
 		return fmt.Errorf("query CGDCONT: %w", err)
 	}
@@ -500,7 +488,7 @@ func (c *Controller) activateIMSPDN(deviceID string) error {
 	if !ok {
 		return fmt.Errorf("volte: no IMS APN in CGDCONT")
 	}
-	actResp, err := c.host.ExecuteAT(deviceID, CGACTQueryCommand(), defaultATTimeout)
+	actResp, err := execAT(c.host, deviceID, CGACTQueryCommand())
 	if err != nil {
 		return fmt.Errorf("query CGACT: %w", err)
 	}
@@ -509,10 +497,10 @@ func (c *Controller) activateIMSPDN(deviceID string) error {
 		return err
 	}
 	if !active[ims.CID] {
-		if _, err := c.host.ExecuteAT(deviceID, CGACTSetCommand(ims.CID, true), defaultATTimeout); err != nil {
+		if _, err := execAT(c.host, deviceID, CGACTSetCommand(ims.CID, true)); err != nil {
 			return fmt.Errorf("activate IMS PDN cid %d: %w", ims.CID, err)
 		}
-		actResp, err = c.host.ExecuteAT(deviceID, CGACTQueryCommand(), defaultATTimeout)
+		actResp, err = execAT(c.host, deviceID, CGACTQueryCommand())
 		if err != nil {
 			return fmt.Errorf("re-query CGACT: %w", err)
 		}

@@ -98,7 +98,7 @@ func (b *MBIMBackend) GetSignalInfo(ctx context.Context) (*SignalInfo, error) {
 	if s.HasSNR {
 		info.SINR = s.SNR
 	}
-	return info, nil
+	return normalizeSignalInfo(info), nil
 }
 
 func (b *MBIMBackend) GetServingSystem(ctx context.Context) (*ServingSystem, error) {

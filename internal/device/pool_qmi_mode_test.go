@@ -612,6 +612,24 @@ func TestMergeRuntimeStatePreservesRadioFieldsOnPartialRefresh(t *testing.T) {
 	}
 }
 
+func TestMergeRuntimeStateClearsPlaceholderSignalDBM(t *testing.T) {
+	worker := &Worker{ID: "dev-qmi"}
+	worker.state.Runtime.SignalDBM = -125
+	worker.state.Runtime.SignalRSRP = -86
+
+	worker.mergeRuntimeStateLocked(modem.DeviceStatus{
+		SignalRSRP: -86,
+	}, true)
+
+	status := worker.ProjectDeviceStatus()
+	if status.SignalDBM != 0 {
+		t.Fatalf("placeholder RSSI should be cleared, SignalDBM=%d", status.SignalDBM)
+	}
+	if status.SignalRSRP != -86 {
+		t.Fatalf("RSRP=%d, want -86", status.SignalRSRP)
+	}
+}
+
 func TestWorkerGetDeviceStatusIncludesOperatingModeForATBackend(t *testing.T) {
 	worker := &Worker{
 		Backend: &workerStatusBackendStub{

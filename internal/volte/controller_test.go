@@ -3,6 +3,7 @@ package volte
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/iniwex5/quectel-qmi-go/pkg/qmi"
@@ -131,8 +132,8 @@ func TestControllerRejectsUnknownPLMNWithoutGuessingMBN(t *testing.T) {
 	host := newFakeModem()
 	host.COPS = "23433"
 	ctl := NewControllerWithBackup(host, t.TempDir())
-	if err := ctl.Enable(context.Background(), "wwan1"); err == nil {
-		t.Fatal("UK PLMN must not guess an MBN")
+	if err := ctl.Enable(context.Background(), "wwan1"); err == nil || !errors.Is(err, ErrNoUniqueProfile) {
+		t.Fatalf("UK PLMN must not guess an MBN: %v", err)
 	}
 	if ctl.Status("wwan1").Phase != PhaseFailed {
 		t.Fatalf("status %+v", ctl.Status("wwan1"))
@@ -153,5 +154,37 @@ func TestControllerKeepsGoingWhenVoLTEBitStuck(t *testing.T) {
 	}
 	if st.ProvisionStage != StageApplyIMS {
 		t.Fatalf("want apply_ims drift recorded, got %+v", st)
+	}
+}
+
+func TestControllerQueriesMBNListOnceBeforeIMSWrite(t *testing.T) {
+	host := newFakeModem()
+	ctl := NewControllerWithBackup(host, t.TempDir())
+	if err := ctl.Enable(context.Background(), "wwan1"); err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for _, cmd := range host.Commands {
+		if strings.HasPrefix(cmd, `AT+QCFG="ims",`) {
+			break
+		}
+		if cmd == MBNListQueryCommand() {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Fatalf("want 1 MBN list before IMS write, got %d in %v", n, host.Commands)
+	}
+}
+
+func TestControllerRetriesMBNListTimeout(t *testing.T) {
+	host := newFakeModem()
+	host.ListTimeouts = 1
+	ctl := NewControllerWithBackup(host, t.TempDir())
+	if err := ctl.Enable(context.Background(), "wwan1"); err != nil {
+		t.Fatal(err)
+	}
+	if st := ctl.Status("wwan1"); st.MBNName != "Volte_OpenMkt-Commercial-CMCC" {
+		t.Fatalf("status %+v", st)
 	}
 }

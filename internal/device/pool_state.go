@@ -373,6 +373,8 @@ func (w *Worker) mergeRuntimeStateLocked(status modem.DeviceStatus, healthy bool
 	w.state.Runtime.SimInserted = status.SimInserted
 	if status.SignalDBM != 0 {
 		w.state.Runtime.SignalDBM = status.SignalDBM
+	} else if backend.IsPlaceholderRSSI(w.state.Runtime.SignalDBM) {
+		w.state.Runtime.SignalDBM = 0
 	}
 	if status.SignalRSRP != 0 {
 		w.state.Runtime.SignalRSRP = status.SignalRSRP

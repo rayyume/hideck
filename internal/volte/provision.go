@@ -48,6 +48,8 @@ type Desired struct {
 	UACEnabled   *bool
 	MBNAutoSel   *bool
 	MBNSelect    *string
+	MCC          string
+	MNC          string
 }
 
 type VoiceSettings struct {
@@ -158,12 +160,12 @@ func (p *Provisioner) Ensure(ctx context.Context, deviceID string, desired Desir
 	if err != nil {
 		return res, err
 	}
-	return p.apply(ctx, deviceID, snap, false)
+	return p.apply(ctx, deviceID, snap, res.Current, true, false)
 }
 
 func (p *Provisioner) Restore(ctx context.Context, deviceID string) (Result, error) {
 	res := Result{DeviceID: deviceID, Stage: StageRestoreIdentity, Restored: false}
-	current, imei, err := p.readSettings(deviceID)
+	current, imei, _, err := p.readSettings(deviceID)
 	if err != nil {
 		return res, p.fail(res, StageRestoreIdentity, "read live identity", err)
 	}
@@ -182,7 +184,7 @@ func (p *Provisioner) Restore(ctx context.Context, deviceID string) (Result, err
 	if canonHexID(snap.VID) != canonHexID(current.VID) || canonHexID(snap.PID) != canonHexID(current.PID) {
 		return res, p.fail(res, StageRestoreIdentity, "snapshot VID/PID does not match live module", ErrVIDPIDMismatch)
 	}
-	applied, err := p.apply(ctx, deviceID, snap.withTarget(snap.Original), true)
+	applied, err := p.apply(ctx, deviceID, snap.withTarget(snap.Original), current, true, true)
 	if err != nil {
 		applied.Restored = false
 		stage := applied.Stage
@@ -215,13 +217,23 @@ func (s Snapshot) withTarget(target VoiceSettings) Snapshot {
 func (p *Provisioner) capture(ctx context.Context, deviceID string, desired Desired) (Result, Snapshot, error) {
 	_ = ctx
 	res := Result{DeviceID: deviceID, Stage: StageIdentity, Restored: false}
-	current, imei, err := p.readSettings(deviceID)
+	current, imei, entries, err := p.readSettings(deviceID)
 	if err != nil {
 		return res, Snapshot{}, p.fail(res, StageIdentity, "read module identity", err)
 	}
 	res.IMEITail = IMEITail(imei)
 	res.Current = current
 	res.Original = current
+	if strings.TrimSpace(desired.MCC) != "" && desired.MBNSelect == nil {
+		name, mbnErr := UniqueMBN(desired.MCC, desired.MNC, entries)
+		if mbnErr != nil {
+			return res, Snapshot{}, p.fail(res, StageIdentity, "select MBN", mbnErr)
+		}
+		desired.MBNSelect = &name
+		if desired.MBNAutoSel == nil {
+			desired.MBNAutoSel = boolPtr(false)
+		}
+	}
 	target := overlayDesired(current, desired)
 	if canonHexID(target.VID) != canonHexID(current.VID) || canonHexID(target.PID) != canonHexID(current.PID) {
 		return res, Snapshot{}, p.fail(res, StageIdentity, "refusing VID/PID change", ErrVIDPIDMismatch)
@@ -261,7 +273,7 @@ func (p *Provisioner) capture(ctx context.Context, deviceID string, desired Desi
 	return res, snap, nil
 }
 
-func (p *Provisioner) apply(ctx context.Context, deviceID string, snap Snapshot, restoring bool) (Result, error) {
+func (p *Provisioner) apply(ctx context.Context, deviceID string, snap Snapshot, live VoiceSettings, haveLive, restoring bool) (Result, error) {
 	res := Result{
 		DeviceID:     deviceID,
 		IMEITail:     IMEITail(snap.IMEI),
@@ -273,13 +285,23 @@ func (p *Provisioner) apply(ctx context.Context, deviceID string, snap Snapshot,
 	if path, err := p.store.PathFor(snap.IMEI); err == nil {
 		res.SnapshotPath = path
 	}
-	current, imei, err := p.readSettings(deviceID)
-	if err != nil {
-		stage := StageApplyIMS
-		if restoring {
-			stage = StageRestoreWrite
+	var (
+		current VoiceSettings
+		imei    string
+		err     error
+	)
+	if haveLive {
+		current = live
+		imei = snap.IMEI
+	} else {
+		current, imei, _, err = p.readSettings(deviceID)
+		if err != nil {
+			stage := StageApplyIMS
+			if restoring {
+				stage = StageRestoreWrite
+			}
+			return res, p.fail(res, stage, "read before apply", err)
 		}
-		return res, p.fail(res, stage, "read before apply", err)
 	}
 	if imei != snap.IMEI {
 		stage := StageIdentity
@@ -323,7 +345,7 @@ func (p *Provisioner) apply(ctx context.Context, deviceID string, snap Snapshot,
 		res.DeviceID = newID
 	}
 
-	current, imei, err = p.readSettings(deviceID)
+	current, imei, _, err = p.readSettings(deviceID)
 	if err != nil {
 		return res, p.fail(res, StageVerify, "re-read after apply", err)
 	}
@@ -368,7 +390,7 @@ func (p *Provisioner) applyIMS(deviceID string, res *Result) error {
 		return p.fail(*res, StageApplyIMS, "write IMS/VoLTE", last)
 	}
 	res.Written = appendUnique(res.Written, "ims")
-	current, _, err := p.readSettings(deviceID)
+	current, _, _, err := p.readSettings(deviceID)
 	if err != nil {
 		return p.fail(*res, StageApplyIMS, "re-query IMS", err)
 	}
@@ -412,7 +434,7 @@ func (p *Provisioner) applyMBN(deviceID string, res *Result) error {
 		}
 		res.Written = appendUnique(res.Written, "mbn_autosel")
 	}
-	current, _, err := p.readSettings(deviceID)
+	current, _, _, err := p.readSettings(deviceID)
 	if err != nil {
 		return p.fail(*res, StageApplyMBN, "re-query MBN", err)
 	}
@@ -440,7 +462,7 @@ func (p *Provisioner) applyUSBCFG(deviceID string, res *Result) error {
 	}
 	res.Written = appendUnique(res.Written, "usbcfg")
 	res.RebootRequired = true
-	current, _, err := p.readSettings(deviceID)
+	current, _, _, err := p.readSettings(deviceID)
 	if err != nil {
 		return p.fail(*res, StageApplyUSBCFG, "re-query USBCFG", err)
 	}
@@ -448,43 +470,43 @@ func (p *Provisioner) applyUSBCFG(deviceID string, res *Result) error {
 	return nil
 }
 
-func (p *Provisioner) readSettings(deviceID string) (VoiceSettings, string, error) {
+func (p *Provisioner) readSettings(deviceID string) (VoiceSettings, string, []MBNEntry, error) {
 	imei, err := p.readIMEI(deviceID)
 	if err != nil {
-		return VoiceSettings{}, "", err
+		return VoiceSettings{}, "", nil, err
 	}
 	imsResp, err := p.exec(deviceID, IMSQueryCommand())
 	if err != nil {
-		return VoiceSettings{}, imei, fmt.Errorf("query IMS: %w", err)
+		return VoiceSettings{}, imei, nil, fmt.Errorf("query IMS: %w", err)
 	}
 	ims, err := ParseIMSConfig(imsResp)
 	if err != nil {
-		return VoiceSettings{}, imei, err
+		return VoiceSettings{}, imei, nil, err
 	}
 	var usb USBConfig
 	usbResp, usbErr := p.exec(deviceID, USBConfigQueryCommand())
 	if usbErr == nil {
 		parsed, parseErr := ParseUSBConfig(usbResp)
 		if parseErr != nil {
-			return VoiceSettings{}, imei, parseErr
+			return VoiceSettings{}, imei, nil, parseErr
 		}
 		usb = parsed
 	}
 	autoResp, err := p.exec(deviceID, MBNAutoSelQueryCommand())
 	if err != nil {
-		return VoiceSettings{}, imei, fmt.Errorf("query mbn autosel: %w", err)
+		return VoiceSettings{}, imei, nil, fmt.Errorf("query mbn autosel: %w", err)
 	}
 	autoSel, _, err := ParseMBNAutoSel(autoResp)
 	if err != nil {
-		return VoiceSettings{}, imei, err
+		return VoiceSettings{}, imei, nil, err
 	}
 	listResp, err := p.exec(deviceID, MBNListQueryCommand())
 	if err != nil {
-		return VoiceSettings{}, imei, fmt.Errorf("query mbn list: %w", err)
+		return VoiceSettings{}, imei, nil, fmt.Errorf("query mbn list: %w", err)
 	}
 	entries, err := ParseMBNList(listResp)
 	if err != nil {
-		return VoiceSettings{}, imei, err
+		return VoiceSettings{}, imei, nil, err
 	}
 	selected, _ := SelectedMBN(entries)
 	return VoiceSettings{
@@ -497,7 +519,7 @@ func (p *Provisioner) readSettings(deviceID string) (VoiceSettings, string, erro
 		MBNAutoSel:   autoSel,
 		MBNName:      selected.Name,
 		MBNIndex:     selected.Index,
-	}, imei, nil
+	}, imei, entries, nil
 }
 
 func (p *Provisioner) readIMEI(deviceID string) (string, error) {
@@ -522,11 +544,10 @@ func (p *Provisioner) readIMEI(deviceID string) (string, error) {
 }
 
 func (p *Provisioner) exec(deviceID, cmd string) (string, error) {
-	if p == nil || p.at == nil {
+	if p == nil {
 		return "", errors.New("volte provision: AT transport is not configured")
 	}
-	resp, err := p.at.ExecuteAT(deviceID, cmd, defaultATTimeout)
-	return resp, atResult(resp, err)
+	return execAT(p.at, deviceID, cmd)
 }
 
 func (p *Provisioner) fail(res Result, stage, message string, err error) error {

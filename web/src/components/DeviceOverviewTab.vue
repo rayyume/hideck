@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import type { DeviceOverviewItem } from '../types/api'
 import { isControlOnline, isRadioRegistered, isRecoveryPhase, lifecycleStatusLabel } from '../utils/deviceLifecycle'
 import { phoneModeCampsOnCell } from '../utils/phoneMode'
+import { displaySignalDbm, hasValidSignalDbm } from '../utils/signalPresentation'
 import StatusLight from './StatusLight.vue'
 import OperatorSelectionDialog from './OperatorSelectionDialog.vue'
 import { Settings24Regular } from '@vicons/fluent'
@@ -27,7 +28,6 @@ const emit = defineEmits<{
 }>()
 
 const showOperatorSelection = ref(false)
-const QMI_INVALID_SIGNAL_DBM = -128
 
 const trafficStateLabel = computed(() => {
   const status = props.device?.traffic_meta?.status
@@ -47,24 +47,25 @@ const trafficUploadRateDisplay = computed(() => props.trafficSpeedTx || trafficS
 
 // ---- 蜂窝模式计算属性 ----
 
-function hasValidSignalDbm(dbm: number | null | undefined): dbm is number {
-  return typeof dbm === 'number' && Number.isFinite(dbm) && dbm > QMI_INVALID_SIGNAL_DBM && dbm !== 0
-}
-
 function signalMetricDisplay(value: number | null | undefined): number | '--' {
   return typeof value === 'number' && Number.isFinite(value) && value !== 0 && value !== -999
     ? value
     : '--'
 }
 
+const signalDbmValue = computed(() => displaySignalDbm(
+  props.device?.modem?.signal_dbm,
+  props.device?.modem?.signal_rsrp
+))
+
 const signalDbmDisplay = computed(() => {
-  const dbm = props.device?.modem?.signal_dbm
-  return hasValidSignalDbm(dbm) ? dbm : '--'
+  const dbm = signalDbmValue.value
+  return dbm === undefined ? '--' : dbm
 })
 
 // 0-5 格
 const signalLevel = computed<number>(() => {
-  const dbm = props.device?.modem?.signal_dbm
+  const dbm = signalDbmValue.value
   if (!hasValidSignalDbm(dbm)) return 0
   if (dbm >= -75)  return 5
   if (dbm >= -85)  return 4
@@ -74,7 +75,7 @@ const signalLevel = computed<number>(() => {
 })
 
 const signalColor = computed<'green' | 'amber' | 'red' | 'gray'>(() => {
-  const dbm = props.device?.modem?.signal_dbm
+  const dbm = signalDbmValue.value
   if (!hasValidSignalDbm(dbm)) return 'gray'
   if (dbm >= -85)  return 'green'
   if (dbm >= -100) return 'amber'

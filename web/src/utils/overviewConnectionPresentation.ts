@@ -4,6 +4,7 @@ import {
   formatDashboardSignal,
   hasDashboardSignal
 } from './dashboardPresentation'
+import { displaySignalDbm } from './signalPresentation'
 import { isNativeVoLTEMode, phoneModeCampsOnCell } from './phoneMode'
 
 export type OverviewConnectionKind = 'wifi' | 'volte' | 'cellular'
@@ -92,7 +93,7 @@ function createVoWiFiOrCellularPresentation(
         ])
       })
     }
-    const signal = device?.modem?.signal_dbm
+    const signal = displaySignalDbm(device?.modem?.signal_dbm, device?.modem?.signal_rsrp)
     return Object.freeze({
       kind: 'cellular',
       eyebrow: 'CELLULAR',
@@ -104,7 +105,7 @@ function createVoWiFiOrCellularPresentation(
       metrics: Object.freeze([
         {
           label: '蜂窝信号',
-          value: formatDashboardSignal(signal),
+          value: formatDashboardSignal(device?.modem?.signal_dbm, device?.modem?.signal_rsrp),
           hint: hasDashboardSignal(signal) ? signalQuality(signal) : ''
         },
         metric('公网 IPv4', device?.public_ip, '未分配'),

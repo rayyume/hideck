@@ -2,6 +2,7 @@ package volte
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -23,6 +24,7 @@ type FakeModem struct {
 	MBN           []MBNEntry
 	FailIMS11     bool
 	Fail          map[string]error
+	ListTimeouts  int
 	Commands      []string
 	PendingUAC    *int
 	NextID        string
@@ -101,6 +103,10 @@ func (f *FakeModem) ExecuteAT(deviceID, cmd string, _ time.Duration) (string, er
 	case cmd == MBNAutoSelQueryCommand():
 		return fmt.Sprintf("+QMBNCFG: \"AutoSel\",%d\r\nOK\r\n", f.AutoSel), nil
 	case cmd == MBNListQueryCommand():
+		if f.ListTimeouts > 0 {
+			f.ListTimeouts--
+			return "", errors.New("timeout")
+		}
 		return f.listMBN(), nil
 	case strings.HasPrefix(cmd, `AT+QMBNCFG="autosel",`):
 		bit := 0

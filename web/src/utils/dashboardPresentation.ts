@@ -1,4 +1,5 @@
 import type { DashboardDevice, VoWiFiRuntimeState } from '../types/api'
+import { displaySignalDbm, hasValidSignalDbm } from './signalPresentation'
 
 export const DASHBOARD_UNAVAILABLE = '不可用'
 export const DASHBOARD_UNASSIGNED = '未分配'
@@ -37,14 +38,8 @@ export type DashboardOperatorSource = Readonly<{
   }>
 }>
 
-const QMI_INVALID_SIGNAL_DBM = -128
-const LEGACY_INVALID_SIGNAL_DBM = -999
-const SIGNAL_SENTINELS = new Set([0, QMI_INVALID_SIGNAL_DBM, LEGACY_INVALID_SIGNAL_DBM])
-
 export function hasDashboardSignal(value: unknown): value is number {
-  return typeof value === 'number'
-    && Number.isFinite(value)
-    && !SIGNAL_SENTINELS.has(value)
+  return hasValidSignalDbm(value)
 }
 
 export function formatDashboardNetworkType(device: DashboardDevice): string {
@@ -55,8 +50,12 @@ export function formatDashboardNetworkType(device: DashboardDevice): string {
   return parts.join(' ') || DASHBOARD_UNAVAILABLE
 }
 
-export function formatDashboardSignal(value: unknown): string {
-  return hasDashboardSignal(value) ? `${value} dBm` : DASHBOARD_UNAVAILABLE
+export function formatDashboardSignal(value: unknown, rsrp?: unknown): string {
+  const dbm = displaySignalDbm(
+    typeof value === 'number' ? value : undefined,
+    typeof rsrp === 'number' ? rsrp : undefined
+  )
+  return dbm === undefined ? DASHBOARD_UNAVAILABLE : `${dbm} dBm`
 }
 
 export function createDashboardStages(
