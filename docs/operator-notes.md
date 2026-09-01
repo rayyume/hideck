@@ -78,7 +78,7 @@ IKE/ESP 先用宽列表，`device_model=rmx3366`，REGISTER 带 `smsip`，403/50
 - EE 的 234/33 仍是 `CTEUK_23433`，不要当成 EE 官方卡。
 - Lycamobile UK 是 234/26。美国 Lyca 走 AT&T 的 `310/410`，两套不要混。
 - 1GLOBAL 若 DNS 不到标准 3GPP ePDG，再按 IKE 日志改自定义主机名。
-- 人在国内必须配对应国家前置：GB / FR / DE / HK / JP / EE。UI 里还没有该国规则时，WFC 连不上 ePDG。
+- 人在国内必须配对应国家前置：GB / FR / DE / HK / JP / EE / NL / MY / PH / TH / NG。UI 里还没有该国规则时，WFC 连不上 ePDG。
 - 余额查询资料不足，命令中心标成不支持自动查。
 
 香港 MCC `454` 的 PANI 国家码现在是 **HK**（以前掉进默认 `XX`）。CSL / 3HK / CMHK 都会用到。
@@ -108,6 +108,29 @@ IKE/ESP 先用宽列表，`device_model=rmx3366`，REGISTER 带 `smsip`，403/50
 - Elisa 官方页写明商务套餐有 VoWiFi。TravelSIM/乌龟卡是 MVNO，IMS 开户不保证；没开户时 IKE/REGISTER 会被拒。
 - 国家代理按 MCC `248` 走 **EE**。人在国内需配爱沙尼亚前置。
 - 248/02 也是 Elisa 官方卡。余额短码不能自动选：乌龟卡/TravelSIM 文档有 `*146*099#`，Elisa 官方走账户页。
+
+## 本轮核对过的 eSIM
+
+| 品牌 | 结论 | 原因 |
+| --- | --- | --- |
+| Lycamobile UK | 已有 | `lycamobile_uk_23426` |
+| 新西兰 2degrees | 已有 | `2degrees_nz_53024` |
+| CMLink UK | 不另加 | 宿主 EE `234/30`，客服多次说不支持 WFC；IMSI 已走 EE 预设 |
+| Asda Mobile | 不另加 | 官方有 WFC，宿主 VF `234/15`，且没有 eSIM |
+| Saily | 不加 | 流量卡 + App 虚拟美号，不是 ePDG VoWiFi |
+| 克罗地亚 A1 | 不加 | A1 HR 没有 VoWiFi；旅游 eSIM 偏流量 |
+| 格鲁吉亚 Cellfie | 不加 | 只公开 VoLTE，没有 VoWiFi |
+| 摩尔多瓦 eSIM | 不加 | 旅行卡多是流量；Orange/Moldcell 没有可审计的 VoWiFi |
+| Hotlink MY | 新增 | 官方 VoWiFi，`hotlink_my_50212`（502/12） |
+| AIS TH | 新增 | 官方 Wi-Fi Calling，`ais_th_52001` / `52003` |
+| Smart PH | 新增 | 已商用 VoWiFi，`smart_ph_51503` |
+| GlobeOne / Globe | 新增 | 官方 VoWiFi，`globe_ph_51502` |
+| Simyo NL | 新增 | 官方 wifi bellen，宿主 KPN `kpn_nl_20408` |
+| MTN 尼日利亚 | 新增 | 有 eSIM 和 VoWiFi 报道，`mtn_ng_62130` |
+
+Hotlink 官方写明**漫游时 VoWiFi 不可用**。人在国内仍先走 MY 前置试 ePDG；账户没开国际 WFC 时会被拒。
+
+尼日利亚 MCC `621` 的国家码是 **NG**。
 
 ## 英国侧已有预设
 

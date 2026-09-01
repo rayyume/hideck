@@ -208,6 +208,8 @@ func CountryISO2FromMCC(mcc string) string {
 		return "MO"
 	case "466":
 		return "TW"
+	case "621":
+		return "NG"
 	case "901":
 		return "UNK"
 	default:

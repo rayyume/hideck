@@ -158,6 +158,9 @@ func TestResolveEmbeddedCarrierPresets(t *testing.T) {
 	if vodafoneNL := ResolveEffectiveCarrierConfig("204", "04"); vodafoneNL.PresetID != "vodafone_nl_20404" {
 		t.Fatalf("vodafone nl stolen by lebara: %+v", vodafoneNL)
 	}
+	if kpn := ResolveEffectiveCarrierConfig("204", "08"); kpn.PresetID != "kpn_nl_20408" {
+		t.Fatalf("kpn/simyo = %+v", kpn)
+	}
 	if o2 := ResolveEffectiveCarrierConfig("262", "03"); o2.PresetID != "O2_de_26203" ||
 		o2.EPDGAddr != "epdg.epc.mnc003.mcc262.pub.3gppnetwork.org" {
 		t.Fatalf("o2 de = %+v", o2)
@@ -199,6 +202,13 @@ func TestResolveEmbeddedCarrierPresets(t *testing.T) {
 		{"440", "20", "softbank_44020", "epdg.epc.mnc020.mcc440.pub.3gppnetwork.org"},
 		{"440", "51", "kddi_44051", "epdg.epc.mnc051.mcc440.pub.3gppnetwork.org"},
 		{"248", "02", "elisa_ee_24802", "epdg.epc.mnc002.mcc248.pub.3gppnetwork.org"},
+		{"204", "08", "kpn_nl_20408", "epdg.epc.mnc008.mcc204.pub.3gppnetwork.org"},
+		{"502", "12", "hotlink_my_50212", "epdg.epc.mnc012.mcc502.pub.3gppnetwork.org"},
+		{"515", "02", "globe_ph_51502", "epdg.epc.mnc002.mcc515.pub.3gppnetwork.org"},
+		{"515", "03", "smart_ph_51503", "epdg.epc.mnc003.mcc515.pub.3gppnetwork.org"},
+		{"520", "01", "ais_th_52001", "epdg.epc.mnc001.mcc520.pub.3gppnetwork.org"},
+		{"520", "03", "ais_th_52003", "epdg.epc.mnc003.mcc520.pub.3gppnetwork.org"},
+		{"621", "30", "mtn_ng_62130", "epdg.epc.mnc030.mcc621.pub.3gppnetwork.org"},
 	} {
 		got := ResolveEffectiveCarrierConfig(item.mcc, item.mnc)
 		if got.PresetID != item.id || got.DeviceModel != "rmx3366" ||
