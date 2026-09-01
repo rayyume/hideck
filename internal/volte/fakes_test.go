@@ -49,6 +49,8 @@ type FakeModem struct {
 	hangupErr     error
 	dialVoice     *qmi.VoiceAllCallInfo
 	UACUnusable   bool
+	manageCalls   []qmi.VoiceManageCallsRequest
+	manageErrs    []error
 }
 
 func newFakeModem() *FakeModem {
@@ -291,6 +293,17 @@ func (f *FakeModem) VOICEHangup(context.Context, string, uint8) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.hangupErr
+}
+func (f *FakeModem) VOICEManageCalls(_ context.Context, _ string, req qmi.VoiceManageCallsRequest) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.manageCalls = append(f.manageCalls, req)
+	if len(f.manageErrs) == 0 {
+		return nil
+	}
+	err := f.manageErrs[0]
+	f.manageErrs = f.manageErrs[1:]
+	return err
 }
 func (f *FakeModem) VOICEBurstDTMF(context.Context, string, uint8, string) error {
 	return nil

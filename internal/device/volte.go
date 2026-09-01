@@ -293,6 +293,14 @@ func (p *Pool) VOICEHangup(ctx context.Context, deviceID string, callID uint8) e
 	return err
 }
 
+func (p *Pool) VOICEManageCalls(ctx context.Context, deviceID string, req qmi.VoiceManageCallsRequest) error {
+	w := p.GetWorker(deviceID)
+	if w == nil || w.QMICore == nil {
+		return fmt.Errorf("设备 %s 没有 QMI VOICE", deviceID)
+	}
+	return w.QMICore.VOICEManageCalls(ctx, req)
+}
+
 func (p *Pool) VOICEBurstDTMF(ctx context.Context, deviceID string, callID uint8, digits string) error {
 	w := p.GetWorker(deviceID)
 	if w == nil || w.QMICore == nil {

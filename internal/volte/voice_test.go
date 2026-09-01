@@ -429,6 +429,68 @@ func eventTypes(events []voicehost.CallEvent) []string {
 	return out
 }
 
+func TestNativeHoldUsesManageCalls(t *testing.T) {
+	ctl, host := enableVoice(t)
+	var events []voicehost.CallEvent
+	ctl.SubscribeCallEvents(func(ev voicehost.CallEvent) { events = append(events, ev) })
+	host.fireVoice(&qmi.VoiceAllCallInfo{
+		Calls:              []qmi.VoiceCallInfo{{ID: 1, State: qmiCallConversation, Direction: qmiDirMO}},
+		RemotePartyNumbers: []qmi.VoiceRemotePartyNumber{{CallID: 1, Number: "10010"}},
+	})
+	active := ctl.ActiveCall("wwan1")
+	if active == nil {
+		t.Fatal("missing active call")
+	}
+	if err := ctl.HoldCall(context.Background(), "wwan1", active.CallID); err != nil {
+		t.Fatalf("hold: %v", err)
+	}
+	if len(host.manageCalls) != 1 || host.manageCalls[0].ServiceType != qmi.VoiceSupsHoldActiveAcceptWaitingOrHeld || host.manageCalls[0].CallID != 1 {
+		t.Fatalf("manageCalls=%+v", host.manageCalls)
+	}
+	held := ctl.ActiveCall("wwan1")
+	if held == nil || !held.Held {
+		t.Fatalf("held snapshot=%+v", held)
+	}
+	if countType(events, "CallMediaUpdated") != 1 {
+		t.Fatalf("events %v", eventTypes(events))
+	}
+	if err := ctl.ResumeCall(context.Background(), "wwan1", active.CallID); err != nil {
+		t.Fatalf("resume: %v", err)
+	}
+	if len(host.manageCalls) != 2 || host.manageCalls[1].ServiceType != qmi.VoiceSupsHoldActiveAcceptWaitingOrHeld {
+		t.Fatalf("resume manageCalls=%+v", host.manageCalls)
+	}
+	resumed := ctl.ActiveCall("wwan1")
+	if resumed == nil || resumed.Held {
+		t.Fatalf("resumed snapshot=%+v", resumed)
+	}
+}
+
+func TestNativeHoldFallsBackToLocalHold(t *testing.T) {
+	ctl, host := enableVoice(t)
+	host.manageErrs = []error{errors.New("manage 0x03 failed"), nil}
+	host.fireVoice(&qmi.VoiceAllCallInfo{
+		Calls:              []qmi.VoiceCallInfo{{ID: 4, State: qmiCallConversation, Direction: qmiDirMO}},
+		RemotePartyNumbers: []qmi.VoiceRemotePartyNumber{{CallID: 4, Number: "10086"}},
+	})
+	active := ctl.ActiveCall("wwan1")
+	if active == nil {
+		t.Fatal("missing active call")
+	}
+	if err := ctl.HoldCall(context.Background(), "wwan1", active.CallID); err != nil {
+		t.Fatalf("hold fallback: %v", err)
+	}
+	if len(host.manageCalls) != 2 {
+		t.Fatalf("want primary+fallback, got %+v", host.manageCalls)
+	}
+	if host.manageCalls[0].ServiceType != qmi.VoiceSupsHoldActiveAcceptWaitingOrHeld {
+		t.Fatalf("primary=%+v", host.manageCalls[0])
+	}
+	if host.manageCalls[1].ServiceType != qmi.VoiceSupsLocalHold || host.manageCalls[1].CallID != 4 {
+		t.Fatalf("fallback=%+v", host.manageCalls[1])
+	}
+}
+
 func countType(events []voicehost.CallEvent, typ string) int {
 	n := 0
 	for _, ev := range events {

@@ -2156,6 +2156,13 @@ func (m *Manager) VOICEEndCall(ctx context.Context, callID uint8) (uint8, error)
 	return m.qmiMgr.VOICEEndCall(ctx, callID)
 }
 
+func (m *Manager) VOICEManageCalls(ctx context.Context, req qmi.VoiceManageCallsRequest) error {
+	if m == nil || m.qmiMgr == nil {
+		return qmimanager.ErrServiceNotReady("VOICE")
+	}
+	return m.qmiMgr.VOICEManageCalls(ctx, req)
+}
+
 func (m *Manager) VOICEGetAllCallInfo(ctx context.Context) (*qmi.VoiceAllCallInfo, error) {
 	if m == nil || m.qmiMgr == nil {
 		return nil, qmimanager.ErrServiceNotReady("VOICE")

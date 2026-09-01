@@ -111,6 +111,20 @@ type VoiceManageCallsRequest struct {
 	CallID      uint8
 }
 
+// QMI VOICE_MANAGE_CALLS SUPS types (QMI Voice v02).
+const (
+	VoiceSupsReleaseHeldOrWaiting             uint8 = 0x01
+	VoiceSupsReleaseActiveAcceptHeldOrWaiting uint8 = 0x02
+	VoiceSupsHoldActiveAcceptWaitingOrHeld    uint8 = 0x03
+	VoiceSupsHoldAllExceptSpecified           uint8 = 0x04
+	VoiceSupsMakeConferenceCall               uint8 = 0x05
+	VoiceSupsExplicitCallTransfer             uint8 = 0x06
+	VoiceSupsEndAllCalls                      uint8 = 0x08
+	VoiceSupsReleaseSpecifiedCall             uint8 = 0x09
+	VoiceSupsLocalHold                        uint8 = 0x0A
+	VoiceSupsLocalUnhold                      uint8 = 0x0B
+)
+
 type VoiceSupplementaryServiceRequest struct {
 	Action uint8
 	Reason uint8

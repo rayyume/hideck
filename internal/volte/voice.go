@@ -52,6 +52,7 @@ type nativeCall struct {
 	ClientSDP string
 	Reason    string
 	Codec     string
+	Held      bool
 }
 
 func newVoiceSession() *voiceSession {
@@ -238,7 +239,7 @@ func (c *Controller) ActiveCall(deviceID string) *voicehost.CallSnapshot {
 	snap := voicehost.CallSnapshot{
 		CallID: call.ID, DeviceID: deviceID, State: call.State, Direction: call.Direction,
 		Peer: call.Peer, StartTime: call.Start, Duration: time.Since(call.Start),
-		ClientSDP: call.ClientSDP,
+		ClientSDP: call.ClientSDP, Held: call.Held,
 	}
 	return &snap
 }
@@ -333,12 +334,53 @@ func (c *Controller) finishLocalCall(deviceID string, call nativeCall, reason st
 	})
 }
 
-func (c *Controller) HoldCall(context.Context, string, string) error {
-	return errors.New("volte: native hold is not supported")
+func (c *Controller) HoldCall(ctx context.Context, deviceID, id string) error {
+	return c.setNativeHold(ctx, deviceID, id, true)
 }
 
-func (c *Controller) ResumeCall(context.Context, string, string) error {
-	return errors.New("volte: native hold is not supported")
+func (c *Controller) ResumeCall(ctx context.Context, deviceID, id string) error {
+	return c.setNativeHold(ctx, deviceID, id, false)
+}
+
+func (c *Controller) setNativeHold(ctx context.Context, deviceID, id string, hold bool) error {
+	call, ok := c.lookup(deviceID, id)
+	if !ok {
+		return fmt.Errorf("volte: call %s not found", id)
+	}
+	if call.Held == hold {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	primary := qmi.VoiceSupsHoldActiveAcceptWaitingOrHeld
+	fallback := qmi.VoiceSupsLocalHold
+	if !hold {
+		fallback = qmi.VoiceSupsLocalUnhold
+	}
+	err := c.host.VOICEManageCalls(ctx, deviceID, qmi.VoiceManageCallsRequest{
+		ServiceType: primary, CallID: call.QMI,
+	})
+	if err != nil {
+		if fbErr := c.host.VOICEManageCalls(ctx, deviceID, qmi.VoiceManageCallsRequest{
+			ServiceType: fallback, CallID: call.QMI,
+		}); fbErr != nil {
+			action := "resume"
+			if hold {
+				action = "hold"
+			}
+			return fmt.Errorf("volte: native %s: %w", action, err)
+		}
+	}
+	call.Held = hold
+	c.storeCall(deviceID, call)
+	c.emitEvent(deviceID, voicehost.CallEvent{
+		Type: "CallMediaUpdated", DeviceID: deviceID, CallID: call.ID,
+		Caller: call.Peer, Callee: call.Peer, Direction: call.Direction,
+		State: call.State, Time: time.Now(), Held: hold,
+		RecordingError: audioError(c.Status(deviceID)),
+	})
+	return nil
 }
 
 func (c *Controller) SwitchCall(string, string) error {
@@ -453,6 +495,7 @@ func (c *Controller) handleVoiceInfo(deviceID string, vs *voiceSession, info *qm
 		next := nativeCall{
 			ID: id, QMI: item.ID, Direction: dir, Peer: peer, State: state,
 			Start: startedAt(prev, now), ClientSDP: prev.ClientSDP, Reason: reason, Codec: codec,
+			Held: prev.Held,
 		}
 		vs.put(next)
 		if dir == "inbound" && vs.markIncoming(id) {
