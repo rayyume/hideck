@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import test from 'node:test'
 
 function source(relativePath: string): string {
@@ -90,6 +91,28 @@ test('boot script understands navy and classic storage keys', () => {
   assert.match(indexHtml, /theme === 'navy-night' \|\| theme === 'classic'/)
   assert.match(indexHtml, /classList.toggle\('classic', theme === 'classic'\)/)
   assert.match(indexHtml, /background: #FBF9F6;/)
+})
+
+test('vue and class helpers no longer use generic Tailwind gray palette classes', () => {
+  const leftover = /\b(?:text|bg|border|divide|placeholder|ring|from|to|via)-gray-\d{2,3}\b|\bdark:text-white\b|\bdark:border-white\/|\bdark:bg-white\/|\bdark:text-gray-|\bdark:bg-gray-|\bdark:border-gray-|\bdark:divide-white|\bhover:bg-gray-/
+  const srcRoot = new URL('../src/', import.meta.url)
+  const hits: string[] = []
+
+  function walk(dir: URL) {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const url = new URL(entry.name + (entry.isDirectory() ? '/' : ''), dir)
+      if (entry.isDirectory()) {
+        walk(url)
+        continue
+      }
+      if (!/\.(vue|ts|css)$/.test(entry.name)) continue
+      const text = readFileSync(url, 'utf8')
+      if (leftover.test(text)) hits.push(join('src', decodeURIComponent(url.pathname.slice(srcRoot.pathname.length))))
+    }
+  }
+
+  walk(srcRoot)
+  assert.deepEqual(hits, [])
 })
 
 test('login, logs, and AT terminal no longer leak the old teal palette', () => {

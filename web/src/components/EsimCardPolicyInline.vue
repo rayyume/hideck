@@ -128,8 +128,8 @@ const {
 </script>
 
 <template>
-  <div class="px-4 py-3 bg-gray-50/60 dark:bg-white/5 rounded-lg space-y-3">
-    <div v-if="loading" class="text-xs text-gray-400 flex items-center gap-1">
+  <div class="px-4 py-3 bg-[var(--ui-surface-muted)] rounded-lg space-y-3">
+    <div v-if="loading" class="text-xs text-[var(--ui-text-muted)] flex items-center gap-1">
       <el-icon class="animate-spin"><Loading /></el-icon> 正在加载策略...
     </div>
     <div v-else-if="loadFailed" class="text-xs text-orange-500 flex items-center gap-2">
@@ -139,11 +139,11 @@ const {
     <template v-else>
       <div v-if="hint" class="text-xs text-amber-600 dark:text-amber-400">{{ hint }}</div>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        <div class="flex items-center justify-between rounded-lg px-3 py-2 bg-white dark:bg-white/5">
-          <span class="text-sm text-gray-700 dark:text-gray-200">飞行<small class="block text-xs text-gray-400 font-normal">{{ wifiCallingLocksRadio ? 'WiFi calling 已锁定' : '关闭后注册运营商' }}</small></span>
+        <div class="flex items-center justify-between rounded-lg px-3 py-2 bg-[var(--ui-surface)]">
+          <span class="text-sm text-[var(--ui-text)]">飞行<small class="block text-xs text-[var(--ui-text-muted)] font-normal">{{ wifiCallingLocksRadio ? 'WiFi calling 已锁定' : '关闭后注册运营商' }}</small></span>
           <div class="flex items-center gap-2">
             <span v-if="airplaneFailed" class="text-xs text-orange-500">未生效</span>
-            <el-icon v-if="airplanePending" class="animate-spin text-gray-400"><Loading /></el-icon>
+            <el-icon v-if="airplanePending" class="animate-spin text-[var(--ui-text-muted)]"><Loading /></el-icon>
             <el-switch
               :model-value="radioMode === 'airplane'"
               :disabled="airplanePending || wifiCallingLocksRadio"
@@ -151,11 +151,11 @@ const {
             />
           </div>
         </div>
-        <div class="flex items-center justify-between rounded-lg px-3 py-2 bg-white dark:bg-white/5">
-          <span class="text-sm text-gray-700 dark:text-gray-200">网络<small class="block text-xs text-gray-400 font-normal">只开流量</small></span>
+        <div class="flex items-center justify-between rounded-lg px-3 py-2 bg-[var(--ui-surface)]">
+          <span class="text-sm text-[var(--ui-text)]">网络<small class="block text-xs text-[var(--ui-text-muted)] font-normal">只开流量</small></span>
           <div class="flex items-center gap-2">
             <span v-if="networkFailed" class="text-xs text-orange-500">未生效</span>
-            <el-icon v-if="networkPending" class="animate-spin text-gray-400"><Loading /></el-icon>
+            <el-icon v-if="networkPending" class="animate-spin text-[var(--ui-text-muted)]"><Loading /></el-icon>
             <el-switch
               v-model="local.network_enabled"
               :disabled="radioMode === 'airplane' || networkPending || wifiCallingLocksRadio"
@@ -165,8 +165,8 @@ const {
         </div>
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        <div class="flex items-center justify-between rounded-lg px-3 py-2 bg-white dark:bg-white/5">
-          <span class="text-sm text-gray-700 dark:text-gray-200">通话方式</span>
+        <div class="flex items-center justify-between rounded-lg px-3 py-2 bg-[var(--ui-surface)]">
+          <span class="text-sm text-[var(--ui-text)]">通话方式</span>
           <el-select
             :model-value="local.phone_mode ?? 'wifi'"
             size="small"
@@ -181,9 +181,9 @@ const {
         </div>
         <div
           v-if="(local.phone_mode ?? 'wifi') === 'cellular'"
-          class="flex items-center justify-between rounded-lg px-3 py-2 bg-white dark:bg-white/5"
+          class="flex items-center justify-between rounded-lg px-3 py-2 bg-[var(--ui-surface)]"
         >
-          <span class="text-sm text-gray-700 dark:text-gray-200">数据策略</span>
+          <span class="text-sm text-[var(--ui-text)]">数据策略</span>
           <el-select
             :model-value="local.data_strategy ?? 'on_demand'"
             size="small"
@@ -196,16 +196,16 @@ const {
           </el-select>
         </div>
       </div>
-      <div class="flex items-center justify-between rounded-lg px-3 py-2 bg-white dark:bg-white/5">
-        <span class="text-sm text-gray-700 dark:text-gray-200">
+      <div class="flex items-center justify-between rounded-lg px-3 py-2 bg-[var(--ui-surface)]">
+        <span class="text-sm text-[var(--ui-text)]">
           {{ (local.phone_mode ?? 'wifi') === 'wifi' ? '启动' : '软件电话' }}
-          <small class="block text-xs text-gray-400 font-normal">{{ (local.phone_mode ?? 'wifi') === 'wifi'
+          <small class="block text-xs text-[var(--ui-text-muted)] font-normal">{{ (local.phone_mode ?? 'wifi') === 'wifi'
             ? '打开后开始注册。关掉只停服务，仍是 WiFi calling'
             : '开启后可拨号。关掉只停服务，通话方式不变' }}</small>
         </span>
         <div class="flex items-center gap-2">
           <span v-if="vowifiFailed" class="text-xs text-orange-500">未生效</span>
-          <el-icon v-if="vowifiPending" class="animate-spin text-gray-400"><Loading /></el-icon>
+          <el-icon v-if="vowifiPending" class="animate-spin text-[var(--ui-text-muted)]"><Loading /></el-icon>
           <el-switch
             v-model="local.vowifi_enabled"
             :disabled="vowifiPending"
@@ -214,7 +214,7 @@ const {
           />
         </div>
       </div>
-      <div class="text-xs leading-5 text-gray-500 dark:text-gray-400">
+      <div class="text-xs leading-5 text-[var(--ui-text-muted)]">
         <template v-if="wifiCallingLocksRadio">WiFi calling 占用射频，飞行已锁定，网络不可用。</template>
         <template v-else-if="radioMode === 'airplane'">飞行已开，射频关闭。关掉飞行后才会注册运营商。</template>
         <template v-else-if="(local.phone_mode ?? 'wifi') === 'cellular'">

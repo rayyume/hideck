@@ -144,7 +144,7 @@ const networkPanelMessage = computed(() => {
             ? 'bg-[var(--ui-success-surface)] border-[color-mix(in_srgb,var(--ui-success)_28%,var(--ui-border))]'
             : controlOnline
               ? 'bg-amber-50 border-amber-200 dark:bg-amber-500/10 dark:border-amber-500/25'
-              : 'bg-gray-100 border-gray-200 dark:bg-white/5 dark:border-white/10'"
+              : 'bg-[var(--ui-surface-muted)] border-[var(--ui-border)]'"
         >
           <StatusLight :tone="cellularStatusTone" size="sm" :animated="isRegistered" />
           <div class="flex-1 min-w-0">
@@ -153,7 +153,7 @@ const networkPanelMessage = computed(() => {
                 ? 'text-[var(--ui-success)]'
                 : controlOnline
                   ? 'text-amber-700 dark:text-amber-300'
-                  : 'text-gray-500 dark:text-gray-400'"
+                  : 'text-[var(--ui-text-muted)]'"
             >
               <template v-if="isRegistered">
                 {{ device?.modem?.operator || '--' }}
@@ -164,23 +164,23 @@ const networkPanelMessage = computed(() => {
               </template>
             </div>
           </div>
-          <button @click="showOperatorSelection = true" class="p-1 rounded hover:bg-black/5 dark:hover:bg-white/10 transition-colors" title="网络选择设置">
-            <Settings24Regular class="w-5 h-5 text-gray-500 dark:text-gray-400" />
+          <button @click="showOperatorSelection = true" class="p-1 rounded hover:bg-[var(--ui-selected)] transition-colors" title="网络选择设置">
+            <Settings24Regular class="w-5 h-5 text-[var(--ui-text-muted)]" />
           </button>
         </div>
 
         <!-- 信号大字 -->
-        <div class="rounded-xl border border-gray-200 dark:border-white/10 px-3.5 py-3 mb-3">
-          <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">信号强度</div>
+        <div class="rounded-xl border border-[var(--ui-border)] px-3.5 py-3 mb-3">
+          <div class="text-xs font-bold text-[var(--ui-text-muted)] uppercase tracking-wider mb-1.5">信号强度</div>
           <div class="flex items-center gap-3">
             <div>
               <div class="flex items-baseline gap-1">
                 <span class="text-2xl font-extrabold tabular-nums leading-none" :class="signalColorClass">
                   {{ signalDbmDisplay }}
                 </span>
-                <span class="text-xs text-gray-400">dBm</span>
+                <span class="text-xs text-[var(--ui-text-muted)]">dBm</span>
               </div>
-              <div class="text-xs text-gray-400 mt-1">
+              <div class="text-xs text-[var(--ui-text-muted)] mt-1">
                 RSRP {{ signalMetricDisplay(device?.modem?.signal_rsrp) }}
                 &nbsp;·&nbsp;
                 RSRQ {{ signalMetricDisplay(device?.modem?.signal_rsrq) }}
@@ -196,14 +196,14 @@ const networkPanelMessage = computed(() => {
               <div v-for="i in 5" :key="i"
                 class="w-1.5 rounded-sm"
                 :style="{ height: (i * 18 + 10) + '%' }"
-                :class="i <= signalLevel ? signalBarColor : 'bg-gray-200 dark:bg-white/10'"
+                :class="i <= signalLevel ? signalBarColor : 'bg-[var(--ui-border)]'"
               />
             </div>
           </div>
         </div>
 
         <!-- 次要字段 -->
-        <div class="space-y-1.5 text-sm text-gray-700 dark:text-gray-200">
+        <div class="space-y-1.5 text-sm text-[var(--ui-text)]">
           <FieldRow label="网络模式"  :value="[device?.modem?.network_duplex, device?.modem?.network_mode].filter(Boolean).join(' ') || '--'" monospace />
           <FieldRow label="频段"  :value="device?.modem?.radio_band || '--'" monospace />
           <FieldRow label="信道"  :value="device?.modem?.radio_channel ? String(device.modem.radio_channel) : '--'" monospace />
@@ -223,10 +223,10 @@ const networkPanelMessage = computed(() => {
     <!-- ===== 流量面板（不变）===== -->
     <section class="overview-fact-panel overview-network-panel ui-panel-muted p-4">
       <div class="overview-panel-title mb-2">地址与实时网络</div>
-      <div v-if="networkPanelMessage" class="flex items-center justify-center p-6 text-sm text-gray-400">
+      <div v-if="networkPanelMessage" class="flex items-center justify-center p-6 text-sm text-[var(--ui-text-muted)]">
         {{ networkPanelMessage }}
       </div>
-      <div v-else class="text-sm space-y-1.5 text-gray-700 dark:text-gray-200">
+      <div v-else class="text-sm space-y-1.5 text-[var(--ui-text)]">
         <FieldRow label="内网 IPv4"     :value="device?.private_ip"           monospace copyable />
         <FieldRow label="内网 IPv6"   :value="device?.private_ipv6"         monospace copyable wrap />
         <FieldRow label="外网 IPv4"     :value="device?.public_ip"            monospace copyable />

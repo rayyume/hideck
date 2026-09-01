@@ -647,10 +647,10 @@ onBeforeUnmount(() => {
             ESIM
           </div>
           <div>
-            <div class="text-base font-bold text-gray-900 dark:text-white">
+            <div class="text-base font-bold text-[var(--ui-text)]">
               {{ chipInfo.sku_name || 'eUICC' }}
             </div>
-            <div class="text-xs text-gray-500 dark:text-gray-400 font-mono">
+            <div class="text-xs text-[var(--ui-text-muted)] font-mono">
               <template v-if="chipInfo.firmware">固件 {{ chipInfo.firmware }}</template>
               <template v-if="chipInfo.serial_number">
                 · SN: <span class="transition-all" :class="{ 'blur-sm select-none': !showSensitive }">{{ chipInfo.serial_number }}</span>
@@ -675,15 +675,15 @@ onBeforeUnmount(() => {
       <!-- 按 eUICC 分组的 Profiles -->
       <section v-for="(group, gi) in profiles" :key="group.aid_hex || group.eid || ('group-' + gi)" class="esim-profile-group ui-panel-muted overflow-hidden">
       <!-- eUICC 头部 -->
-      <div class="px-4 py-3 border-b border-gray-100 dark:border-white/10">
+      <div class="px-4 py-3 border-b border-[var(--ui-border)]">
         <div class="flex items-center justify-between">
           <div>
-            <span class="text-sm font-bold text-gray-900 dark:text-white">eUICC #{{ gi + 1 }}</span>
-            <span class="text-xs text-gray-400 font-mono ml-2 transition-all" :class="{ 'blur-sm select-none': !showSensitive }">
+            <span class="text-sm font-bold text-[var(--ui-text)]">eUICC #{{ gi + 1 }}</span>
+            <span class="text-xs text-[var(--ui-text-muted)] font-mono ml-2 transition-all" :class="{ 'blur-sm select-none': !showSensitive }">
               {{ group.eid }}
             </span>
           </div>
-          <div v-if="chipInfo?.eids" class="text-xs text-gray-500">
+          <div v-if="chipInfo?.eids" class="text-xs text-[var(--ui-text-muted)]">
             <template v-for="eid in chipInfo.eids" :key="eid.eid">
               <span v-if="eid.eid === group.eid" class="inline-flex flex-col items-end gap-1">
                 <span class="inline-flex items-center gap-1">
@@ -700,7 +700,7 @@ onBeforeUnmount(() => {
         <!-- PKI 信息行 -->
         <template v-if="chipInfo?.eids">
           <template v-for="eid in chipInfo.eids" :key="'pki-' + eid.eid">
-            <div v-if="eid.eid === group.eid && (eid.manufacturer || eid.certificates?.length || eid.default_smdp_address || eid.root_ds_address || eid.sas_accreditation_number || eid.info_source)" class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-400 dark:text-gray-500">
+            <div v-if="eid.eid === group.eid && (eid.manufacturer || eid.certificates?.length || eid.default_smdp_address || eid.root_ds_address || eid.sas_accreditation_number || eid.info_source)" class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--ui-text-muted)]">
               <span v-if="eid.manufacturer" class="inline-flex items-center gap-1">
                 <span class="text-xs">生产商:</span> {{ eid.manufacturer }}
               </span>
@@ -725,23 +725,23 @@ onBeforeUnmount(() => {
       </div>
 
       <!-- Profile 列表 -->
-      <div v-if="group.profiles?.length === 0" class="p-4 text-sm text-gray-400">
+      <div v-if="group.profiles?.length === 0" class="p-4 text-sm text-[var(--ui-text-muted)]">
         暂无 Profile
       </div>
-      <div v-else class="divide-y divide-gray-100 dark:divide-white/10">
+      <div v-else class="divide-y divide-[var(--ui-border)]">
         <template v-for="p in group.profiles" :key="p.iccid">
-        <div class="esim-profile-row px-4 py-3 hover:bg-gray-50/50 dark:hover:bg-white/5 transition-colors">
+        <div class="esim-profile-row px-4 py-3 hover:bg-[var(--ui-selected)] transition-colors">
           <div class="min-w-0 flex-1">
             <!-- 正常显示模式 -->
             <template v-if="renaming !== p.iccid">
               <div class="flex items-center gap-2">
                 <span class="w-2 h-2 rounded-full flex-shrink-0" :class="p.state === 1 ? 'bg-[var(--ui-success)]' : 'bg-[var(--ui-border)]'" />
-                <span class="font-medium text-sm text-gray-900 dark:text-white truncate">{{ p.name || p.iccid }}</span>
+                <span class="font-medium text-sm text-[var(--ui-text)] truncate">{{ p.name || p.iccid }}</span>
                 <el-tag size="small" :type="p.state === 1 ? 'success' : 'info'" class="flex-shrink-0">
                   {{ p.state_text }}
                 </el-tag>
               </div>
-              <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 ml-4 flex flex-wrap items-center gap-x-2 gap-y-1 transition-all">
+              <div class="text-xs text-[var(--ui-text-muted)] mt-0.5 ml-4 flex flex-wrap items-center gap-x-2 gap-y-1 transition-all">
                 <span>{{ p.service_provider_name }}</span>
                 <span :class="{ 'blur-sm select-none': !showSensitive }">{{ p.iccid }}</span>
               </div>
@@ -822,8 +822,8 @@ onBeforeUnmount(() => {
         :width="notificationDialogWidth()"
         class="glass-modal"
       >
-        <div v-if="notificationsLoading" class="py-10 text-sm text-center text-gray-400">正在加载通知...</div>
-        <div v-else-if="notifications.length === 0" class="py-10 text-sm text-center text-gray-400">当前没有可展示的通知</div>
+        <div v-if="notificationsLoading" class="py-10 text-sm text-center text-[var(--ui-text-muted)]">正在加载通知...</div>
+        <div v-else-if="notifications.length === 0" class="py-10 text-sm text-center text-[var(--ui-text-muted)]">当前没有可展示的通知</div>
         <div v-else class="space-y-2 max-h-[420px] overflow-auto pr-1">
           <div
             v-for="item in notifications"
@@ -831,21 +831,21 @@ onBeforeUnmount(() => {
             :class="notificationListItemLayoutClass()"
           >
             <div class="min-w-0 flex-1 space-y-1">
-              <div class="flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-white">
+              <div class="flex items-center gap-2 text-sm font-medium text-[var(--ui-text)]">
                 <span>#{{ item.sequence_number }}</span>
                 <el-tag size="small" type="info">{{ formatEsimNotificationEvent(item.event) }}</el-tag>
               </div>
               <div :class="notificationMetaContainerClass()">
                 <div v-if="item.iccid" :class="notificationMetaItemClass()">
-                  <span class="mr-1 text-gray-400 dark:text-gray-500">ICCID</span>
+                  <span class="mr-1 text-[var(--ui-text-muted)]">ICCID</span>
                   <span class="break-all">{{ item.iccid }}</span>
                 </div>
                 <div v-if="item.address" :class="notificationMetaItemClass()">
-                  <span class="mr-1 text-gray-400 dark:text-gray-500">地址</span>
+                  <span class="mr-1 text-[var(--ui-text-muted)]">地址</span>
                   <span class="break-all">{{ item.address }}</span>
                 </div>
                 <div v-if="item.aid_hex" :class="notificationMetaItemClass()">
-                  <span class="mr-1 text-gray-400 dark:text-gray-500">AID</span>
+                  <span class="mr-1 text-[var(--ui-text-muted)]">AID</span>
                   <span class="break-all">{{ item.aid_hex }}</span>
                 </div>
               </div>
@@ -872,7 +872,7 @@ onBeforeUnmount(() => {
         </div>
         <div>
           <span class="esim-panel-eyebrow">INSTALL PROFILE</span>
-          <div class="text-sm font-bold text-gray-900 dark:text-white">安装新档案</div>
+          <div class="text-sm font-bold text-[var(--ui-text)]">安装新档案</div>
         </div>
       </div>
       <p class="esim-install-copy">
@@ -882,7 +882,7 @@ onBeforeUnmount(() => {
       </p>
       <div class="space-y-3">
         <div class="space-y-1">
-          <div class="text-xs font-bold text-gray-500 uppercase tracking-wider">激活码 / 二维码内容</div>
+          <div class="text-xs font-bold text-[var(--ui-text-muted)] uppercase tracking-wider">激活码 / 二维码内容</div>
           <div
             class="esim-qr-drop"
             :class="{ 'is-active': qrDropActive, 'is-reading': qrReading }"
@@ -918,7 +918,7 @@ onBeforeUnmount(() => {
         </div>
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
           <div class="space-y-1">
-            <div class="text-xs font-bold text-gray-500 uppercase tracking-wider">SM-DP+ 地址</div>
+            <div class="text-xs font-bold text-[var(--ui-text-muted)] uppercase tracking-wider">SM-DP+ 地址</div>
             <el-input v-model="downloadForm.smdp" placeholder="解析后自动填写，也可手填">
               <template #prefix>
                 <el-icon><QrCode24Regular /></el-icon>
@@ -926,11 +926,11 @@ onBeforeUnmount(() => {
             </el-input>
           </div>
           <div class="space-y-1">
-            <div class="text-xs font-bold text-gray-500 uppercase tracking-wider">Matching ID</div>
+            <div class="text-xs font-bold text-[var(--ui-text-muted)] uppercase tracking-wider">Matching ID</div>
             <el-input v-model="downloadForm.matchingId" placeholder="解析后自动填写" />
           </div>
           <div class="space-y-1">
-            <div class="text-xs font-bold text-gray-500 uppercase tracking-wider">
+            <div class="text-xs font-bold text-[var(--ui-text-muted)] uppercase tracking-wider">
               确认码{{ confirmationRequired ? ' *' : '' }}
             </div>
             <el-input
@@ -939,11 +939,11 @@ onBeforeUnmount(() => {
             />
           </div>
           <div class="space-y-1">
-            <div class="text-xs font-bold text-gray-500 uppercase tracking-wider">IMEI</div>
+            <div class="text-xs font-bold text-[var(--ui-text-muted)] uppercase tracking-wider">IMEI</div>
             <el-input v-model="downloadForm.imei" maxlength="15" placeholder="默认使用设备 IMEI，可修改" />
           </div>
           <div class="space-y-1">
-            <div class="text-xs font-bold text-gray-500 uppercase tracking-wider">目标 eUICC</div>
+            <div class="text-xs font-bold text-[var(--ui-text-muted)] uppercase tracking-wider">目标 eUICC</div>
             <el-select v-model="downloadForm.aidHex" placeholder="选择目标 eUICC">
               <el-option
                 v-for="(eid, ei) in (chipInfo?.eids || [])"
@@ -966,7 +966,7 @@ onBeforeUnmount(() => {
           :duration="8"
           :stroke-width="10"
         />
-        <div class="text-xs" :class="downloadError ? 'text-red-500' : 'text-gray-500 dark:text-gray-400'">
+        <div class="text-xs" :class="downloadError ? 'text-red-500' : 'text-[var(--ui-text-muted)]'">
           {{ downloadError || downloadMsg }}
         </div>
       </div>

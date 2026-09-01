@@ -462,13 +462,13 @@ onMounted(() => {
                <el-icon size="24"><Key24Regular /></el-icon>
             </div>
             <div>
-               <h3 class="text-lg font-bold text-gray-800 dark:text-gray-100">安全</h3>
-               <p class="text-xs text-gray-500">更新访问凭证</p>
+               <h3 class="text-lg font-bold text-[var(--ui-text)]">安全</h3>
+               <p class="text-xs text-[var(--ui-text-muted)]">更新访问凭证</p>
             </div>
          </div>
 
          <div class="space-y-4 relative z-10">
-             <div v-if="loadingPasswordStatus" class="rounded-xl border border-gray-200/70 dark:border-white/10 bg-gray-50/80 dark:bg-white/[0.03] px-4 py-3 text-sm text-gray-500">
+             <div v-if="loadingPasswordStatus" class="rounded-xl border border-[var(--ui-border)] bg-[var(--ui-surface-muted)] px-4 py-3 text-sm text-[var(--ui-text-muted)]">
                正在读取凭证管理状态…
              </div>
              <div v-else-if="!passwordStatus" class="rounded-xl border border-red-300/60 bg-red-50/80 dark:border-red-500/30 dark:bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-300">
@@ -481,15 +481,15 @@ onMounted(() => {
                当前密码为初始明文凭证或强度不足，请尽快修改。
              </div>
              <div class="space-y-1">
-                <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">当前密码</label>
+                <label class="text-xs font-bold text-[var(--ui-text-muted)] uppercase tracking-wider">当前密码</label>
                 <el-input v-model="passwordForm.old_password" :disabled="!passwordStatus || passwordManagedByEnvironment" type="password" show-password placeholder="••••••••" size="large" />
              </div>
              <div class="space-y-1">
-                <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">新密码</label>
+                <label class="text-xs font-bold text-[var(--ui-text-muted)] uppercase tracking-wider">新密码</label>
                 <el-input v-model="passwordForm.new_password" :disabled="!passwordStatus || passwordManagedByEnvironment" type="password" show-password placeholder="至少 8 位，建议 12 位以上" size="large" />
              </div>
              <div class="space-y-1">
-                <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">确认新密码</label>
+                <label class="text-xs font-bold text-[var(--ui-text-muted)] uppercase tracking-wider">确认新密码</label>
                 <el-input v-model="passwordForm.confirm_password" :disabled="!passwordStatus || passwordManagedByEnvironment" type="password" show-password placeholder="再次输入新密码" size="large" />
              </div>
              
@@ -510,13 +510,13 @@ onMounted(() => {
                <el-icon size="24"><Server24Regular /></el-icon>
             </div>
             <div>
-               <h3 class="text-lg font-bold text-gray-800 dark:text-gray-100">系统信息</h3>
-               <p class="text-xs text-gray-500">运行环境</p>
+               <h3 class="text-lg font-bold text-[var(--ui-text)]">系统信息</h3>
+               <p class="text-xs text-[var(--ui-text-muted)]">运行环境</p>
             </div>
          </div>
 
          <div class="space-y-4 text-sm relative z-10">
-            <div class="p-3 bg-gray-50 dark:bg-white/5 rounded-lg">
+            <div class="p-3 bg-[var(--ui-surface-muted)] rounded-lg">
               <FieldRow label="版本" :value="systemInfo.version" monospace>
                 <div class="flex items-center justify-end gap-3">
                   <el-button size="small" type="primary" class="!border-0" :loading="checkingUpdate" @click.stop="doCheckUpdate">
@@ -538,17 +538,17 @@ onMounted(() => {
                  {{ updateInfo.is_docker ? '查看 Docker 更新方法' : '查看更新方法' }}
                </el-button>
             </div>
-            <div class="p-3 bg-gray-50 dark:bg-white/5 rounded-lg">
+            <div class="p-3 bg-[var(--ui-surface-muted)] rounded-lg">
               <FieldRow
                 label="构建时间"
                 :value="formatDeviceDateTime(systemInfo.build_time, { fallback: systemInfo.build_time })"
                 monospace
               />
             </div>
-            <div class="p-3 bg-gray-50 dark:bg-white/5 rounded-lg">
+            <div class="p-3 bg-[var(--ui-surface-muted)] rounded-lg">
               <FieldRow label="配置路径" :value="systemInfo.config" monospace copyable />
             </div>
-            <div class="p-3 bg-gray-50 dark:bg-white/5 rounded-lg">
+            <div class="p-3 bg-[var(--ui-surface-muted)] rounded-lg">
               <FieldRow label="项目主页" value="https://github.com/yibaiba/hideck" monospace copyable />
             </div>
             <div class="ui-panel-muted px-4 py-4">
@@ -559,8 +559,8 @@ onMounted(() => {
                       <el-icon size="18"><DocumentText24Regular /></el-icon>
                     </div>
                     <div>
-                      <div class="text-sm font-bold text-gray-800 dark:text-gray-100">API 文档</div>
-                      <div class="text-xs text-gray-500">打开后端直出的 OpenAPI 页面</div>
+                      <div class="text-sm font-bold text-[var(--ui-text)]">API 文档</div>
+                      <div class="text-xs text-[var(--ui-text-muted)]">打开后端直出的 OpenAPI 页面</div>
                     </div>
                   </div>
 
@@ -576,20 +576,20 @@ onMounted(() => {
                 </el-button>
               </div>
             </div>
-            <div class="border-t border-gray-100 dark:border-white/10 pt-4 flex items-center justify-between gap-4">
+            <div class="border-t border-[var(--ui-border)] pt-4 flex items-center justify-between gap-4">
               <div class="min-w-0">
-                <div class="text-sm font-bold text-gray-800 dark:text-gray-100">经典主题</div>
-                <div class="text-xs text-gray-500">旧版深色外观。顶栏太阳按钮只切换海军浅色 / 夜间</div>
+                <div class="text-sm font-bold text-[var(--ui-text)]">经典主题</div>
+                <div class="text-xs text-[var(--ui-text-muted)]">旧版深色外观。顶栏太阳按钮只切换海军浅色 / 夜间</div>
               </div>
               <el-switch
                 :model-value="isClassic"
                 @change="applyClassicTheme"
               />
             </div>
-            <div class="border-t border-gray-100 dark:border-white/10 pt-4 flex items-center justify-between gap-4">
+            <div class="border-t border-[var(--ui-border)] pt-4 flex items-center justify-between gap-4">
               <div class="min-w-0">
-                <div class="text-sm font-bold text-gray-800 dark:text-gray-100">OpenWrt 动态接口映射</div>
-                <div class="text-xs text-gray-500">netifd</div>
+                <div class="text-sm font-bold text-[var(--ui-text)]">OpenWrt 动态接口映射</div>
+                <div class="text-xs text-[var(--ui-text-muted)]">netifd</div>
               </div>
               <el-switch
                 v-model="openWRTDynamicInterfaces"
@@ -608,8 +608,8 @@ onMounted(() => {
                   <el-icon size="24"><Alert24Regular /></el-icon>
                </div>
                <div>
-                  <h3 class="text-lg font-bold text-gray-800 dark:text-gray-100">通知</h3>
-                  <p class="text-xs text-gray-500">个人微信 / 企业微信 / QQ / Webhook / 更多</p>
+                  <h3 class="text-lg font-bold text-[var(--ui-text)]">通知</h3>
+                  <p class="text-xs text-[var(--ui-text-muted)]">个人微信 / 企业微信 / QQ / Webhook / 更多</p>
                </div>
             </div>
             <el-button type="primary" :loading="savingNotifications" :disabled="loadingNotifications" @click="saveNotifications" class="!border-0">
@@ -618,7 +618,7 @@ onMounted(() => {
             </el-button>
          </div>
 
-         <div v-if="loadingNotifications" class="p-6 text-sm text-gray-500 dark:text-gray-400">正在加载通知配置…</div>
+         <div v-if="loadingNotifications" class="p-6 text-sm text-[var(--ui-text-muted)]">正在加载通知配置…</div>
 
          <div v-else class="w-full overflow-hidden">
             <el-tabs v-model="activeNotifyTab" class="settings-notify-tabs">
@@ -655,7 +655,7 @@ onMounted(() => {
               <el-tab-pane label="Bark" name="bark" class="pt-2">
                 <div class="flex items-center justify-between mb-4">
                   <div class="flex items-center gap-2">
-                    <div class="font-bold text-gray-800 dark:text-gray-100">启用 Bark 推送</div>
+                    <div class="font-bold text-[var(--ui-text)]">启用 Bark 推送</div>
                   </div>
                   <div class="flex items-center gap-2">
                     <el-button
@@ -675,14 +675,14 @@ onMounted(() => {
                 <div class="space-y-4">
                   <div class="space-y-2">
                     <div class="flex items-center justify-between">
-                      <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">目标 URLs</label>
+                      <label class="text-xs font-bold text-[var(--ui-text-muted)] uppercase tracking-wider">目标 URLs</label>
                       <el-button size="small" type="primary" plain @click="addBarkUrl" :disabled="!barkSettings.enabled">
                          <el-icon><Add20Regular /></el-icon>
                          <span class="ml-1">添加 URL</span>
                       </el-button>
                     </div>
                     
-                    <div v-if="barkSettings.urls && barkSettings.urls.length === 0" class="text-xs text-gray-400 py-2 border border-dashed border-gray-200 dark:border-white/10 rounded-lg text-center bg-gray-50/30 dark:bg-white/5">
+                    <div v-if="barkSettings.urls && barkSettings.urls.length === 0" class="text-xs text-[var(--ui-text-muted)] py-2 border border-dashed border-[var(--ui-border)] rounded-lg text-center bg-[var(--ui-surface-muted)]">
                       尚未配置任何 Bark URL，点击右侧添加按钮。
                     </div>
 
@@ -695,23 +695,23 @@ onMounted(() => {
                   </div>
 
                   <div class="space-y-1">
-                    <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">分组 (Group)</label>
+                    <label class="text-xs font-bold text-[var(--ui-text-muted)] uppercase tracking-wider">分组 (Group)</label>
                     <el-input v-model="barkSettings.group" :disabled="!barkSettings.enabled" placeholder="例如 hideck" />
-                    <div class="text-[10px] text-gray-400 mt-1">iOS 设备上的通知分组。</div>
+                    <div class="text-[10px] text-[var(--ui-text-muted)] mt-1">iOS 设备上的通知分组。</div>
                   </div>
 
                   <div class="space-y-1">
-                    <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">通知级别 (Level)</label>
+                    <label class="text-xs font-bold text-[var(--ui-text-muted)] uppercase tracking-wider">通知级别 (Level)</label>
                     <el-select v-model="barkSettings.level" :disabled="!barkSettings.enabled" placeholder="选择通知级别" class="w-full">
                       <el-option label="时效性 (timeSensitive)" value="timeSensitive" />
                       <el-option label="积极 (active)" value="active" />
                       <el-option label="被动 (passive)" value="passive" />
                     </el-select>
-                    <div class="text-[10px] text-gray-400 mt-1">iOS 的专注模式/打扰规则会根据此级别决定是否亮屏。</div>
+                    <div class="text-[10px] text-[var(--ui-text-muted)] mt-1">iOS 的专注模式/打扰规则会根据此级别决定是否亮屏。</div>
                   </div>
 
                   <div class="space-y-1">
-                    <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">图标 (Icon)</label>
+                    <label class="text-xs font-bold text-[var(--ui-text-muted)] uppercase tracking-wider">图标 (Icon)</label>
                     <el-input v-model="barkSettings.icon" :disabled="!barkSettings.enabled" placeholder="图标 URL，可选" />
                   </div>
                 </div>
@@ -721,7 +721,7 @@ onMounted(() => {
               <el-tab-pane label="Email" name="email" class="pt-2">
                 <div class="flex items-center justify-between mb-4">
                   <div class="flex items-center gap-2">
-                    <div class="font-bold text-gray-800 dark:text-gray-100">启用 Email 推送</div>
+                    <div class="font-bold text-[var(--ui-text)]">启用 Email 推送</div>
                   </div>
                   <div class="flex items-center gap-2">
                     <el-button
@@ -741,15 +741,15 @@ onMounted(() => {
                 <div class="space-y-4">
                   <div class="grid grid-cols-1 sm:grid-cols-10 gap-4">
                     <div class="space-y-1 sm:col-span-5">
-                      <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">SMTP 主机</label>
+                      <label class="text-xs font-bold text-[var(--ui-text-muted)] uppercase tracking-wider">SMTP 主机</label>
                       <el-input v-model="emailForm.smtp_host" :disabled="!emailForm.enabled" placeholder="smtp.example.com" />
                     </div>
                     <div class="space-y-1 sm:col-span-3">
-                      <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">SMTP 端口</label>
+                      <label class="text-xs font-bold text-[var(--ui-text-muted)] uppercase tracking-wider">SMTP 端口</label>
                       <el-input v-model="emailForm.smtp_port" :disabled="!emailForm.enabled" type="number" inputmode="numeric" placeholder="465 / 587" />
                     </div>
                     <div class="space-y-1 sm:col-span-2">
-                      <label class="text-xs font-bold text-gray-500 uppercase tracking-wider block">使用 SSL/TLS </label>
+                      <label class="text-xs font-bold text-[var(--ui-text-muted)] uppercase tracking-wider block">使用 SSL/TLS </label>
                       <div class="h-10 flex items-center">
                         <el-switch v-model="emailForm.use_ssl" :disabled="!emailForm.enabled" />
                       </div>
@@ -757,20 +757,20 @@ onMounted(() => {
                   </div>
                   <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div class="space-y-1">
-                      <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">用户名 (Username)</label>
+                      <label class="text-xs font-bold text-[var(--ui-text-muted)] uppercase tracking-wider">用户名 (Username)</label>
                       <el-input v-model="emailForm.username" :disabled="!emailForm.enabled" placeholder="邮箱账号" />
                     </div>
                     <div class="space-y-1">
-                      <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">密码 (Password)</label>
+                      <label class="text-xs font-bold text-[var(--ui-text-muted)] uppercase tracking-wider">密码 (Password)</label>
                       <el-input v-model="emailForm.password" :disabled="!emailForm.enabled" type="password" show-password placeholder="邮箱密码或授权码" />
                     </div>
                   </div>
                   <div class="space-y-1">
-                    <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">发件人地址 (From)</label>
+                    <label class="text-xs font-bold text-[var(--ui-text-muted)] uppercase tracking-wider">发件人地址 (From)</label>
                     <el-input v-model="emailForm.from_address" :disabled="!emailForm.enabled" placeholder="例如 noreply@example.com" />
                   </div>
                   <div class="space-y-1">
-                    <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">收件人地址 (To)</label>
+                    <label class="text-xs font-bold text-[var(--ui-text-muted)] uppercase tracking-wider">收件人地址 (To)</label>
                     <el-input v-model="emailForm.to_addresses" :disabled="!emailForm.enabled" placeholder="多个收件人请用英文逗号分隔" />
                   </div>
                 </div>
@@ -780,22 +780,22 @@ onMounted(() => {
               <el-tab-pane label="Pushplus" name="pushplus" class="pt-2">
                 <div class="flex items-center justify-between mb-4">
                   <div class="flex items-center gap-2">
-                    <div class="font-bold text-gray-800 dark:text-gray-100">启用 Pushplus 推送</div>
+                    <div class="font-bold text-[var(--ui-text)]">启用 Pushplus 推送</div>
                   </div>
                   <el-switch v-model="pushplusForm.enabled" />
                 </div>
 
                 <div class="space-y-4">
                   <div class="space-y-1">
-                    <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">Token</label>
+                    <label class="text-xs font-bold text-[var(--ui-text-muted)] uppercase tracking-wider">Token</label>
                     <el-input v-model="pushplusForm.token" :disabled="!pushplusForm.enabled" placeholder="Pushplus 用户的 Token" />
                   </div>
                   <div class="space-y-1">
-                    <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">群组编码 (Topic)</label>
+                    <label class="text-xs font-bold text-[var(--ui-text-muted)] uppercase tracking-wider">群组编码 (Topic)</label>
                     <el-input v-model="pushplusForm.topic" :disabled="!pushplusForm.enabled" placeholder="群组编码，不填则发给个人" />
                   </div>
                   <div class="space-y-1">
-                    <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">渠道 (Channel)</label>
+                    <label class="text-xs font-bold text-[var(--ui-text-muted)] uppercase tracking-wider">渠道 (Channel)</label>
                     <el-select v-model="pushplusForm.channel" :disabled="!pushplusForm.enabled" placeholder="选择渠道" class="w-full">
                       <el-option label="微信 (wechat)" value="wechat" />
                       <el-option label="Webhook (webhook)" value="webhook" />
@@ -810,7 +810,7 @@ onMounted(() => {
               <el-tab-pane label="Webhook" name="webhook" class="pt-2">
                 <div class="flex items-center justify-between mb-4">
                   <div class="flex items-center gap-2">
-                    <div class="font-bold text-gray-800 dark:text-gray-100">启用 Webhook 推送</div>
+                    <div class="font-bold text-[var(--ui-text)]">启用 Webhook 推送</div>
                   </div>
                   <div class="flex items-center gap-2">
                     <el-button
@@ -830,14 +830,14 @@ onMounted(() => {
                 <div class="space-y-4">
                   <div class="space-y-2">
                     <div class="flex items-center justify-between">
-                      <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">目标 URLs</label>
+                      <label class="text-xs font-bold text-[var(--ui-text-muted)] uppercase tracking-wider">目标 URLs</label>
                       <el-button size="small" type="primary" plain @click="addWebhookUrl" :disabled="!webhookSettings.enabled">
                          <el-icon><Add20Regular /></el-icon>
                          <span class="ml-1">添加 URL</span>
                       </el-button>
                     </div>
                     
-                    <div v-if="webhookSettings.urls && webhookSettings.urls.length === 0" class="text-xs text-gray-400 py-2 border border-dashed border-gray-200 dark:border-white/10 rounded-lg text-center bg-gray-50/30 dark:bg-white/5">
+                    <div v-if="webhookSettings.urls && webhookSettings.urls.length === 0" class="text-xs text-[var(--ui-text-muted)] py-2 border border-dashed border-[var(--ui-border)] rounded-lg text-center bg-[var(--ui-surface-muted)]">
                       尚未配置任何 Webhook URL，点击右侧添加按钮。
                     </div>
 
@@ -852,21 +852,21 @@ onMounted(() => {
                   </div>
 
                   <div class="space-y-1">
-                    <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">数字签名密钥 (Secret)</label>
+                    <label class="text-xs font-bold text-[var(--ui-text-muted)] uppercase tracking-wider">数字签名密钥 (Secret)</label>
                     <el-input v-model="webhookSettings.secret" :disabled="!webhookSettings.enabled" placeholder="用于 HMAC-SHA256 签名，选填" />
-                    <div class="text-[10px] text-gray-400 mt-1">若配置，将通过请求头 X-HiDeck-Signature 提供 payload 验证。</div>
+                    <div class="text-[10px] text-[var(--ui-text-muted)] mt-1">若配置，将通过请求头 X-HiDeck-Signature 提供 payload 验证。</div>
                   </div>
 
                   <div class="space-y-2">
                     <div class="flex items-center justify-between">
-                      <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">自定义请求头 (Headers)</label>
+                      <label class="text-xs font-bold text-[var(--ui-text-muted)] uppercase tracking-wider">自定义请求头 (Headers)</label>
                       <el-button size="small" type="primary" plain @click="addWebhookHeader" :disabled="!webhookSettings.enabled">
                         <el-icon><Add20Regular /></el-icon>
                         <span class="ml-1">添加 Header</span>
                       </el-button>
                     </div>
 
-                    <div v-if="webhookHeaderRows.length === 0" class="text-xs text-gray-400 py-2 border border-dashed border-gray-200 dark:border-white/10 rounded-lg text-center bg-gray-50/30 dark:bg-white/5">
+                    <div v-if="webhookHeaderRows.length === 0" class="text-xs text-[var(--ui-text-muted)] py-2 border border-dashed border-[var(--ui-border)] rounded-lg text-center bg-[var(--ui-surface-muted)]">
                       尚未配置自定义请求头，例如 Authorization、X-Api-Key 等。
                     </div>
 
@@ -887,13 +887,13 @@ onMounted(() => {
                         <el-icon><Delete20Regular /></el-icon>
                       </el-button>
                     </div>
-                    <div class="text-[10px] text-gray-400 mt-1">
+                    <div class="text-[10px] text-[var(--ui-text-muted)] mt-1">
                       Content-Type 与 X-HiDeck-Signature 为系统保留头，自定义同名头会被忽略。
                     </div>
                   </div>
 
                   <div class="space-y-1">
-                    <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">文本模板 (Text Template)</label>
+                    <label class="text-xs font-bold text-[var(--ui-text-muted)] uppercase tracking-wider">文本模板 (Text Template)</label>
                     <el-input
                       v-model="webhookSettings.text_template"
                       :disabled="!webhookSettings.enabled"
@@ -901,18 +901,18 @@ onMounted(() => {
                       :rows="2"
                       placeholder="{{device_label}} {{text}}"
                     />
-                    <div class="text-[10px] text-gray-400 mt-1">
+                    <div class="text-[10px] text-[var(--ui-text-muted)] mt-1">
                       支持占位符：<code v-pre>{{text}}</code>、<code v-pre>{{event}}</code>、<code v-pre>{{timestamp}}</code>、<code v-pre>{{device_id}}</code>、<code v-pre>{{device_name}}</code>、<code v-pre>{{device_label}}</code>。留空则直接发送原始 text。
                     </div>
                   </div>
                   
                   <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div class="space-y-1">
-                      <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">请求超时 (ms)</label>
+                      <label class="text-xs font-bold text-[var(--ui-text-muted)] uppercase tracking-wider">请求超时 (ms)</label>
                       <el-input-number v-model="webhookSettings.timeout_ms" :min="1000" :max="60000" :disabled="!webhookSettings.enabled" class="w-full !w-full" controls-position="right" />
                     </div>
                     <div class="space-y-1">
-                      <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">最大重试次数</label>
+                      <label class="text-xs font-bold text-[var(--ui-text-muted)] uppercase tracking-wider">最大重试次数</label>
                       <el-input-number v-model="webhookSettings.retry_max" :min="0" :max="10" :disabled="!webhookSettings.enabled" class="w-full !w-full" controls-position="right" />
                     </div>
                   </div>
@@ -922,7 +922,7 @@ onMounted(() => {
               <!-- 企业微信消息推送 -->
               <el-tab-pane label="企微 Webhook" name="wecom" class="pt-2">
                 <div class="flex items-center justify-between gap-3 mb-4">
-                  <div class="font-bold text-gray-800 dark:text-gray-100">启用企业微信消息推送</div>
+                  <div class="font-bold text-[var(--ui-text)]">启用企业微信消息推送</div>
                   <div class="flex items-center gap-2">
                     <el-button
                       size="small"
@@ -941,7 +941,7 @@ onMounted(() => {
                 <div class="space-y-4">
                   <div class="space-y-2">
                     <div class="flex items-center justify-between gap-3">
-                      <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">Webhook URLs</label>
+                      <label class="text-xs font-bold text-[var(--ui-text-muted)] uppercase tracking-wider">Webhook URLs</label>
                       <el-button
                         size="small"
                         type="primary"
@@ -953,7 +953,7 @@ onMounted(() => {
                         <span class="ml-1">添加 URL</span>
                       </el-button>
                     </div>
-                    <div v-if="weComSettings.urls.length === 0" class="text-xs text-gray-400 py-2 border border-dashed border-gray-200 dark:border-white/10 rounded-lg text-center bg-gray-50/30 dark:bg-white/5">
+                    <div v-if="weComSettings.urls.length === 0" class="text-xs text-[var(--ui-text-muted)] py-2 border border-dashed border-[var(--ui-border)] rounded-lg text-center bg-[var(--ui-surface-muted)]">
                       尚未配置企业微信 Webhook URL
                     </div>
                     <div v-for="(_, index) in weComSettings.urls" :key="index" class="flex items-center gap-2">
@@ -972,7 +972,7 @@ onMounted(() => {
                   </div>
 
                   <div class="space-y-1">
-                    <label class="text-xs font-bold text-gray-500 uppercase tracking-wider">JSON 请求体模板</label>
+                    <label class="text-xs font-bold text-[var(--ui-text-muted)] uppercase tracking-wider">JSON 请求体模板</label>
                     <el-input
                       v-model="weComSettings.payload_template"
                       :disabled="!weComSettings.enabled"
@@ -980,7 +980,7 @@ onMounted(() => {
                       :rows="12"
                       class="wecom-template-input"
                     />
-                    <div class="text-[10px] text-gray-400 mt-1">
+                    <div class="text-[10px] text-[var(--ui-text-muted)] mt-1">
                       变量需直接作为 JSON 值使用。支持 <code v-pre>{{event}}</code>、<code v-pre>{{title}}</code>、<code v-pre>{{message}}</code>、<code v-pre>{{timestamp}}</code>、<code v-pre>{{content}}</code>、<code v-pre>{{number}}</code>、<code v-pre>{{device_id}}</code>、<code v-pre>{{device_name}}</code>、<code v-pre>{{device_label}}</code>、<code v-pre>{{time}}</code>。
                     </div>
                   </div>

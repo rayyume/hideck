@@ -810,7 +810,7 @@ async function confirmDeleteThread(thread: SmsThread) {
             :autosize="{ minRows: 4, maxRows: 10 }"
             resize="none"
           />
-          <div class="mt-2 text-xs flex justify-end text-gray-400">
+          <div class="mt-2 text-xs flex justify-end text-[var(--ui-text-muted)]">
             {{ sendEstimate.encoding }} · 预计 {{ sendEstimate.parts }} 段 · {{ Array.from(String(sendForm.message || '')).length }} 字
           </div>
         </el-form-item>

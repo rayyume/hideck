@@ -387,7 +387,7 @@ const chartOption = computed(() => {
           </div>`
         })
         if (otherItems.length > 0) {
-          res += `<div class="flex justify-between gap-4 text-xs text-gray-500">
+          res += `<div class="flex justify-between gap-4 text-xs text-[var(--ui-text-muted)]">
             <span>其他（${otherItems.length}）</span>
             <span class="font-mono">${otherSum.toFixed(unit.decimals)} ${unit.label}</span>
           </div>`
@@ -524,7 +524,7 @@ function handleRangeChange(value: string | number | boolean | undefined) {
       </div>
     </div>
 
-    <div v-if="disabled" class="ui-panel-muted p-6 text-sm text-gray-400 dark:text-gray-500">
+    <div v-if="disabled" class="ui-panel-muted p-6 text-sm text-[var(--ui-text-muted)]">
       网络已禁用，暂无流量分析
     </div>
 
@@ -570,13 +570,13 @@ function handleRangeChange(value: string | number | boolean | undefined) {
       />
       <div
         v-else-if="chartOption && chartLoading"
-        class="traffic-chart-placeholder ui-panel-muted border border-dashed border-gray-200 dark:border-white/10"
+        class="traffic-chart-placeholder ui-panel-muted border border-dashed border-[var(--ui-border)]"
       >
         流量图表加载中...
       </div>
       <div
         v-else
-        class="traffic-chart-placeholder ui-panel-muted border border-dashed border-gray-200 dark:border-white/10"
+        class="traffic-chart-placeholder ui-panel-muted border border-dashed border-[var(--ui-border)]"
       >
         暂无流量图表数据
       </div>

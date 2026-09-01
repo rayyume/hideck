@@ -223,7 +223,7 @@ const airplaneHint = computed(() => {
           </span>
           <div class="flex items-center gap-2">
             <span v-if="airplaneFailed" class="text-xs text-orange-500 dark:text-orange-400">未生效</span>
-            <el-icon v-if="airplanePending" class="animate-spin text-gray-400"><Loading /></el-icon>
+            <el-icon v-if="airplanePending" class="animate-spin text-[var(--ui-text-muted)]"><Loading /></el-icon>
             <el-switch
               :model-value="radioMode === 'airplane'"
               :disabled="!canToggle || airplanePending || wifiCallingLocksRadio || rfLocked"
@@ -239,7 +239,7 @@ const airplaneHint = computed(() => {
           <span><strong>网络</strong><small>只开数据流量。飞行开启或 WiFi calling 占用射频时不可用</small></span>
             <div class="flex items-center gap-2">
               <span v-if="networkFailed" class="text-xs text-orange-500 dark:text-orange-400">未生效</span>
-              <el-icon v-if="networkPending" class="animate-spin text-gray-400"><Loading /></el-icon>
+              <el-icon v-if="networkPending" class="animate-spin text-[var(--ui-text-muted)]"><Loading /></el-icon>
               <el-switch
                 v-model="local.network_enabled"
                 :disabled="!canToggle || radioMode === 'airplane' || networkPending || wifiCallingLocksRadio || rfLocked"
@@ -278,7 +278,7 @@ const airplaneHint = computed(() => {
           </span>
             <div class="flex items-center gap-2">
               <span v-if="vowifiFailed" class="text-xs text-orange-500 dark:text-orange-400">未生效</span>
-              <el-icon v-if="vowifiPending" class="animate-spin text-gray-400"><Loading /></el-icon>
+              <el-icon v-if="vowifiPending" class="animate-spin text-[var(--ui-text-muted)]"><Loading /></el-icon>
               <el-switch
                 v-model="local.vowifi_enabled"
                 :disabled="!canToggle || vowifiPending"

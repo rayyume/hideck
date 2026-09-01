@@ -39,7 +39,7 @@ async function copy() {
 
 <template>
   <div class="flex w-full min-w-0 items-center justify-between gap-3 overflow-hidden">
-    <span class="text-gray-500 shrink-0 whitespace-nowrap">{{ label }}</span>
+    <span class="text-[var(--ui-text-muted)] shrink-0 whitespace-nowrap">{{ label }}</span>
     <span
       class="block min-w-0 max-w-full flex-1 text-right"
       :class="[

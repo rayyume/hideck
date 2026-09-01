@@ -135,11 +135,11 @@ const secondaryStatus = (d: DeviceMgmtListItem) => {
           >
             <div class="device-list-button-main">
               <div class="min-w-0">
-                <div class="font-bold text-gray-800 dark:text-gray-100 truncate">{{ d.name || d.id }}</div>
-                <div class="text-xs text-gray-500 mt-0.5 truncate">
+                <div class="font-bold text-[var(--ui-text)] truncate">{{ d.name || d.id }}</div>
+                <div class="text-xs text-[var(--ui-text-muted)] mt-0.5 truncate">
                   {{ d.id }} · {{ d?.interface || '--' }}
                 </div>
-                <div class="text-xs text-gray-400 mt-1 truncate">
+                <div class="text-xs text-[var(--ui-text-muted)] mt-1 truncate">
                   {{ secondaryStatus(d) }}
                 </div>
               </div>
