@@ -32,9 +32,82 @@
 - 不是旧的 Vodafone-hosted Lebara（234/15 + GID 90）。234/15 仍走 `vodafone_uk_23415`。
 - 自有 MNC `87`，宿主网仍是 Vodafone UK。预设 `lebara_uk_23487`：标准 ePDG `epdg.epc.mnc087.mcc234.pub.3gppnetwork.org`，`device_model=rmx3366`，IKE/ESP 先用英国已通提案加宽列表，REGISTER 带 `smsip`。
 - 双 IMSI：一驻国内 460 常会切到 `20404`。切过去之后不要当荷兰沃达丰去连；英国 WFC 不可用。分享卡运行时锁射频、拒绝开网络/关飞行/蜂窝模式，避免踩这条路。
+- `20404` 不是 Profile 损坏。同一 ICCID 做一次 Disable→Enable（或经停车 Profile 中转）可以把活动身份拉回 `23487`，不必删卡重写。VoHive 在活 IMSI 变成 `20404` 时自动清污，连续 3 次读到 `23487` 后再开 VoWiFi。射频锁不变。模组重启本身清不掉。
 - `20404` 且没有 Lebara 证据时，仍是 `vodafone_nl_20404`。
 - 国家代理按活 IMSI 的 MCC：`23487` 走 GB。人在国内必须走英国代理。
 - 真卡验收前：IKE/ESP 仍可能要按日志改。余额查询未做自动短码（走 Lebara App）。
+
+## 德国 O2（262/03、262/07）
+
+- 预设已有：`O2_de_26203`、`O2_de_26207_alias`。ePDG 用 3GPP 名 `epdg.epc.mnc003.mcc262.pub.3gppnetwork.org` / `mnc007`。
+- IKE 先出 `aes256-sha256-prfsha1-modp2048`（iPhone 侧已通过的提案），设备身份 `iphone15,4`。
+- 国家代理按 MCC `262` 走 **DE**。人在国内要配德国前置，和 GB 同一套规则表。
+- 余额查询码按套餐不同（`*105#` / `*101#`），命令中心标成不支持自动查。
+
+## 荷兰 Vodafone（204/04）
+
+- 预设已有：`vodafone_nl_20404`。ePDG `epdg.epc.mnc004.mcc204.pub.3gppnetwork.org`。
+- **不要**把 Lebara UK 切到 `20404` 的分享卡当成这家。光秃 204/04 且没有 Lebara 证据时才走这条。
+- 国家代理按 MCC `204` 走 **NL**。
+- 余额短码：`STATUS` → `4000`。
+
+## 菲律宾 DITO（515/66）
+
+- 新增预设 `dito_51566`。标准 ePDG `epdg.epc.mnc066.mcc515.pub.3gppnetwork.org`，`device_model=rmx3366`，IKE/ESP 用宽列表，REGISTER 带 `smsip`，403/500 允许 fallback。
+- DITO 公开页只保证 VoLTE；VoWiFi 按机型开通，白名单不公开。真卡 IKE/REGISTER 仍可能要按日志改提案或 `device_model`。
+- 国家代理按 MCC `515` 走 **PH**。人在国内需配菲律宾前置。
+- 余额走 DITO App / `*143#` 菜单，没有可审计的统一免费短信码。
+
+## 市面常见 eSIM（按 home PLMN，不是品牌名）
+
+Airalo / Holafly / Nomad 一类旅行流量卡通常没有 IMS 开户。即使宿主 IMSI 落在下面这些 PLMN，REGISTER 仍会被拒。下面加的是带号码、官方写过 WiFi calling 的宿主网。匹配键是 SIM 的 home MCC+MNC，不是包装上的品牌。
+
+IKE/ESP 先用宽列表，`device_model=rmx3366`，REGISTER 带 `smsip`，403/500 允许 fallback。真卡验收前仍可能要按日志改提案或设备身份。
+
+| 运营商 | PLMN | 预设 | 国家前置 |
+| --- | --- | --- | --- |
+| 1GLOBAL / 原 Truphone | 234/25 | `oneglobal_23425` | GB |
+| Lycamobile UK | 234/26 | `lycamobile_uk_23426` | GB |
+| EE UK | 234/30、234/31、234/32 | `ee_uk_23430` / `23431` / `23432` | GB |
+| Orange France | 208/01 | `orange_fr_20801` | FR |
+| Telekom Germany | 262/01 | `telekom_de_26201` | DE |
+| Vodafone Germany | 262/02 | `vodafone_de_26202` | DE |
+| 中国移动香港 CMHK | 454/12、454/13 | `cmhk_45412` / `cmhk_45413` | HK |
+| 乌龟卡 / TravelSIM / Elisa | 248/02 | `elisa_ee_24802` | EE |
+
+- EE 的 234/33 仍是 `CTEUK_23433`，不要当成 EE 官方卡。
+- Lycamobile UK 是 234/26。美国 Lyca 走 AT&T 的 `310/410`，两套不要混。
+- 1GLOBAL 若 DNS 不到标准 3GPP ePDG，再按 IKE 日志改自定义主机名。
+- 人在国内必须配对应国家前置：GB / FR / DE / HK / JP / EE。UI 里还没有该国规则时，WFC 连不上 ePDG。
+- 余额查询资料不足，命令中心标成不支持自动查。
+
+香港 MCC `454` 的 PANI 国家码现在是 **HK**（以前掉进默认 `XX`）。CSL / 3HK / CMHK 都会用到。
+
+## 日本（440）官方 Wi-Fi通話
+
+三大运营商官方套餐和线上品牌 eSIM 有 3GPP Wi-Fi通話。匹配仍按 home PLMN。IIJmio / mineo 一类 MVNO、以及日本旅行流量卡，通常没有 IMS 开户。
+
+| 运营商 | PLMN | 预设 | 常见 eSIM |
+| --- | --- | --- | --- |
+| NTT Docomo | 440/10 | `docomo_44010` | ドコモ官方 eSIM |
+| SoftBank / LINEMO | 440/20 | `softbank_44020` | SoftBank、LINEMO |
+| Y!mobile | 440/00 | `ymobile_44000` | 旧 eAccess IMSI；新卡常见 440/20 |
+| KDDI au / povo / UQ | 440/51 | `kddi_44051` | au、povo、UQ VoLTE 卡 |
+
+- 没加 440/50（非 VoLTE）、440/52（IoT）、440/53（乐天漫游 KDDI）、Starlink / JPN-ROAM 号段。
+- **乐天 440/11 不加**。语音走 Rakuten Link，不是 ePDG VoWiFi。
+- 国家代理按 MCC `440`/`441` 走 **JP**。人在国内需配日本前置。
+- ePDG 先用标准 3GPP 名。Y!mobile `440/00` 若 DNS 不到，再按日志看要不要改 SoftBank `mnc020`。
+- 余额走各家 App，命令中心标成不支持自动查。
+
+## 乌龟卡 / 爱沙尼亚 Elisa（248/02）
+
+市面「乌龟卡」是 esim.gg / Nekoko Telecom，TravelSIM 的代理，+372 号码，宿主网是 **Elisa Eesti 248/02**，不是英国卡，也不是中国移动。
+
+- 新增预设 `elisa_ee_24802`。标准 ePDG `epdg.epc.mnc002.mcc248.pub.3gppnetwork.org`，`device_model=rmx3366`，IKE/ESP 用宽列表，REGISTER 带 `smsip`，403/500 允许 fallback。
+- Elisa 官方页写明商务套餐有 VoWiFi。TravelSIM/乌龟卡是 MVNO，IMS 开户不保证；没开户时 IKE/REGISTER 会被拒。
+- 国家代理按 MCC `248` 走 **EE**。人在国内需配爱沙尼亚前置。
+- 248/02 也是 Elisa 官方卡。余额短码不能自动选：乌龟卡/TravelSIM 文档有 `*146*099#`，Elisa 官方走账户页。
 
 ## 英国侧已有预设
 
@@ -43,5 +116,8 @@
 | giffgaff | 234/10 | `giffgaff_23410` |
 | Vodafone UK / VOXI | 234/15 | `vodafone_uk_23415` |
 | Three UK | 234/20 | `three_uk_234020` |
+| 1GLOBAL / Truphone | 234/25 | `oneglobal_23425` |
+| Lycamobile UK | 234/26 | `lycamobile_uk_23426` |
+| EE UK | 234/30、31、32 | `ee_uk_23430` 及别名 |
 | CTExcel | 234/33 | `CTEUK_23433` |
 | Lebara UK NextGen | 234/87 | `lebara_uk_23487` |

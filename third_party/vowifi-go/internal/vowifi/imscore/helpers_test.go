@@ -40,6 +40,27 @@ func TestCountryISO2FromMCC(t *testing.T) {
 	if got := CountryISO2FromMCC("460"); got != "CN" {
 		t.Errorf("460 -> %q, want CN", got)
 	}
+	if got := CountryISO2FromMCC("262"); got != "DE" {
+		t.Errorf("262 -> %q, want DE", got)
+	}
+	if got := CountryISO2FromMCC("204"); got != "NL" {
+		t.Errorf("204 -> %q, want NL", got)
+	}
+	if got := CountryISO2FromMCC("515"); got != "PH" {
+		t.Errorf("515 -> %q, want PH", got)
+	}
+	if got := CountryISO2FromMCC("208"); got != "FR" {
+		t.Errorf("208 -> %q, want FR", got)
+	}
+	if got := CountryISO2FromMCC("454"); got != "HK" {
+		t.Errorf("454 -> %q, want HK", got)
+	}
+	if got := CountryISO2FromMCC("440"); got != "JP" {
+		t.Errorf("440 -> %q, want JP", got)
+	}
+	if got := CountryISO2FromMCC("248"); got != "EE" {
+		t.Errorf("248 -> %q, want EE", got)
+	}
 }
 
 func TestIsFatalNetworkError(t *testing.T) {

@@ -170,6 +170,8 @@ func CountryISO2FromMCC(mcc string) string {
 		return "DE"
 	case "234", "235":
 		return "GB"
+	case "248":
+		return "EE"
 	case "222":
 		return "IT"
 	case "214":
@@ -200,6 +202,8 @@ func CountryISO2FromMCC(mcc string) string {
 		return "ID"
 	case "515":
 		return "PH"
+	case "454":
+		return "HK"
 	case "455":
 		return "MO"
 	case "466":

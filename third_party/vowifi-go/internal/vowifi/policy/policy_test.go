@@ -158,6 +158,68 @@ func TestResolveEmbeddedCarrierPresets(t *testing.T) {
 	if vodafoneNL := ResolveEffectiveCarrierConfig("204", "04"); vodafoneNL.PresetID != "vodafone_nl_20404" {
 		t.Fatalf("vodafone nl stolen by lebara: %+v", vodafoneNL)
 	}
+	if o2 := ResolveEffectiveCarrierConfig("262", "03"); o2.PresetID != "O2_de_26203" ||
+		o2.EPDGAddr != "epdg.epc.mnc003.mcc262.pub.3gppnetwork.org" {
+		t.Fatalf("o2 de = %+v", o2)
+	}
+	if o2alias := ResolveEffectiveCarrierConfig("262", "07"); o2alias.PresetID != "O2_de_26207_alias" {
+		t.Fatalf("o2 de alias = %+v", o2alias)
+	}
+	dito := ResolveEffectiveCarrierConfig("515", "66")
+	if dito.PresetID != "dito_51566" || dito.DeviceModel != "rmx3366" ||
+		dito.EPDGAddr != "epdg.epc.mnc066.mcc515.pub.3gppnetwork.org" ||
+		dito.EmergencyEPDGAddr != DefaultCarrierEmergencyEPDGAddr("515", "66") ||
+		dito.EPDGAddrSource != "standard" ||
+		dito.IMSRegisterTemplate.ID != "dito_51566" {
+		t.Fatalf("dito = %+v", dito)
+	}
+	if !strings.Contains(dito.IMSRegisterTemplate.ICSIRef, "ims.icsi.sms") {
+		t.Fatalf("dito ICSI missing SMS: %q", dito.IMSRegisterTemplate.ICSIRef)
+	}
+	if !reflect.DeepEqual(dito.IMSRegisterTemplate.ContactParamOrder[:6], []string{
+		"access_type", "sip_instance", "audio", "smsip", "smsip_msisdn_less", "icsi_ref",
+	}) {
+		t.Fatalf("dito contact order = %v", dito.IMSRegisterTemplate.ContactParamOrder)
+	}
+	for _, item := range []struct {
+		mcc, mnc, id, epdg string
+	}{
+		{"208", "01", "orange_fr_20801", "epdg.epc.mnc001.mcc208.pub.3gppnetwork.org"},
+		{"234", "25", "oneglobal_23425", "epdg.epc.mnc025.mcc234.pub.3gppnetwork.org"},
+		{"234", "26", "lycamobile_uk_23426", "epdg.epc.mnc026.mcc234.pub.3gppnetwork.org"},
+		{"234", "30", "ee_uk_23430", "epdg.epc.mnc030.mcc234.pub.3gppnetwork.org"},
+		{"234", "31", "ee_uk_23431", "epdg.epc.mnc031.mcc234.pub.3gppnetwork.org"},
+		{"234", "32", "ee_uk_23432", "epdg.epc.mnc032.mcc234.pub.3gppnetwork.org"},
+		{"262", "01", "telekom_de_26201", "epdg.epc.mnc001.mcc262.pub.3gppnetwork.org"},
+		{"262", "02", "vodafone_de_26202", "epdg.epc.mnc002.mcc262.pub.3gppnetwork.org"},
+		{"454", "12", "cmhk_45412", "epdg.epc.mnc012.mcc454.pub.3gppnetwork.org"},
+		{"454", "13", "cmhk_45413", "epdg.epc.mnc013.mcc454.pub.3gppnetwork.org"},
+		{"440", "00", "ymobile_44000", "epdg.epc.mnc000.mcc440.pub.3gppnetwork.org"},
+		{"440", "10", "docomo_44010", "epdg.epc.mnc010.mcc440.pub.3gppnetwork.org"},
+		{"440", "20", "softbank_44020", "epdg.epc.mnc020.mcc440.pub.3gppnetwork.org"},
+		{"440", "51", "kddi_44051", "epdg.epc.mnc051.mcc440.pub.3gppnetwork.org"},
+		{"248", "02", "elisa_ee_24802", "epdg.epc.mnc002.mcc248.pub.3gppnetwork.org"},
+	} {
+		got := ResolveEffectiveCarrierConfig(item.mcc, item.mnc)
+		if got.PresetID != item.id || got.DeviceModel != "rmx3366" ||
+			got.EPDGAddr != item.epdg ||
+			got.EmergencyEPDGAddr != DefaultCarrierEmergencyEPDGAddr(item.mcc, item.mnc) ||
+			got.EPDGAddrSource != "standard" ||
+			got.IMSRegisterTemplate.ID != item.id {
+			t.Fatalf("%s = %+v", item.id, got)
+		}
+		if !strings.Contains(got.IMSRegisterTemplate.ICSIRef, "ims.icsi.sms") {
+			t.Fatalf("%s ICSI missing SMS: %q", item.id, got.IMSRegisterTemplate.ICSIRef)
+		}
+		if !reflect.DeepEqual(got.IMSRegisterTemplate.ContactParamOrder[:6], []string{
+			"access_type", "sip_instance", "audio", "smsip", "smsip_msisdn_less", "icsi_ref",
+		}) {
+			t.Fatalf("%s contact order = %v", item.id, got.IMSRegisterTemplate.ContactParamOrder)
+		}
+	}
+	if cte := ResolveEffectiveCarrierConfig("234", "33"); cte.PresetID != "CTEUK_23433" {
+		t.Fatalf("EE aliases must not steal CTExcel 234/33: %+v", cte)
+	}
 	att := ResolveEffectiveCarrierConfig("310", "280")
 	if att.PresetID != "att_310280" || att.EPDGAddr != "epdg.epc.att.net" ||
 		att.EmergencyEPDGAddr != DefaultCarrierEmergencyEPDGAddr("310", "280") ||
