@@ -110,7 +110,7 @@ func setWebRTCPublicHost(settings *webrtc.SettingEngine, value string, lookup pu
 	}
 	if err := settings.SetICEAddressRewriteRules(webrtc.ICEAddressRewriteRule{
 		External:        publicIPs,
-		AsCandidateType: webrtc.ICECandidateTypeSrflx,
+		AsCandidateType: webrtc.ICECandidateTypeHost,
 		Mode:            webrtc.ICEAddressRewriteAppend,
 	}); err != nil {
 		return fmt.Errorf("phone: configure WebRTC public host: %w", err)
