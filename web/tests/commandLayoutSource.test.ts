@@ -59,7 +59,7 @@ test('command conversation uses the Studio event rail instead of chat bubbles', 
   assert.match(commandTimeline, /\.tone-parsed \{ color: var\(--ui-info\); \}/)
   assert.match(commandTimeline, /\.tone-success \{ color: var\(--ui-success\); \}/)
   assert.match(commandTimeline, /\.tone-danger \{ color: var\(--ui-danger\); \}/)
-  assert.equal((globalStyles.match(/--ui-info:/g) || []).length, 2)
+  assert.equal((globalStyles.match(/--ui-info:/g) || []).length, 3)
   assert.doesNotMatch(commandTimeline, /class="message"/)
 })
 
