@@ -212,6 +212,8 @@ type Service struct {
 	tcpCRLFPongWait           time.Duration
 	sipOutboundKeepalive      bool
 	sipOutbound               bool
+	outboundContactOffered    bool
+	outboundContactRegistered bool
 	flowTimer                 time.Duration
 	stunKeepaliveWait         chan stunKeepaliveResult
 	stunKeepaliveTxID         [12]byte

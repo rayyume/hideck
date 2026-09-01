@@ -26,6 +26,9 @@ func (s *Service) logRegisterFlowNegotiation(response *sipResponse) {
 	s.mu.Lock()
 	s.sipOutboundKeepalive = requiredOutbound || viaKeep
 	s.sipOutbound = supportedOutbound || requiredOutbound || pathOB || contactRegID
+	if s.outboundContactOffered {
+		s.outboundContactRegistered = true
+	}
 	s.flowTimer = parseFlowTimerHeader(response.HeaderValues("Flow-Timer"))
 	s.stunMappedAddr = nil
 	s.mu.Unlock()

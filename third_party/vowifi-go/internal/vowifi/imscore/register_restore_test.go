@@ -450,6 +450,33 @@ func TestInitialRegisterOmitsOutboundContactWithoutSupportedOutbound(t *testing.
 	}
 }
 
+func TestPathOBRequiresFollowUpRegisterWithRegID(t *testing.T) {
+	service := &Service{cfg: &IMSConfig{
+		IMPI: "user@ims.example", IMPU: "sip:user@ims.example", Domain: "ims.example",
+		LocalIP: net.ParseIP("192.0.2.10"), LocalPort: 5060, Transport: "udp",
+	}}
+	if service.needsOutboundBindingRefresh() {
+		t.Fatal("outbound refresh before Path ob")
+	}
+	service.logRegisterFlowNegotiation(&sipResponse{
+		StatusCode: 200,
+		Headers:    map[string]string{"Path": "<sip:pcscf.example;lr;ob>"},
+	})
+	if !service.needsOutboundBindingRefresh() {
+		t.Fatal("Path ob must trigger a follow-up REGISTER with reg-id before SMS is treated as reachable")
+	}
+	service.mu.Lock()
+	service.outboundContactOffered = true
+	service.mu.Unlock()
+	service.logRegisterFlowNegotiation(&sipResponse{
+		StatusCode: 200,
+		Headers:    map[string]string{"Path": "<sip:pcscf.example;lr;ob>"},
+	})
+	if service.needsOutboundBindingRefresh() {
+		t.Fatal("outbound REGISTER already completed")
+	}
+}
+
 func TestWithOutboundContactParamsKeepsSipInstance(t *testing.T) {
 	got := withOutboundContactParams(nil)
 	if !containsContactParamName(got, "sip_instance") ||
