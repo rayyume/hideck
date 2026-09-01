@@ -73,4 +73,16 @@ func TestMapQMIState(t *testing.T) {
 	if state != "calling" || event != "CallRinging" {
 		t.Fatalf("originating -> %s %s", state, event)
 	}
+	state, event = mapQMIState(qmiCallDisconnecting)
+	if state != "completed" || event != "CallEnded" {
+		t.Fatalf("disconnecting -> %s %s", state, event)
+	}
+	state, event = mapQMIState(qmiCallIdle)
+	if state != "completed" || event != "CallEnded" {
+		t.Fatalf("idle -> %s %s", state, event)
+	}
+	state, event = mapQMIState(qmiCallSetup)
+	if state != "ringing" || event != "CallRinging" {
+		t.Fatalf("setup -> %s %s", state, event)
+	}
 }

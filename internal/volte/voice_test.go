@@ -421,6 +421,58 @@ func TestVoiceAgentBusyRemoteRelease(t *testing.T) {
 	}
 }
 
+func TestIncomingDisconnectingCancelsRinging(t *testing.T) {
+	ctl, host := enableVoice(t)
+	var incoming []voicehost.IncomingCall
+	var events []voicehost.CallEvent
+	ctl.SubscribeIncomingCalls(func(call voicehost.IncomingCall) { incoming = append(incoming, call) })
+	ctl.SubscribeCallEvents(func(ev voicehost.CallEvent) { events = append(events, ev) })
+	host.fireVoice(&qmi.VoiceAllCallInfo{
+		Calls:              []qmi.VoiceCallInfo{{ID: 1, State: qmiCallIncoming, Direction: qmiDirMT}},
+		RemotePartyNumbers: []qmi.VoiceRemotePartyNumber{{CallID: 1, Number: "18500001111"}},
+	})
+	if len(incoming) != 1 {
+		t.Fatalf("incoming %d", len(incoming))
+	}
+	host.fireVoice(&qmi.VoiceAllCallInfo{
+		Calls:              []qmi.VoiceCallInfo{{ID: 1, State: qmiCallDisconnecting, Direction: qmiDirMT}},
+		RemotePartyNumbers: []qmi.VoiceRemotePartyNumber{{CallID: 1, Number: "18500001111"}},
+	})
+	if countType(events, "CallCanceled") != 1 {
+		t.Fatalf("events %v", eventTypes(events))
+	}
+	if countType(events, "CallEnded") != 0 {
+		t.Fatalf("unanswered inbound should cancel, not end: %v", eventTypes(events))
+	}
+	if ctl.ActiveCall("wwan1") != nil {
+		t.Fatal("disconnecting inbound left an active call")
+	}
+}
+
+func TestIncomingEndReasonCancelsRinging(t *testing.T) {
+	ctl, host := enableVoice(t)
+	var events []voicehost.CallEvent
+	ctl.SubscribeCallEvents(func(ev voicehost.CallEvent) { events = append(events, ev) })
+	host.fireVoice(&qmi.VoiceAllCallInfo{
+		Calls:              []qmi.VoiceCallInfo{{ID: 1, State: qmiCallIncoming, Direction: qmiDirMT}},
+		RemotePartyNumbers: []qmi.VoiceRemotePartyNumber{{CallID: 1, Number: "18500002222"}},
+	})
+	host.fireVoice(&qmi.VoiceAllCallInfo{
+		Calls: []qmi.VoiceCallInfo{{ID: 1, State: qmiCallIncoming, Direction: qmiDirMT}},
+		RemotePartyNumbers: []qmi.VoiceRemotePartyNumber{{CallID: 1, Number: "18500002222"}},
+		EndReasons:         []qmi.VoiceCallEndReason{{CallID: 1, Reason: 16}},
+	})
+	if countType(events, "CallCanceled") != 1 {
+		t.Fatalf("events %v", eventTypes(events))
+	}
+	if events[len(events)-1].Reason != "normal" {
+		t.Fatalf("end reason = %q", events[len(events)-1].Reason)
+	}
+	if ctl.ActiveCall("wwan1") != nil {
+		t.Fatal("end-reason inbound left an active call")
+	}
+}
+
 func eventTypes(events []voicehost.CallEvent) []string {
 	out := make([]string, 0, len(events))
 	for _, ev := range events {

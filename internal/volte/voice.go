@@ -15,13 +15,18 @@ import (
 )
 
 const (
-	qmiCallIncoming     qmi.VoiceCallState     = 0x01
-	qmiCallOriginating  qmi.VoiceCallState     = 0x02
-	qmiCallAlerting     qmi.VoiceCallState     = 0x03
-	qmiCallConversation qmi.VoiceCallState     = 0x04
-	qmiCallEnd          qmi.VoiceCallState     = 0x08
-	qmiDirMO            qmi.VoiceCallDirection = 0x01
-	qmiDirMT            qmi.VoiceCallDirection = 0x02
+	qmiCallIdle          qmi.VoiceCallState     = 0x00
+	qmiCallIncoming      qmi.VoiceCallState     = 0x01
+	qmiCallOriginating   qmi.VoiceCallState     = 0x02
+	qmiCallAlerting      qmi.VoiceCallState     = 0x03
+	qmiCallConversation  qmi.VoiceCallState     = 0x04
+	qmiCallHolding       qmi.VoiceCallState     = 0x05
+	qmiCallWaiting       qmi.VoiceCallState     = 0x06
+	qmiCallDisconnecting qmi.VoiceCallState     = 0x07
+	qmiCallEnd           qmi.VoiceCallState     = 0x08
+	qmiCallSetup         qmi.VoiceCallState     = 0x09
+	qmiDirMO             qmi.VoiceCallDirection = 0x01
+	qmiDirMT             qmi.VoiceCallDirection = 0x02
 )
 
 type qmiTombstone struct {
@@ -458,6 +463,20 @@ func (c *Controller) handleVoiceInfo(deviceID string, vs *voiceSession, info *qm
 			dir = "inbound"
 		}
 		prev, existed := vs.getByQMI(item.ID)
+		reason, codec := prev.Reason, prev.Codec
+		if !item.Mode.PacketSwitched() && item.Mode != 0 {
+			reason = "cs_fallback"
+		}
+		hasEndReason := false
+		for _, end := range info.EndReasons {
+			if end.CallID == item.ID {
+				reason = qmiEndReasonName(end.Reason)
+				hasEndReason = true
+			}
+		}
+		if hasEndReason && stateRank(state) != rankTerminal {
+			state, eventType = "completed", "CallEnded"
+		}
 		if !existed && stateRank(state) == rankTerminal {
 			continue
 		}
@@ -477,15 +496,6 @@ func (c *Controller) handleVoiceInfo(deviceID string, vs *voiceSession, info *qm
 		}
 		if dir == "outbound" && prev.Direction != "" {
 			dir = prev.Direction
-		}
-		reason, codec := prev.Reason, prev.Codec
-		if !item.Mode.PacketSwitched() && item.Mode != 0 {
-			reason = "cs_fallback"
-		}
-		for _, end := range info.EndReasons {
-			if end.CallID == item.ID {
-				reason = qmiEndReasonName(end.Reason)
-			}
 		}
 		for _, sp := range info.SpeechCodecs {
 			if sp.CallID == item.ID {
@@ -511,6 +521,9 @@ func (c *Controller) handleVoiceInfo(deviceID string, vs *voiceSession, info *qm
 				OfferSDP: next.ClientSDP,
 			})
 		}
+		if eventType == "CallEnded" && unansweredInbound(dir, prev.State) {
+			eventType = "CallCanceled"
+		}
 		if eventType == "" || !vs.markEmitted(id, rankKey(state)) {
 			continue
 		}
@@ -524,7 +537,7 @@ func (c *Controller) handleVoiceInfo(deviceID string, vs *voiceSession, info *qm
 				c.setError(deviceID, err)
 			}
 		}
-		if eventType == "CallEnded" {
+		if eventType == "CallEnded" || eventType == "CallCanceled" {
 			c.releaseCallAudio(id)
 			vs.forget(id)
 		}
@@ -533,11 +546,15 @@ func (c *Controller) handleVoiceInfo(deviceID string, vs *voiceSession, info *qm
 		if seen[call.ID] || stateRank(call.State) == rankTerminal {
 			continue
 		}
+		eventType := "CallEnded"
+		if unansweredInbound(call.Direction, call.State) {
+			eventType = "CallCanceled"
+		}
 		call.State = "completed"
 		vs.put(call)
 		if vs.markEmitted(call.ID, rankKey("completed")) {
 			c.emitEvent(deviceID, voicehost.CallEvent{
-				Type: "CallEnded", DeviceID: deviceID, CallID: call.ID, Caller: call.Peer, Callee: call.Peer,
+				Type: eventType, DeviceID: deviceID, CallID: call.ID, Caller: call.Peer, Callee: call.Peer,
 				Direction: call.Direction, State: "completed", Time: now, Reason: call.Reason, AudioCodec: call.Codec,
 				RecordingError: audioError(c.Status(deviceID)),
 			})
@@ -553,14 +570,28 @@ func mapQMIState(state qmi.VoiceCallState) (string, string) {
 	switch state {
 	case qmiCallOriginating:
 		return "calling", "CallRinging"
-	case qmiCallIncoming, qmiCallAlerting:
+	case qmiCallIncoming, qmiCallAlerting, qmiCallSetup:
 		return "ringing", "CallRinging"
-	case qmiCallConversation:
+	case qmiCallConversation, qmiCallHolding:
 		return "connected", "CallAnswered"
-	case qmiCallEnd:
+	case qmiCallWaiting:
+		return "waiting", "CallWaiting"
+	case qmiCallIdle, qmiCallDisconnecting, qmiCallEnd:
 		return "completed", "CallEnded"
 	default:
 		return "calling", ""
+	}
+}
+
+func unansweredInbound(direction, state string) bool {
+	if direction != "inbound" {
+		return false
+	}
+	switch state {
+	case "", "calling", "ringing", "waiting":
+		return true
+	default:
+		return false
 	}
 }
 
@@ -598,7 +629,7 @@ func stateRank(state string) int {
 	switch state {
 	case "calling":
 		return 1
-	case "ringing":
+	case "ringing", "waiting":
 		return 2
 	case "connected":
 		return 3

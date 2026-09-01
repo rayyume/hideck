@@ -150,7 +150,7 @@ func weComTemplateValues(ctx NotificationContext) map[string]string {
 	}
 	return map[string]string{
 		"event":        event,
-		"title":        weComNotificationTitle(event),
+		"title":        ctx.NotificationTitle(),
 		"message":      strings.TrimSpace(ctx.Text),
 		"timestamp":    timestamp.UTC().Format(time.RFC3339),
 		"content":      ctx.Content,
@@ -159,21 +159,6 @@ func weComTemplateValues(ctx NotificationContext) map[string]string {
 		"device_name":  strings.TrimSpace(ctx.DeviceName),
 		"device_label": ctx.DeviceLabel(),
 		"time":         timestamp.Local().Format("2006-01-02 15:04:05"),
-	}
-}
-
-func weComNotificationTitle(event string) string {
-	switch event {
-	case "sms_received":
-		return "收到新短信"
-	case "incoming_call":
-		return "来电通知"
-	case "call_ended", "call_completed", "call_failed", "call_missed", "call_rejected", "call_busy":
-		return "通话结束"
-	case "ip_rotated":
-		return "公网切换"
-	default:
-		return "HiDeck 通知"
 	}
 }
 

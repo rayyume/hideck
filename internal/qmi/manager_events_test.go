@@ -109,6 +109,36 @@ func TestManagerDispatchesRawSMSIndication(t *testing.T) {
 	}
 }
 
+func TestSummarizeQMIEventVoiceCallStatusIncludesStates(t *testing.T) {
+	summary := summarizeQMIEvent(qmimanager.Event{
+		Type: qmimanager.EventVoiceCallStatus,
+		VoiceCalls: &qmi.VoiceAllCallInfo{
+			Calls: []qmi.VoiceCallInfo{
+				{ID: 1, State: 0x01},
+				{ID: 1, State: 0x07},
+			},
+			RemotePartyNumbers: []qmi.VoiceRemotePartyNumber{{CallID: 1, Number: "18599996654"}},
+			EndReasons:         []qmi.VoiceCallEndReason{{CallID: 1, Reason: 16}},
+		},
+	})
+	if summary.Level != qmiEventLogDebug {
+		t.Fatalf("level=%v want=%v", summary.Level, qmiEventLogDebug)
+	}
+	fields := summaryFieldsMap(summary.Fields)
+	if got := fields["call_count"]; got != 2 {
+		t.Fatalf("call_count=%v want=2", got)
+	}
+	if got := fields["call_states"]; got != "1:1,1:7" {
+		t.Fatalf("call_states=%v", got)
+	}
+	if got := fields["end_reasons"]; got != "1:16" {
+		t.Fatalf("end_reasons=%v", got)
+	}
+	if summaryContains(summary, "18599996654") {
+		t.Fatal("summary leaked remote number")
+	}
+}
+
 func TestSummarizeQMIEventVoiceUSSDDoesNotLeakText(t *testing.T) {
 	summary := summarizeQMIEvent(qmimanager.Event{
 		Type: qmimanager.EventVoiceUSSD,

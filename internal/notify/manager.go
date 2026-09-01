@@ -42,6 +42,7 @@ type ManagerOptions struct {
 
 type NotificationContext struct {
 	Event      string
+	Title      string
 	Text       string
 	DeviceID   string
 	DeviceName string
@@ -174,8 +175,14 @@ func (m *Manager) NotifySMSWithSource(deviceID, sender, content, source string, 
 	if source == "" {
 		source = "蜂窝"
 	}
-	msg := fmt.Sprintf("收到新短信 / %s\n设备  %s\n号码  %s\n时间  %s\n内容  %s",
-		source, deviceID, sender, m.formatNotificationTime(timestamp), content)
+	title := notificationTitle("sms_received")
+	msg := notificationLines(title,
+		"设备", deviceID,
+		"通道", source,
+		"号码", sender,
+		"时间", m.formatNotificationTime(timestamp),
+		"内容", content,
+	)
 
 	logger.Info("开始发送短信通知",
 		"event", "sms_received",
@@ -185,6 +192,7 @@ func (m *Manager) NotifySMSWithSource(deviceID, sender, content, source string, 
 
 	m.broadcastWithContext(NotificationContext{
 		Event:      "sms_received",
+		Title:      title,
 		Text:       msg,
 		DeviceID:   deviceID,
 		DeviceName: m.resolveDeviceName(deviceID),
@@ -217,9 +225,16 @@ func (m *Manager) NotifyIPRotated(deviceID, oldIP, newIP string, duration time.D
 	if name := m.resolveDeviceName(deviceID); name != "" {
 		displayName = fmt.Sprintf("%s (%s)", name, deviceID)
 	}
-	msg := fmt.Sprintf("公网切换 / 完成\n设备    %s\n旧 IP   %s\n新 IP   %s\n耗时    %s", displayName, oldIP, newIP, duration.String())
+	title := notificationTitle("ip_rotated")
+	msg := notificationLines(title,
+		"设备", displayName,
+		"旧 IP", oldIP,
+		"新 IP", newIP,
+		"耗时", duration.String(),
+	)
 	m.broadcastWithContext(NotificationContext{
 		Event:      "ip_rotated",
+		Title:      title,
 		Text:       msg,
 		DeviceID:   deviceID,
 		DeviceName: m.resolveDeviceName(deviceID),
@@ -244,13 +259,18 @@ func (m *Manager) NotifyIncomingCall(deviceID, caller, callee string) {
 	m.lastIncomingAt = now
 	m.incomingMu.Unlock()
 
-	msg := fmt.Sprintf("来电通知\n设备    %s\n主叫    %s\n被叫    %s",
-		deviceID, caller, callee)
+	title := notificationTitle("incoming_call")
+	msg := notificationLines(title,
+		"设备", deviceID,
+		"主叫", caller,
+		"被叫", callee,
+	)
 
 	logger.Info("开始发送来电通知", "device", deviceID, "caller", caller, "channel_count", channelCount)
 
 	m.broadcastWithContext(NotificationContext{
 		Event:      "incoming_call",
+		Title:      title,
 		Text:       msg,
 		DeviceID:   deviceID,
 		DeviceName: m.resolveDeviceName(deviceID),
@@ -264,8 +284,10 @@ func (m *Manager) NotifyCallResult(deviceID, peer, direction, status, reason str
 	if m.channelCount() == 0 {
 		return
 	}
+	title := callResultTitle(status, reason)
 	m.broadcastWithContext(NotificationContext{
 		Event:      "call_" + status,
+		Title:      title,
 		Text:       formatCallResultMessage(deviceID, peer, direction, status, reason),
 		DeviceID:   deviceID,
 		DeviceName: m.resolveDeviceName(deviceID),
@@ -275,8 +297,10 @@ func (m *Manager) NotifyCallResult(deviceID, peer, direction, status, reason str
 }
 
 func formatCallResultMessage(deviceID, peer, direction, status, reason string) string {
-	return fmt.Sprintf("通话结束 / %s\n设备    %s\n%s    %s",
-		callResultLabel(status, reason), deviceID, callResultPeerField(direction), peer)
+	return notificationLines(callResultTitle(status, reason),
+		"设备", deviceID,
+		callResultPeerField(direction), peer,
+	)
 }
 
 func callResultPeerField(direction string) string {
@@ -288,37 +312,6 @@ func callResultPeerField(direction string) string {
 	default:
 		return "号码"
 	}
-}
-
-func callResultLabel(status, reason string) string {
-	switch strings.ToLower(strings.TrimSpace(reason)) {
-	case "local_hangup":
-		return "已挂断"
-	case "remote_bye", "remote_hangup":
-		return "对方已挂断"
-	case "local_reject", "rejected":
-		return "已拒接"
-	case "remote_cancel":
-		return "未接"
-	case "device_busy", "busy":
-		return "忙线"
-	}
-	switch status {
-	case "completed":
-		return "已结束"
-	case "missed":
-		return "未接"
-	case "rejected":
-		return "已拒接"
-	case "busy":
-		return "忙线"
-	case "failed":
-		return "失败"
-	}
-	if strings.TrimSpace(status) != "" {
-		return status
-	}
-	return "已结束"
 }
 
 func (m *Manager) resolveDeviceName(deviceID string) string {

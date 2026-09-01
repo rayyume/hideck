@@ -187,23 +187,16 @@ func (a *Agent) handleInboundCancel(request imscore.InboundVoiceRequest, call *C
 	call.inboundDecisionMu.Lock()
 	defer call.inboundDecisionMu.Unlock()
 	call.stopTUECWTimer()
-	if call.CallState() != callstate.StateRinging {
+	if !inboundAlerting(call.CallState()) {
 		return voiceResult(481), nil
 	}
-	responder := call.inboundResponseWriter()
-	if responder == nil && !call.hasServerInvite() {
-		return voiceResult(500), errors.New("voice: inbound INVITE response context is unavailable")
+	var cancelErr error
+	if request.Responder != nil {
+		cancelErr = request.Responder.Respond(imscore.InboundVoiceResponse{
+			StatusCode: 200, ToTag: call.inboundLocalTagValue(),
+		})
 	}
-	if request.Responder == nil {
-		return voiceResult(500), errors.New("voice: CANCEL reply path is unavailable")
-	}
-	cancelErr := request.Responder.Respond(imscore.InboundVoiceResponse{
-		StatusCode: 200, ToTag: call.inboundLocalTagValue(),
-	})
-	structured, inviteErr := a.rejectStoredServerInvite(call, 487)
-	if !structured && responder != nil {
-		inviteErr = responder.Respond(imscore.InboundVoiceResponse{StatusCode: 487})
-	}
+	inviteErr := a.rejectAlertingInvite(call, 487)
 	clientErr := a.sendClientCancel(call)
 	a.releaseInboundCall(call, errors.New("voice: call canceled by IMS"), true)
 	return voiceResult(0), errors.Join(cancelErr, inviteErr, clientErr)

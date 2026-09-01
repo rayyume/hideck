@@ -75,6 +75,40 @@ func TestIncomingTerminalClassificationsAndDeduplication(t *testing.T) {
 	}
 }
 
+func TestIncomingTerminalEventBeforeIncomingIsReplayed(t *testing.T) {
+	gateway, store := newFakeVoiceGateway(), newMemoryCallStore()
+	service := newPhoneTestService(t, gateway, store, time.Second)
+	gateway.emitEvent(voicehost.CallEvent{
+		Type: "CallCanceled", DeviceID: "dev-1", CallID: "late-1",
+		Reason: "remote_cancel", Time: time.Now(),
+	})
+	gateway.emitIncoming(voicehost.IncomingCall{
+		DeviceID: "dev-1", CallID: "late-1", Caller: "+15550001",
+		OfferSDP: testPlainSDP, ReceivedAt: time.Now(),
+	})
+	waitForRecordStatus(t, store, "late-1", StatusMissed)
+	if active := service.Active(""); len(active) != 0 {
+		t.Fatalf("zombie ringing after early cancel: %+v", active)
+	}
+}
+
+func TestIncomingRemoteHangupWhileRingingIsMissed(t *testing.T) {
+	gateway, store := newFakeVoiceGateway(), newMemoryCallStore()
+	service := newPhoneTestService(t, gateway, store, time.Second)
+	gateway.emitIncoming(voicehost.IncomingCall{
+		DeviceID: "dev-1", CallID: "missed-end-1", Caller: "+15550001",
+		OfferSDP: testPlainSDP, ReceivedAt: time.Now(),
+	})
+	gateway.emitEvent(voicehost.CallEvent{
+		Type: "CallEnded", DeviceID: "dev-1", CallID: "missed-end-1",
+		Reason: "normal", Time: time.Now(),
+	})
+	waitForRecordStatus(t, store, "missed-end-1", StatusMissed)
+	if active := service.Active(""); len(active) != 0 {
+		t.Fatalf("active after remote hangup: %+v", active)
+	}
+}
+
 func TestIncomingCallNotifiesChannelsWhileRinging(t *testing.T) {
 	gateway, store := newFakeVoiceGateway(), newMemoryCallStore()
 	notifications := make(chan capturedNotification, 4)

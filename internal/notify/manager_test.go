@@ -210,7 +210,7 @@ func TestManagerNotifyEventsToWebhookWithTemplate(t *testing.T) {
 	for _, payload := range payloads {
 		byEvent[payload.Event] = payload
 	}
-	if got := byEvent["sms_received"].Text; got != "[wwan0] 收到新短信 / 蜂窝\n设备  wwan0\n号码  +8613800000000\n时间  2026-04-13 12:00:00\n内容  hello" {
+	if got := byEvent["sms_received"].Text; got != "[wwan0] 收到新短信\n设备    wwan0\n通道    蜂窝\n号码    +8613800000000\n时间    2026-04-13 12:00:00\n内容    hello" {
 		t.Fatalf("sms text=%q", got)
 	}
 	if got := byEvent["ip_rotated"].Meta.DeviceID; got != "wwan0" {
@@ -417,7 +417,7 @@ func TestManagerNotifyIPRotatedUsesPlainTemplate(t *testing.T) {
 
 	m.NotifyIPRotated("wwan0", "1.1.1.1", "2.2.2.2", 2*time.Second)
 	waitUntil(t, time.Second, func() bool { return capture.Last() != "" })
-	want := "公网切换 / 完成\n设备    wwan0\n旧 IP   1.1.1.1\n新 IP   2.2.2.2\n耗时    2s"
+	want := "公网切换\n设备    wwan0\n旧 IP    1.1.1.1\n新 IP    2.2.2.2\n耗时    2s"
 	if got := capture.Last(); got != want {
 		t.Fatalf("ip rotated text=%q, want %q", got, want)
 	}
@@ -430,6 +430,18 @@ func TestManagerNotifyIncomingCallUsesPlainTemplate(t *testing.T) {
 	m.NotifyIncomingCall("wwan0", "10086", "10010")
 	time.Sleep(20 * time.Millisecond)
 	want := "来电通知\n设备    wwan0\n主叫    10086\n被叫    10010"
+	if got := capture.Last(); got != want {
+		t.Fatalf("incoming call text=%q, want %q", got, want)
+	}
+}
+
+func TestManagerNotifyIncomingCallOmitsEmptyCallee(t *testing.T) {
+	capture := &captureChannel{}
+	m := &Manager{channels: []Channel{capture}}
+
+	m.NotifyIncomingCall("wwan1", "18599996654", "")
+	time.Sleep(20 * time.Millisecond)
+	want := "来电通知\n设备    wwan1\n主叫    18599996654"
 	if got := capture.Last(); got != want {
 		t.Fatalf("incoming call text=%q, want %q", got, want)
 	}
@@ -479,7 +491,7 @@ func TestManagerNotifyCallResultIsSeparateFromIncomingCall(t *testing.T) {
 	if result.Timestamp != at {
 		t.Fatalf("result timestamp=%s, want %s", result.Timestamp, at)
 	}
-	want := "通话结束 / 未接\n设备    wwan0\n主叫    10086"
+	want := "未接来电\n设备    wwan0\n主叫    10086"
 	if result.Text != want {
 		t.Fatalf("result text=%q, want %q", result.Text, want)
 	}
@@ -502,7 +514,7 @@ func TestFormatCallResultMessageUsesIncomingCallStyle(t *testing.T) {
 			direction: "outbound",
 			status:    "completed",
 			reason:    "local_hangup",
-			want:      "通话结束 / 已挂断\n设备    wwan1\n被叫    888",
+			want:      "已挂断\n设备    wwan1\n被叫    888",
 		},
 		{
 			name:      "inbound remote hangup",
@@ -511,7 +523,7 @@ func TestFormatCallResultMessageUsesIncomingCallStyle(t *testing.T) {
 			direction: "inbound",
 			status:    "completed",
 			reason:    "remote_bye",
-			want:      "通话结束 / 对方已挂断\n设备    wwan0\n主叫    10086",
+			want:      "对方已挂断\n设备    wwan0\n主叫    10086",
 		},
 		{
 			name:      "incoming missed",
@@ -520,7 +532,7 @@ func TestFormatCallResultMessageUsesIncomingCallStyle(t *testing.T) {
 			direction: "incoming",
 			status:    "missed",
 			reason:    "remote_cancel",
-			want:      "通话结束 / 未接\n设备    wwan0\n主叫    10086",
+			want:      "未接来电\n设备    wwan0\n主叫    10086",
 		},
 		{
 			name:      "inbound rejected",
@@ -529,7 +541,7 @@ func TestFormatCallResultMessageUsesIncomingCallStyle(t *testing.T) {
 			direction: "inbound",
 			status:    "rejected",
 			reason:    "local_reject",
-			want:      "通话结束 / 已拒接\n设备    wwan0\n主叫    10010",
+			want:      "已拒接\n设备    wwan0\n主叫    10010",
 		},
 		{
 			name:      "inbound busy",
@@ -538,7 +550,7 @@ func TestFormatCallResultMessageUsesIncomingCallStyle(t *testing.T) {
 			direction: "inbound",
 			status:    "busy",
 			reason:    "device_busy",
-			want:      "通话结束 / 忙线\n设备    wwan0\n主叫    10086",
+			want:      "忙线\n设备    wwan0\n主叫    10086",
 		},
 		{
 			name:      "completed without specific reason",
@@ -547,7 +559,7 @@ func TestFormatCallResultMessageUsesIncomingCallStyle(t *testing.T) {
 			direction: "outbound",
 			status:    "completed",
 			reason:    "normal",
-			want:      "通话结束 / 已结束\n设备    wwan1\n被叫    888",
+			want:      "通话结束\n设备    wwan1\n被叫    888",
 		},
 	}
 	for _, tt := range tests {
@@ -596,7 +608,7 @@ func TestManagerNotifySMSWithSourceUsesProvidedSourceLabel(t *testing.T) {
 	notifier.NotifySMSWithSource("wwan0", "+8613800000000", "hello", "VoWiFi", ts)
 
 	waitUntil(t, time.Second, func() bool { return capture.Last() != "" })
-	want := "收到新短信 / VoWiFi\n设备  wwan0\n号码  +8613800000000\n时间  2026-04-13 12:00:00\n内容  hello"
+	want := "收到新短信\n设备    wwan0\n通道    VoWiFi\n号码    +8613800000000\n时间    2026-04-13 12:00:00\n内容    hello"
 	if got := capture.Last(); got != want {
 		t.Fatalf("text=%q, want %q", got, want)
 	}
@@ -615,7 +627,7 @@ func TestManagerNotifySMSConvertsNetworkTimeToNotificationLocation(t *testing.T)
 	m.NotifySMSWithSource("wwan1", "888", "verification code", "VoWiFi", timestamp)
 
 	waitUntil(t, time.Second, func() bool { return capture.Last() != "" })
-	if !strings.Contains(capture.Last(), "时间  2026-08-19 16:25:36") {
+	if !strings.Contains(capture.Last(), "时间    2026-08-19 16:25:36") {
 		t.Fatalf("notification time was not converted: %q", capture.Last())
 	}
 	if got := capture.LastContext().Timestamp; !got.Equal(timestamp) || got.Location() != londonSummer {

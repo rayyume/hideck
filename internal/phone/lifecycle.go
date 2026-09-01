@@ -31,11 +31,17 @@ func (s *Service) handleIncoming(incoming voicehost.IncomingCall) {
 			s.calls[incoming.CallID] = call
 			s.deviceWaiting[incoming.DeviceID] = incoming.CallID
 			call.view.Status, call.record.Status = StatusWaiting, StatusWaiting
+			pending, alreadyEnded := s.takePendingLocked(incoming.CallID)
 			s.mu.Unlock()
-			s.persist(call.record)
-			s.publish("call_waiting", call)
-			if s.notifier != nil {
-				go s.notifier.NotifyIncomingCall(incoming.DeviceID, incoming.Caller, incoming.Callee)
+			if !alreadyEnded {
+				s.persist(call.record)
+				s.publish("call_waiting", call)
+				if s.notifier != nil {
+					go s.notifier.NotifyIncomingCall(incoming.DeviceID, incoming.Caller, incoming.Callee)
+				}
+			}
+			for _, event := range pending {
+				s.dispatchCallEvent(event)
 			}
 			return
 		}
@@ -51,20 +57,26 @@ func (s *Service) handleIncoming(incoming voicehost.IncomingCall) {
 	}
 	s.calls[incoming.CallID] = call
 	s.deviceCalls[incoming.DeviceID] = incoming.CallID
+	pending, alreadyEnded := s.takePendingLocked(incoming.CallID)
 	s.mu.Unlock()
-	if err := s.gateway.StartCallCapture(incoming.DeviceID, incoming.CallID, call.recordingBase); err != nil {
-		s.mu.Lock()
-		call.record.RecordingError = err.Error()
-		call.view.RecordingError = err.Error()
-		s.mu.Unlock()
+	if !alreadyEnded {
+		if err := s.gateway.StartCallCapture(incoming.DeviceID, incoming.CallID, call.recordingBase); err != nil {
+			s.mu.Lock()
+			call.record.RecordingError = err.Error()
+			call.view.RecordingError = err.Error()
+			s.mu.Unlock()
+		}
+		s.mu.RLock()
+		record := call.record
+		s.mu.RUnlock()
+		s.persist(record)
+		s.publish("incoming_call", call)
+		if s.notifier != nil {
+			go s.notifier.NotifyIncomingCall(incoming.DeviceID, incoming.Caller, incoming.Callee)
+		}
 	}
-	s.mu.RLock()
-	record := call.record
-	s.mu.RUnlock()
-	s.persist(record)
-	s.publish("incoming_call", call)
-	if s.notifier != nil {
-		go s.notifier.NotifyIncomingCall(incoming.DeviceID, incoming.Caller, incoming.Callee)
+	for _, event := range pending {
+		s.dispatchCallEvent(event)
 	}
 }
 
@@ -116,11 +128,37 @@ func (s *Service) bufferPendingCallEvent(event voicehost.CallEvent) bool {
 		return false
 	}
 	reservedCallID, reserved := s.deviceCalls[event.DeviceID]
-	if !reserved || reservedCallID != "" {
+	deviceReservedEmpty := reserved && reservedCallID == ""
+	if !deviceReservedEmpty && !earlyCallEvent(event.Type) {
 		return false
 	}
 	s.pendingEvents[event.CallID] = append(s.pendingEvents[event.CallID], event)
 	return true
+}
+
+func earlyCallEvent(eventType string) bool {
+	switch eventType {
+	case "CallEnded", "CallFailed", "CallCanceled", "CallRinging", "CallAnswered", "CallFinalized":
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *Service) takePendingLocked(callID string) ([]voicehost.CallEvent, bool) {
+	pending := s.pendingEvents[callID]
+	delete(s.pendingEvents, callID)
+	alreadyEnded := false
+	if _, ok := s.terminalSeen[callID]; ok {
+		alreadyEnded = true
+	}
+	for _, event := range pending {
+		switch event.Type {
+		case "CallEnded", "CallFailed", "CallCanceled":
+			alreadyEnded = true
+		}
+	}
+	return pending, alreadyEnded
 }
 
 func (s *Service) dispatchCallEvent(event voicehost.CallEvent) {
@@ -229,7 +267,13 @@ func (s *Service) failMediaAttachment(callID string, err error) {
 func (s *Service) finishCall(event voicehost.CallEvent) {
 	s.mu.Lock()
 	call := s.calls[event.CallID]
-	if call == nil || call.terminal {
+	if call == nil {
+		s.terminalSeen[event.CallID] = struct{}{}
+		s.pendingEvents[event.CallID] = append(s.pendingEvents[event.CallID], event)
+		s.mu.Unlock()
+		return
+	}
+	if call.terminal {
 		s.mu.Unlock()
 		return
 	}
@@ -282,11 +326,25 @@ func terminalStatus(call *activeCall, event voicehost.CallEvent) string {
 	if call.userRejected {
 		return StatusRejected
 	}
-	reason := strings.ToLower(event.Reason)
-	if event.Type == "CallCanceled" || strings.Contains(reason, "timed out") || strings.Contains(reason, "timeout") {
+	reason := strings.ToLower(strings.TrimSpace(event.Reason))
+	if event.Type == "CallCanceled" || remoteCancelReason(reason) {
 		return StatusMissed
 	}
 	return StatusFailed
+}
+
+func remoteCancelReason(reason string) bool {
+	if reason == "" {
+		return false
+	}
+	switch reason {
+	case "normal", "remote_cancel", "remote_bye", "canceled", "cancelled":
+		return true
+	}
+	return strings.Contains(reason, "timed out") ||
+		strings.Contains(reason, "timeout") ||
+		strings.Contains(reason, "canceled by ims") ||
+		strings.Contains(reason, "cancelled by ims")
 }
 
 func callDurationSeconds(record CallRecord, endedAt time.Time) int64 {

@@ -165,10 +165,37 @@ func (a *Agent) handleInboundBye(call *Call) (imscore.InboundVoiceResult, error)
 	call.stopTUECWTimer()
 	call.inboundDecisionMu.Lock()
 	defer call.inboundDecisionMu.Unlock()
-	if call.CallState() != callstate.StateConnected {
-		return voiceResult(481), nil
+	state := call.CallState()
+	if state == callstate.StateConnected {
+		return voiceResult(200), a.finishRemoteBye(call)
 	}
-	return voiceResult(200), a.finishRemoteBye(call)
+	if inboundAlerting(state) {
+		inviteErr := a.rejectAlertingInvite(call, 487)
+		a.releaseInboundCall(call, errors.New("voice: call canceled by IMS"), true)
+		return voiceResult(200), inviteErr
+	}
+	return voiceResult(481), nil
+}
+
+func inboundAlerting(state callstate.State) bool {
+	switch state {
+	case callstate.StateCalling, callstate.StateRinging, callstate.StateEarlyMedia, callstate.StatePreconditionWait:
+		return true
+	default:
+		return false
+	}
+}
+
+func (a *Agent) rejectAlertingInvite(call *Call, statusCode int) error {
+	responder := call.inboundResponseWriter()
+	structured, err := a.rejectStoredServerInvite(call, statusCode)
+	if structured || err != nil {
+		return err
+	}
+	if responder == nil {
+		return nil
+	}
+	return responder.Respond(imscore.InboundVoiceResponse{StatusCode: statusCode})
 }
 
 func voiceResult(status int) imscore.InboundVoiceResult {

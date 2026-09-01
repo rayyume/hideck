@@ -329,8 +329,9 @@ export const usePhoneStore = defineStore('phone', {
     handleEvent(event: PhoneEvent) {
       if (event.id === this.lastEventId) return
       this.lastEventId = event.id
-      if (ACTIVE_STATUSES.has(event.call.status)) this.upsertCall(event.call)
-      else this.calls = this.calls.filter((call) => call.call_id !== event.call.call_id)
+      const ended = event.type === 'call_ended' || !ACTIVE_STATUSES.has(event.call.status)
+      if (ended) this.calls = this.calls.filter((call) => call.call_id !== event.call.call_id)
+      else this.upsertCall(event.call)
       if (event.type === 'call_ended') {
         this.clearEndingCall(event.call.call_id)
         if (event.call.media_id === this.mediaId) this.releaseMedia()

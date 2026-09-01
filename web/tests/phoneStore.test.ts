@@ -47,6 +47,26 @@ test('store ignores replayed events and never grants another media session contr
   assert.equal(store.calls[0].read_only, false)
 })
 
+test('removes an incoming call even when call_ended still says ringing', () => {
+  setActivePinia(createPinia())
+  const store = usePhoneStore()
+  store.mediaId = 'media-1'
+  store.handleEvent({
+    id: 1,
+    type: 'incoming_call',
+    call: call('media-1', { direction: 'inbound', status: 'ringing', peer: '+15550001' }),
+    time: '2026-08-13T12:00:00Z'
+  })
+  assert.equal(store.calls.length, 1)
+  store.handleEvent({
+    id: 2,
+    type: 'call_ended',
+    call: call('media-1', { direction: 'inbound', status: 'ringing', peer: '+15550001' }),
+    time: '2026-08-13T12:00:20Z'
+  })
+  assert.equal(store.calls.length, 0)
+})
+
 test('applies call_ended after the event stream restarts with lower ids', () => {
   setActivePinia(createPinia())
   const store = usePhoneStore()

@@ -150,6 +150,50 @@ func TestInboundCallRejectAndCancelSendFinalInviteResponses(t *testing.T) {
 	}
 }
 
+func TestInboundAlertingBYECancelsRingingCall(t *testing.T) {
+	agent := startedVoiceAgent(t)
+	peer := listenVoiceUDP(t)
+	responder := &capturedVoiceResponder{localTag: "local-tag"}
+	request := inboundAgentInvite("call-in-early-bye", peer, responder)
+	if _, err := agent.HandleInboundVoiceRequest(request); err != nil {
+		t.Fatal(err)
+	}
+	result, err := agent.HandleInboundVoiceRequest(imscore.InboundVoiceRequest{
+		Method: "BYE", CallID: request.CallID,
+	})
+	if err != nil || result.StatusCode != 200 {
+		t.Fatalf("alerting BYE result=%+v err=%v", result, err)
+	}
+	if got := responder.statuses(); fmt.Sprint(got) != "[180 487]" {
+		t.Fatalf("responses = %v", got)
+	}
+	if agent.IsBusy() || len(agent.IncomingCalls()) != 0 {
+		t.Fatalf("alerting BYE left call active busy=%t incoming=%d", agent.IsBusy(), len(agent.IncomingCalls()))
+	}
+}
+
+func TestInboundCancelWithoutResponderStillReleases(t *testing.T) {
+	agent := startedVoiceAgent(t)
+	peer := listenVoiceUDP(t)
+	responder := &capturedVoiceResponder{localTag: "local-tag"}
+	request := inboundAgentInvite("call-in-cancel-noreply", peer, responder)
+	if _, err := agent.HandleInboundVoiceRequest(request); err != nil {
+		t.Fatal(err)
+	}
+	result, err := agent.HandleInboundVoiceRequest(imscore.InboundVoiceRequest{
+		Method: "CANCEL", CallID: request.CallID,
+	})
+	if err != nil || result.StatusCode != 0 {
+		t.Fatalf("CANCEL result=%+v err=%v", result, err)
+	}
+	if got := responder.statuses(); fmt.Sprint(got) != "[180 487]" {
+		t.Fatalf("responses = %v", got)
+	}
+	if agent.IsBusy() {
+		t.Fatal("CANCEL without reply path left the call ringing")
+	}
+}
+
 func TestInboundBYEWaitsForConcurrentAnswerDecision(t *testing.T) {
 	agent := startedVoiceAgent(t)
 	peer := listenVoiceUDP(t)

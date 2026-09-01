@@ -84,19 +84,7 @@ func (b *BarkChannel) SendWithContextDetailed(ctx NotificationContext) (SendBark
 		return result, nil
 	}
 
-	title := ctx.DeviceLabel()
-	if strings.TrimSpace(title) == "" || title == "未知设备" {
-		title = "HiDeck Notification"
-	}
-
-	// 如果是特殊的事件类型，可以在这里定制 title
-	if ctx.Event == "sms_received" {
-		title = "💬 " + title
-	} else if ctx.Event == "incoming_call" {
-		title = "📞 " + title
-	} else if ctx.Event == "ip_rotated" {
-		title = "🔄 " + title
-	}
+	title := ctx.NotificationTitle()
 
 	payload := barkPayload{
 		Title: title,

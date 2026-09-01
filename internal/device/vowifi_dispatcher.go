@@ -27,7 +27,10 @@ func applyVoWiFiSMSMemoryPressure(set func(bool), persistErr error, retained vow
 }
 
 func isCompatVoWiFiIncomingSMSLog(msg string) bool {
-	return strings.HasPrefix(strings.TrimSpace(msg), "收到新短信 / VoWiFi\n")
+	msg = strings.TrimSpace(msg)
+	return strings.HasPrefix(msg, "收到新短信 / VoWiFi\n") ||
+		strings.Contains(msg, "\n通道    VoWiFi\n") ||
+		strings.Contains(msg, "\n通道  VoWiFi\n")
 }
 
 func (d poolVoWiFiRuntimeDispatcher) Dispatch(ctx context.Context, e eventhost.Event) {

@@ -374,12 +374,18 @@ func summarizeQMIEvent(event qmimanager.Event) qmiEventSummary {
 			Fields:  fields,
 		}
 	case qmimanager.EventVoiceCallStatus:
-		fields := make([]any, 0, 4)
+		fields := make([]any, 0, 8)
 		if info := event.VoiceCalls; info != nil {
 			fields = append(fields,
 				"call_count", len(info.Calls),
 				"remote_party_count", len(info.RemotePartyNumbers),
 			)
+			if states := qmiVoiceCallStateFields(info.Calls); states != "" {
+				fields = append(fields, "call_states", states)
+			}
+			if reasons := qmiVoiceEndReasonFields(info.EndReasons); reasons != "" {
+				fields = append(fields, "end_reasons", reasons)
+			}
 		}
 		return qmiEventSummary{
 			Level:   qmiEventLogDebug,
@@ -607,6 +613,28 @@ func summarizeQMIEvent(event qmimanager.Event) qmiEventSummary {
 			Fields:  fields,
 		}
 	}
+}
+
+func qmiVoiceCallStateFields(calls []qmi.VoiceCallInfo) string {
+	if len(calls) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(calls))
+	for _, call := range calls {
+		parts = append(parts, fmt.Sprintf("%d:%d", call.ID, call.State))
+	}
+	return strings.Join(parts, ",")
+}
+
+func qmiVoiceEndReasonFields(reasons []qmi.VoiceCallEndReason) string {
+	if len(reasons) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(reasons))
+	for _, reason := range reasons {
+		parts = append(parts, fmt.Sprintf("%d:%d", reason.CallID, reason.Reason))
+	}
+	return strings.Join(parts, ",")
 }
 
 func qmiSettingsIP(settings *qmi.RuntimeSettings) string {
