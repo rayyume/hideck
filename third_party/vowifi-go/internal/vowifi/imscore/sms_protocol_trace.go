@@ -17,6 +17,7 @@ const smsProtocolTraceDeviceEnv = "VOHIVE_IMS_SMS_TRACE_DEVICE"
 
 type inboundSMSProtocolTrace struct {
 	callID, cseq, via, fromDomain, assertedDomain, contactDomain string
+	fromUserKind, assertedUserKind                               string
 	bodyBytes                                                    int
 	rpKind                                                       string
 	rpType, rpMR, rpCause, causeIEBytes                          int
@@ -42,6 +43,23 @@ func smsTraceToken(value string) string {
 	return hex.EncodeToString(sum[:8])
 }
 
+func smsTraceUserKind(user string) string {
+	user = strings.TrimSpace(user)
+	if user == "" {
+		return "host"
+	}
+	digits := strings.TrimPrefix(user, "+")
+	if digits == "" {
+		return "other"
+	}
+	for _, r := range digits {
+		if r < '0' || r > '9' {
+			return "other"
+		}
+	}
+	return "phone"
+}
+
 func smsTraceHeaderDomain(value string) string {
 	value = firstSIPHeaderURI(value)
 	if value == "" {
@@ -63,14 +81,18 @@ func parseInboundSMSProtocolTrace(raw string) (inboundSMSProtocolTrace, error) {
 	if !ok {
 		return inboundSMSProtocolTrace{}, errExpectedSIPResponse
 	}
+	from := sipkit.FirstHeaderValue(request, "From", true)
+	asserted := sipkit.FirstHeaderValue(request, "P-Asserted-Identity", true)
 	trace := inboundSMSProtocolTrace{
-		callID:         smsTraceToken(sipkit.FirstHeaderValue(request, "Call-ID", true)),
-		cseq:           sipkit.FirstHeaderValue(request, "CSeq", true),
-		via:            smsTraceToken(sipkit.FirstHeaderValue(request, "Via", true)),
-		fromDomain:     smsTraceHeaderDomain(sipkit.FirstHeaderValue(request, "From", true)),
-		assertedDomain: smsTraceHeaderDomain(sipkit.FirstHeaderValue(request, "P-Asserted-Identity", true)),
-		contactDomain:  smsTraceHeaderDomain(sipkit.FirstHeaderValue(request, "Contact", true)),
-		bodyBytes:      len(request.Body()),
+		callID:           smsTraceToken(sipkit.FirstHeaderValue(request, "Call-ID", true)),
+		cseq:             sipkit.FirstHeaderValue(request, "CSeq", true),
+		via:              smsTraceToken(sipkit.FirstHeaderValue(request, "Via", true)),
+		fromDomain:       smsTraceHeaderDomain(from),
+		assertedDomain:   smsTraceHeaderDomain(asserted),
+		contactDomain:    smsTraceHeaderDomain(sipkit.FirstHeaderValue(request, "Contact", true)),
+		fromUserKind:     smsTraceUserKind(sipURIUser(firstSIPHeaderURI(from))),
+		assertedUserKind: smsTraceUserKind(sipURIUser(firstSIPHeaderURI(asserted))),
+		bodyBytes:        len(request.Body()),
 	}
 	rpdu, err := smscodec.DecodeBodyMaybeHex(request.Body())
 	if err != nil {
@@ -114,8 +136,9 @@ func (s *Service) logInboundSMSProtocolTrace(raw string) {
 	trace, err := parseInboundSMSProtocolTrace(raw)
 	logging.Debug("IMS SMS protocol trace: inbound MESSAGE",
 		"device", s.DeviceID(), "call_id_hash", trace.callID, "cseq", trace.cseq,
-		"via_hash", trace.via, "from_domain", trace.fromDomain,
-		"asserted_domain", trace.assertedDomain, "contact_domain", trace.contactDomain,
+		"via_hash", trace.via, "from_domain", trace.fromDomain, "from_user_kind", trace.fromUserKind,
+		"asserted_domain", trace.assertedDomain, "asserted_user_kind", trace.assertedUserKind,
+		"contact_domain", trace.contactDomain,
 		"body_bytes", trace.bodyBytes, "rp_kind", trace.rpKind,
 		"rp_type", trace.rpType, "rp_mr", trace.rpMR, "rp_cause", trace.rpCause,
 		"rp_cause_ie_bytes", trace.causeIEBytes, "rp_cause_diagnostic", trace.causeDiagnostic,
@@ -210,6 +233,10 @@ func (s *Service) logRPReportProtocolTrace(
 		"in_reply_to_hash", smsTraceToken(sipkit.FirstHeaderValue(request, "In-Reply-To", true)),
 		"inbound_call_id_hash", smsTraceToken(rawSIPHeaderValue(report.Inbound, "Call-ID")),
 		"target_domain", strings.ToLower(strings.Trim(strings.TrimSpace(request.Recipient.Host), "[]")),
+		"target_user_kind", smsTraceUserKind(request.Recipient.User),
+		"preferred_service", sipkit.FirstHeaderValue(request, "P-Preferred-Service", true) != "",
+		"accept_contact", sipkit.FirstHeaderValue(request, "Accept-Contact", true) != "",
+		"omit_cte", report.OmitBinaryCTE, "omit_in_reply_to", report.OmitInReplyTo,
 		"destination_hash", smsTraceToken(destinationFromContext(modeCtx)),
 		"transport", strings.ToLower(strings.TrimSpace(modeCtx.Transport)),
 		"rp_mr", int(report.RPMR), "sip_status", status,

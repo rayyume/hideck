@@ -18,6 +18,18 @@ func TestSMSProtocolTraceEnabledForSelectedDevice(t *testing.T) {
 	}
 }
 
+func TestSMSTraceUserKindDoesNotExposeUser(t *testing.T) {
+	if got := smsTraceUserKind("+447840000000"); got != "phone" {
+		t.Fatalf("phone user kind = %q", got)
+	}
+	if got := smsTraceUserKind(""); got != "host" {
+		t.Fatalf("host user kind = %q", got)
+	}
+	if got := smsTraceUserKind("ipsmgw"); got != "other" {
+		t.Fatalf("other user kind = %q", got)
+	}
+}
+
 func TestSMSTraceHeaderDomainDoesNotExposeUser(t *testing.T) {
 	header := `"Subscriber" <sip:447840000000@ims.example.test>;tag=secret`
 	domain := smsTraceHeaderDomain(header)

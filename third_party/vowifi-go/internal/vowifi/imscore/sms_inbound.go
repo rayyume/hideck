@@ -15,8 +15,14 @@ import (
 )
 
 const (
-	imsSMSContentType       = "application/vnd.3gpp.sms"
-	rpCauseTemporaryFailure = byte(41)
+	imsSMSContentType = "application/vnd.3gpp.sms"
+	// 24.229 originating ICSI marking; 24.341 5.3.2.1 applies 24.229 to RP-ACK.
+	// Missing these, originating iFC can deliver RP-ACK to an AS that 488s
+	// unmatched In-Reply-To (24.341 5.3.3.4.1).
+	imsSMSPreferredService   = "urn:urn-7:3gpp-service.ims.icsi.sms"
+	imsSMSAcceptContact      = `*;+g.3gpp.smsip;+g.3gpp.icsi-ref="urn%3Aurn-7%3A3gpp-service.ims.icsi.sms"`
+	imsSMSContentDisposition = "signal;handling=required"
+	rpCauseTemporaryFailure  = byte(41)
 	// TS 24.341 5.3.2.3: MT RP-DATA is accepted with SIP 202, then RP-ACK
 	// is sent in a separate MESSAGE. RP-ACK/RP-ERROR of our MO stay 200.
 	inboundRPDataSIPStatus = 202
@@ -381,7 +387,7 @@ func (s *Service) rpReportForInbound(raw string, message inboundSMS, rpdu []byte
 	return report
 }
 
-func (s *Service) buildInboundSMSControlRequest(inbound string, body []byte, remoteURI, contentType string, omitBinaryCTE bool) (string, error) {
+func (s *Service) buildInboundSMSControlRequest(inbound string, body []byte, remoteURI, contentType string, omitBinaryCTE, omitInReplyTo bool) (string, error) {
 	remoteURI = strings.TrimSpace(remoteURI)
 	if remoteURI == "" {
 		targets := resolveRpAckTargets(
@@ -398,8 +404,11 @@ func (s *Service) buildInboundSMSControlRequest(inbound string, body []byte, rem
 		return "", errors.New("IMS RP-ACK target is unavailable")
 	}
 	callID := inboundCallIDForReply(inbound)
-	if callID == "" {
+	if callID == "" && !omitInReplyTo {
 		return "", errors.New("IMS RP-ACK In-Reply-To is unavailable")
+	}
+	if omitInReplyTo {
+		callID = ""
 	}
 	return s.buildSMSMESSAGEWithOptions(smsMESSAGEOptions{
 		RemoteURI:     remoteURI,
@@ -407,6 +416,7 @@ func (s *Service) buildInboundSMSControlRequest(inbound string, body []byte, rem
 		InReplyTo:     callID,
 		ContentType:   contentType,
 		OmitBinaryCTE: omitBinaryCTE,
+		OmitInReplyTo: omitInReplyTo,
 	})
 }
 

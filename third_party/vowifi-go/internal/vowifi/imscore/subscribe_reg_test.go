@@ -330,7 +330,7 @@ func TestDuplicateActiveRegistrationRequiresSameAORAndCurrentContact(t *testing.
 	}
 }
 
-func TestRegistrationBindingCleanupIsGiffgaffOnlyAndOncePerIdentity(t *testing.T) {
+func TestRegistrationBindingCleanupOncePerIdentity(t *testing.T) {
 	document, err := parseReginfoXML([]byte(`<reginfo><registration aor="sip:user@example">` +
 		`<contact id="current" state="active"><uri>sip:current@new.example</uri></contact>` +
 		`<contact id="stale" state="active"><uri>sip:stale@old.example</uri></contact>` +
@@ -342,15 +342,16 @@ func TestRegistrationBindingCleanupIsGiffgaffOnlyAndOncePerIdentity(t *testing.T
 		return &Service{cfg: &IMSConfig{CarrierPresetID: preset, DeviceID: device, IMPU: "sip:user@example"},
 			regSession: &registerSession{contactUser: "current", publicID: "sip:user@example", authHeader: "Digest auth"}}
 	}
-	if newService("CTEUK_23433", "cte").requestRegistrationBindingCleanup(document) {
-		t.Fatal("non-giffgaff carrier requested wildcard cleanup")
+	cte := newService("CTEUK_23433", "cte")
+	if !cte.requestRegistrationBindingCleanup(document) || !cte.bindingCleanupPending.Load() {
+		t.Fatal("duplicate binding did not request cleanup")
 	}
 	service := newService(giffgaffCarrierPresetID, "giffgaff-once")
 	if !service.requestRegistrationBindingCleanup(document) || !service.bindingCleanupPending.Load() {
-		t.Fatal("giffgaff duplicate binding did not request cleanup")
+		t.Fatal("duplicate binding did not request cleanup")
 	}
 	if service.requestRegistrationBindingCleanup(document) {
-		t.Fatal("giffgaff duplicate binding requested cleanup more than once")
+		t.Fatal("duplicate binding requested cleanup more than once")
 	}
 }
 

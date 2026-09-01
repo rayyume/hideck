@@ -60,6 +60,10 @@ func TestNotifySMSMemoryAvailableUsesLastIPSMGW(t *testing.T) {
 	if got := rawSIPHeaderValue(request, "Content-Transfer-Encoding"); got != "binary" {
 		t.Fatalf("Content-Transfer-Encoding = %q", got)
 	}
+	if got := rawSIPHeaderValue(request, "Content-Disposition"); got != imsSMSContentDisposition {
+		t.Fatalf("Content-Disposition = %q", got)
+	}
+	assertSMSOverIPServiceHeaders(t, request)
 	body, err := rawSIPBody(request)
 	if err != nil {
 		t.Fatal(err)

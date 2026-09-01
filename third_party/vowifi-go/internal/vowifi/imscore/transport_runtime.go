@@ -10,6 +10,7 @@ import (
 
 	"github.com/emiago/sipgo/sip"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/logging"
+	"github.com/iniwex5/vowifi-go/internal/vowifi/sipkit"
 )
 
 // SMSReceiverStatus is a snapshot of the live SIP receiver.
@@ -175,7 +176,9 @@ func (s *Service) dispatchInboundSIPMessageWithPeer(
 			cseq = parsed.CSeq().Value()
 		}
 		logging.Debug("IMS inbound SIP response",
-			"device", s.DeviceID(), "status", parsed.StatusCode, "reason", parsed.Reason, "cseq", cseq)
+			"device", s.DeviceID(), "status", parsed.StatusCode, "reason", parsed.Reason, "cseq", cseq,
+			"warning", sipkit.FirstHeaderValue(parsed, "Warning", true),
+			"accept", sipkit.FirstHeaderValue(parsed, "Accept", true))
 		s.publishIMSEvent(s.buildIMSEventFromResponse(parsed))
 		s.transport.DeliverResponse(newSIPResponse(parsed))
 		return nil
@@ -187,12 +190,35 @@ func (s *Service) dispatchInboundSIPMessageWithPeer(
 	}
 }
 
+func (s *Service) logInboundSIPRequest(request *sip.Request) {
+	if s == nil || request == nil {
+		return
+	}
+	cseq := ""
+	if request.CSeq() != nil {
+		cseq = request.CSeq().Value()
+	}
+	fields := []any{
+		"device", s.DeviceID(),
+		"method", string(request.Method),
+		"cseq", cseq,
+		"content_type", sipkit.FirstHeaderValue(request, "Content-Type", true),
+		"body_bytes", len(request.Body()),
+	}
+	if s.smsProtocolTraceEnabled() {
+		logging.Info("IMS inbound SIP request", fields...)
+		return
+	}
+	logging.Debug("IMS inbound SIP request", fields...)
+}
+
 func (s *Service) dispatchInboundSIPRequest(
 	request *sip.Request,
 	raw string,
 	reply func(string) error,
 	peer net.Conn,
 ) error {
+	s.logInboundSIPRequest(request)
 	s.transport.DeliverRequest(raw)
 	transaction, handled, err := s.acceptServerRequest(request, raw, reply)
 	if handled || err != nil {

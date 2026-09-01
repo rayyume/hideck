@@ -98,6 +98,18 @@ func (s *Service) registerLocked(ctx context.Context) error {
 	if err == nil {
 		expires, err = s.runRegisterFlow(ctx)
 	}
+	if err == nil && s.lastRegisterContactCount.Load() > 1 {
+		logging.Info("IMS REGISTER listed multiple Contacts; clearing stale bindings",
+			"device", s.DeviceID(), "contacts", s.lastRegisterContactCount.Load())
+		if clearErr := s.clearRegistrationBindingsLocked(ctx); clearErr != nil {
+			logging.Info("IMS stale Contact cleanup failed",
+				"device", s.DeviceID(), "err", clearErr)
+		} else if again, againErr := s.runRegisterFlow(ctx); againErr != nil {
+			err = againErr
+		} else {
+			expires = again
+		}
+	}
 	if err != nil {
 		s.mu.Lock()
 		s.regState = regFailed
@@ -305,6 +317,7 @@ func updateRegisterAttemptAuth(result *registerAttemptResult, session *registerS
 
 func (s *Service) commitRegisterSuccess(resp *sipResponse, session *registerSession) (time.Duration, error) {
 	s.finalizeRegistrationTransportSwitch()
+	s.lastRegisterContactCount.Store(int32(registerContactBindingCount(resp)))
 	expires := registrationExpires(resp, s.cfg.Expires)
 	session.expires = expires
 	s.recordRegisterSession(session)
@@ -678,13 +691,13 @@ func (s *Service) registerContactOptions(session *registerSession) imsheaders.Co
 		options.LocalPortC = int(session.security.client.PortC)
 		options.LocalPortS = int(session.security.client.PortS)
 	}
-	if s.outboundContactEnabled() {
+	if s.outboundContactEnabled(session) {
 		options.ContactParamOrder = withOutboundContactParams(options.ContactParamOrder)
 	}
 	return options
 }
 
-func (s *Service) outboundContactEnabled() bool {
+func (s *Service) outboundContactEnabled(session *registerSession) bool {
 	if s == nil {
 		return false
 	}
@@ -695,6 +708,9 @@ func (s *Service) outboundContactEnabled() bool {
 
 func withOutboundContactParams(order []string) []string {
 	result := append([]string(nil), order...)
+	if !containsContactParamName(result, "sip_instance") {
+		result = insertContactParamAfter(result, "access_type", "sip_instance")
+	}
 	if !containsContactParamName(result, "reg_id") {
 		result = insertContactParamAfter(result, "sip_instance", "reg_id")
 	}

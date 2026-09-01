@@ -13,6 +13,11 @@ import (
 
 const defaultSIPPort = 5060
 
+// protectedPushReconnectGrace waits for P-CSCF to reopen port-s after it
+// RSTs the previous push TCP (normal after REGISTER refresh). Re-REGISTER
+// only if no replacement connection appears.
+var protectedPushReconnectGrace = 5 * time.Second
+
 func registerTransportDeadline(ctx context.Context, timeout time.Duration) time.Time {
 	deadline := time.Now().Add(timeout)
 	if ctx == nil {
@@ -277,6 +282,35 @@ func (s *Service) handleProtectedServerPushClosed() {
 	remaining := len(s.protectedConns)
 	s.protectedConnMu.Unlock()
 	if remaining > 0 {
+		return
+	}
+	grace := protectedPushReconnectGrace
+	if grace <= 0 {
+		s.triggerRegisterImmediate("protected server push closed")
+		return
+	}
+	s.networkDone.Add(1)
+	go s.confirmProtectedPushReRegister(grace)
+}
+
+func (s *Service) confirmProtectedPushReRegister(grace time.Duration) {
+	defer s.networkDone.Done()
+	timer := time.NewTimer(grace)
+	defer timer.Stop()
+	select {
+	case <-s.stop:
+		return
+	case <-timer.C:
+	}
+	if s.stopped() {
+		return
+	}
+	s.protectedConnMu.Lock()
+	remaining := len(s.protectedConns)
+	s.protectedConnMu.Unlock()
+	if remaining > 0 {
+		logging.Info("IMS protected server push replaced; skip re-REGISTER",
+			"device", s.DeviceID(), "connections", remaining)
 		return
 	}
 	s.triggerRegisterImmediate("protected server push closed")

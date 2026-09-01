@@ -141,6 +141,49 @@ func TestInstanceStopReleasesIMSBeforeTunnel(t *testing.T) {
 	}
 }
 
+func TestInstanceStopDeregistersBeforeCancelingRuntime(t *testing.T) {
+	var order []string
+	tunnel := newLifecycleTunnel(nil)
+	tunnel.onShutdown = func() { order = append(order, "tunnel") }
+	service := &recordingStopService{onStop: func() { order = append(order, "ims") }}
+	instance := &Instance{
+		cancel:  func() { order = append(order, "cancel") },
+		service: service,
+		tunnel:  tunnel,
+	}
+	if err := instance.Stop(context.Background()); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+	want := []string{"ims", "cancel", "tunnel"}
+	if !reflectDeepEqualStrings(order, want) {
+		t.Fatalf("cleanup order = %v, want %v", order, want)
+	}
+}
+
+type recordingStopService struct {
+	stubService
+	onStop func()
+}
+
+func (s *recordingStopService) Stop(context.Context) error {
+	if s.onStop != nil {
+		s.onStop()
+	}
+	return nil
+}
+
+func reflectDeepEqualStrings(got, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func TestTriggerMOBIKEUsesTunnelAndReportsFailure(t *testing.T) {
 	tunnel := newLifecycleTunnel(nil)
 	instance := &Instance{tunnel: tunnel}

@@ -1,6 +1,7 @@
 package imscore
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -269,13 +270,39 @@ func TestRPReportRetriesServerErrorsNot488(t *testing.T) {
 	}
 }
 
-func TestRPAckFallsBackWithoutBinaryCTEAfter488(t *testing.T) {
+func TestRPAckHostOnlyKeepsInReplyToFirst(t *testing.T) {
+	service, _, _ := newInboundSMSTestService(t)
+	var requests []string
+	service.transport.SetSendFn(func(raw string) error {
+		requests = append(requests, raw)
+		service.transport.DeliverResponse(registerResponseForRequest(raw, 202, nil))
+		return nil
+	})
+	raw := inboundSMSRequest(t, imsSMSContentType, inboundRPData(t, 0x37, "+447700900123", "ack"))
+	raw = strings.Replace(raw, "From: <sip:+447802002606@ims.example>;tag=remote\r\n",
+		"P-Asserted-Identity: <sip:ipsmms1mc06.ims.example>\r\n"+
+			"From: <sip:ipsmms1mc06.ims.example>;tag=remote\r\n", 1)
+	err := service.sendRPReportWithRetryPolicy(rpReportRequest{
+		Inbound: raw, Body: smscodec.BuildRPAck(0x37), RPMR: 0x37,
+	}, 0, 0)
+	if err != nil || len(requests) != 1 {
+		t.Fatalf("attempts=%d error=%v", len(requests), err)
+	}
+	if got := rawSIPHeaderValue(requests[0], "In-Reply-To"); got != "inbound-sms" {
+		t.Fatalf("host-only first In-Reply-To = %q", got)
+	}
+	if got := strings.SplitN(requests[0], "\r\n", 2)[0]; got != "MESSAGE sip:ipsmms1mc06.ims.example SIP/2.0" {
+		t.Fatalf("Request-URI = %q", got)
+	}
+}
+
+func TestRPAckOmitsInReplyToAfter488(t *testing.T) {
 	service, _, _ := newInboundSMSTestService(t)
 	var requests []string
 	service.transport.SetSendFn(func(raw string) error {
 		requests = append(requests, raw)
 		status := 488
-		if len(requests) == 2 {
+		if len(requests) == 3 {
 			status = 202
 		}
 		service.transport.DeliverResponse(registerResponseForRequest(raw, status, nil))
@@ -285,17 +312,114 @@ func TestRPAckFallsBackWithoutBinaryCTEAfter488(t *testing.T) {
 	err := service.sendRPReportWithRetryPolicy(rpReportRequest{
 		Inbound: raw, Body: smscodec.BuildRPAck(0x34), RPMR: 0x34,
 	}, 0, 0)
-	if err != nil || len(requests) != 2 {
+	if err != nil || len(requests) != 3 {
+		t.Fatalf("attempts=%d error=%v", len(requests), err)
+	}
+	if got := rawSIPHeaderValue(requests[0], "In-Reply-To"); got != "inbound-sms" {
+		t.Fatalf("first In-Reply-To = %q", got)
+	}
+	body, err := rawSIPBody(requests[1])
+	if err != nil || !bytes.Equal(body, smscodec.BuildRPAckWithDeliverReport(0x34)) {
+		t.Fatalf("deliver-report body = %x err=%v", body, err)
+	}
+	if got := rawSIPHeaderValue(requests[2], "In-Reply-To"); got != "" {
+		t.Fatalf("fallback In-Reply-To = %q", got)
+	}
+	if rawSIPHeaderValue(requests[0], "Content-Transfer-Encoding") != "binary" ||
+		rawSIPHeaderValue(requests[2], "Content-Transfer-Encoding") != "binary" {
+		t.Fatal("In-Reply-To fallback dropped CTE")
+	}
+	if rawSIPHeaderValue(requests[0], "To") != rawSIPHeaderValue(requests[2], "To") {
+		t.Fatalf("fallback changed Request-URI")
+	}
+}
+
+func TestRPAckFallsBackWithoutBinaryCTEAfter488(t *testing.T) {
+	service, _, _ := newInboundSMSTestService(t)
+	var requests []string
+	service.transport.SetSendFn(func(raw string) error {
+		requests = append(requests, raw)
+		status := 488
+		if len(requests) == 4 {
+			status = 202
+		}
+		service.transport.DeliverResponse(registerResponseForRequest(raw, status, nil))
+		return nil
+	})
+	raw := inboundSMSRequest(t, imsSMSContentType, inboundRPData(t, 0x34, "+447700900123", "ack"))
+	err := service.sendRPReportWithRetryPolicy(rpReportRequest{
+		Inbound: raw, Body: smscodec.BuildRPAck(0x34), RPMR: 0x34,
+	}, 0, 0)
+	if err != nil || len(requests) != 4 {
 		t.Fatalf("attempts=%d error=%v", len(requests), err)
 	}
 	if got := rawSIPHeaderValue(requests[0], "Content-Transfer-Encoding"); got != "binary" {
 		t.Fatalf("first CTE = %q", got)
 	}
-	if got := rawSIPHeaderValue(requests[1], "Content-Transfer-Encoding"); got != "" {
-		t.Fatalf("fallback CTE = %q", got)
+	if got := rawSIPHeaderValue(requests[3], "Content-Transfer-Encoding"); got != "" {
+		t.Fatalf("CTE fallback CTE = %q", got)
 	}
-	if rawSIPHeaderValue(requests[0], "To") != rawSIPHeaderValue(requests[1], "To") {
+	if rawSIPHeaderValue(requests[3], "In-Reply-To") != "inbound-sms" {
+		t.Fatalf("CTE fallback dropped In-Reply-To")
+	}
+	if rawSIPHeaderValue(requests[0], "To") != rawSIPHeaderValue(requests[3], "To") {
 		t.Fatalf("fallback changed Request-URI")
+	}
+	for i, request := range requests {
+		if got := rawSIPHeaderValue(request, "P-Preferred-Service"); got != imsSMSPreferredService {
+			t.Fatalf("request %d P-Preferred-Service = %q", i, got)
+		}
+		if got := rawSIPHeaderValue(request, "Accept-Contact"); got != imsSMSAcceptContact {
+			t.Fatalf("request %d Accept-Contact = %q", i, got)
+		}
+	}
+}
+
+func TestRPAckHostOnlyPAIFallsBackToSameHostFromAfter488(t *testing.T) {
+	service, _, _ := newInboundSMSTestService(t)
+	var requests []string
+	service.transport.SetSendFn(func(raw string) error {
+		requests = append(requests, raw)
+		status := 488
+		if len(requests) == 5 {
+			status = 202
+		}
+		service.transport.DeliverResponse(registerResponseForRequest(raw, status, nil))
+		return nil
+	})
+	raw := inboundSMSRequest(t, imsSMSContentType, inboundRPData(t, 0x36, "+447700900123", "ack"))
+	raw = strings.Replace(raw, "From: <sip:+447802002606@ims.example>;tag=remote\r\n",
+		"P-Asserted-Identity: <sip:ipsmms1mc06.ims.example>\r\n"+
+			"From: <sip:ipsmgw@ipsmms1mc06.ims.example>;tag=remote\r\n", 1)
+	err := service.sendRPReportWithRetryPolicy(rpReportRequest{
+		Inbound: raw, Body: smscodec.BuildRPAck(0x36), RPMR: 0x36,
+	}, 0, 0)
+	if err != nil || len(requests) != 5 {
+		t.Fatalf("attempts=%d error=%v", len(requests), err)
+	}
+	if got := strings.SplitN(requests[0], "\r\n", 2)[0]; got != "MESSAGE sip:ipsmms1mc06.ims.example SIP/2.0" {
+		t.Fatalf("first Request-URI = %q", got)
+	}
+	if got := rawSIPHeaderValue(requests[0], "In-Reply-To"); got != "inbound-sms" {
+		t.Fatalf("host-only first In-Reply-To = %q", got)
+	}
+	if got := strings.SplitN(requests[4], "\r\n", 2)[0]; got != "MESSAGE sip:ipsmgw@ipsmms1mc06.ims.example SIP/2.0" {
+		t.Fatalf("host-only fallback Request-URI = %q", got)
+	}
+	if rawSIPHeaderValue(requests[4], "Content-Disposition") != imsSMSContentDisposition {
+		t.Fatalf("From fallback lost Content-Disposition")
+	}
+}
+
+func TestRPAckKeepsUserPAIWithoutFromFallback(t *testing.T) {
+	got := rpAckURICandidates(rpReportRequest{
+		Inbound: "P-Asserted-Identity: <sip:smsc@ims.example>\r\n" +
+			"From: <sip:ipsmgw@ims.example>\r\n" +
+			"Contact: <sip:other@ims.example>\r\n",
+		RemoteURI: "sip:smsc@ims.example",
+	})
+	if len(got) != 1 || got[0] != "sip:smsc@ims.example" {
+		t.Fatalf("user PAI candidates = %v", got)
 	}
 }
 
@@ -314,7 +438,7 @@ func TestRPAckKeepsPAIAfterCTEFallbackStill488(t *testing.T) {
 	err := service.sendRPReportWithRetryPolicy(rpReportRequest{
 		Inbound: raw, Body: smscodec.BuildRPAck(0x35), RPMR: 0x35,
 	}, 0, 0)
-	if err == nil || len(requests) != 2 {
+	if err == nil || len(requests) != 4 {
 		t.Fatalf("attempts=%d error=%v", len(requests), err)
 	}
 	for i, request := range requests {

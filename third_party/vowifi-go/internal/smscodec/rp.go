@@ -301,6 +301,13 @@ func BuildRPAck(rpMR byte) []byte {
 	return []byte{0x02, rpMR}
 }
 
+// BuildRPAckWithDeliverReport adds a successful SMS-DELIVER-REPORT TPDU
+// as RP-User Data (TS 24.011 7.3.3 / 8.2.2 IEI 0x41).
+func BuildRPAckWithDeliverReport(rpMR byte) []byte {
+	tpdu := []byte{0x00}
+	return []byte{0x02, rpMR, rpUserDataIEI, byte(len(tpdu)), tpdu[0]}
+}
+
 // BuildRPSMMA 构造 RP-SMMA（TS 24.011：MS→网络 memory available，MTI 110）。
 func BuildRPSMMA(rpMR byte) []byte {
 	return []byte{0x06, rpMR}

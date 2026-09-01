@@ -12,7 +12,53 @@ import (
 	"github.com/iniwex5/vowifi-go/internal/vowifi/sipkit"
 )
 
-const gracefulUnregisterTimeout = 5 * time.Second
+const (
+	gracefulUnregisterTimeout  = 12 * time.Second
+	shutdownUnsubscribeTimeout = 2 * time.Second
+	stopCurrentReserve         = 500 * time.Millisecond
+)
+
+var shutdownDeregisterAttemptTimeout = 3 * time.Second
+
+func deregisterAttemptTimeout(ctx context.Context) time.Duration {
+	timeout := shutdownDeregisterAttemptTimeout
+	if timeout <= 0 {
+		timeout = 3 * time.Second
+	}
+	if ctx == nil {
+		return timeout
+	}
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return timeout
+	}
+	remaining := time.Until(deadline)
+	if remaining <= 0 {
+		return time.Millisecond
+	}
+	if remaining < timeout {
+		return remaining
+	}
+	return timeout
+}
+
+func unregisterTimeoutFor(ctx context.Context) time.Duration {
+	if ctx == nil {
+		return gracefulUnregisterTimeout
+	}
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return gracefulUnregisterTimeout
+	}
+	remaining := time.Until(deadline)
+	if remaining <= 0 {
+		return time.Millisecond
+	}
+	if remaining > stopCurrentReserve+time.Second {
+		return remaining - stopCurrentReserve
+	}
+	return remaining
+}
 
 // Status restores the v1.5.5 map status API.
 func (s *Service) Status() map[string]interface{} {
@@ -216,7 +262,10 @@ func (s *Service) Stop(ctx context.Context) error {
 		s.StopCurrent()
 		return err
 	}
-	unregisterCtx, cancel := context.WithTimeout(ctx, gracefulUnregisterTimeout)
+	unregisterCtx, cancel := context.WithTimeout(ctx, unregisterTimeoutFor(ctx))
+	// Contact-specific Expires=0 first. Contact:* also third-party
+	// deregisters IP-SM-GW; Vodafone then stopped pushing MT MESSAGE
+	// even after a clean re-REGISTER.
 	unregisterErr := s.Unregister(unregisterCtx)
 	cancel()
 	s.StopCurrent()

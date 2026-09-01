@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/emiago/sipgo/sip"
+	"github.com/iniwex5/vowifi-go/internal/smscodec"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/common"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/logging"
 )
@@ -20,6 +22,7 @@ type rpReportRequest struct {
 	RemoteURI     string
 	ContentType   string
 	OmitBinaryCTE bool
+	OmitInReplyTo bool
 }
 
 type rpReportRejectError struct {
@@ -69,7 +72,7 @@ func (s *Service) recordMTAckAudit(audit mtAckAudit, err error) {
 }
 
 func (s *Service) sendRPReport(report rpReportRequest) error {
-	request, err := s.buildRPAckMESSAGE(report.Inbound, report.Body, report.RemoteURI, report.ContentType, report.OmitBinaryCTE)
+	request, err := s.buildRPAckMESSAGE(report.Inbound, report.Body, report.RemoteURI, report.ContentType, report.OmitBinaryCTE, report.OmitInReplyTo)
 	if err != nil {
 		s.mtAckSendErr.Add(1)
 		return err
@@ -172,11 +175,9 @@ func (s *Service) sendRPReportWithRetryPolicy(
 				return nil
 			}
 			if rpReportFallbackStatus(lastErr) {
-				if delay <= 0 {
-					delay = retryDelay
-				} else {
-					delay *= 2
-				}
+				// Next packing must go out on the same IP-SM-GW
+				// transaction. Waiting here turned a 488 into 481.
+				delay = 0
 				break
 			}
 			if !rpReportRetryable(lastErr) || attempts >= rpReportMaxAttempts {
@@ -205,7 +206,7 @@ func rpReportRetryable(err error) bool {
 
 func rpReportFallbackStatus(err error) bool {
 	switch rpReportRejectStatus(err) {
-	case 406, 415, 488:
+	case 406, 415, 481, 488:
 		return true
 	default:
 		return false
@@ -213,13 +214,100 @@ func rpReportFallbackStatus(err error) bool {
 }
 
 func rpAckRequestVariants(report rpReportRequest) []rpReportRequest {
-	variants := []rpReportRequest{report}
-	if !report.OmitBinaryCTE {
-		withoutCTE := report
-		withoutCTE.OmitBinaryCTE = true
-		variants = append(variants, withoutCTE)
+	var variants []rpReportRequest
+	for _, uri := range rpAckURICandidates(report) {
+		withURI := report
+		withURI.RemoteURI = uri
+		// 24.341 5.3.2.4: In-Reply-To is shall on the first attempt.
+		// Live Vodafone host-only IP-SM-GW 481s an omitted In-Reply-To.
+		variants = append(variants, withURI)
+		if extra := rpAckDeliverReportVariant(withURI); extra != nil {
+			variants = append(variants, *extra)
+		}
+		if !withURI.OmitInReplyTo {
+			withoutIRT := withURI
+			withoutIRT.OmitInReplyTo = true
+			variants = append(variants, withoutIRT)
+		}
+		if !withURI.OmitBinaryCTE {
+			withoutCTE := withURI
+			withoutCTE.OmitBinaryCTE = true
+			variants = append(variants, withoutCTE)
+		}
+	}
+	if len(variants) == 0 {
+		return []rpReportRequest{report}
 	}
 	return variants
+}
+
+func rpAckDeliverReportVariant(report rpReportRequest) *rpReportRequest {
+	if len(report.Body) != 2 || report.Body[0] != 0x02 {
+		return nil
+	}
+	next := report
+	next.Body = smscodec.BuildRPAckWithDeliverReport(report.RPMR)
+	if len(next.Body) <= len(report.Body) {
+		return nil
+	}
+	return &next
+}
+
+func rpAckURICandidates(report rpReportRequest) []string {
+	primary := strings.TrimSpace(report.RemoteURI)
+	if primary == "" {
+		targets := resolveRpAckTargets(
+			rawSIPHeaderValue(report.Inbound, "P-Asserted-Identity"),
+			rawSIPHeaderValue(report.Inbound, "From"),
+			rawSIPHeaderValue(report.Inbound, "Contact"),
+		)
+		if len(targets) == 0 {
+			return nil
+		}
+		primary = targets[0]
+	}
+	out := []string{primary}
+	if sipURIUser(primary) != "" {
+		return out
+	}
+	// RFC 3261 488 is location-specific. Host-only PAI can 488 while the
+	// same-host From/Contact still names the IP-SM-GW (24.341 5.3.2.4).
+	seen := map[string]struct{}{primary: {}}
+	host := sipURIHost(primary)
+	for _, extra := range []string{
+		firstSIPHeaderURI(rawSIPHeaderValue(report.Inbound, "From")),
+		firstSIPHeaderURI(rawSIPHeaderValue(report.Inbound, "Contact")),
+	} {
+		extra = strings.TrimSpace(extra)
+		if extra == "" || strings.ContainsAny(extra, "\r\n") || sipURIUser(extra) == "" {
+			continue
+		}
+		if host == "" || sipURIHost(extra) != host {
+			continue
+		}
+		if _, ok := seen[extra]; ok {
+			continue
+		}
+		seen[extra] = struct{}{}
+		out = append(out, extra)
+	}
+	return out
+}
+
+func sipURIUser(value string) string {
+	var uri sip.Uri
+	if err := sip.ParseUri(strings.TrimSpace(value), &uri); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(uri.User)
+}
+
+func sipURIHost(value string) string {
+	var uri sip.Uri
+	if err := sip.ParseUri(strings.TrimSpace(value), &uri); err != nil {
+		return ""
+	}
+	return strings.ToLower(strings.Trim(strings.TrimSpace(uri.Host), "[]"))
 }
 
 func (report rpReportRequest) ackTargets() []string {

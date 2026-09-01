@@ -204,6 +204,7 @@ type Service struct {
 	subscriptionDialog        registrationSubscriptionDialog
 	notifyReconnectPending    atomic.Bool
 	bindingCleanupPending     atomic.Bool
+	lastRegisterContactCount  atomic.Int32
 	keepaliveInterval         time.Duration
 	keepaliveTimeout          time.Duration
 	keepaliveFailureLimit     int

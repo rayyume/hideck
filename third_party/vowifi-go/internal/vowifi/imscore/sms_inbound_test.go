@@ -63,14 +63,12 @@ func TestInboundSMSDeliversEventAndSendsRPAck(t *testing.T) {
 	if got := rawSIPHeaderValue(request, "In-Reply-To"); got != "inbound-sms" {
 		t.Fatalf("RP-ACK In-Reply-To = %q", got)
 	}
-	if got := rawSIPHeaderValue(request, "Accept-Contact"); got != "" {
-		t.Fatalf("RP-ACK Accept-Contact = %q", got)
-	}
-	if got := rawSIPHeaderValue(request, "P-Preferred-Service"); got != "" {
-		t.Fatalf("RP-ACK P-Preferred-Service = %q", got)
-	}
+	assertSMSOverIPServiceHeaders(t, request)
 	if got := rawSIPHeaderValue(request, "Content-Transfer-Encoding"); got != "binary" {
 		t.Fatalf("RP-ACK Content-Transfer-Encoding = %q", got)
+	}
+	if got := rawSIPHeaderValue(request, "Content-Disposition"); got != imsSMSContentDisposition {
+		t.Fatalf("RP-ACK Content-Disposition = %q", got)
 	}
 	if got := rawSIPHeaderValue(request, "Request-Disposition"); got != "" {
 		t.Fatalf("RP-ACK Request-Disposition = %q", got)
@@ -254,6 +252,16 @@ func waitForOutboundSMSControl(t *testing.T, outbound <-chan string) string {
 	case <-time.After(time.Second):
 		t.Fatal("RP control MESSAGE was not sent")
 		return ""
+	}
+}
+
+func assertSMSOverIPServiceHeaders(t *testing.T, request string) {
+	t.Helper()
+	if got := rawSIPHeaderValue(request, "P-Preferred-Service"); got != imsSMSPreferredService {
+		t.Fatalf("P-Preferred-Service = %q, want %q", got, imsSMSPreferredService)
+	}
+	if got := rawSIPHeaderValue(request, "Accept-Contact"); got != imsSMSAcceptContact {
+		t.Fatalf("Accept-Contact = %q, want %q", got, imsSMSAcceptContact)
 	}
 }
 

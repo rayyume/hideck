@@ -86,15 +86,15 @@ func (i *Instance) Stop(ctx context.Context) error {
 	i.cancel = nil
 	i.voiceDetach = nil
 	i.mu.Unlock()
-	if cancel != nil {
-		cancel()
-	}
 	var stopErr error
 	if voiceDetach != nil {
 		stopErr = voiceDetach()
 	}
 	if svc != nil {
 		stopErr = errors.Join(stopErr, svc.Stop(ctx))
+	}
+	if cancel != nil {
+		cancel()
 	}
 	if tunnel != nil {
 		tunnel.Shutdown()

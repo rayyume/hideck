@@ -600,10 +600,9 @@ func assertOutboundSMSRequest(t *testing.T, request, recipient, smsc string) {
 	if strings.Contains(request, "\r\nRequire: sec-agree\r\n") || strings.Contains(request, "\r\nProxy-Require: sec-agree\r\n") {
 		t.Fatalf("MESSAGE unexpectedly requires sec-agree: %q", request)
 	}
-	for _, name := range []string{"Accept-Contact", "P-Preferred-Service", "Request-Disposition"} {
-		if got := rawSIPHeaderValue(request, name); got != "" {
-			t.Fatalf("%s = %q", name, got)
-		}
+	assertSMSOverIPServiceHeaders(t, request)
+	if got := rawSIPHeaderValue(request, "Request-Disposition"); got != "" {
+		t.Fatalf("Request-Disposition = %q", got)
 	}
 	body, err := rawSIPBody(request)
 	if err != nil {
@@ -668,4 +667,13 @@ func TestBuildSMSMESSAGERequiresNegotiatedRegistrationIdentity(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "registered public identity is unavailable") {
 		t.Fatalf("build error = %v", err)
 	}
+}
+
+func TestBuildSMSMESSAGEIncludesICSISMSRoutingHeaders(t *testing.T) {
+	service, _, _ := newOutboundSMSTestService(t)
+	request, err := service.buildSMSMESSAGE("sip:+447700900123@ims.example;user=phone", []byte{0x00})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertSMSOverIPServiceHeaders(t, request)
 }

@@ -24,6 +24,7 @@ type smsMESSAGEOptions struct {
 	InReplyTo     string
 	ContentType   string
 	OmitBinaryCTE bool
+	OmitInReplyTo bool
 }
 
 func (s *Service) buildSMSMESSAGEWithOptions(options smsMESSAGEOptions) (string, error) {
@@ -35,6 +36,9 @@ func (s *Service) buildSMSMESSAGEWithOptions(options smsMESSAGEOptions) (string,
 		return "", errors.New("imscore: invalid SMS remote URI")
 	}
 	inReplyTo := strings.TrimSpace(options.InReplyTo)
+	if options.OmitInReplyTo {
+		inReplyTo = ""
+	}
 	if strings.ContainsAny(inReplyTo, "\r\n") {
 		return "", errors.New("imscore: invalid SMS In-Reply-To")
 	}
@@ -69,6 +73,8 @@ func (s *Service) buildSMSMESSAGEWithOptions(options smsMESSAGEOptions) (string,
 	if pani := strings.TrimSpace(profile.PANI); pani != "" {
 		request.WriteString("P-Access-Network-Info: " + pani + "\r\n")
 	}
+	request.WriteString("P-Preferred-Service: " + imsSMSPreferredService + "\r\n")
+	request.WriteString("Accept-Contact: " + imsSMSAcceptContact + "\r\n")
 	if userAgent := strings.TrimSpace(profile.UserAgent); userAgent != "" {
 		request.WriteString("User-Agent: " + userAgent + "\r\n")
 	}
@@ -80,8 +86,11 @@ func (s *Service) buildSMSMESSAGEWithOptions(options smsMESSAGEOptions) (string,
 		return "", errors.New("imscore: invalid SMS Content-Type")
 	}
 	request.WriteString("Content-Type: " + contentType + "\r\n")
-	if normalizedContentType(contentType) == imsSMSContentType && !options.OmitBinaryCTE {
-		request.WriteString("Content-Transfer-Encoding: binary\r\n")
+	if normalizedContentType(contentType) == imsSMSContentType {
+		request.WriteString("Content-Disposition: " + imsSMSContentDisposition + "\r\n")
+		if !options.OmitBinaryCTE {
+			request.WriteString("Content-Transfer-Encoding: binary\r\n")
+		}
 	}
 	fmt.Fprintf(&request, "Content-Length: %d\r\n\r\n", len(options.Body))
 	request.Write(options.Body)
@@ -108,8 +117,8 @@ func (s *Service) buildOutboundMESSAGEWithOptions(options smsMESSAGEOptions) (*s
 	return request, nil
 }
 
-func (s *Service) buildRPAckMESSAGE(inbound string, body []byte, remoteURI, contentType string, omitBinaryCTE bool) (*sip.Request, error) {
-	raw, err := s.buildInboundSMSControlRequest(inbound, body, remoteURI, contentType, omitBinaryCTE)
+func (s *Service) buildRPAckMESSAGE(inbound string, body []byte, remoteURI, contentType string, omitBinaryCTE, omitInReplyTo bool) (*sip.Request, error) {
+	raw, err := s.buildInboundSMSControlRequest(inbound, body, remoteURI, contentType, omitBinaryCTE, omitInReplyTo)
 	if err != nil {
 		return nil, err
 	}

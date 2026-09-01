@@ -663,6 +663,25 @@ func TestStartWaitsForIMSRegistrationBeforeSuccess(t *testing.T) {
 	}
 }
 
+func TestIMSServiceUsesStablePreparedIMEI(t *testing.T) {
+	tunnel := newLifecycleTunnel(nil)
+	prepared := &identity.PreparedSession{
+		Profile: identity.Profile{
+			IMSI: "310260123456789", MCC: "310", MNC: "260", IMEI: "860349051234567",
+		},
+		IMSIdentity: identity.IMSIdentity{IMPI: "310260123456789@ims.example", IMPU: "sip:310260123456789@ims.example", Domain: "ims.example"},
+		EPDGAddr:    "epdg.example.com",
+	}
+	svc, err := imscoreFromPrepared(runtimeTestRequest(prepared, tunnel), tunnel)
+	if err != nil {
+		t.Fatalf("imscoreFromPrepared: %v", err)
+	}
+	t.Cleanup(svc.StopCurrent)
+	if got := svc.GetIMEI(); got != "860349051234567" {
+		t.Fatalf("IMS IMEI = %q, want prepared identity IMEI for sip.instance replacement", got)
+	}
+}
+
 func TestIMSServiceUsesSWuInnerNetwork(t *testing.T) {
 	tunnel := newLifecycleTunnel(nil)
 	prepared := &identity.PreparedSession{

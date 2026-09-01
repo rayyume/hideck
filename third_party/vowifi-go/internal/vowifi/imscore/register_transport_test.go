@@ -371,8 +371,12 @@ func TestRegistrationRefreshesBeforeExpiryAndReportsFailure(t *testing.T) {
 	if sipHeaderValue(seen[0], "CSeq") != "2 REGISTER" || sipHeaderValue(seen[1], "CSeq") != "3 REGISTER" {
 		t.Fatalf("refresh CSeq values = %q, %q", sipHeaderValue(seen[0], "CSeq"), sipHeaderValue(seen[1], "CSeq"))
 	}
-	if !strings.Contains(sipHeaderValue(seen[1], "Contact"), ";expires=3600") {
-		t.Fatalf("refresh Contact omitted expires: %q", sipHeaderValue(seen[1], "Contact"))
+	if sipHeaderValue(seen[1], "Expires") != "3600" {
+		t.Fatalf("refresh Expires = %q", sipHeaderValue(seen[1], "Expires"))
+	}
+	refreshContact := sipHeaderValue(seen[1], "Contact")
+	if !strings.Contains(refreshContact, "+sip.instance=") {
+		t.Fatalf("refresh Contact omitted sip.instance: %q", refreshContact)
 	}
 	select {
 	case err := <-svc.RegistrationErrors():
@@ -666,6 +670,10 @@ func sipHeaderValue(message, name string) string {
 }
 
 func TestProtectedServerPushClosureSchedulesReRegister(t *testing.T) {
+	previous := protectedPushReconnectGrace
+	protectedPushReconnectGrace = 5 * time.Millisecond
+	t.Cleanup(func() { protectedPushReconnectGrace = previous })
+
 	service := newProtectedKeepaliveTestService(t)
 	service.mu.Lock()
 	service.registrationRefreshAt = time.Now().Add(time.Hour)
@@ -681,10 +689,7 @@ func TestProtectedServerPushClosureSchedulesReRegister(t *testing.T) {
 	}
 	service.untrackProtectedConnection(client)
 	service.handleProtectedServerPushClosed()
-
-	if !service.reRegisterPending.Load() {
-		t.Fatal("last port-s close did not schedule re-REGISTER")
-	}
+	waitReRegisterPending(t, service)
 	if service.RegState() != regRegistered {
 		t.Fatalf("outbound registration dropped: %s", service.RegState())
 	}
@@ -718,6 +723,10 @@ func TestProtectedServerPushClosureKeepsOtherInboundFlows(t *testing.T) {
 }
 
 func TestServeProtectedSIPConnectionReRegistersOnReset(t *testing.T) {
+	previous := protectedPushReconnectGrace
+	protectedPushReconnectGrace = 5 * time.Millisecond
+	t.Cleanup(func() { protectedPushReconnectGrace = previous })
+
 	service := newProtectedKeepaliveTestService(t)
 	service.mu.Lock()
 	service.registrationRefreshAt = time.Now().Add(time.Hour)
@@ -742,10 +751,52 @@ func TestServeProtectedSIPConnectionReRegistersOnReset(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("serveProtectedSIPConnection did not return after reset")
 	}
-	if !service.reRegisterPending.Load() {
-		t.Fatal("port-s reset did not schedule re-REGISTER")
-	}
+	waitReRegisterPending(t, service)
 	if service.RegState() != regRegistered {
 		t.Fatalf("outbound registration dropped: %s", service.RegState())
 	}
+}
+
+func TestProtectedServerPushClosureSkipsReRegisterWhenReplaced(t *testing.T) {
+	previous := protectedPushReconnectGrace
+	protectedPushReconnectGrace = 30 * time.Millisecond
+	t.Cleanup(func() { protectedPushReconnectGrace = previous })
+
+	service := newProtectedKeepaliveTestService(t)
+	service.mu.Lock()
+	service.registrationRefreshAt = time.Now().Add(time.Hour)
+	service.mu.Unlock()
+
+	closed, closedPeer := net.Pipe()
+	alive, alivePeer := net.Pipe()
+	t.Cleanup(func() {
+		_ = closed.Close()
+		_ = closedPeer.Close()
+		_ = alive.Close()
+		_ = alivePeer.Close()
+	})
+	if !service.trackProtectedConnection(closed) {
+		t.Fatal("trackProtectedConnection")
+	}
+	service.untrackProtectedConnection(closed)
+	service.handleProtectedServerPushClosed()
+	if !service.trackProtectedConnection(alive) {
+		t.Fatal("replacement trackProtectedConnection")
+	}
+	time.Sleep(60 * time.Millisecond)
+	if service.reRegisterPending.Load() {
+		t.Fatal("replaced port-s still scheduled re-REGISTER")
+	}
+}
+
+func waitReRegisterPending(t *testing.T, service *Service) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if service.reRegisterPending.Load() {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("did not schedule re-REGISTER")
 }

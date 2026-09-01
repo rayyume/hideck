@@ -74,8 +74,13 @@ func (adapter lifecycleServiceAdapter) StatusSnapshot() messaging.ServiceStatus 
 	}
 }
 
-func (adapter lifecycleServiceAdapter) Stop(context.Context) error {
-	adapter.lifecycle.Stop()
+func (adapter lifecycleServiceAdapter) Stop(ctx context.Context) error {
+	if withCtx, ok := adapter.lifecycle.(interface{ StopContext(context.Context) error }); ok {
+		return withCtx.StopContext(ctx)
+	}
+	if adapter.lifecycle != nil {
+		adapter.lifecycle.Stop()
+	}
 	return nil
 }
 
@@ -173,7 +178,14 @@ func (adapter *imscoreLifecycleAdapter) Status() Status {
 func (adapter *imscoreLifecycleAdapter) StatusSnapshot() Status { return adapter.Status() }
 
 func (adapter *imscoreLifecycleAdapter) Stop() {
-	newServiceAdapter(adapter.svc).StopCurrent()
+	_ = adapter.StopContext(context.Background())
+}
+
+func (adapter *imscoreLifecycleAdapter) StopContext(ctx context.Context) error {
+	if adapter == nil || adapter.svc == nil {
+		return nil
+	}
+	return adapter.svc.Stop(ctx)
 }
 
 func (adapter *imscoreLifecycleAdapter) TriggerRegisterImmediate() error {

@@ -52,9 +52,6 @@ func (s *Service) requestRegistrationBindingCleanup(document *regInfoDocument) b
 	if s == nil || s.cfg == nil {
 		return false
 	}
-	if !strings.EqualFold(strings.TrimSpace(s.cfg.CarrierPresetID), giffgaffCarrierPresetID) {
-		return false
-	}
 	s.mu.RLock()
 	contactID, contactNeedle := s.registrationContactIdentityLocked()
 	cleanupKey := s.registrationBindingCleanupKeyLocked()
@@ -186,14 +183,25 @@ func (s *Service) exchangeUnregister(
 
 // Unregister removes the current Contact binding from the IMS registrar.
 func (s *Service) Unregister(ctx context.Context) error {
+	return s.unregisterBindings(ctx, false)
+}
+
+// UnregisterAll removes every registrar binding for the current public identity.
+func (s *Service) UnregisterAll(ctx context.Context) error {
+	return s.unregisterBindings(ctx, true)
+}
+
+func (s *Service) unregisterBindings(ctx context.Context, allBindings bool) error {
 	if s == nil {
 		return nil
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	s.unsubscribeMWI(ctx)
-	s.unsubscribeRegistration(ctx)
+	unsubCtx, unsubCancel := context.WithTimeout(ctx, shutdownUnsubscribeTimeout)
+	s.unsubscribeMWI(unsubCtx)
+	s.unsubscribeRegistration(unsubCtx)
+	unsubCancel()
 	s.registerMu.Lock()
 	defer s.registerMu.Unlock()
 	if !s.hasActiveRegistrationForUnregister() {
@@ -203,7 +211,19 @@ func (s *Service) Unregister(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	response, err := s.exchangeUnregister(ctx, session, false)
+	response, err := s.exchangeUnregisterAttempt(ctx, session, allBindings)
+	if shouldFallbackUnregister(ctx, response, err) {
+		s.adoptRegisterSession(session)
+		fallbackWildcard := !allBindings
+		if fallbackSession, fallbackErr := s.nextRegisterSession("deregistration fallback"); fallbackErr == nil {
+			logging.Info("IMS deregistration falling back",
+				"device", s.DeviceID(), "cseq", session.cseq, "wildcard", fallbackWildcard, "err", err)
+			response, err = s.exchangeUnregisterAttempt(ctx, fallbackSession, fallbackWildcard)
+			if err == nil {
+				session = fallbackSession
+			}
+		}
+	}
 	if err != nil {
 		return err
 	}
@@ -217,6 +237,96 @@ func (s *Service) Unregister(ctx context.Context) error {
 	s.mu.Unlock()
 	logging.Info("IMS Contact binding removed", "device", s.DeviceID(), "cseq", session.cseq)
 	return nil
+}
+
+func registerContactBindingCount(response *sipResponse) int {
+	if response == nil {
+		return 0
+	}
+	count := 0
+	for _, value := range response.HeaderValues("Contact") {
+		for _, part := range splitQuotedSIPHeaderValues(value) {
+			if isUEFlowContact(part) {
+				count++
+			}
+		}
+	}
+	return count
+}
+
+func splitQuotedSIPHeaderValues(value string) []string {
+	var values []string
+	start, angleDepth := 0, 0
+	inQuote := false
+	for index := 0; index < len(value); index++ {
+		switch value[index] {
+		case '"':
+			inQuote = !inQuote
+		case '<':
+			if !inQuote {
+				angleDepth++
+			}
+		case '>':
+			if !inQuote && angleDepth > 0 {
+				angleDepth--
+			}
+		case ',':
+			if !inQuote && angleDepth == 0 {
+				if item := strings.TrimSpace(value[start:index]); item != "" {
+					values = append(values, item)
+				}
+				start = index + 1
+			}
+		}
+	}
+	if item := strings.TrimSpace(value[start:]); item != "" {
+		values = append(values, item)
+	}
+	return values
+}
+
+func isUEFlowContact(contact string) bool {
+	contact = strings.TrimSpace(contact)
+	if contact == "" || contact == "*" {
+		return false
+	}
+	lower := strings.ToLower(contact)
+	if strings.Contains(lower, "+sip.instance") || containsSIPParameter(lower, "reg-id") {
+		return true
+	}
+	if containsSIPParameter(lower, "gr") {
+		return false
+	}
+	return true
+}
+
+func (s *Service) adoptRegisterSession(session *registerSession) {
+	if s == nil || session == nil {
+		return
+	}
+	s.mu.Lock()
+	s.regSession = session
+	s.mu.Unlock()
+}
+
+func (s *Service) exchangeUnregisterAttempt(
+	ctx context.Context,
+	session *registerSession,
+	wildcard bool,
+) (*sipResponse, error) {
+	attemptCtx, cancel := context.WithTimeout(ctx, deregisterAttemptTimeout(ctx))
+	defer cancel()
+	return s.exchangeUnregister(attemptCtx, session, wildcard)
+}
+
+func shouldFallbackUnregister(ctx context.Context, response *sipResponse, err error) bool {
+	if ctx != nil && ctx.Err() != nil {
+		return false
+	}
+	if err != nil {
+		return true
+	}
+	return response != nil && (response.StatusCode < 200 || response.StatusCode >= 300)
 }
 
 func (s *Service) hasActiveRegistrationForUnregister() bool {

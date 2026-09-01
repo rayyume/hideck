@@ -24,6 +24,9 @@ func TestBuildRPControlPDUs(t *testing.T) {
 	if got := BuildRPAck(0x33); !bytes.Equal(got, []byte{0x02, 0x33}) {
 		t.Fatalf("RP-ACK = %x", got)
 	}
+	if got := BuildRPAckWithDeliverReport(0x33); !bytes.Equal(got, []byte{0x02, 0x33, 0x41, 0x01, 0x00}) {
+		t.Fatalf("RP-ACK+DELIVER-REPORT = %x", got)
+	}
 	if got := BuildRPError(0x44, 41); !bytes.Equal(got, []byte{0x04, 0x44, 0x01, 41, 0x00}) {
 		t.Fatalf("RP-ERROR = %x", got)
 	}

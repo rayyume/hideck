@@ -397,13 +397,36 @@ func TestSipSentByPortParsesIPv4AndIPv6(t *testing.T) {
 	}
 }
 
-func TestRefreshRegisterAddsOutboundContactAfterNegotiation(t *testing.T) {
+func TestInitialRegisterOmitsOutboundContactUntilNegotiated(t *testing.T) {
 	service := &Service{cfg: &IMSConfig{
 		IMPI: "user@ims.example", IMPU: "sip:user@ims.example", Domain: "ims.example",
 		LocalIP: net.ParseIP("192.0.2.10"), LocalPort: 5060, Transport: "udp",
 		RegisterTemplate: IMSRegisterTemplate{
-			ContactOrder: []string{"access_type", "sip_instance", "audio", "icsi_ref"},
-			AccessType:   "wlan1",
+			ContactOrder:    []string{"access_type", "sip_instance", "audio", "icsi_ref"},
+			AccessType:      "wlan1",
+			SupportedHeader: "path,sec-agree,outbound",
+		},
+		IMEI: "356938035643809",
+	}}
+	before := sipHeaderValue(service.buildRegister(&registerSession{
+		callID: "call-1", fromTag: "tag-1", contactUser: "contact-1", cseq: 1,
+	}, ""), "Contact")
+	if strings.Contains(before, ";ob") || strings.Contains(before, "reg-id=") {
+		t.Fatalf("pre-negotiation Contact = %q", before)
+	}
+	if !strings.Contains(before, `+sip.instance="<urn:gsma:imei:35693803-564380-9>"`) {
+		t.Fatalf("initial Contact omitted sip.instance = %q", before)
+	}
+}
+
+func TestInitialRegisterOmitsOutboundContactWithoutSupportedOutbound(t *testing.T) {
+	service := &Service{cfg: &IMSConfig{
+		IMPI: "user@ims.example", IMPU: "sip:user@ims.example", Domain: "ims.example",
+		LocalIP: net.ParseIP("192.0.2.10"), LocalPort: 5060, Transport: "udp",
+		RegisterTemplate: IMSRegisterTemplate{
+			ContactOrder:    []string{"access_type", "sip_instance", "audio", "icsi_ref"},
+			AccessType:      "wlan1",
+			SupportedHeader: "path,sec-agree",
 		},
 		IMEI: "356938035643809",
 	}}
@@ -424,6 +447,15 @@ func TestRefreshRegisterAddsOutboundContactAfterNegotiation(t *testing.T) {
 	contact := sipHeaderValue(after, "Contact")
 	if !strings.Contains(contact, ";ob") || !strings.Contains(contact, "reg-id=1") {
 		t.Fatalf("post-negotiation Contact = %q", contact)
+	}
+}
+
+func TestWithOutboundContactParamsKeepsSipInstance(t *testing.T) {
+	got := withOutboundContactParams(nil)
+	if !containsContactParamName(got, "sip_instance") ||
+		!containsContactParamName(got, "reg_id") ||
+		!containsContactParamName(got, "ob") {
+		t.Fatalf("order = %v", got)
 	}
 }
 
@@ -518,6 +550,122 @@ func TestUnregisterRemovesOnlyCurrentAuthenticatedContact(t *testing.T) {
 	}
 }
 
+func TestUnregisterFallsBackToWildcardAfterContactReject(t *testing.T) {
+	service, err := New(registerTransportTestConfig("udp", "127.0.0.1:5060"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer service.StopCurrent()
+	service.regState = regRegistered
+	service.regSession = &registerSession{
+		callID: "call-1", fromTag: "tag-1", contactUser: "contact-1",
+		cseq: 7, authHeader: "Digest username=\"user\"", expires: time.Hour,
+	}
+	requests := make(chan string, 2)
+	service.transport.SetSendFn(func(request string) error {
+		requests <- request
+		status := 200
+		if sipHeaderValue(request, "Contact") != "*" {
+			status = 500
+		}
+		service.transport.DeliverResponse(registerResponseForRequest(request, status, nil))
+		return nil
+	})
+
+	if err := service.Unregister(context.Background()); err != nil {
+		t.Fatalf("Unregister: %v", err)
+	}
+	first := <-requests
+	second := <-requests
+	if got := sipHeaderValue(first, "Contact"); got == "*" || !strings.Contains(got, "expires=0") {
+		t.Fatalf("first Contact = %q, want current Contact with expires=0", got)
+	}
+	if got := sipHeaderValue(second, "Contact"); got != "*" {
+		t.Fatalf("second Contact = %q, want wildcard", got)
+	}
+	if parseCSeq(sipHeaderValue(first, "CSeq")) != 8 || parseCSeq(sipHeaderValue(second, "CSeq")) != 9 {
+		t.Fatalf("CSeq = %q / %q", sipHeaderValue(first, "CSeq"), sipHeaderValue(second, "CSeq"))
+	}
+	if service.regState != regUnregister || service.regSession.cseq != 9 {
+		t.Fatalf("registration state/session = %s/%+v", service.regState, service.regSession)
+	}
+}
+
+func TestUnregisterAllSendsFallbackAfterAttemptTimeout(t *testing.T) {
+	previous := shutdownDeregisterAttemptTimeout
+	shutdownDeregisterAttemptTimeout = 40 * time.Millisecond
+	t.Cleanup(func() { shutdownDeregisterAttemptTimeout = previous })
+
+	service, err := New(registerTransportTestConfig("udp", "127.0.0.1:5060"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer service.StopCurrent()
+	service.regState = regRegistered
+	service.regSession = &registerSession{
+		callID: "call-1", fromTag: "tag-1", contactUser: "contact-1",
+		cseq: 7, authHeader: "Digest username=\"user\"", expires: time.Hour,
+	}
+	requests := make(chan string, 2)
+	service.transport.SetSendFn(func(request string) error {
+		requests <- request
+		if sipHeaderValue(request, "Contact") == "*" {
+			return nil
+		}
+		service.transport.DeliverResponse(registerResponseForRequest(request, 200, nil))
+		return nil
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := service.UnregisterAll(ctx); err != nil {
+		t.Fatalf("UnregisterAll: %v", err)
+	}
+	first := <-requests
+	second := <-requests
+	if sipHeaderValue(first, "Contact") != "*" {
+		t.Fatalf("first Contact = %q, want wildcard", sipHeaderValue(first, "Contact"))
+	}
+	if got := sipHeaderValue(second, "Contact"); got == "*" || !strings.Contains(got, "expires=0") {
+		t.Fatalf("fallback Contact = %q, want current Contact with expires=0", got)
+	}
+}
+
+func TestUnregisterDoesNotWildcardAfterContextDeadline(t *testing.T) {
+	service, err := New(registerTransportTestConfig("udp", "127.0.0.1:5060"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer service.StopCurrent()
+	service.regState = regRegistered
+	service.regSession = &registerSession{
+		callID: "call-1", fromTag: "tag-1", contactUser: "contact-1",
+		cseq: 7, authHeader: "Digest username=\"user\"", expires: time.Hour,
+	}
+	requests := make(chan string, 2)
+	service.transport.SetSendFn(func(request string) error {
+		requests <- request
+		return nil
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 80*time.Millisecond)
+	defer cancel()
+	if err := service.Unregister(ctx); err == nil {
+		t.Fatal("Unregister succeeded without a response")
+	}
+	select {
+	case request := <-requests:
+		if got := sipHeaderValue(request, "Contact"); got == "*" {
+			t.Fatal("deadline exceeded still sent wildcard REGISTER")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("contact deregistration was not sent")
+	}
+	select {
+	case request := <-requests:
+		t.Fatalf("unexpected extra deregistration Contact = %q", sipHeaderValue(request, "Contact"))
+	default:
+	}
+}
+
 func TestStopUnregistersBeforeClosingRegisteredTransport(t *testing.T) {
 	service, err := New(registerTransportTestConfig("udp", "127.0.0.1:5060"))
 	if err != nil {
@@ -543,8 +691,75 @@ func TestStopUnregistersBeforeClosingRegisteredTransport(t *testing.T) {
 		if sipHeaderValue(request, "Expires") != "0" {
 			t.Fatalf("shutdown REGISTER Expires = %q", sipHeaderValue(request, "Expires"))
 		}
+		contact := sipHeaderValue(request, "Contact")
+		if contact == "*" {
+			t.Fatal("shutdown used wildcard Contact")
+		}
+		if !strings.Contains(strings.ToLower(contact), "expires=0") {
+			t.Fatalf("shutdown Contact = %q, want current Contact with expires=0", contact)
+		}
 	default:
 		t.Fatal("Stop closed the transport without deregistering")
+	}
+}
+
+func TestRegisterClearsStaleContactsAdvertisedIn200(t *testing.T) {
+	service, err := New(registerTransportTestConfig("udp", "127.0.0.1:5060"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer service.StopCurrent()
+	service.regSession = &registerSession{
+		callID: "call-1", fromTag: "tag-1", contactUser: "contact-1",
+		cseq: 1, authHeader: "Digest username=\"user\"", publicID: service.cfg.IMPU,
+		expires: time.Hour,
+	}
+	requests := make(chan string, 3)
+	service.transport.SetSendFn(func(request string) error {
+		requests <- request
+		headers := map[string]string{}
+		if sipHeaderValue(request, "Contact") != "*" {
+			headers["Contact"] = `<sip:contact-1@new.example>, <sip:stale@old.example>`
+		}
+		service.transport.DeliverResponse(registerResponseForRequest(request, 200, headers))
+		return nil
+	})
+	if err := service.Register(context.Background()); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	first := <-requests
+	wildcard := <-requests
+	again := <-requests
+	if sipHeaderValue(first, "Contact") == "*" {
+		t.Fatal("initial REGISTER used wildcard Contact")
+	}
+	if sipHeaderValue(wildcard, "Contact") != "*" || sipHeaderValue(wildcard, "Expires") != "0" {
+		t.Fatalf("stale cleanup Contact=%q Expires=%q",
+			sipHeaderValue(wildcard, "Contact"), sipHeaderValue(wildcard, "Expires"))
+	}
+	if sipHeaderValue(again, "Contact") == "*" {
+		t.Fatal("REGISTER after stale cleanup retained wildcard Contact")
+	}
+}
+
+func TestRegisterContactBindingCountSplitsContactList(t *testing.T) {
+	if got := registerContactBindingCount(&sipResponse{Headers: map[string]string{
+		"Contact": `<sip:one@example>, <sip:two@example>`,
+	}}); got != 2 {
+		t.Fatalf("count = %d, want 2", got)
+	}
+	if got := registerContactBindingCount(&sipResponse{Headers: map[string]string{
+		"Contact": `<sip:one@example>;+sip.instance="<urn:uuid:x>";+g.3gpp.icsi-ref="urn:a,urn:b,urn:c,urn:d"`,
+	}}); got != 1 {
+		t.Fatalf("quoted ICSI commas counted as extra Contacts: %d", got)
+	}
+	if got := registerContactBindingCount(&sipResponse{Headers: map[string]string{
+		"Contact": `<sip:one@example>;+sip.instance="<urn:uuid:x>";reg-id=1, <sip:user@ims.example;gr=urn:uuid:gruu>`,
+	}}); got != 1 {
+		t.Fatalf("GRUU Contact counted as a registrar flow: %d", got)
+	}
+	if got := registerContactBindingCount(&sipResponse{Headers: map[string]string{"Contact": "*"}}); got != 0 {
+		t.Fatalf("wildcard count = %d, want 0", got)
 	}
 }
 
@@ -570,7 +785,7 @@ func TestRegisterClearsProvenDuplicateBindingsBeforeRegistering(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !service.requestRegistrationBindingCleanup(document) {
-		t.Fatal("duplicate giffgaff binding did not request cleanup")
+		t.Fatal("duplicate binding did not request cleanup")
 	}
 
 	requests := make(chan string, 2)
