@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1.10
 
-# HiDeck multi-platform image for local Buildx and CI builds.
+# HiDeck 从源码完整构建（npm + Go + apk）。日常发版用 Dockerfile.release 拷二进制。
+# 更新运行时依赖时走这条，或先重建 hideck-runtime。
 
 # 构建阶段 1: 前端构建 (Frontend)
 # 使用 --platform=$BUILDPLATFORM 强制在构建机本地架构（通常是amd64）运行
@@ -93,6 +94,7 @@ LABEL org.opencontainers.image.title="HiDeck" \
 # - psmisc: 提供 fuser，用于安全释放串口占用
 RUN apk add --no-cache \
       ca-certificates \
+      gcompat \
       lame-libs \
       opencore-amr \
       psmisc \

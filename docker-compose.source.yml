@@ -1,0 +1,25 @@
+name: hideck-image-source-build
+
+# 从源码完整构建（npm + Go + apk）。更新依赖、排查底包、或不走预编译二进制时用这个。
+# 日常发版请用 docker-compose.build.yml，只把 dist/ 里的二进制拷进 hideck-runtime。
+services:
+  hideck:
+    image: yibaiba/hideck:${HIDECK_VERSION:-2.1.1}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+      pull: true
+      platforms:
+        - linux/amd64
+        - linux/arm64
+      args:
+        VERSION: v${HIDECK_VERSION:-2.1.1}
+        REVISION: ${HIDECK_REVISION:?HIDECK_REVISION is required}
+        BUILDTIME: ${HIDECK_BUILDTIME:?HIDECK_BUILDTIME is required}
+        ENABLE_UPX: ${HIDECK_ENABLE_UPX:-0}
+      tags:
+        - yibaiba/hideck:${HIDECK_MINOR_VERSION:-2.1}
+        - yibaiba/hideck:${HIDECK_LATEST_TAG:-latest}
+      provenance: false
+      sbom: false

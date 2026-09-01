@@ -73,7 +73,7 @@ HiDeck 是面向高通 4G/LTE/5G 模组的综合管理平台，将设备热插�
 优先用 Docker。镜像已内置通话录音需要的 AMR / MP3 编解码库，不用再往宿主机装依赖。
 
 运行环境需要 Linux、curl、Docker Engine、Docker Compose、host 网络和 USB 设备访问权限。
-服务器使用 `docker-compose.yml` 拉取发布镜像。发版把已经打好的二进制拷进运行时底包，见 [DOCKERHUB.md](DOCKERHUB.md)；从源码完整构建用根目录 `Dockerfile`。
+服务器使用 `docker-compose.yml` 拉取发布镜像。发版把已经打好的二进制拷进运行时底包（`docker-compose.build.yml`）；更新依赖或从源码完整构建用原来的 `Dockerfile` 和 `docker-compose.source.yml`。说明见 [DOCKERHUB.md](DOCKERHUB.md)。
 
 服务器可直接通过 curl 安装到当前目录下的 `hideck/`：
 
