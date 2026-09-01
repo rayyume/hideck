@@ -105,26 +105,7 @@ RUN apk add --no-cache \
     test -e /usr/lib/libopencore-amrwb.so.0 && \
     test -e /usr/lib/libvo-amrwbenc.so.0 && \
     test -e /usr/lib/libmp3lame.so.0 && \
-    test -x /usr/libexec/qmi-proxy && \
-    rm -rf /usr/lib/girepository-1.0 \
-      /usr/lib/libgirepository-2.0.so* \
-      /usr/libexec/gio-launch-desktop \
-      /usr/bin/gapplication \
-      /usr/bin/gdbus \
-      /usr/bin/gi-compile-repository \
-      /usr/bin/gi-decompile-typelib \
-      /usr/bin/gi-inspect-typelib \
-      /usr/bin/gio \
-      /usr/bin/gio-querymodules \
-      /usr/bin/glib-compile-schemas \
-      /usr/bin/gsettings && \
-    cp -L /usr/share/zoneinfo/Asia/Shanghai /tmp/Shanghai && \
-    cp -L /usr/share/zoneinfo/UTC /tmp/UTC && \
-    rm -rf /usr/share/zoneinfo && \
-    mkdir -p /usr/share/zoneinfo/Asia && \
-    mv /tmp/Shanghai /usr/share/zoneinfo/Asia/Shanghai && \
-    mv /tmp/UTC /usr/share/zoneinfo/UTC && \
-    ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+    test -x /usr/libexec/qmi-proxy
 
 # 管理 HTTP、电话 HTTPS、WebRTC UDP mux
 EXPOSE 7575/tcp 7576/tcp 7580/udp

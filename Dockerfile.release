@@ -13,7 +13,8 @@ LABEL org.opencontainers.image.title="HiDeck" \
       org.opencontainers.image.created=${BUILDTIME} \
       org.opencontainers.image.revision=${REVISION}
 
-COPY --chmod=0755 dist/hideck_${VERSION}_linux_${TARGETARCH} /usr/local/bin/hideck
+COPY dist/hideck_${VERSION}_linux_${TARGETARCH} /usr/local/bin/hideck
+RUN chmod 0755 /usr/local/bin/hideck
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD wget -q -T 3 -O /dev/null http://127.0.0.1:7575/ping || exit 1
