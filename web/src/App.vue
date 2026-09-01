@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, ref, onMounted, watch } from 'vue'
+import { computed, defineAsyncComponent, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from './stores/auth'
 import LoadingScreen from './components/LoadingScreen.vue'
@@ -13,11 +13,11 @@ import {
   type StartupState
 } from './utils/startupGate'
 import { Warning24Regular } from '@vicons/fluent'
+import { useTheme } from './composables/useTheme'
 
 const route = useRoute()
 const auth = useAuthStore()
-
-const isDark = ref(localStorage.getItem('theme') === 'dark')
+const { isDark, toggleTheme } = useTheme()
 const disclaimerAccepted = ref(false)
 const confirmText = ref('')
 const expectedConfirmText = '我同意并确认'
@@ -30,25 +30,6 @@ const disclaimerState = ref<StartupState>(auth.isAuthenticated ? 'loading' : 'id
 const disclaimerError = ref('')
 let deviceTimeGeneration = 0
 let disclaimerGeneration = 0
-
-function toggleTheme() {
-  isDark.value = !isDark.value
-  const mode = isDark.value ? 'dark' : 'light'
-  localStorage.setItem('theme', mode)
-  updateHtmlClass(mode)
-}
-
-function updateHtmlClass(mode: 'dark' | 'light') {
-  if (mode === 'dark') {
-    document.documentElement.classList.add('dark')
-  } else {
-    document.documentElement.classList.remove('dark')
-  }
-}
-
-onMounted(() => {
-  updateHtmlClass(isDark.value ? 'dark' : 'light')
-})
 
 async function syncDeviceTime() {
   const generation = ++deviceTimeGeneration

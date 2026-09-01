@@ -22,9 +22,11 @@ import {
   DocumentText24Regular
 } from '@vicons/fluent'
 import { formatDeviceDateTime } from '../utils/deviceTime'
+import { useTheme } from '../composables/useTheme'
 
 const settingsStore = useSettingsStore()
 const authStore = useAuthStore()
+const { isClassic, applyClassic, restoreNavyTheme } = useTheme()
 const { systemInfo, loadingNotifications, savingNotifications, testingWebhook, testingBark, testingEmail, testingWeCom, changingPassword, passwordForm, telegramForm, feishuForm, qqForm, weixinForm, weComBotForm, webhookSettings, barkSettings, emailForm, pushplusForm, weComSettings } = storeToRefs(settingsStore)
 const activeNotifyTab = ref('telegram')
 const openWRTDynamicInterfaces = ref(false)
@@ -157,6 +159,16 @@ async function updateOpenWRTDynamicInterfaces(value: string | number | boolean) 
     return
   }
   ElMessage.success(enabled ? 'OpenWrt 接口映射已启用' : 'OpenWrt 接口映射已关闭')
+}
+
+function applyClassicTheme(value: string | number | boolean) {
+  if (value === true) {
+    applyClassic()
+    ElMessage.success('已应用经典主题')
+    return
+  }
+  restoreNavyTheme('navy-night')
+  ElMessage.success('已恢复海军主题')
 }
 
 
@@ -563,6 +575,16 @@ onMounted(() => {
                   打开 API 文档
                 </el-button>
               </div>
+            </div>
+            <div class="border-t border-gray-100 dark:border-white/10 pt-4 flex items-center justify-between gap-4">
+              <div class="min-w-0">
+                <div class="text-sm font-bold text-gray-800 dark:text-gray-100">经典主题</div>
+                <div class="text-xs text-gray-500">旧版深色外观。顶栏太阳按钮只切换海军浅色 / 夜间</div>
+              </div>
+              <el-switch
+                :model-value="isClassic"
+                @change="applyClassicTheme"
+              />
             </div>
             <div class="border-t border-gray-100 dark:border-white/10 pt-4 flex items-center justify-between gap-4">
               <div class="min-w-0">

@@ -291,11 +291,11 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
   font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  --sidebar-menu-text: #9bb2b6;
-  --sidebar-menu-hover-bg: rgba(255, 255, 255, 0.06);
-  --sidebar-menu-active-bg: rgba(56, 189, 180, 0.14);
-  --sidebar-menu-active-color: #d8fffa;
-  --sidebar-menu-active-ring: rgba(56, 189, 180, 0.24);
+  --sidebar-menu-text: var(--ui-nav-muted);
+  --sidebar-menu-hover-bg: color-mix(in srgb, var(--ui-selected) 42%, transparent);
+  --sidebar-menu-active-bg: var(--ui-selected);
+  --sidebar-menu-active-color: var(--ui-nav-active);
+  --sidebar-menu-active-ring: color-mix(in srgb, var(--ui-accent) 24%, transparent);
 }
 
 :deep(.sidebar-menu) {
@@ -346,10 +346,10 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
 :deep(.sidebar-menu .el-menu-item.is-active::before) {
   position: absolute;
   left: 0;
-  width: 2px;
+  width: 3px;
   height: 30px;
-  border-radius: 2px;
-  background: var(--ui-primary);
+  border-radius: 0 2px 2px 0;
+  background: var(--ui-accent);
   box-shadow: none;
   content: "";
 }
@@ -443,9 +443,9 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
   border: 0;
   border-right: 1px solid var(--ui-border);
   border-radius: 0;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--ui-nav) 99%, transparent), color-mix(in srgb, #050a0c 98%, transparent));
+  background: var(--ui-nav);
   box-shadow: none;
-  color: #fff;
+  color: var(--ui-nav-text);
 }
 
 .sidebar-brand {
@@ -458,7 +458,7 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
   min-height: auto;
   padding: 0;
   background: none;
-  color: #f5fbfb;
+  color: var(--ui-nav-text);
   filter: none;
   -webkit-text-fill-color: currentColor;
   font-size: 18px;
@@ -469,7 +469,7 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
 
 .sidebar-brand-subtitle {
   margin-top: 3px;
-  color: #7fa4a8;
+  color: var(--ui-nav-muted);
   font-family: "v-mono", ui-monospace, monospace;
   font-size: var(--ui-font-caption);
   font-weight: 600;
@@ -481,21 +481,13 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
   height: 44px;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(130, 232, 223, 0.34);
+  border: 1px solid color-mix(in srgb, var(--ui-accent) 34%, var(--ui-border));
   border-radius: 14px;
-  background: linear-gradient(145deg, rgba(92, 234, 177, 0.24), rgba(91, 225, 222, 0.08));
-  color: #8ff7cb;
-  box-shadow: inset 0 0 20px rgba(92, 234, 177, 0.08);
+  background: color-mix(in srgb, var(--ui-accent) 16%, var(--ui-nav));
+  color: var(--ui-nav-text);
+  box-shadow: none;
   font-size: 20px;
   font-weight: 800;
-}
-
-:global(html.dark) .sidebar-shell {
-  --sidebar-menu-text: #93a8ad;
-  --sidebar-menu-hover-bg: rgba(255, 255, 255, 0.06);
-  --sidebar-menu-active-bg: rgba(56, 189, 180, 0.14);
-  --sidebar-menu-active-color: #d8fffa;
-  --sidebar-menu-active-ring: rgba(56, 189, 180, 0.24);
 }
 
 .sidebar-menu-label {
@@ -546,12 +538,12 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
   flex: 0 0 32px;
   place-items: center;
   border-radius: 4px;
-  background: rgba(56, 189, 180, 0.12);
-  color: #83e0d8;
+  background: color-mix(in srgb, var(--ui-accent) 12%, transparent);
+  color: var(--ui-accent);
 }
 
 .sidebar-account-role {
-  color: #789398;
+  color: var(--ui-nav-muted);
 }
 
 .app-topbar {

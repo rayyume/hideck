@@ -6,52 +6,82 @@
   color-scheme: light;
   font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   font-synthesis: none;
-  --ui-bg: #f4f7f8;
-  --ui-nav: #102a2e;
-  --ui-nav-muted: #99b2b6;
-  --ui-nav-active: #d8fffa;
+  --ui-bg: #FBF9F6;
+  --ui-nav: #0B3558;
+  --ui-nav-text: #F5F8FB;
+  --ui-nav-muted: #9EB3C2;
+  --ui-nav-active: #0B3558;
   --ui-surface: #ffffff;
   --ui-surface-strong: #ffffff;
-  --ui-surface-muted: #edf3f4;
-  --ui-surface-subtle: #f8fafb;
-  --ui-border: #d5e0e2;
-  --ui-border-muted: #e4ebed;
-  --ui-text: #152529;
-  --ui-text-muted: #5d7176;
-  --ui-primary: #087f7b;
-  --ui-primary-solid: #087f7b;
-  --ui-primary-hover: #066b68;
-  --ui-communication: #246bce;
-  --ui-info: #6b4eb8;
-  --ui-success: #198754;
-  --ui-warning: #b86a0b;
-  --ui-danger: #c53b3b;
+  --ui-surface-muted: #F3F6F9;
+  --ui-surface-subtle: #F3F6F9;
+  --ui-border: #E3EAF0;
+  --ui-border-muted: #E3EAF0;
+  --ui-text: #0B3558;
+  --ui-text-muted: #5B6B7A;
+  --ui-accent: #006BFF;
+  --ui-selected: #E8F1FF;
+  --ui-primary: #006BFF;
+  --ui-primary-solid: #0B3558;
+  --ui-primary-hover: #082840;
+  --ui-communication: #006BFF;
+  --ui-info: #4B5FA8;
+  --ui-success: #1F7A4D;
+  --ui-success-surface: #E6F4EC;
+  --ui-warning: #9A6700;
+  --ui-warning-surface: #F8F1DE;
+  --ui-danger: #B42318;
+  --ui-danger-surface: #FDECEC;
   --ui-font-caption: 12px;
   --ui-font-body-sm: 13px;
   --ui-font-body: 14px;
   --ui-font-title: 16px;
   --ui-font-section: 20px;
   --ui-font-page-title: 24px;
-  --ui-radius-sm: 4px;
+  --ui-font-weight-body: 500;
+  --ui-font-weight-title: 700;
+  --ui-radius-sm: 8px;
   --ui-radius-md: 12px;
   --ui-radius-lg: 16px;
   --ui-radius-xl: 20px;
-  --ui-shadow-sm: 0 1px 2px rgba(16, 42, 46, 0.06);
-  --ui-shadow-md: 0 8px 24px rgba(16, 42, 46, 0.08);
-  --ui-shadow-lg: 0 18px 44px rgba(4, 20, 24, 0.18);
+  --ui-radius-pill: 999px;
+  --ui-shadow-sm: none;
+  --ui-shadow-md: none;
+  --ui-shadow-lg: 0 10px 28px rgba(11, 53, 88, 0.06);
   --ui-backdrop: none;
-  --ui-focus: 0 0 0 3px rgba(8, 127, 123, 0.18);
+  --ui-focus: 0 0 0 3px rgba(0, 107, 255, 0.18);
   --ui-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ui-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
-  --el-color-primary: #087f7b;
-  --el-color-primary-light-3: #4ca6a2;
-  --el-color-primary-light-5: #83bfbc;
-  --el-color-primary-light-7: #badbd9;
-  --el-color-primary-light-8: #d5e9e7;
-  --el-color-primary-light-9: #edf7f6;
-  --el-color-primary-dark-2: #066b68;
-  --el-border-radius-base: 4px;
-  --el-border-radius-small: 4px;
+  --el-color-primary: #0B3558;
+  --el-color-primary-light-3: #3A6488;
+  --el-color-primary-light-5: #6D8AA0;
+  --el-color-primary-light-7: #9EB3C2;
+  --el-color-primary-light-8: #C5D2DC;
+  --el-color-primary-light-9: #E8F1FF;
+  --el-color-primary-dark-2: #082840;
+  --el-color-success: #1F7A4D;
+  --el-color-success-light-3: #4A9A70;
+  --el-color-success-light-5: #7BB698;
+  --el-color-success-light-7: #ACD2C0;
+  --el-color-success-light-8: #CDE4D6;
+  --el-color-success-light-9: #E6F4EC;
+  --el-color-success-dark-2: #19633E;
+  --el-color-warning: #9A6700;
+  --el-color-warning-light-3: #B8882E;
+  --el-color-warning-light-5: #C9A45C;
+  --el-color-warning-light-7: #DBC08A;
+  --el-color-warning-light-8: #EAD9B4;
+  --el-color-warning-light-9: #F8F1DE;
+  --el-color-warning-dark-2: #7A5200;
+  --el-color-danger: #B42318;
+  --el-color-danger-light-3: #C64F46;
+  --el-color-danger-light-5: #D57B74;
+  --el-color-danger-light-7: #E3A7A3;
+  --el-color-danger-light-8: #F0CBC8;
+  --el-color-danger-light-9: #FDECEC;
+  --el-color-danger-dark-2: #8F1C13;
+  --el-border-radius-base: 8px;
+  --el-border-radius-small: 8px;
   --el-border-color: var(--ui-border);
   --el-border-color-light: var(--ui-border-muted);
   --el-fill-color-light: var(--ui-surface-muted);
@@ -63,8 +93,64 @@
 
 html.dark {
   color-scheme: dark;
+  --ui-bg: #0B1420;
+  --ui-nav: #0A1018;
+  --ui-nav-text: #E8EEF4;
+  --ui-nav-muted: #8A96A3;
+  --ui-nav-active: #E8EEF4;
+  --ui-surface: #121A24;
+  --ui-surface-strong: #161F2C;
+  --ui-surface-muted: #171F2B;
+  --ui-surface-subtle: #0E151F;
+  --ui-border: #2A3648;
+  --ui-border-muted: #1E2836;
+  --ui-text: #E8EEF4;
+  --ui-text-muted: #8A96A3;
+  --ui-accent: #006BFF;
+  --ui-selected: #163050;
+  --ui-primary: #006BFF;
+  --ui-primary-solid: #0B3558;
+  --ui-primary-hover: #0F4A7A;
+  --ui-communication: #006BFF;
+  --ui-info: #7B8CFF;
+  --ui-success: #4A9A70;
+  --ui-success-surface: #163024;
+  --ui-warning: #C4921A;
+  --ui-warning-surface: #2A2210;
+  --ui-danger: #D6453D;
+  --ui-danger-surface: #2C1616;
+  --ui-shadow-sm: 0 1px 0 rgba(255, 255, 255, 0.04);
+  --ui-shadow-md: 0 8px 24px rgba(0, 0, 0, 0.28);
+  --ui-shadow-lg: 0 18px 44px rgba(0, 0, 0, 0.36);
+  --ui-focus: 0 0 0 3px rgba(0, 107, 255, 0.28);
+  --el-color-primary: #0B3558;
+  --el-color-primary-light-3: #1A4E7A;
+  --el-color-primary-light-5: #163050;
+  --el-color-primary-light-7: #13233A;
+  --el-color-primary-light-8: #101C2C;
+  --el-color-primary-light-9: #163050;
+  --el-color-primary-dark-2: #006BFF;
+  --el-color-success: #4A9A70;
+  --el-color-success-light-9: #163024;
+  --el-color-warning: #C4921A;
+  --el-color-warning-light-9: #2A2210;
+  --el-color-danger: #D6453D;
+  --el-color-danger-light-9: #2C1616;
+  --el-bg-color: var(--ui-surface);
+  --el-bg-color-overlay: #161F2C;
+  --el-fill-color-light: var(--ui-surface-muted);
+  --el-fill-color-lighter: var(--ui-surface-subtle);
+  --el-border-color: var(--ui-border);
+  --el-border-color-light: var(--ui-border-muted);
+  --el-text-color-primary: var(--ui-text);
+  --el-text-color-regular: var(--ui-text-muted);
+}
+
+html.classic {
+  color-scheme: dark;
   --ui-bg: #050807;
   --ui-nav: #080b0a;
+  --ui-nav-text: #f5fbfb;
   --ui-nav-muted: #8f9b95;
   --ui-nav-active: #dffff1;
   --ui-surface: #0b100e;
@@ -75,16 +161,22 @@ html.dark {
   --ui-border-muted: rgba(230, 241, 235, 0.065);
   --ui-text: #f4f7f5;
   --ui-text-muted: #8f9b95;
+  --ui-accent: #66e9ad;
+  --ui-selected: rgba(56, 189, 180, 0.14);
   --ui-primary: #66e9ad;
   --ui-primary-solid: #1a8b62;
   --ui-primary-hover: #82f4c7;
   --ui-communication: #5adbd7;
   --ui-info: #b783ff;
   --ui-success: #66e9ad;
+  --ui-success-surface: #173737;
   --ui-warning: #eeb254;
+  --ui-warning-surface: #3a2c12;
   --ui-danger: #ef646a;
+  --ui-danger-surface: #3a1719;
   --ui-shadow-sm: 0 1px 0 rgba(255, 255, 255, 0.035) inset, 0 20px 54px rgba(0, 0, 0, 0.18);
   --ui-shadow-md: 0 1px 0 rgba(255, 255, 255, 0.08) inset, 0 28px 80px rgba(0, 0, 0, 0.42);
+  --ui-shadow-lg: 0 18px 44px rgba(4, 20, 24, 0.18);
   --ui-focus: 0 0 0 3px rgba(102, 233, 173, 0.2);
   --el-color-primary: #1a8b62;
   --el-color-primary-light-3: #2f9f98;
@@ -93,6 +185,12 @@ html.dark {
   --el-color-primary-light-8: #1b4746;
   --el-color-primary-light-9: #173737;
   --el-color-primary-dark-2: #55cec5;
+  --el-color-success: #66e9ad;
+  --el-color-success-light-9: #173737;
+  --el-color-warning: #eeb254;
+  --el-color-warning-light-9: #3a2c12;
+  --el-color-danger: #ef646a;
+  --el-color-danger-light-9: #3a1719;
   --el-bg-color: var(--ui-surface);
   --el-bg-color-overlay: #1a2a30;
   --el-fill-color-light: var(--ui-surface-muted);
@@ -117,13 +215,22 @@ body {
   background: var(--ui-bg);
   color: var(--ui-text);
   font-size: 14px;
+  font-weight: 500;
   line-height: 1.5;
   letter-spacing: 0;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
+h1, h2, h3, h4 {
+  font-weight: 700;
+}
+
 html.dark body {
+  background: var(--ui-bg);
+}
+
+html.classic body {
   background:
     radial-gradient(circle at 69% 12%, rgba(52, 198, 148, 0.06), transparent 33%),
     linear-gradient(145deg, #030709, #071014 58%, #04080a);
@@ -152,7 +259,7 @@ button,
 }
 
 ::selection {
-  background: rgba(8, 127, 123, 0.22);
+  background: color-mix(in srgb, var(--ui-accent) 22%, transparent);
   color: var(--ui-text);
 }
 
@@ -205,6 +312,11 @@ html.dark ::-webkit-scrollbar-thumb {
 
 html.dark .ui-card,
 html.dark .ui-panel {
+  background: var(--ui-surface);
+}
+
+html.classic .ui-card,
+html.classic .ui-panel {
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.018), transparent 42%),
     var(--ui-surface);
@@ -228,6 +340,12 @@ html.dark .ui-panel {
 
 html.dark .ui-workspace-glow::before {
   background:
+    radial-gradient(circle at 8% 0%, color-mix(in srgb, var(--ui-accent) 8%, transparent), transparent 28%),
+    linear-gradient(112deg, color-mix(in srgb, var(--ui-accent) 4%, transparent), transparent 42%);
+}
+
+html.classic .ui-workspace-glow::before {
+  background:
     radial-gradient(circle at 8% 0%, color-mix(in srgb, var(--ui-primary) 11%, transparent), transparent 31%),
     linear-gradient(112deg, color-mix(in srgb, var(--ui-primary) 5%, transparent), transparent 42%);
 }
@@ -242,7 +360,7 @@ html.dark .ui-workspace-glow::before {
 }
 
 .ui-card-hover:hover {
-  border-color: #a9c7c8;
+  border-color: color-mix(in srgb, var(--ui-accent) 35%, var(--ui-border));
   box-shadow: var(--ui-shadow-md);
 }
 
@@ -344,9 +462,9 @@ html.dark .el-table td.el-table__cell {
 
 .el-button {
   min-height: 36px;
-  border-radius: var(--ui-radius-sm);
+  border-radius: var(--ui-radius-pill);
   box-shadow: none;
-  font-weight: 600;
+  font-weight: 500;
   transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 140ms var(--ui-ease-out);
 }
 
@@ -404,7 +522,7 @@ html.dark .el-table td.el-table__cell {
   border-color: var(--ui-border);
   border-radius: var(--ui-radius-md);
   background: var(--ui-surface);
-  box-shadow: var(--ui-shadow-sm);
+  box-shadow: none;
 }
 
 .el-table,
@@ -448,7 +566,7 @@ html.dark .el-table td.el-table__cell {
 }
 
 .el-menu-item.is-active {
-  background: rgba(56, 189, 180, 0.14);
+  background: var(--ui-selected);
 }
 
 .el-scrollbar__wrap {
