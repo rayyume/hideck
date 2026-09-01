@@ -45,7 +45,7 @@ const recordingModeOptions = [
 
     <div class="space-y-4">
       <div class="space-y-1">
-        <label for="telegram-bot-token" class="text-xs font-semibold text-[var(--ui-text-muted)]">Bot Token</label>
+        <label for="telegram-bot-token" class="text-xs font-semibold text-[var(--ui-muted)]">Bot Token</label>
         <el-input
           id="telegram-bot-token"
           v-model="telegramForm.bot_token"
@@ -59,17 +59,17 @@ const recordingModeOptions = [
 
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div class="space-y-1">
-          <label for="telegram-admin-id" class="text-xs font-semibold text-[var(--ui-text-muted)]">管理员 ID</label>
+          <label for="telegram-admin-id" class="text-xs font-semibold text-[var(--ui-muted)]">管理员 ID</label>
           <el-input id="telegram-admin-id" v-model="telegramForm.admin_id" :disabled="!telegramForm.enabled" type="number" inputmode="numeric" placeholder="例如 123456789" />
         </div>
         <div class="space-y-1">
-          <label for="telegram-chat-id" class="text-xs font-semibold text-[var(--ui-text-muted)]">通知 Chat ID（可选）</label>
+          <label for="telegram-chat-id" class="text-xs font-semibold text-[var(--ui-muted)]">通知 Chat ID（可选）</label>
           <el-input id="telegram-chat-id" v-model="telegramForm.chat_id" :disabled="!telegramForm.enabled" type="number" inputmode="numeric" placeholder="自动绑定后显示" />
         </div>
       </div>
 
       <div class="space-y-1">
-        <span id="telegram-recording-mode-label" class="text-xs font-semibold text-[var(--ui-text-muted)]">录音发送样式</span>
+        <span id="telegram-recording-mode-label" class="text-xs font-semibold text-[var(--ui-muted)]">录音发送样式</span>
         <el-segmented
           v-model="telegramForm.recording_mode"
           :options="recordingModeOptions"
@@ -81,11 +81,11 @@ const recordingModeOptions = [
 
       <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div class="space-y-1">
-          <label for="telegram-base-url" class="text-xs font-semibold text-[var(--ui-text-muted)]">TG API 反代（可选）</label>
+          <label for="telegram-base-url" class="text-xs font-semibold text-[var(--ui-muted)]">TG API 反代（可选）</label>
           <el-input id="telegram-base-url" v-model="telegramForm.base_url" :disabled="!telegramForm.enabled" placeholder="https://example.com/bot%s/%s" />
         </div>
         <div class="space-y-1">
-          <label for="telegram-proxy" class="text-xs font-semibold text-[var(--ui-text-muted)]">HTTP 代理（可选）</label>
+          <label for="telegram-proxy" class="text-xs font-semibold text-[var(--ui-muted)]">HTTP 代理（可选）</label>
           <el-input id="telegram-proxy" v-model="telegramForm.proxy" :disabled="!telegramForm.enabled" placeholder="http://127.0.0.1:7890" />
         </div>
       </div>

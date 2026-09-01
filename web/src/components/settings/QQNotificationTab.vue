@@ -32,21 +32,21 @@ const qr = useNotificationQR('qq', {
       <div class="space-y-4">
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div class="space-y-1">
-            <label class="text-xs font-semibold text-[var(--ui-text-muted)]">App ID</label>
+            <label class="text-xs font-semibold text-[var(--ui-muted)]">App ID</label>
             <el-input v-model="qqForm.app_id" placeholder="QQ Bot App ID" />
           </div>
           <div class="space-y-1">
-            <label class="text-xs font-semibold text-[var(--ui-text-muted)]">App Secret</label>
+            <label class="text-xs font-semibold text-[var(--ui-muted)]">App Secret</label>
             <el-input v-model="qqForm.app_secret" type="password" show-password placeholder="********" />
           </div>
         </div>
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div class="space-y-1">
-            <label class="text-xs font-semibold text-[var(--ui-text-muted)]">群聊 OpenID</label>
+            <label class="text-xs font-semibold text-[var(--ui-muted)]">群聊 OpenID</label>
             <el-input v-model="qqForm.group_ids" placeholder="多个使用英文逗号分隔" />
           </div>
           <div class="space-y-1">
-            <label class="text-xs font-semibold text-[var(--ui-text-muted)]">私聊 OpenID</label>
+            <label class="text-xs font-semibold text-[var(--ui-muted)]">私聊 OpenID</label>
             <el-input v-model="qqForm.direct_ids" placeholder="扫码用户会自动加入" />
           </div>
         </div>

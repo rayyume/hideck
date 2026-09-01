@@ -177,7 +177,7 @@ function retryStartup() {
             
             <h2 class="mb-5 text-2xl font-extrabold text-center text-[var(--ui-text)] tracking-tight">HiDeck 最终用户许可与免责声明</h2>
             
-            <div class="space-y-4 text-[14px] text-[var(--ui-text-muted)] leading-relaxed font-medium">
+            <div class="space-y-4 text-[14px] text-[var(--ui-muted)] leading-relaxed font-medium">
               <div class="flex items-start">
                 <div class="license-index">1</div>
                 <p>本软件（HiDeck）属于个人开发者业余时间开发的工具软件，仅供技术研究、学习交流和个人内部测试使用。<strong class="license-emphasis">严禁用于任何商业用途</strong>，严禁作为生产环境的基础设施。</p>
@@ -197,7 +197,7 @@ function retryStartup() {
             </div>
             
             <div class="mt-6 pt-5 border-t border-[var(--ui-border)]">
-              <p class="mb-3 text-xs font-bold text-center text-[var(--ui-text-muted)]">
+              <p class="mb-3 text-xs font-bold text-center text-[var(--ui-muted)]">
                 请输入「<span class="license-emphasis select-all">{{ expectedConfirmText }}</span>」以解锁按钮
               </p>
               

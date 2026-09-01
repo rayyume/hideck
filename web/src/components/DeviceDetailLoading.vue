@@ -33,7 +33,7 @@
       </div>
     </div>
 
-    <div class="mt-5 text-xs text-[var(--ui-text-muted)] tracking-wide">正在加载设备...</div>
+    <div class="mt-5 text-xs text-[var(--ui-muted)] tracking-wide">正在加载设备...</div>
   </div>
 </template>
 

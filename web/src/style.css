@@ -18,6 +18,7 @@
   --ui-border: #E3EAF0;
   --ui-border-muted: #E3EAF0;
   --ui-text: #0B3558;
+  --ui-muted: #5B6B7A;
   --ui-text-muted: #5B6B7A;
   --ui-accent: #006BFF;
   --ui-selected: #E8F1FF;
@@ -105,6 +106,7 @@ html.dark {
   --ui-border: #2A3648;
   --ui-border-muted: #1E2836;
   --ui-text: #E8EEF4;
+  --ui-muted: #8A96A3;
   --ui-text-muted: #8A96A3;
   --ui-accent: #006BFF;
   --ui-selected: #163050;
@@ -161,6 +163,7 @@ html.classic {
   --ui-border-muted: rgba(230, 241, 235, 0.065);
   --ui-text: #f4f7f5;
   --ui-text-muted: #8f9b95;
+  --ui-muted: var(--ui-text-muted);
   --ui-accent: #66e9ad;
   --ui-selected: rgba(56, 189, 180, 0.14);
   --ui-primary: #66e9ad;

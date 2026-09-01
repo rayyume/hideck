@@ -17,7 +17,7 @@ defineProps<{
       </slot>
     </div>
     <div class="mt-4 text-sm font-bold text-[var(--ui-text)]">{{ title }}</div>
-    <div v-if="subtitle" class="mt-1 text-xs text-[var(--ui-text-muted)]">{{ subtitle }}</div>
+    <div v-if="subtitle" class="mt-1 text-xs text-[var(--ui-muted)]">{{ subtitle }}</div>
     <div class="mt-5 flex items-center justify-center gap-2">
       <slot name="actions" />
     </div>

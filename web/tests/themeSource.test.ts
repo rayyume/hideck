@@ -22,6 +22,7 @@ test('navy-light tokens match the approved palette', () => {
   assert.match(globalStyles, /:root \{[\s\S]*--ui-text: #0B3558;/)
   assert.match(globalStyles, /:root \{[\s\S]*--ui-primary-solid: #0B3558;/)
   assert.match(globalStyles, /:root \{[\s\S]*--ui-accent: #006BFF;/)
+  assert.match(globalStyles, /:root \{[\s\S]*--ui-muted: #5B6B7A;/)
   assert.match(globalStyles, /:root \{[\s\S]*--ui-text-muted: #5B6B7A;/)
   assert.match(globalStyles, /:root \{[\s\S]*--ui-surface: #ffffff;/)
   assert.match(globalStyles, /:root \{[\s\S]*--ui-border: #E3EAF0;/)
@@ -46,6 +47,7 @@ test('navy-night keeps the same language without neon primary', () => {
   const darkBlock = globalStyles.match(/html\.dark \{[\s\S]*?\n\}/)?.[0] || ''
   assert.match(darkBlock, /--ui-bg: #0B1420;/)
   assert.match(darkBlock, /--ui-accent: #006BFF;/)
+  assert.match(darkBlock, /--ui-muted: #8A96A3;/)
   assert.match(darkBlock, /--ui-selected: #163050;/)
   assert.match(darkBlock, /--ui-primary-solid: #0B3558;/)
   assert.doesNotMatch(darkBlock, /#66e9ad/)
@@ -113,6 +115,24 @@ test('vue and class helpers no longer use generic Tailwind gray palette classes'
 
   walk(srcRoot)
   assert.deepEqual(hits, [])
+})
+
+test('secondary copy and timestamps use --ui-muted instead of navy --ui-text', () => {
+  const settings = source('../src/views/Settings.vue')
+  const empty = source('../src/components/EmptyState.vue')
+  const fieldRow = source('../src/components/FieldRow.vue')
+  const debug = source('../src/components/DebugPanel.vue')
+  const app = source('../src/App.vue')
+  assert.match(settings, /<h3 class="text-lg font-bold text-\[var\(--ui-text\)\]">安全<\/h3>/)
+  assert.match(settings, /更新访问凭证<\/p>/)
+  assert.match(settings, /text-\[var\(--ui-muted\)\]">更新访问凭证/)
+  assert.match(empty, /text-\[var\(--ui-text\)\]">\{\{ title \}\}<\/div>/)
+  assert.match(empty, /text-\[var\(--ui-muted\)\]">\{\{ subtitle \}\}<\/div>/)
+  assert.match(fieldRow, /text-\[var\(--ui-muted\)\] shrink-0/)
+  assert.match(debug, /text-\[var\(--ui-muted\)\]">\{\{ fmtTs/)
+  assert.match(app, /text-\[var\(--ui-text\)\] tracking-tight/)
+  assert.match(app, /text-\[14px\] text-\[var\(--ui-muted\)\]/)
+  assert.match(globalStyles, /html\.classic \{[\s\S]*--ui-text-muted: #8f9b95;[\s\S]*--ui-muted: var\(--ui-text-muted\);/)
 })
 
 test('login, logs, and AT terminal no longer leak the old teal palette', () => {

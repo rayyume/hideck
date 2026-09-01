@@ -70,12 +70,12 @@ function clearAll() {
 <template>
   <el-drawer v-model="open" direction="rtl" size="520px" title="诊断面板">
     <div class="flex items-center justify-between gap-2 mb-4">
-      <div class="text-xs text-[var(--ui-text-muted)] font-mono truncate">
+      <div class="text-xs text-[var(--ui-muted)] font-mono truncate">
         {{ currentHref }}
       </div>
       <div class="flex items-center gap-2">
         <div class="flex items-center gap-2 px-2">
-          <div class="text-xs text-[var(--ui-text-muted)]">错误自动弹出</div>
+          <div class="text-xs text-[var(--ui-muted)]">错误自动弹出</div>
           <el-switch v-model="autoOpen" />
         </div>
         <el-button @click="clearAll" class="!border-0 !bg-white/70 dark:!bg-white/5">清空</el-button>
@@ -87,12 +87,12 @@ function clearAll() {
     <div class="space-y-6">
       <div class="ui-panel-muted p-4">
         <div class="text-sm font-extrabold text-[var(--ui-text)] mb-2">最近路由</div>
-        <div v-if="debugCollector.routes.value.length === 0" class="text-xs text-[var(--ui-text-muted)]">暂无记录</div>
+        <div v-if="debugCollector.routes.value.length === 0" class="text-xs text-[var(--ui-muted)]">暂无记录</div>
         <div v-else class="space-y-2 max-h-[220px] overflow-auto">
           <div v-for="r in debugCollector.routes.value.slice().reverse()" :key="r.ts" class="text-xs font-mono">
-            <div class="text-[var(--ui-text-muted)]">{{ fmtTs(r.ts) }}</div>
+            <div class="text-[var(--ui-muted)]">{{ fmtTs(r.ts) }}</div>
             <div class="text-[var(--ui-text)] break-words">
-              {{ r.from || '-' }} → {{ r.to || '-' }} <span v-if="r.name" class="text-[var(--ui-text-muted)]">({{ r.name }})</span>
+              {{ r.from || '-' }} → {{ r.to || '-' }} <span v-if="r.name" class="text-[var(--ui-muted)]">({{ r.name }})</span>
             </div>
           </div>
         </div>
@@ -100,40 +100,40 @@ function clearAll() {
 
       <div class="ui-panel-muted p-4">
         <div class="text-sm font-extrabold text-[var(--ui-text)] mb-2">最近 API 错误</div>
-        <div v-if="debugCollector.apiErrors.value.length === 0" class="text-xs text-[var(--ui-text-muted)]">暂无记录</div>
+        <div v-if="debugCollector.apiErrors.value.length === 0" class="text-xs text-[var(--ui-muted)]">暂无记录</div>
         <div v-else class="space-y-2 max-h-[260px] overflow-auto">
           <div v-for="a in debugCollector.apiErrors.value.slice().reverse()" :key="a.ts" class="text-xs font-mono">
-            <div class="text-[var(--ui-text-muted)]">{{ fmtTs(a.ts) }}</div>
+            <div class="text-[var(--ui-muted)]">{{ fmtTs(a.ts) }}</div>
             <div class="text-[var(--ui-text)] break-words">
               <span v-if="a.status">HTTP {{ a.status }} · </span>
               <span v-if="a.method">{{ String(a.method).toUpperCase() }} </span>
               <span v-if="a.url">{{ a.url }}</span>
             </div>
-            <div class="text-[var(--ui-text-muted)] break-words">{{ a.message }}</div>
+            <div class="text-[var(--ui-muted)] break-words">{{ a.message }}</div>
           </div>
         </div>
       </div>
 
       <div class="ui-panel-muted p-4">
         <div class="text-sm font-extrabold text-[var(--ui-text)] mb-2">最近前端错误</div>
-        <div v-if="debugCollector.jsErrors.value.length === 0" class="text-xs text-[var(--ui-text-muted)]">暂无记录</div>
+        <div v-if="debugCollector.jsErrors.value.length === 0" class="text-xs text-[var(--ui-muted)]">暂无记录</div>
         <div v-else class="space-y-2 max-h-[260px] overflow-auto">
           <div v-for="j in debugCollector.jsErrors.value.slice().reverse()" :key="j.ts" class="text-xs font-mono">
-            <div class="text-[var(--ui-text-muted)]">{{ fmtTs(j.ts) }} <span v-if="j.source" class="text-[var(--ui-text-muted)]">· {{ j.source }}</span></div>
+            <div class="text-[var(--ui-muted)]">{{ fmtTs(j.ts) }} <span v-if="j.source" class="text-[var(--ui-muted)]">· {{ j.source }}</span></div>
             <div class="text-[var(--ui-text)] break-words">{{ j.message }}</div>
-            <div v-if="j.stack" class="text-[var(--ui-text-muted)] whitespace-pre-wrap break-words">{{ j.stack }}</div>
+            <div v-if="j.stack" class="text-[var(--ui-muted)] whitespace-pre-wrap break-words">{{ j.stack }}</div>
           </div>
         </div>
       </div>
 
       <div class="ui-panel-muted p-4">
         <div class="text-sm font-extrabold text-[var(--ui-text)] mb-2">鉴权事件</div>
-        <div v-if="debugCollector.authEvents.value.length === 0" class="text-xs text-[var(--ui-text-muted)]">暂无记录</div>
+        <div v-if="debugCollector.authEvents.value.length === 0" class="text-xs text-[var(--ui-muted)]">暂无记录</div>
         <div v-else class="space-y-2 max-h-[160px] overflow-auto">
           <div v-for="e in debugCollector.authEvents.value.slice().reverse()" :key="e.ts" class="text-xs font-mono">
-            <div class="text-[var(--ui-text-muted)]">{{ fmtTs(e.ts) }}</div>
+            <div class="text-[var(--ui-muted)]">{{ fmtTs(e.ts) }}</div>
             <div class="text-[var(--ui-text)] break-words">
-              {{ e.kind }} <span v-if="e.redirectTo" class="text-[var(--ui-text-muted)]">· redirect={{ e.redirectTo }}</span>
+              {{ e.kind }} <span v-if="e.redirectTo" class="text-[var(--ui-muted)]">· redirect={{ e.redirectTo }}</span>
             </div>
           </div>
         </div>

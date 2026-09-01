@@ -86,7 +86,7 @@ const signalColorClass = computed(() => ({
   green: 'text-[var(--ui-success)]',
   amber: 'text-[var(--ui-warning)]',
   red:   'text-[var(--ui-danger)]',
-  gray:  'text-[var(--ui-text-muted)]',
+  gray:  'text-[var(--ui-muted)]',
 }[signalColor.value]))
 
 const signalBarColor = computed(() => ({
@@ -153,7 +153,7 @@ const networkPanelMessage = computed(() => {
                 ? 'text-[var(--ui-success)]'
                 : controlOnline
                   ? 'text-amber-700 dark:text-amber-300'
-                  : 'text-[var(--ui-text-muted)]'"
+                  : 'text-[var(--ui-muted)]'"
             >
               <template v-if="isRegistered">
                 {{ device?.modem?.operator || '--' }}
@@ -165,22 +165,22 @@ const networkPanelMessage = computed(() => {
             </div>
           </div>
           <button @click="showOperatorSelection = true" class="p-1 rounded hover:bg-[var(--ui-selected)] transition-colors" title="网络选择设置">
-            <Settings24Regular class="w-5 h-5 text-[var(--ui-text-muted)]" />
+            <Settings24Regular class="w-5 h-5 text-[var(--ui-muted)]" />
           </button>
         </div>
 
         <!-- 信号大字 -->
         <div class="rounded-xl border border-[var(--ui-border)] px-3.5 py-3 mb-3">
-          <div class="text-xs font-bold text-[var(--ui-text-muted)] uppercase tracking-wider mb-1.5">信号强度</div>
+          <div class="text-xs font-bold text-[var(--ui-muted)] uppercase tracking-wider mb-1.5">信号强度</div>
           <div class="flex items-center gap-3">
             <div>
               <div class="flex items-baseline gap-1">
                 <span class="text-2xl font-extrabold tabular-nums leading-none" :class="signalColorClass">
                   {{ signalDbmDisplay }}
                 </span>
-                <span class="text-xs text-[var(--ui-text-muted)]">dBm</span>
+                <span class="text-xs text-[var(--ui-muted)]">dBm</span>
               </div>
-              <div class="text-xs text-[var(--ui-text-muted)] mt-1">
+              <div class="text-xs text-[var(--ui-muted)] mt-1">
                 RSRP {{ signalMetricDisplay(device?.modem?.signal_rsrp) }}
                 &nbsp;·&nbsp;
                 RSRQ {{ signalMetricDisplay(device?.modem?.signal_rsrq) }}
@@ -223,7 +223,7 @@ const networkPanelMessage = computed(() => {
     <!-- ===== 流量面板（不变）===== -->
     <section class="overview-fact-panel overview-network-panel ui-panel-muted p-4">
       <div class="overview-panel-title mb-2">地址与实时网络</div>
-      <div v-if="networkPanelMessage" class="flex items-center justify-center p-6 text-sm text-[var(--ui-text-muted)]">
+      <div v-if="networkPanelMessage" class="flex items-center justify-center p-6 text-sm text-[var(--ui-muted)]">
         {{ networkPanelMessage }}
       </div>
       <div v-else class="text-sm space-y-1.5 text-[var(--ui-text)]">

@@ -61,18 +61,18 @@ useNotificationBindingPoll({
       <div class="space-y-4">
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div class="space-y-1">
-            <label class="text-xs font-semibold text-[var(--ui-text-muted)]">App ID</label>
+            <label class="text-xs font-semibold text-[var(--ui-muted)]">App ID</label>
             <el-input v-model="feishuForm.app_id" placeholder="cli_xxxx" />
           </div>
           <div class="space-y-1">
-            <label class="text-xs font-semibold text-[var(--ui-text-muted)]">App Secret</label>
+            <label class="text-xs font-semibold text-[var(--ui-muted)]">App Secret</label>
             <el-input v-model="feishuForm.app_secret" type="password" show-password placeholder="••••••••" />
           </div>
         </div>
         <div class="space-y-1">
-          <label class="text-xs font-semibold text-[var(--ui-text-muted)]">Chat IDs</label>
+          <label class="text-xs font-semibold text-[var(--ui-muted)]">Chat IDs</label>
           <el-input v-model="feishuForm.chat_ids" placeholder="多个群组用英文逗号分隔" />
-          <div class="text-xs text-[var(--ui-text-muted)]">飞书会话的 Chat ID (oc_xxxx)。扫码只创建应用，请用扫码的那个飞书账号发消息后会自动填入。</div>
+          <div class="text-xs text-[var(--ui-muted)]">飞书会话的 Chat ID (oc_xxxx)。扫码只创建应用，请用扫码的那个飞书账号发消息后会自动填入。</div>
         </div>
       </div>
     </section>

@@ -62,25 +62,25 @@ useNotificationBindingPoll({
       <div class="space-y-4">
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div class="space-y-1">
-            <label class="text-xs font-semibold text-[var(--ui-text-muted)]">Bot ID</label>
+            <label class="text-xs font-semibold text-[var(--ui-muted)]">Bot ID</label>
             <el-input v-model="weComBotForm.bot_id" placeholder="企业微信 Bot ID" />
           </div>
           <div class="space-y-1">
-            <label class="text-xs font-semibold text-[var(--ui-text-muted)]">Secret</label>
+            <label class="text-xs font-semibold text-[var(--ui-muted)]">Secret</label>
             <el-input v-model="weComBotForm.secret" type="password" show-password placeholder="********" />
           </div>
         </div>
         <div class="space-y-1">
-          <label class="text-xs font-semibold text-[var(--ui-text-muted)]">WebSocket 地址</label>
+          <label class="text-xs font-semibold text-[var(--ui-muted)]">WebSocket 地址</label>
           <el-input v-model="weComBotForm.websocket_url" placeholder="wss://openws.work.weixin.qq.com" />
         </div>
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div class="space-y-1">
-            <label class="text-xs font-semibold text-[var(--ui-text-muted)]">允许私聊用户 ID</label>
+            <label class="text-xs font-semibold text-[var(--ui-muted)]">允许私聊用户 ID</label>
             <el-input v-model="weComBotForm.allowed_user_ids" placeholder="首个私聊用户会自动绑定" />
           </div>
           <div class="space-y-1">
-            <label class="text-xs font-semibold text-[var(--ui-text-muted)]">允许群聊 ID</label>
+            <label class="text-xs font-semibold text-[var(--ui-muted)]">允许群聊 ID</label>
             <el-input v-model="weComBotForm.allowed_group_ids" placeholder="多个使用英文逗号分隔" />
           </div>
         </div>

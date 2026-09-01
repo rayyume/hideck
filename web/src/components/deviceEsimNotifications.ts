@@ -65,5 +65,5 @@ export function notificationMetaContainerClass() {
 }
 
 export function notificationMetaItemClass() {
-  return 'w-full min-w-0 rounded-lg bg-[var(--ui-surface-muted)] px-2 py-0.5 text-xs leading-[18px] text-[var(--ui-text-muted)]'
+  return 'w-full min-w-0 rounded-lg bg-[var(--ui-surface-muted)] px-2 py-0.5 text-xs leading-[18px] text-[var(--ui-muted)]'
 }
