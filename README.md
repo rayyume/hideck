@@ -33,6 +33,7 @@ HiDeck 是面向高通 4G/LTE/5G 模组的综合管理平台，将设备热插�
 
 - [界面预览](#界面预览)
 - [核心能力](#核心能力)
+- [电话与 eSIM](#电话与-esim)
 - [Docker 部署（推荐）](#docker-部署推荐)
 - [二进制部署](#二进制部署)
 - [配置](#配置)
@@ -49,19 +50,30 @@ HiDeck 是面向高通 4G/LTE/5G 模组的综合管理平台，将设备热插�
 | 设备管理 | 自动发现 USB 模组，管理 QMI、MBIM、AT 与 PC/SC 后端，实时展示设备和网络状态 |
 | 移动代理 | 为指定数据网卡创建 SOCKS5 / HTTP 出口，并通过 `SO_BINDTODEVICE` 绑定流量 |
 | 短信与命令 | 收发短信、管理联系人和会话、执行 AT/USSD 命令、查询余额并保存历史 |
+| 电话 | WiFi calling、蜂窝软件 IMS、原生 VoLTE；保持/恢复、呼叫等待、仅听接听；对端挂断后停振铃 |
 | VoWiFi / IMS | 建立 SWu/IMS 连接，处理短信与通话，并保存通话记录和录音；规范映射见 [VoWiFi 协议对齐](docs/vowifi-protocol-alignment.md) |
-| 原生 VoLTE | `phone_mode=volte` 走模组 IMS / QMI VOICE；协议与回滚见 [docs/volte-native.md](docs/volte-native.md) |
-| eSIM | 下载、启用、停用、重命名和删除 eSIM Profile |
+| 原生 VoLTE | `phone_mode=volte` 走模组 IMS / QMI VOICE；国内卡有唯一画像才选；不可用 USB 声卡会跳过以免打挂 QMI。见 [docs/volte-native.md](docs/volte-native.md) |
+| eSIM | 下载、启用、停用、重命名、删除；可贴激活码或拖入二维码 / PDF 安装；Lebara UK `204/04` 污染可自动清污，不必删卡 |
 | 自动任务 | 按设备、Profile、时区和计划执行任务，记录运行历史和错误 |
 | 通知 | 支持 Telegram、Email、PushPlus、Bark、飞书、企业微信、微信和 QQ 等渠道 |
 | 多架构交付 | 支持 Linux amd64、arm64 与 armv7 构建及 Docker 部署 |
+
+## 电话与 eSIM
+
+电话页可选 **WiFi calling**、**蜂窝数据** 或 **VoLTE**。接通后可保持/恢复；第二路来电显示呼叫等待；对端挂断后振铃会停。接听可选麦克风或仅听（对方听不到你）。
+
+**原生 VoLTE**（`phone_mode=volte`）走模组 IMS，不建 ePDG。国内有唯一 MBN 画像的卡（移动 / 联通 / 电信 / 广电）才会选；英国等没有唯一画像时不会乱选，也不会回退软件 IMS。大疆/佰旺一类 USB 声卡不能开的模组会跳过声卡，避免把同口 QMI 打挂，信令仍可打。细节见 [原生 VoLTE](docs/volte-native.md)。
+
+**Lebara UK** 分享卡运行时锁射频：不要关飞行或开流量驻国内网，否则 IMSI 会切到荷兰 `20404`，英国 WiFi calling 会废。切过去之后不必删卡重写——同一 ICCID 做一次停用/启用（或经停车 Profile 中转），连续读到英国 `23487` 后再开 VoWiFi。电话页会显示「正在恢复英国身份」。说明见 [运营商笔记](docs/operator-notes.md)。
+
+**eSIM** 支持下载、启用、停用、重命名和删除，也可贴 `LPA:1$` 激活码，或拖入二维码图片 / PDF 安装。
 
 ## Docker 部署（推荐）
 
 优先用 Docker。镜像已内置通话录音需要的 AMR / MP3 编解码库，不用再往宿主机装依赖。
 
 运行环境需要 Linux、curl、Docker Engine、Docker Compose、host 网络和 USB 设备访问权限。
-服务器使用 `docker-compose.yml` 拉取发布镜像；维护者本机的多架构构建使用独立的 `docker-compose.build.yml`。
+服务器使用 `docker-compose.yml` 拉取发布镜像。发版把已经打好的二进制拷进运行时底包，见 [DOCKERHUB.md](DOCKERHUB.md)；从源码完整构建用根目录 `Dockerfile`。
 
 服务器可直接通过 curl 安装到当前目录下的 `hideck/`：
 

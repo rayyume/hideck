@@ -92,21 +92,36 @@ Web 入口：`http://YOUR_IP:7575`
 
 ## 维护者发布
 
-本机使用独立的 `docker-compose.build.yml` 调用 Buildx，一次生成 amd64、arm64 和多架构 manifest。服务器部署仍只使用 `docker-compose.yml`，不会在服务器编译源码。
+发版镜像不再在 Docker 里编译或 `apk`。先打好 `dist/hideck_vX.Y.Z_linux_amd64` 和 `linux_arm64`，再拷进运行时底包。
+
+运行时底包（`ca-certificates`、AMR/MP3、`gcompat`）只在依赖变化时重建：
 
 ```bash
+docker compose -f docker-compose.runtime.yml build --builder hideck-release --push
+```
+
+arm64 拉 Alpine 包若 TLS 失败，改用：
+
+```bash
+docker buildx build --builder hideck-release --allow network.host \
+  --platform linux/amd64,linux/arm64 -f Dockerfile.runtime \
+  -t yibaiba/hideck-runtime:3.24 -t yibaiba/hideck-runtime:latest --push .
+```
+
+每次发版：
+
+```bash
+# 先 make / 本地编出 dist/hideck_v2.1.1_linux_amd64 和 linux_arm64
 export HIDECK_VERSION=2.1.1
 export HIDECK_MINOR_VERSION=2.1
 export HIDECK_REVISION="$(git rev-parse HEAD)"
 export HIDECK_BUILDTIME="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 
-docker compose -f docker-compose.build.yml build --check
-docker compose -f docker-compose.build.yml build --push
-
+docker compose -f docker-compose.build.yml build --builder hideck-release --push
 docker buildx imagetools inspect "yibaiba/hideck:${HIDECK_VERSION}"
 ```
 
-正式发布必须从干净、已提交的源码快照构建，确保镜像标签可以追溯到 `REVISION`。
+服务器部署仍只用 `docker-compose.yml` 拉 `yibaiba/hideck:latest`，不会在服务器编译。从源码完整构建请用仓库根目录的 `Dockerfile`。
 
 ## 更新镜像
 

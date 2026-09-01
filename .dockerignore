@@ -14,7 +14,8 @@ README.md
 logs
 data
 tmp
-dist
+dist/*
+!dist/hideck_*
 design-system
 old
 output

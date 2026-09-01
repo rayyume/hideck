@@ -1,0 +1,26 @@
+# 运行时底包：录音库和证书只在这里装一次。发版镜像只 COPY 已经打好的二进制。
+FROM alpine:3.24
+WORKDIR /app
+
+# ca-certificates / tzdata：HTTPS 和时区
+# opencore-amr / vo-amrwbenc：AMR / AMR-WB
+# lame-libs：MP3 录音
+# psmisc：fuser，释放串口
+# gcompat：UPX 压缩后的 Go 二进制在 musl 上需要
+RUN apk add --no-cache \
+      ca-certificates \
+      gcompat \
+      lame-libs \
+      opencore-amr \
+      psmisc \
+      tzdata \
+      vo-amrwbenc && \
+    test -e /usr/lib/libopencore-amrnb.so.0 && \
+    test -e /usr/lib/libopencore-amrwb.so.0 && \
+    test -e /usr/lib/libvo-amrwbenc.so.0 && \
+    test -e /usr/lib/libmp3lame.so.0 && \
+    mkdir -p /app/config /app/data /app/logs
+
+EXPOSE 7575/tcp 7576/tcp 7580/udp
+ENV CONFIG_PATH=/app/config/config.yaml
+ENV TZ=Asia/Shanghai

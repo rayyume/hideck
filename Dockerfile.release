@@ -1,0 +1,24 @@
+# 发版镜像：不再编译、不再 apk。把 dist/ 里已经打好的二进制放进运行时底包。
+# 需要先有 hideck_<VERSION>_linux_amd64 和 linux_arm64，例如 hideck_v2.1.1_linux_amd64。
+FROM yibaiba/hideck-runtime:3.24
+ARG VERSION=unknown
+ARG BUILDTIME=unknown
+ARG REVISION=unknown
+ARG TARGETARCH
+WORKDIR /app
+LABEL org.opencontainers.image.title="HiDeck" \
+      org.opencontainers.image.description="Qualcomm modem management platform" \
+      org.opencontainers.image.source="https://github.com/yibaiba/hideck" \
+      org.opencontainers.image.version=${VERSION} \
+      org.opencontainers.image.created=${BUILDTIME} \
+      org.opencontainers.image.revision=${REVISION}
+
+COPY dist/hideck_${VERSION}_linux_${TARGETARCH} /usr/local/bin/hideck
+RUN chmod 0755 /usr/local/bin/hideck
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD wget -q -T 3 -O /dev/null http://127.0.0.1:7575/ping || exit 1
+
+STOPSIGNAL SIGTERM
+ENTRYPOINT ["/usr/local/bin/hideck"]
+CMD ["-c", "/app/config/config.yaml"]

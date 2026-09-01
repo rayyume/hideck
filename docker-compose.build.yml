@@ -5,8 +5,7 @@ services:
     image: yibaiba/hideck:${HIDECK_VERSION:-2.1.1}
     build:
       context: .
-      dockerfile: Dockerfile
-      target: runtime
+      dockerfile: Dockerfile.release
       pull: true
       platforms:
         - linux/amd64
@@ -15,7 +14,6 @@ services:
         VERSION: v${HIDECK_VERSION:-2.1.1}
         REVISION: ${HIDECK_REVISION:?HIDECK_REVISION is required}
         BUILDTIME: ${HIDECK_BUILDTIME:?HIDECK_BUILDTIME is required}
-        ENABLE_UPX: ${HIDECK_ENABLE_UPX:-0}
       tags:
         - yibaiba/hideck:${HIDECK_MINOR_VERSION:-2.1}
         - yibaiba/hideck:${HIDECK_LATEST_TAG:-latest}
