@@ -93,6 +93,7 @@ LABEL org.opencontainers.image.title="HiDeck" \
 # - psmisc: 提供 fuser，用于安全释放串口占用
 RUN apk add --no-cache \
       ca-certificates \
+      gcompat \
       lame-libs \
       opencore-amr \
       psmisc \
