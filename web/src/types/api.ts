@@ -119,6 +119,8 @@ export type DeviceOverviewItem = {
   e911_setup_available?: boolean
   active_esim_profile_name?: string
   rf_lock?: string
+  lebara_identity_status?: string
+  lebara_identity_message?: string
   network_enabled: boolean
   phone_mode?: string
   vowifi_enabled?: boolean
@@ -274,6 +276,8 @@ export type EsimProfileItem = {
   state: number
   state_text: string
   class_text?: string
+  disabling_not_allowed?: boolean
+  deletion_not_allowed?: boolean
 }
 
 export type EsimEUICCProfiles = {

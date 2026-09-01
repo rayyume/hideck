@@ -460,6 +460,7 @@ func (s *Server) newRouter() *gin.Engine {
 		api.POST("/devices/:device_id/esim/actions/decode-activation", s.handleEsimDecodeActivation)              // 从图片或 PDF 识别激活码
 		api.PATCH("/devices/:device_id/esim/profiles/:iccid", s.handleEsimRenameProfile)                          // 修改 profile 名称
 		api.DELETE("/devices/:device_id/esim/profiles/:iccid", s.handleEsimDeleteProfile)                         // 删除 eSIM profile
+		api.POST("/devices/:device_id/esim/profiles/:iccid/actions/recover-lebara-identity", s.handleEsimRecoverLebaraIdentity)
 
 		// ===== VoWiFi =====
 		api.PATCH("/devices/:device_id/vowifi", s.handleDeviceVoWiFiPatch)                          // 启用/禁用 VoWiFi

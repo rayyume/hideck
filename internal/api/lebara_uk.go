@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/yibaiba/hideck/internal/db"
@@ -58,6 +59,34 @@ func rejectLebaraUKRFUnlock(c *gin.Context, class device.LebaraUKClass, err erro
 		"rf_lock": class.RFLock(),
 	})
 	return true
+}
+
+func (s *Server) handleEsimRecoverLebaraIdentity(c *gin.Context) {
+	id := deviceIDParam(c)
+	iccid := strings.TrimSpace(c.Param("iccid"))
+	if iccid == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "iccid 不能为空"})
+		return
+	}
+	if s == nil || s.pool == nil {
+		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": "设备未找到"})
+		return
+	}
+	worker := s.pool.GetWorker(id)
+	if worker == nil {
+		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": "设备未找到或未运行"})
+		return
+	}
+	err := s.pool.ScheduleLebaraUKIdentityRecover(worker, iccid, true)
+	if err == nil {
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "已开始恢复英国身份"})
+		return
+	}
+	status := http.StatusConflict
+	if errors.Is(err, device.ErrLebaraUKIdentityICCIDMismatch) {
+		status = http.StatusBadRequest
+	}
+	c.JSON(status, gin.H{"status": "error", "message": err.Error()})
 }
 
 func writeLebaraUKRFLockError(c *gin.Context, err error) bool {

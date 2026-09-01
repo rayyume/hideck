@@ -397,6 +397,8 @@ type deviceMgmtOverviewLiteItem struct {
 	E911SetupAvailable     bool               `json:"e911_setup_available,omitempty"`
 	ActiveESIMProfileName  string             `json:"active_esim_profile_name,omitempty"`
 	RFLock                 string             `json:"rf_lock,omitempty"`
+	LebaraIdentityStatus   string             `json:"lebara_identity_status,omitempty"`
+	LebaraIdentityMessage  string             `json:"lebara_identity_message,omitempty"`
 	SMSEnabled             bool               `json:"sms_enabled"`
 	NetworkEnabled         bool               `json:"network_enabled"`
 	PhoneMode              string             `json:"phone_mode,omitempty"`
@@ -685,35 +687,43 @@ func (s *Server) buildOverviewLiteItemFromWorkerWithModem(w *device.Worker, cfg 
 		logger.Warn("设备概览识别 Lebara UK 射频策略失败", "device", w.ID, "err", err)
 	}
 	item.RFLock = class.RFLock()
+	if recoverSnap := s.pool.LebaraUKIdentityRecoverSnapshot(w.ID); recoverSnap.Status != "" {
+		item.LebaraIdentityStatus = recoverSnap.Status
+		item.LebaraIdentityMessage = recoverSnap.Message
+	}
 	s.applyLifecycleToOverviewLiteItem(&item, w, cfg)
 	return item
 }
 
 type overviewStreamEmitVersion struct {
-	VoWiFiActive    bool
-	LifecyclePhase  string
-	LifecycleReason string
-	LocalPhone      string
-	ICCID           string
-	IMSI            string
-	HasRuntime      bool
-	Phase           string
-	SIMReady        bool
-	AccessReady     bool
-	TunnelReady     bool
-	IMSReady        bool
-	SMSReady        bool
-	LastErrorClass  string
+	VoWiFiActive          bool
+	LifecyclePhase        string
+	LifecycleReason       string
+	LocalPhone            string
+	ICCID                 string
+	IMSI                  string
+	HasRuntime            bool
+	Phase                 string
+	SIMReady              bool
+	AccessReady           bool
+	TunnelReady           bool
+	IMSReady              bool
+	SMSReady              bool
+	LastErrorClass        string
+	LebaraIdentityStatus  string
+	LebaraIdentityMessage string
 }
 
 func newOverviewStreamEmitVersion(item deviceMgmtOverviewLiteItem) overviewStreamEmitVersion {
 	v := overviewStreamEmitVersion{
-		VoWiFiActive:    item.VoWiFiActive,
-		LifecyclePhase:  item.LifecyclePhase,
-		LifecycleReason: item.LifecycleReason,
-		LocalPhone:      strings.TrimSpace(item.LocalPhone),
-		ICCID:           strings.TrimSpace(item.Modem.ICCID),
-		IMSI:            strings.TrimSpace(item.Modem.IMSI),
+		VoWiFiActive:          item.VoWiFiActive,
+		LifecyclePhase:        item.LifecyclePhase,
+		LifecycleReason:       item.LifecycleReason,
+		LocalPhone:            strings.TrimSpace(item.LocalPhone),
+		ICCID:                 strings.TrimSpace(item.Modem.ICCID),
+		IMSI:                  strings.TrimSpace(item.Modem.IMSI),
+		LebaraIdentityStatus:  item.LebaraIdentityStatus,
+		LebaraIdentityMessage: item.LebaraIdentityMessage,
 	}
 	if item.VoWiFiRuntime != nil {
 		v.HasRuntime = true

@@ -15,6 +15,8 @@ import (
 
 const (
 	RFLockLebaraUKNextGen       = "lebara_uk_nextgen"
+	LebaraUKHomeIMSIPrefix      = "23487"
+	LebaraUKFlippedIMSIPrefix   = "20404"
 	lebaraUKLiveIdentityTimeout = 3 * time.Second
 )
 
@@ -51,7 +53,24 @@ func NewLebaraUKFlippedIMSIError(imsi string) error {
 	if imsi == "" {
 		return ErrLebaraUKFlippedIMSI
 	}
-	return fmt.Errorf("%w（当前 %s）", ErrLebaraUKFlippedIMSI, imsi)
+	return fmt.Errorf("%w（当前 %s）", ErrLebaraUKFlippedIMSI, maskIMSIPrefix(imsi))
+}
+
+func maskIMSIPrefix(imsi string) string {
+	imsi = strings.TrimSpace(imsi)
+	if imsi == "" {
+		return ""
+	}
+	if IsLebaraUKFlippedIMSI(imsi) {
+		return LebaraUKFlippedIMSIPrefix
+	}
+	if IsLebaraUKHomeIMSI(imsi) {
+		return LebaraUKHomeIMSIPrefix
+	}
+	if len(imsi) > 5 {
+		return imsi[:5]
+	}
+	return imsi
 }
 
 func IsLebaraUKPolicyError(err error) bool {
@@ -63,8 +82,8 @@ func IsLebaraUKPolicyError(err error) bool {
 func ClassifyLebaraUKNextGen(imsi, profileName string, seenIMSIs []string) LebaraUKClass {
 	imsi = strings.TrimSpace(imsi)
 	class := LebaraUKClass{LiveIMSI: imsi}
-	liveHome := strings.HasPrefix(imsi, "23487")
-	liveFlipped := strings.HasPrefix(imsi, "20404")
+	liveHome := IsLebaraUKHomeIMSI(imsi)
+	liveFlipped := IsLebaraUKFlippedIMSI(imsi)
 	hasLebaraEvidence := profileNameLooksLikeLebaraUK(profileName) || hasIMSIPrefix(seenIMSIs, "23487")
 	if liveHome || (hasLebaraEvidence && (imsi == "" || liveFlipped)) {
 		class.IsLebara = true
@@ -127,9 +146,17 @@ func classifyLebaraUKWithHistory(imsi, profileName, iccid string) (LebaraUKClass
 	return ClassifyLebaraUKNextGen(imsi, profileName, seenIMSIs), nil
 }
 
+func IsLebaraUKHomeIMSI(imsi string) bool {
+	return strings.HasPrefix(strings.TrimSpace(imsi), LebaraUKHomeIMSIPrefix)
+}
+
+func IsLebaraUKFlippedIMSI(imsi string) bool {
+	return strings.HasPrefix(strings.TrimSpace(imsi), LebaraUKFlippedIMSIPrefix)
+}
+
 func lebaraUKHistoryCanDisambiguate(imsi string) bool {
 	imsi = strings.TrimSpace(imsi)
-	return imsi == "" || strings.HasPrefix(imsi, "20404")
+	return imsi == "" || IsLebaraUKFlippedIMSI(imsi)
 }
 
 func workerLebaraUKProfileName(w *Worker) string {

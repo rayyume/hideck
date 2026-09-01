@@ -370,6 +370,12 @@ export const devicesService = {
       return true
     })
   },
+  recoverLebaraIdentity(id: string, iccid: string) {
+    return callService(async () => {
+      await withEsimBusyRetry(() => api.post(`/devices/${id}/esim/profiles/${iccid}/actions/recover-lebara-identity`))
+      return true
+    })
+  },
   renameEsimProfile(id: string, iccid: string, payload: { name: string; aid_hex: string }) {
     return callService(async () => {
       await withEsimBusyRetry(() => api.patch(`/devices/${id}/esim/profiles/${iccid}`, payload))

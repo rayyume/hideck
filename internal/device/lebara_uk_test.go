@@ -3,6 +3,7 @@ package device
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -119,5 +120,8 @@ func TestLebaraUKPolicyErrors(t *testing.T) {
 	}
 	if err := NewLebaraUKFlippedIMSIError("204040000000001"); !errors.Is(err, ErrLebaraUKFlippedIMSI) {
 		t.Fatalf("wrap = %v", err)
+	}
+	if err := NewLebaraUKFlippedIMSIError("204040000000001"); strings.Contains(err.Error(), "204040000000001") {
+		t.Fatalf("error leaked full IMSI: %v", err)
 	}
 }

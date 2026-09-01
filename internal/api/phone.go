@@ -83,7 +83,7 @@ func (s *Server) handlePhoneDevices(c *gin.Context) {
 			if phoneMode == "" {
 				phoneMode = "wifi"
 			}
-			devices = append(devices, gin.H{
+			item := gin.H{
 				"id": worker.ID, "name": worker.Config.Name, "iccid": worker.CurrentICCID(),
 				"voice":                voice,
 				"phone_mode":           phoneMode,
@@ -94,7 +94,17 @@ func (s *Server) handlePhoneDevices(c *gin.Context) {
 				"native_volte":         s.pool.NativeVoLTEStatus(worker.ID),
 				"software_ims_blocked": device.WorkerSoftwareIMSBlocked(worker),
 				"rf_lock":              class.RFLock(),
-			})
+			}
+			if recoverSnap := s.pool.LebaraUKIdentityRecoverSnapshot(worker.ID); recoverSnap.Status != "" {
+				item["lebara_identity_status"] = recoverSnap.Status
+				if recoverSnap.Message != "" {
+					item["lebara_identity_message"] = recoverSnap.Message
+				}
+				if recoverSnap.ICCID != "" {
+					item["lebara_identity_iccid"] = recoverSnap.ICCID
+				}
+			}
+			devices = append(devices, item)
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{"devices": devices})

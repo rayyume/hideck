@@ -239,6 +239,8 @@ type ProfileItem struct {
 	State               int    `json:"state"` // 0=disabled, 1=enabled
 	StateText           string `json:"state_text"`
 	ClassText           string `json:"class_text,omitempty"`
+	DisablingNotAllowed bool   `json:"disabling_not_allowed,omitempty"`
+	DeletionNotAllowed  bool   `json:"deletion_not_allowed,omitempty"`
 }
 
 // EUICCProfiles 按 eUICC 分组的 profile 列表
@@ -400,6 +402,7 @@ var basicProfileTags = []bertlv.Tag{
 	sgp22.TagServiceProviderName,
 	sgp22.TagProfileName,
 	sgp22.TagProfileClass,
+	sgp22.TagProfilePolicyRules,
 }
 
 func listBasicProfiles(client *lpa.Client) ([]*sgp22.ProfileInfo, error) {
@@ -845,6 +848,9 @@ func (m *Manager) preCleanChannels() {
 
 // createLPAWithAID 用指定 AID 创建 LPA client（通过 channelFactory 统一分发）
 func (m *Manager) createLPAWithAID(aid []byte) (*lpa.Client, error) {
+	if m == nil || m.channelFactory == nil {
+		return nil, fmt.Errorf("eUICC 通道未就绪")
+	}
 	client, err := m.channelFactory(aid)
 	if err != nil {
 		return nil, fmt.Errorf("创建 LPA client 失败 (AID=%X): %w", aid, err)
@@ -1709,6 +1715,8 @@ func buildProfileGroup(eidStr string, aid []byte, profiles []*sgp22.ProfileInfo)
 			State:               int(p.ProfileState),
 			StateText:           stateText,
 			ClassText:           p.ProfileClass.String(),
+			DisablingNotAllowed: p.ProfilePolicyRules.DisablingNotAllowed,
+			DeletionNotAllowed:  p.ProfilePolicyRules.DeletionNotAllowed,
 		})
 	}
 	return group
@@ -1967,6 +1975,37 @@ func (m *Manager) ActiveProfileName() (string, error) {
 }
 
 // CachedProfileNameForICCID returns profile metadata without starting an APDU load.
+func (m *Manager) CachedProfileGroups() []EUICCProfiles {
+	if m == nil {
+		return nil
+	}
+	overview := m.cachedOverview()
+	if overview == nil {
+		return nil
+	}
+	return cloneProfiles(overview.Profiles)
+}
+
+func (m *Manager) LookupProfilePPR(iccid string) (disablingNotAllowed bool, known bool) {
+	target := normalizeICCIDValue(iccid)
+	if target == "" {
+		return false, false
+	}
+	for _, group := range m.CachedProfileGroups() {
+		for _, profile := range group.Profiles {
+			if normalizeICCIDValue(profile.ICCID) == target {
+				return profile.DisablingNotAllowed, true
+			}
+		}
+	}
+	return false, false
+}
+
+func (m *Manager) ProfileDisablingNotAllowed(iccid string) bool {
+	disallowed, _ := m.LookupProfilePPR(iccid)
+	return disallowed
+}
+
 func (m *Manager) CachedProfileNameForICCID(iccid string) (string, bool) {
 	overview := m.cachedOverview()
 	if overview == nil {

@@ -104,6 +104,28 @@ const selectedMode = computed(() => {
 const selectedStrategy = computed(() => selected.value?.data_strategy === 'always' ? 'always' : 'on_demand')
 const modePending = ref(false)
 
+function lebaraIdentityBusy(device?: PhoneDevice) {
+  const status = device?.lebara_identity_status
+  return status === 'recovering' || status === 'waiting_identity'
+}
+
+async function retryLebaraIdentity() {
+  const iccid = selected.value?.lebara_identity_iccid || selected.value?.iccid
+  if (!selectedDevice.value || !iccid || modePending.value) return
+  modePending.value = true
+  phone.clearError()
+  try {
+    const result = await devicesService.recoverLebaraIdentity(selectedDevice.value, iccid)
+    if (!result.ok) throw new Error(result.error?.message || '恢复英国身份失败')
+    await phone.refresh()
+    ElMessage.success('已开始恢复英国身份')
+  } catch (error) {
+    phone.error = phoneErrorMessage(error, '恢复英国身份失败')
+  } finally {
+    modePending.value = false
+  }
+}
+
 async function toggleWifiCalling(rawVal: string | number | boolean) {
   const enabled = rawVal === true
   if (!selectedDevice.value || !!call.value || modePending.value) return
@@ -391,13 +413,20 @@ async function sendDTMF(digit: string) {
                 </span>
                 <el-switch
                   :model-value="selected?.vowifi_enabled === true"
-                  :disabled="!!call || modePending"
-                  :loading="modePending"
+                  :disabled="!!call || modePending || lebaraIdentityBusy(selected)"
+                  :loading="modePending || lebaraIdentityBusy(selected)"
                   aria-label="启动 WiFi calling"
                   @change="toggleWifiCalling"
                 />
               </div>
-              <p v-if="selected?.rf_lock" class="phone-mode-hint is-warn">
+              <p v-if="lebaraIdentityBusy(selected)" class="phone-mode-hint">
+                {{ selected?.lebara_identity_message || '正在恢复英国身份，完成后会自动打开 WiFi calling' }}
+              </p>
+              <p v-else-if="selected?.lebara_identity_status === 'failed'" class="phone-mode-hint is-warn">
+                {{ selected.lebara_identity_message || '自动恢复英国身份失败，当前仍是荷兰 20404。不要开 WiFi calling。' }}
+                <button type="button" class="phone-lebara-retry" :disabled="modePending" @click="retryLebaraIdentity">再试一次</button>
+              </p>
+              <p v-else-if="selected?.rf_lock" class="phone-mode-hint is-warn">
                 这张分享卡不能驻国内网，否则 IMSI 会切到 20404，WiFi calling 会废
               </p>
             </div>

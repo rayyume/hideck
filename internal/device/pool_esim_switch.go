@@ -2,6 +2,7 @@ package device
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -892,7 +893,29 @@ func (p *Pool) waitPostSwitchSIMAuthReady(deviceID string, worker *Worker) error
 }
 
 func (p *Pool) restorePostSwitchConnectivity(deviceID string, worker *Worker, snapshot esimSwitchContext, restoreGateErr error, markDegraded bool) {
+	if p.lebaraUKRecoverBlocksVoWiFi(deviceID) {
+		logger.Info("切卡后跳过 VoWiFi 恢复：Lebara 清污维护锁",
+			"device", deviceID,
+			"reason", "post_switch_finalize")
+		p.restoreRadioDataForSwitchSnapshot(deviceID, worker, snapshot, "post_switch_finalize", worker.Config.ESIMSwitch.RadioCycle)
+		return
+	}
 	if worker.Config.VoWiFiEnabled {
+		if restoreGateErr == nil && p.shouldWaitLebaraUKHomeIdentity(worker, snapshot) {
+			if err := p.waitLebaraUKHomeIdentity(context.Background(), worker, snapshot.TargetICCID); err != nil {
+				restoreGateErr = err
+				if errors.Is(err, ErrLebaraUKFlippedIMSI) {
+					p.launchLebaraUKIdentityRecover(worker, snapshot.TargetICCID, false, true)
+				}
+			}
+		}
+		if p.lebaraUKRecoverBlocksVoWiFi(deviceID) {
+			logger.Info("切卡后跳过 VoWiFi 恢复：Lebara 清污维护锁",
+				"device", deviceID,
+				"reason", "post_switch_finalize")
+			p.restoreRadioDataForSwitchSnapshot(deviceID, worker, snapshot, "post_switch_finalize", worker.Config.ESIMSwitch.RadioCycle)
+			return
+		}
 		if restoreGateErr != nil {
 			if markDegraded {
 				p.markESIMSwitchPhase(deviceID, esim.SwitchPhaseDegraded)
@@ -912,6 +935,17 @@ func (p *Pool) restorePostSwitchConnectivity(deviceID string, worker *Worker, sn
 		}
 	}
 	p.restoreRadioDataForSwitchSnapshot(deviceID, worker, snapshot, "post_switch_finalize", worker.Config.ESIMSwitch.RadioCycle)
+}
+
+func (p *Pool) shouldWaitLebaraUKHomeIdentity(worker *Worker, snapshot esimSwitchContext) bool {
+	if worker == nil {
+		return false
+	}
+	if snapshot.TargetLebaraCandidate {
+		return true
+	}
+	class, err := ClassifyWorkerLebaraUK(worker)
+	return err == nil && class.IsLebara
 }
 
 func (p *Pool) setOperatingModeWithRetry(worker *Worker, mode backend.OperatingMode) error {
@@ -985,7 +1019,7 @@ func (p *Pool) keepLebaraUKRadioOffAfterSwitch(worker *Worker, snapshot esimSwit
 	}
 	liveIMSI := strings.TrimSpace(class.LiveIMSI)
 	targetStillAmbiguous := (snapshot.TargetLebaraCandidate || snapshot.TargetClassifyFailed) &&
-		(liveIMSI == "" || strings.HasPrefix(liveIMSI, "20404"))
+		(liveIMSI == "" || IsLebaraUKFlippedIMSI(liveIMSI))
 	if !class.IsLebara && !targetStillAmbiguous {
 		return false
 	}
@@ -1161,7 +1195,7 @@ func (p *Pool) handleESIMSwitchAfter(deviceID string, token uint64) {
 	p.resolveAndApplyPolicy(worker, "esim_switched")
 	p.schedulePostSwitchIdentityRefreshes(deviceID, snapshot)
 	var restoreGateErr error
-	if worker.Config.VoWiFiEnabled {
+	if worker.Config.VoWiFiEnabled && !p.lebaraUKRecoverBlocksVoWiFi(deviceID) {
 		simAuthReadyStart := time.Now()
 		restoreGateErr = p.waitPostSwitchSIMAuthReady(deviceID, worker)
 		logger.Info("切卡后 SIMAuth gate 阶段耗时",

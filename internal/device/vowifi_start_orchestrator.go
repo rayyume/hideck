@@ -236,6 +236,15 @@ func (p *Pool) prepareVoWiFiStartContext(deviceID, traceID, runtimeEPDGOverride 
 		logVoWiFiFailureSummary(traceID, deviceID, "startup", "policy", err.Error(), false, 0)
 		return startCtx, err
 	}
+	if p.lebaraUKRecoverBlocksVoWiFi(deviceID) {
+		err := fmt.Errorf("正在恢复 Lebara 英国身份，暂不启动 VoWiFi")
+		logger.Warn("VoWiFi 启动被 Lebara 清污维护锁拦截",
+			"trace_id", traceID,
+			"device", deviceID,
+			"err", err)
+		logVoWiFiFailureSummary(traceID, deviceID, "startup", "policy", err.Error(), false, 0)
+		return startCtx, err
+	}
 	if class.BlocksVoWiFi() {
 		err := NewLebaraUKFlippedIMSIError(class.LiveIMSI)
 		logger.Warn("VoWiFi 启动被 Lebara UK 切卡拦截",

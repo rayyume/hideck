@@ -216,6 +216,9 @@ type Pool struct {
 	switchTokens     map[string]uint64
 	switchSeq        uint64
 
+	lebaraRecoverMu sync.Mutex
+	lebaraRecover   map[string]*lebaraUKIdentityRecoverState
+
 	// routedSMS test overrides; nil in production.
 	routedVoWiFiSMSSend func(context.Context, string, string, string, smscodec.SubmitOptions) (messaging.SendOutcome, error)
 	routedCSSMSSend     func(string, string, string) error
@@ -270,6 +273,7 @@ func NewPoolWithDynamicInterfaceMapper(cfg *config.Config, mapper DynamicInterfa
 		switchingDevices:       make(map[string]bool),
 		switchContexts:         make(map[string]esimSwitchContext),
 		switchTokens:           make(map[string]uint64),
+		lebaraRecover:          make(map[string]*lebaraUKIdentityRecoverState),
 		lifecycle:              newLifecycleCoordinator(),
 		smsIdentities:          databaseSMSIdentityStore{},
 		dynamicInterfaceMapper: mapper,

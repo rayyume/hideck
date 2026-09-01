@@ -1731,6 +1731,20 @@ func TestCachedProfileNameForICCIDDoesNotLoadMissingCache(t *testing.T) {
 	}
 }
 
+func TestLookupProfilePPRUsesCachedPolicyRules(t *testing.T) {
+	mgr := &Manager{}
+	mgr.setOverviewCache(&EsimOverview{Profiles: []EUICCProfiles{{Profiles: []ProfileItem{
+		{ICCID: "8944000000000000087F", DisablingNotAllowed: true, DeletionNotAllowed: true},
+	}}}}, nil, 0)
+	disallowed, known := mgr.LookupProfilePPR("8944000000000000087")
+	if !known || !disallowed || !mgr.ProfileDisablingNotAllowed("8944000000000000087") {
+		t.Fatalf("PPR lookup known=%v disallowed=%v", known, disallowed)
+	}
+	if _, ok := mgr.LookupProfilePPR("8944000000000000099"); ok {
+		t.Fatal("missing ICCID should not be known")
+	}
+}
+
 func TestRefreshProfilesPreservesCachedChipInfo(t *testing.T) {
 	var profileLoads atomic.Int32
 	mgr := newTestManagerWithOverviewLoader(func() (*EsimOverview, error) {

@@ -1730,6 +1730,30 @@ paths:
         '500':
           $ref: '#/components/responses/ErrorMessage'
 
+  /devices/{device_id}/esim/profiles/{iccid}/actions/recover-lebara-identity:
+    post:
+      tags: [esim]
+      summary: 恢复 Lebara UK 英国身份
+      description: 同一 ICCID 做 Disable→Enable 或经停车 Profile 中转，等待 IMSI 回到 23487 后再开 VoWiFi。不删卡、不重写。
+      parameters:
+        - $ref: '#/components/parameters/DeviceIDPath'
+        - $ref: '#/components/parameters/ICCIDPath'
+      responses:
+        '200':
+          description: 已开始恢复
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        '400':
+          $ref: '#/components/responses/ErrorMessage'
+        '404':
+          $ref: '#/components/responses/ErrorMessage'
+        '409':
+          $ref: '#/components/responses/ErrorMessage'
+        '500':
+          $ref: '#/components/responses/ErrorMessage'
+
   /devices/{device_id}/esim/actions/disable:
     post:
       tags: [esim]
@@ -5483,6 +5507,10 @@ components:
           type: string
         class_text:
           type: string
+        disabling_not_allowed:
+          type: boolean
+        deletion_not_allowed:
+          type: boolean
 
     EsimNotificationItem:
       type: object

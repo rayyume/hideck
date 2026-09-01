@@ -59,6 +59,9 @@ func (p *Pool) reconcileDesiredVoWiFiOnce(now time.Time) {
 		}
 		if class.BlocksVoWiFi() {
 			p.stopLebaraUKFlippedVoWiFi(w, class)
+			if !p.IsESIMSwitching(w.ID) {
+				p.scheduleLebaraUKIdentityRecover(w, false)
+			}
 			continue
 		}
 		if p.shouldReconcileVoWiFi(w) {
@@ -98,6 +101,9 @@ func (p *Pool) shouldReconcileVoWiFiForReason(w *Worker, reason string) bool {
 		return false
 	}
 	if p.IsESIMSwitching(deviceID) {
+		return false
+	}
+	if p.lebaraUKRecoverBlocksVoWiFi(deviceID) {
 		return false
 	}
 
