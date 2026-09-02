@@ -28,7 +28,7 @@ func (s *Service) logRegisterFlowNegotiation(response *sipResponse) {
 	// RFC 5626: Supported: outbound only means the registrar understands
 	// outbound. A follow-up REGISTER with reg-id is for an actual flow
 	// (Require, Path;ob, or an echoed reg-id). 2degrees advertises
-	// Supported and 503s the extra REGISTER (hideck#6).
+	// Supported and 503s the extra REGISTER (hideck#8 / #6).
 	s.sipOutboundRequired = requiredOutbound
 	s.sipOutbound = requiredOutbound || pathOB || contactRegID
 	if s.outboundContactOffered {

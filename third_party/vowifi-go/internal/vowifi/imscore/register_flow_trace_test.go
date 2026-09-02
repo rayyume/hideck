@@ -24,3 +24,28 @@ func TestContainsSIPParameter(t *testing.T) {
 		t.Fatal("partial Contact parameter was accepted")
 	}
 }
+
+func TestSupportedOutboundDoesNotRequireBindingRefresh(t *testing.T) {
+	service := &Service{}
+	service.logRegisterFlowNegotiation(&sipResponse{
+		StatusCode: 200,
+		Headers:    map[string]string{"Supported": "path, sec-agree, outbound"},
+	})
+	if service.sipOutbound {
+		t.Fatal("Supported: outbound alone must not enable outbound Contact params")
+	}
+	if service.needsOutboundBindingRefresh() {
+		t.Fatal("Supported: outbound alone must not trigger a follow-up REGISTER")
+	}
+}
+
+func TestRequiredOutboundRequiresBindingRefresh(t *testing.T) {
+	service := &Service{}
+	service.logRegisterFlowNegotiation(&sipResponse{
+		StatusCode: 200,
+		Headers:    map[string]string{"Require": "outbound"},
+	})
+	if !service.needsOutboundBindingRefresh() {
+		t.Fatal("Require: outbound must trigger a follow-up REGISTER")
+	}
+}
