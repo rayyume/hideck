@@ -224,7 +224,7 @@ func TestRPReportWaitsForFinalResponse(t *testing.T) {
 func TestRPReportAbortOnStopReturnsError(t *testing.T) {
 	service, _, _ := newInboundSMSTestService(t)
 	service.StopCurrent()
-	err := service.sendRPReportWithRetryPolicy(rpReportRequest{
+	_, err := service.sendRPReportWithRetryPolicy(rpReportRequest{
 		Inbound: inboundSMSRequest(t, imsSMSContentType, inboundRPData(t, 0x34, "+447700900123", "ack")),
 		Body:    smscodec.BuildRPAck(0x34), RPMR: 0x34,
 	}, 5*time.Millisecond, 0)
@@ -257,7 +257,7 @@ func TestRPReportRetriesServerErrorsNot488(t *testing.T) {
 		return nil
 	})
 	raw := inboundSMSRequest(t, imsSMSContentType, inboundRPData(t, 0x33, "+447700900123", "ack"))
-	err := service.sendRPReportWithRetryPolicy(rpReportRequest{
+	_, err := service.sendRPReportWithRetryPolicy(rpReportRequest{
 		Inbound: raw, Body: smscodec.BuildRPAck(0x33), RPMR: 0x33,
 	}, 0, 0)
 	if err != nil || attempts != rpReportMaxAttempts {
@@ -280,7 +280,7 @@ func TestRPAckHostOnlyKeepsInReplyToFirst(t *testing.T) {
 	raw = strings.Replace(raw, "From: <sip:+447802002606@ims.example>;tag=remote\r\n",
 		"P-Asserted-Identity: <sip:ipsmms1mc06.ims.example>\r\n"+
 			"From: <sip:ipsmms1mc06.ims.example>;tag=remote\r\n", 1)
-	err := service.sendRPReportWithRetryPolicy(rpReportRequest{
+	_, err := service.sendRPReportWithRetryPolicy(rpReportRequest{
 		Inbound: raw, Body: smscodec.BuildRPAck(0x37), RPMR: 0x37,
 	}, 0, 0)
 	if err != nil || len(requests) != 1 {
@@ -307,7 +307,7 @@ func TestRPAckUsesFreshCallIDAndInReplyTo(t *testing.T) {
 	})
 	raw := inboundSMSRequest(t, imsSMSContentType, inboundRPData(t, 0x3a, "+447700900123", "ack"))
 	raw = strings.Replace(raw, "Call-ID: inbound-sms\r\n", "Call-ID: mt-session-3a@ipsmms1mc06.ims.example\r\n", 1)
-	err := service.sendRPReportWithRetryPolicy(rpReportRequest{
+	_, err := service.sendRPReportWithRetryPolicy(rpReportRequest{
 		Inbound: raw, Body: smscodec.BuildRPAck(0x3a), RPMR: 0x3a,
 	}, 0, 0)
 	if err != nil || len(requests) != 1 {
@@ -335,7 +335,7 @@ func TestRPAckKeepsInReplyToAndStopsOn488(t *testing.T) {
 		return nil
 	})
 	raw := inboundSMSRequest(t, imsSMSContentType, inboundRPData(t, 0x34, "+447700900123", "ack"))
-	err := service.sendRPReportWithRetryPolicy(rpReportRequest{
+	_, err := service.sendRPReportWithRetryPolicy(rpReportRequest{
 		Inbound: raw, Body: smscodec.BuildRPAck(0x34), RPMR: 0x34,
 	}, 0, 0)
 	if rpReportRejectStatus(err) != 488 || len(requests) != 1 {
@@ -364,7 +364,7 @@ func TestRPAckUsesPAINotFrom(t *testing.T) {
 	raw = strings.Replace(raw, "From: <sip:+447802002606@ims.example>;tag=remote\r\n",
 		"P-Asserted-Identity: <sip:ipsmms1mc06.ims.example>\r\n"+
 			"From: <sip:ipsmgw@ipsmms1mc06.ims.example>;tag=remote\r\n", 1)
-	err := service.sendRPReportWithRetryPolicy(rpReportRequest{
+	_, err := service.sendRPReportWithRetryPolicy(rpReportRequest{
 		Inbound: raw, Body: smscodec.BuildRPAck(0x36), RPMR: 0x36,
 	}, 0, 0)
 	if err != nil || len(requests) != 1 {
@@ -405,7 +405,7 @@ func TestRPAckDoesNotRotateToSMSCAfter488(t *testing.T) {
 	raw = strings.Replace(raw, "From: <sip:+447802002606@ims.example>;tag=remote\r\n",
 		"P-Asserted-Identity: <sip:ipsmms1mc06.ims.example>\r\n"+
 			"From: <sip:ipsmms1mc06.ims.example>;tag=remote\r\n", 1)
-	err := service.sendRPReportWithRetryPolicy(rpReportRequest{
+	_, err := service.sendRPReportWithRetryPolicy(rpReportRequest{
 		Inbound: raw, Body: smscodec.BuildRPAck(0x38), RPMR: 0x38,
 		ServiceCenter: "+447802002606",
 	}, 0, 0)

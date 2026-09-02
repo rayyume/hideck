@@ -133,7 +133,7 @@ func rpReportRejectStatus(err error) int {
 }
 
 func (s *Service) sendRPReportWithRetry(report rpReportRequest) {
-	err := s.sendRPReportWithRetryPolicy(
+	attempts, err := s.sendRPReportWithRetryPolicy(
 		report, rpReportInitialDelay, rpReportRetryDelay,
 	)
 	if err != nil {
@@ -142,8 +142,8 @@ func (s *Service) sendRPReportWithRetry(report rpReportRequest) {
 			deviceID = s.cfg.DeviceID
 		}
 		logging.WarnRate("smsip-rp-report-retry-exhausted:"+deviceID, 30*time.Second,
-			"IMS RP report delivery failed after retries",
-			"device", deviceID, "attempts", rpReportMaxAttempts,
+			"IMS RP report delivery failed",
+			"device", deviceID, "attempts", attempts,
 			"rp_mr", int(report.RPMR), "error", err)
 	}
 }
@@ -152,26 +152,28 @@ func (s *Service) sendRPReportWithRetryPolicy(
 	report rpReportRequest,
 	initialDelay time.Duration,
 	retryDelay time.Duration,
-) error {
+) (int, error) {
 	if !s.waitSMSRetryDelay(initialDelay) {
-		return errRPReportAborted
+		return 0, errRPReportAborted
 	}
 	current := specRPAckReport(report)
 	delay := retryDelay
 	var lastErr error
+	sent := 0
 	for attempt := 1; attempt <= rpReportMaxAttempts; attempt++ {
 		if attempt > 1 && delay > 0 && !s.waitSMSRetryDelay(delay) {
 			if lastErr != nil {
-				return lastErr
+				return sent, lastErr
 			}
-			return errRPReportAborted
+			return sent, errRPReportAborted
 		}
 		lastErr = s.sendRPReport(current)
+		sent++
 		if lastErr == nil {
-			return nil
+			return sent, nil
 		}
 		if !rpReportRetryable(lastErr) {
-			return lastErr
+			return sent, lastErr
 		}
 		if delay <= 0 {
 			delay = retryDelay
@@ -179,7 +181,7 @@ func (s *Service) sendRPReportWithRetryPolicy(
 			delay *= 2
 		}
 	}
-	return lastErr
+	return sent, lastErr
 }
 
 func rpReportRetryable(err error) bool {
