@@ -160,7 +160,7 @@ const airplaneHint = computed(() => {
     </div>
 
     <!-- 离线提示（有 ICCID 但设备离线） -->
-    <div v-show="iccid && !deviceOnline" class="mb-3 px-3 py-2 rounded-lg bg-yellow-50 dark:bg-yellow-900/20 text-xs text-yellow-700 dark:text-yellow-300">
+    <div v-show="iccid && !deviceOnline" class="mb-3 px-3 py-2 rounded-[var(--ui-radius-lg)] bg-yellow-50 dark:bg-yellow-900/20 text-xs text-yellow-700 dark:text-yellow-300">
       设备离线，运行模式开关已禁用；IP 版本和 APN 仍可保存
     </div>
 
@@ -314,7 +314,7 @@ const airplaneHint = computed(() => {
 
 <style scoped>
 .policy-workspace-header { min-height: 82px; display: flex; align-items: center; gap: 12px; }
-.policy-heading-icon { width: 44px; height: 44px; display: grid; place-items: center; border: 1px solid var(--ui-border); border-radius: 11px; color: var(--ui-primary); font-size: 22px; }
+.policy-heading-icon { width: 44px; height: 44px; display: grid; place-items: center; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); color: var(--ui-primary); font-size: 22px; }
 .policy-workspace-header span,
 .policy-card-status > div > span,
 .policy-projection span { color: var(--ui-primary); font: 700 var(--ui-font-caption) "v-mono", ui-monospace, monospace; letter-spacing: .14em; text-transform: uppercase; }
@@ -326,7 +326,7 @@ const airplaneHint = computed(() => {
 .policy-empty-state strong { color: var(--ui-text); }
 .policy-empty-state span { font-size: var(--ui-font-caption); }
 
-.policy-card { overflow: hidden; border: 1px solid var(--ui-border); border-radius: 12px; background: var(--ui-surface-strong); }
+.policy-card { overflow: hidden; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-xl); background: var(--ui-surface-strong); }
 .policy-card-status { min-height: 72px; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--ui-border); background: color-mix(in srgb, var(--ui-primary) 5%, var(--ui-surface)); }
 .policy-card-status strong { display: block; margin-top: 4px; color: var(--ui-text); font: var(--ui-font-body-sm) "v-mono", ui-monospace, monospace; overflow-wrap: anywhere; }
 .policy-status-meta,
@@ -346,7 +346,7 @@ const airplaneHint = computed(() => {
 .policy-setting-row > span small { margin-top: 3px; color: var(--ui-text-muted); font-size: var(--ui-font-body-sm); }
 .policy-field-control { width: min(360px, 52%); }
 .policy-inline-status { color: var(--ui-text); font-size: 13px; font-weight: 650; }
-.policy-notice { margin: 0 0 10px; padding: 10px 12px; border-radius: 8px; font-size: var(--ui-font-body-sm); line-height: 1.45; }
+.policy-notice { margin: 0 0 10px; padding: 10px 12px; border-radius: var(--ui-radius-md); font-size: var(--ui-font-body-sm); line-height: 1.45; }
 .policy-notice.is-warn { background: color-mix(in srgb, var(--ui-warning) 12%, var(--ui-surface)); color: var(--ui-warning); }
 .policy-notice.is-info { background: color-mix(in srgb, var(--ui-primary) 8%, var(--ui-surface)); color: var(--ui-text); }
 .policy-field-control > small { color: var(--ui-warning); font-size: var(--ui-font-caption); }

@@ -45,10 +45,10 @@
   --ui-font-page-title: 24px;
   --ui-font-weight-body: 500;
   --ui-font-weight-title: 700;
-  --ui-radius-sm: 8px;
-  --ui-radius-md: 12px;
-  --ui-radius-lg: 16px;
-  --ui-radius-xl: 20px;
+  --ui-radius-sm: 12px;
+  --ui-radius-md: 16px;
+  --ui-radius-lg: 20px;
+  --ui-radius-xl: 24px;
   --ui-radius-pill: 999px;
   --ui-shadow-sm: none;
   --ui-shadow-md: none;
@@ -85,8 +85,8 @@
   --el-color-danger-light-8: #F0CBC8;
   --el-color-danger-light-9: #FDECEC;
   --el-color-danger-dark-2: #8F1C13;
-  --el-border-radius-base: 12px;
-  --el-border-radius-small: 10px;
+  --el-border-radius-base: 16px;
+  --el-border-radius-small: 12px;
   --el-border-color: var(--ui-border);
   --el-border-color-light: var(--ui-border-muted);
   --el-fill-color-light: var(--ui-surface-muted);
@@ -321,7 +321,7 @@ html.dark ::-webkit-scrollbar-thumb {
 .ui-card,
 .ui-panel,
 .ui-panel-muted {
-  border-radius: var(--ui-radius-lg);
+  border-radius: var(--ui-radius-xl);
   box-shadow: var(--ui-shadow-sm);
 }
 
@@ -506,7 +506,7 @@ html.dark .el-table td.el-table__cell {
 .el-select__wrapper,
 .el-input-number,
 .el-date-editor {
-  border-radius: var(--ui-radius-lg) !important;
+  border-radius: var(--ui-radius-pill) !important;
   box-shadow: 0 0 0 1px var(--ui-border) inset !important;
 }
 
@@ -539,7 +539,7 @@ html.dark .el-table td.el-table__cell {
 
 .el-card {
   border-color: var(--ui-border);
-  border-radius: var(--ui-radius-lg);
+  border-radius: var(--ui-radius-xl);
   background: var(--ui-surface);
   box-shadow: none;
 }
@@ -586,7 +586,7 @@ html.dark .el-table td.el-table__cell {
   height: 40px;
   line-height: 40px;
   margin: 2px 8px;
-  border-radius: var(--ui-radius-sm);
+  border-radius: var(--ui-radius-md);
 }
 
 .el-menu-item.is-active {

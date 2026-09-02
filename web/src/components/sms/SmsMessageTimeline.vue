@@ -137,7 +137,7 @@ onUnmounted(clearLongPress)
   margin: 0;
   padding: 10px 13px;
   border: 1px solid var(--ui-border);
-  border-radius: 4px 12px 12px;
+  border-radius: var(--ui-radius-sm) var(--ui-radius-lg) var(--ui-radius-lg);
   background: var(--ui-surface-strong);
   color: var(--ui-text);
   font-size: 13px;
@@ -148,11 +148,11 @@ onUnmounted(clearLongPress)
 
 .sms-message.is-outgoing p {
   border-color: color-mix(in srgb, var(--ui-primary) 38%, var(--ui-border));
-  border-radius: 12px 4px 12px 12px;
+  border-radius: var(--ui-radius-lg) var(--ui-radius-sm) var(--ui-radius-lg) var(--ui-radius-lg);
   background: color-mix(in srgb, var(--ui-primary) 12%, var(--ui-surface));
 }
 
-.sms-message-delete { width: 26px; height: 26px; display: grid; place-items: center; border: 0; border-radius: 6px; background: transparent; color: var(--ui-danger); cursor: pointer; opacity: 0; pointer-events: none; transition: opacity 140ms var(--ui-ease-out); }
+.sms-message-delete { width: 26px; height: 26px; display: grid; place-items: center; border: 0; border-radius: var(--ui-radius-sm); background: transparent; color: var(--ui-danger); cursor: pointer; opacity: 0; pointer-events: none; transition: opacity 140ms var(--ui-ease-out); }
 .sms-message:hover .sms-message-delete,
 .sms-message:focus-within .sms-message-delete { opacity: 1; pointer-events: auto; }
 

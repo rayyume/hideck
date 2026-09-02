@@ -408,7 +408,7 @@ function showUpdateInstructions() {
     h('p', `当前版本：${info.current_version}，最新版本：${info.latest_version}`),
     h('p', info.release_note),
     h('pre', {
-      class: 'overflow-x-auto rounded-lg border border-[var(--el-border-color)] bg-[var(--el-fill-color-light)] p-3 text-xs whitespace-pre-wrap'
+      class: 'overflow-x-auto rounded-[var(--ui-radius-lg)] border border-[var(--el-border-color)] bg-[var(--el-fill-color-light)] p-3 text-xs whitespace-pre-wrap'
     }, instructions)
   ])
   ElMessageBox.alert(content, info.is_docker ? 'Docker 更新方法' : '更新方法', {
@@ -468,16 +468,16 @@ onMounted(() => {
          </div>
 
          <div class="space-y-4 relative z-10">
-             <div v-if="loadingPasswordStatus" class="rounded-xl border border-[var(--ui-border)] bg-[var(--ui-surface-muted)] px-4 py-3 text-sm text-[var(--ui-muted)]">
+             <div v-if="loadingPasswordStatus" class="rounded-[var(--ui-radius-lg)] border border-[var(--ui-border)] bg-[var(--ui-surface-muted)] px-4 py-3 text-sm text-[var(--ui-muted)]">
                正在读取凭证管理状态…
              </div>
-             <div v-else-if="!passwordStatus" class="rounded-xl border border-red-300/60 bg-red-50/80 dark:border-red-500/30 dark:bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-300">
+             <div v-else-if="!passwordStatus" class="rounded-[var(--ui-radius-lg)] border border-red-300/60 bg-red-50/80 dark:border-red-500/30 dark:bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-300">
                无法确认密码来源，修改功能已暂时禁用。
              </div>
-             <div v-else-if="passwordManagedByEnvironment" class="rounded-xl border border-amber-300/60 bg-amber-50/80 dark:border-amber-500/30 dark:bg-amber-500/10 px-4 py-3 text-sm leading-6 text-amber-800 dark:text-amber-200">
+             <div v-else-if="passwordManagedByEnvironment" class="rounded-[var(--ui-radius-lg)] border border-amber-300/60 bg-amber-50/80 dark:border-amber-500/30 dark:bg-amber-500/10 px-4 py-3 text-sm leading-6 text-amber-800 dark:text-amber-200">
                当前密码由环境变量 <code>{{ passwordStatus.environment_variable || 'PROXY_WEB_PASSWORD' }}</code> 管理。请在部署环境中修改后重启 HiDeck；控制台不会覆盖它。
              </div>
-             <div v-else-if="passwordStatus.change_required" class="rounded-xl border border-amber-300/60 bg-amber-50/80 dark:border-amber-500/30 dark:bg-amber-500/10 px-4 py-3 text-sm leading-6 text-amber-800 dark:text-amber-200">
+             <div v-else-if="passwordStatus.change_required" class="rounded-[var(--ui-radius-lg)] border border-amber-300/60 bg-amber-50/80 dark:border-amber-500/30 dark:bg-amber-500/10 px-4 py-3 text-sm leading-6 text-amber-800 dark:text-amber-200">
                当前密码为初始明文凭证或强度不足，请尽快修改。
              </div>
              <div class="space-y-1">
@@ -516,7 +516,7 @@ onMounted(() => {
          </div>
 
          <div class="space-y-4 text-sm relative z-10">
-            <div class="p-3 bg-[var(--ui-surface-muted)] rounded-lg">
+            <div class="p-3 bg-[var(--ui-surface-muted)] rounded-[var(--ui-radius-lg)]">
               <FieldRow label="版本" :value="systemInfo.version" monospace>
                 <div class="flex items-center justify-end gap-3">
                   <el-button size="small" type="primary" class="!border-0" :loading="checkingUpdate" @click.stop="doCheckUpdate">
@@ -527,7 +527,7 @@ onMounted(() => {
               </FieldRow>
             </div>
             
-            <div v-if="updateInfo?.has_update" class="p-4 bg-amber-50 dark:bg-amber-500/10 rounded-lg border border-amber-200 dark:border-amber-500/20">
+            <div v-if="updateInfo?.has_update" class="p-4 bg-amber-50 dark:bg-amber-500/10 rounded-[var(--ui-radius-lg)] border border-amber-200 dark:border-amber-500/20">
                <div class="flex items-center gap-2 text-amber-800 dark:text-amber-200 mb-2 font-bold text-[13px]">
                  <el-icon><Alert24Regular /></el-icon>发现新版本: {{ updateInfo.latest_version }}
                </div>
@@ -538,24 +538,24 @@ onMounted(() => {
                  {{ updateInfo.is_docker ? '查看 Docker 更新方法' : '查看更新方法' }}
                </el-button>
             </div>
-            <div class="p-3 bg-[var(--ui-surface-muted)] rounded-lg">
+            <div class="p-3 bg-[var(--ui-surface-muted)] rounded-[var(--ui-radius-lg)]">
               <FieldRow
                 label="构建时间"
                 :value="formatDeviceDateTime(systemInfo.build_time, { fallback: systemInfo.build_time })"
                 monospace
               />
             </div>
-            <div class="p-3 bg-[var(--ui-surface-muted)] rounded-lg">
+            <div class="p-3 bg-[var(--ui-surface-muted)] rounded-[var(--ui-radius-lg)]">
               <FieldRow label="配置路径" :value="systemInfo.config" monospace copyable />
             </div>
-            <div class="p-3 bg-[var(--ui-surface-muted)] rounded-lg">
+            <div class="p-3 bg-[var(--ui-surface-muted)] rounded-[var(--ui-radius-lg)]">
               <FieldRow label="项目主页" value="https://github.com/yibaiba/hideck" monospace copyable />
             </div>
             <div class="ui-panel-muted px-4 py-4">
               <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div class="min-w-0">
                   <div class="flex items-center gap-3">
-                    <div class="w-9 h-9 rounded-md bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                    <div class="w-9 h-9 rounded-[var(--ui-radius-md)] bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center text-blue-600 dark:text-blue-400">
                       <el-icon size="18"><DocumentText24Regular /></el-icon>
                     </div>
                     <div>
@@ -604,7 +604,7 @@ onMounted(() => {
       <section class="notify-card p-4 sm:p-6 lg:p-8">
          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
             <div class="flex items-center gap-3">
-               <div class="w-12 h-12 rounded-md bg-[var(--ui-selected)] flex items-center justify-center text-[var(--ui-accent)]">
+               <div class="w-12 h-12 rounded-[var(--ui-radius-md)] bg-[var(--ui-selected)] flex items-center justify-center text-[var(--ui-accent)]">
                   <el-icon size="24"><Alert24Regular /></el-icon>
                </div>
                <div>
@@ -635,7 +635,7 @@ onMounted(() => {
                 <template #label>
                   <span class="inline-flex items-center gap-2" aria-label="个人微信（会话型通知渠道）">
                     <span>个人微信</span>
-                    <span class="rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-xs font-semibold leading-none text-amber-700 dark:text-amber-300">
+                    <span class="rounded-[var(--ui-radius-sm)] border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-xs font-semibold leading-none text-amber-700 dark:text-amber-300">
                       会话型
                     </span>
                   </span>
@@ -682,7 +682,7 @@ onMounted(() => {
                       </el-button>
                     </div>
                     
-                    <div v-if="barkSettings.urls && barkSettings.urls.length === 0" class="text-xs text-[var(--ui-muted)] py-2 border border-dashed border-[var(--ui-border)] rounded-lg text-center bg-[var(--ui-surface-muted)]">
+                    <div v-if="barkSettings.urls && barkSettings.urls.length === 0" class="text-xs text-[var(--ui-muted)] py-2 border border-dashed border-[var(--ui-border)] rounded-[var(--ui-radius-lg)] text-center bg-[var(--ui-surface-muted)]">
                       尚未配置任何 Bark URL，点击右侧添加按钮。
                     </div>
 
@@ -837,7 +837,7 @@ onMounted(() => {
                       </el-button>
                     </div>
                     
-                    <div v-if="webhookSettings.urls && webhookSettings.urls.length === 0" class="text-xs text-[var(--ui-muted)] py-2 border border-dashed border-[var(--ui-border)] rounded-lg text-center bg-[var(--ui-surface-muted)]">
+                    <div v-if="webhookSettings.urls && webhookSettings.urls.length === 0" class="text-xs text-[var(--ui-muted)] py-2 border border-dashed border-[var(--ui-border)] rounded-[var(--ui-radius-lg)] text-center bg-[var(--ui-surface-muted)]">
                       尚未配置任何 Webhook URL，点击右侧添加按钮。
                     </div>
 
@@ -866,7 +866,7 @@ onMounted(() => {
                       </el-button>
                     </div>
 
-                    <div v-if="webhookHeaderRows.length === 0" class="text-xs text-[var(--ui-muted)] py-2 border border-dashed border-[var(--ui-border)] rounded-lg text-center bg-[var(--ui-surface-muted)]">
+                    <div v-if="webhookHeaderRows.length === 0" class="text-xs text-[var(--ui-muted)] py-2 border border-dashed border-[var(--ui-border)] rounded-[var(--ui-radius-lg)] text-center bg-[var(--ui-surface-muted)]">
                       尚未配置自定义请求头，例如 Authorization、X-Api-Key 等。
                     </div>
 
@@ -953,7 +953,7 @@ onMounted(() => {
                         <span class="ml-1">添加 URL</span>
                       </el-button>
                     </div>
-                    <div v-if="weComSettings.urls.length === 0" class="text-xs text-[var(--ui-muted)] py-2 border border-dashed border-[var(--ui-border)] rounded-lg text-center bg-[var(--ui-surface-muted)]">
+                    <div v-if="weComSettings.urls.length === 0" class="text-xs text-[var(--ui-muted)] py-2 border border-dashed border-[var(--ui-border)] rounded-[var(--ui-radius-lg)] text-center bg-[var(--ui-surface-muted)]">
                       尚未配置企业微信 Webhook URL
                     </div>
                     <div v-for="(_, index) in weComSettings.urls" :key="index" class="flex items-center gap-2">
@@ -1009,7 +1009,7 @@ onMounted(() => {
 :deep(.settings-notify-tabs .el-tabs__header) {
   margin-bottom: 24px;
   background-color: var(--el-fill-color-light);
-  border-radius: 6px;
+  border-radius: var(--ui-radius-md);
   border-bottom: none;
   display: block;
   width: 100%;
@@ -1025,7 +1025,7 @@ onMounted(() => {
   height: 38px;
   line-height: 38px;
   padding: 0 14px !important;
-  border-radius: 4px;
+  border-radius: var(--ui-radius-sm);
   margin-right: 4px;
   color: var(--el-text-color-regular);
   transition: background-color 160ms ease, color 160ms ease;

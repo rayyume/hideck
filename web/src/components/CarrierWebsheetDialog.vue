@@ -129,7 +129,7 @@ onUnmounted(() => {
     destroy-on-close
     @update:model-value="emit('update:modelValue', $event)"
   >
-    <div class="websheet-frame-shell relative overflow-hidden rounded border border-[var(--ui-border)]">
+    <div class="websheet-frame-shell relative overflow-hidden rounded-[var(--ui-radius-lg)] border border-[var(--ui-border)]">
       <div v-if="!loaded" class="absolute inset-0 z-10 flex items-center justify-center bg-[color-mix(in_srgb,var(--ui-surface)_82%,transparent)] text-sm text-[var(--ui-muted)]">
         加载中...
       </div>

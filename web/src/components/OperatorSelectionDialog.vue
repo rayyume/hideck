@@ -134,10 +134,10 @@ watch(scanState, (next) => {
   >
     <div class="mt-2 text-sm text-[var(--ui-muted)]">
       <!-- 当前状态 -->
-      <div class="bg-[var(--ui-surface-muted)] rounded-lg p-4 mb-4 border border-[var(--ui-border)]">
+      <div class="bg-[var(--ui-surface-muted)] rounded-[var(--ui-radius-lg)] p-4 mb-4 border border-[var(--ui-border)]">
         <div class="flex justify-between items-center mb-2">
           <span class="font-medium text-[var(--ui-text)]">当前模式</span>
-          <span class="px-2 py-0.5 rounded text-xs font-medium" 
+          <span class="px-2 py-0.5 rounded-[var(--ui-radius-sm)] text-xs font-medium" 
             :class="currentSelection?.mode === 'automatic' ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300'">
             {{ currentSelection?.mode === 'automatic' ? '自动' : '手动锁定' }}
           </span>
@@ -157,13 +157,13 @@ watch(scanState, (next) => {
         </el-button>
       </div>
 
-      <div v-if="scanning || scanMessage || scanError" class="mb-4 rounded-lg border px-3 py-2 text-xs"
+      <div v-if="scanning || scanMessage || scanError" class="mb-4 rounded-[var(--ui-radius-lg)] border px-3 py-2 text-xs"
         :class="scanError ? (scanRetryable ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300' : 'border-red-200 bg-red-50 text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300') : 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-300'">
         {{ scanError || scanMessage }}
       </div>
 
       <!-- 扫描结果列表 -->
-      <div v-if="candidates.length > 0" class="border border-[var(--ui-border)] rounded-lg overflow-hidden divide-y divide-[var(--ui-border)] max-h-[300px] overflow-y-auto">
+      <div v-if="candidates.length > 0" class="border border-[var(--ui-border)] rounded-[var(--ui-radius-lg)] overflow-hidden divide-y divide-[var(--ui-border)] max-h-[300px] overflow-y-auto">
         <div v-for="c in candidates" :key="`${c.plmn}-${ratDisplay(c)}`" 
           class="p-3 flex items-center justify-between hover:bg-[var(--ui-selected)] transition-colors cursor-pointer group"
           @click="setModeManual(c)"

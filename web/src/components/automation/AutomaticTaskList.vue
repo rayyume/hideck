@@ -200,7 +200,7 @@ function selectFromKeyboard(event: KeyboardEvent, task: AutomaticTask) {
   .task-summary { gap: 7px; padding-bottom: 14px; }
   .task-table { min-width: 0; border: 0; overflow: visible; }
   .task-table-head { display: none; }
-  .task-item { min-height: 0; margin-bottom: 10px; padding: 12px; border: 1px solid var(--ui-border); border-radius: 6px; grid-template-columns: minmax(0, 1fr) auto; gap: 0 10px; }
+  .task-item { min-height: 0; margin-bottom: 10px; padding: 12px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); grid-template-columns: minmax(0, 1fr) auto; gap: 0 10px; }
   .task-item:last-child { border-bottom: 1px solid var(--ui-border); }
   .task-item.selected { border-color: color-mix(in srgb, var(--ui-primary) 68%, var(--ui-border)); box-shadow: none; }
   .task-cell { padding: 0; overflow: visible; }

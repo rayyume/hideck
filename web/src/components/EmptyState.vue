@@ -32,7 +32,7 @@ defineProps<{
 
 .empty-state-icon {
   border: 1px solid var(--ui-border);
-  border-radius: 5px;
+  border-radius: var(--ui-radius-md);
   background: var(--ui-surface);
   color: var(--ui-text-muted);
 }

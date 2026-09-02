@@ -70,7 +70,7 @@ const emit = defineEmits<{
 .task-detail > header span { color: var(--ui-primary); font: var(--ui-font-caption)/1.2 "v-mono", monospace; letter-spacing: .14em; }
 .task-detail h2 { margin: 5px 0 0; color: var(--ui-text); font-size: 20px; overflow-wrap: anywhere; }
 .task-detail > header :deep(.el-button) { width: 40px; height: 40px; flex: 0 0 40px; margin: -5px -5px 0 0; }
-.detail-panel { padding: 14px; border: 1px solid var(--ui-border); border-radius: 6px; background: color-mix(in srgb, var(--ui-surface) 62%, transparent); }
+.detail-panel { padding: 14px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); background: color-mix(in srgb, var(--ui-surface) 62%, transparent); }
 .detail-panel + .detail-panel { margin-top: 10px; }
 .detail-panel h3 { margin: 0 0 8px; color: var(--ui-text); font-size: 16px; }
 .detail-panel dl { margin: 0; }

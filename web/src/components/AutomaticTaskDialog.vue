@@ -315,17 +315,17 @@ function focusNameInput() {
 
 <style scoped>
 :global(.automatic-task-editor-scrim) { background: color-mix(in srgb, #000 54%, transparent); }
-:global(.automatic-task-editor) { border-radius: 8px 0 0 8px; background: var(--ui-surface); }
+:global(.automatic-task-editor) { border-radius: var(--ui-radius-lg) 0 0 var(--ui-radius-lg); background: var(--ui-surface); }
 :global(.automatic-task-editor .el-drawer__header) { min-height: 70px; margin: 0; padding: 12px 18px; border-bottom: 1px solid var(--ui-border); color: var(--ui-text); }
 :global(.automatic-task-editor .el-drawer__body) { min-height: 0; padding: 16px 18px 0; overflow-y: auto; }
 :global(.automatic-task-editor .el-drawer__footer) { padding: 0 18px; border-top: 1px solid var(--ui-border); }
 .editor-header { width: 100%; min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; }
-.editor-icon { width: 38px; height: 38px; border: 1px solid color-mix(in srgb, var(--ui-primary) 42%, var(--ui-border)); border-radius: 6px; background: color-mix(in srgb, var(--ui-primary) 9%, transparent); color: var(--ui-primary); display: grid; place-items: center; }
+.editor-icon { width: 38px; height: 38px; border: 1px solid color-mix(in srgb, var(--ui-primary) 42%, var(--ui-border)); border-radius: var(--ui-radius-md); background: color-mix(in srgb, var(--ui-primary) 9%, transparent); color: var(--ui-primary); display: grid; place-items: center; }
 .editor-header div > span { color: var(--ui-primary); font: var(--ui-font-caption)/1.2 "v-mono", monospace; letter-spacing: .14em; }
 .editor-header h2 { margin: 4px 0 0; color: var(--ui-text); font-size: 18px; }
 .editor-header :deep(.el-button) { width: 44px; height: 44px; }
-.form-error { margin-bottom: 14px; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--ui-danger) 40%, var(--ui-border)); border-radius: 4px; background: color-mix(in srgb, var(--ui-danger) 7%, transparent); color: var(--ui-danger); font-size: var(--ui-font-body-sm); }
-.config-state { min-height: 44px; margin-bottom: 14px; padding: 8px 10px; border: 1px solid var(--ui-border); border-radius: 4px; background: color-mix(in srgb, var(--ui-primary) 5%, transparent); color: var(--ui-text-muted); display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: var(--ui-font-body-sm); }
+.form-error { margin-bottom: 14px; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--ui-danger) 40%, var(--ui-border)); border-radius: var(--ui-radius-md); background: color-mix(in srgb, var(--ui-danger) 7%, transparent); color: var(--ui-danger); font-size: var(--ui-font-body-sm); }
+.config-state { min-height: 44px; margin-bottom: 14px; padding: 8px 10px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); background: color-mix(in srgb, var(--ui-primary) 5%, transparent); color: var(--ui-text-muted); display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: var(--ui-font-body-sm); }
 .config-error { border-color: color-mix(in srgb, var(--ui-danger) 40%, var(--ui-border)); background: color-mix(in srgb, var(--ui-danger) 7%, transparent); color: var(--ui-danger); }
 .config-state :deep(.el-button) { flex: 0 0 auto; }
 .form-section { padding: 14px 0 2px; border-bottom: 1px solid var(--ui-border); }

@@ -116,7 +116,7 @@ watch(
   min-width: 0;
   padding: 16px;
   border: 1px solid var(--ui-border);
-  border-radius: 6px;
+  border-radius: var(--ui-radius-xl);
   background: var(--ui-surface-muted);
 }
 
@@ -179,7 +179,7 @@ watch(
   margin-top: 16px;
   place-items: center;
   border: 1px dashed var(--ui-border);
-  border-radius: 4px;
+  border-radius: var(--ui-radius-lg);
   background: var(--ui-surface);
 }
 
@@ -222,7 +222,7 @@ watch(
   color: var(--ui-text);
   padding: 10px 12px;
   border: 1px solid color-mix(in srgb, var(--ui-warning) 45%, var(--ui-border));
-  border-radius: 4px;
+  border-radius: var(--ui-radius-md);
   background: color-mix(in srgb, var(--ui-warning) 12%, var(--ui-surface));
 }
 

@@ -612,12 +612,12 @@ onBeforeUnmount(() => {
     <div v-if="loading" class="space-y-4">
       <div class="ui-panel-muted p-4 relative overflow-hidden esim-loading-hero">
         <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-xl esim-orbit flex items-center justify-center text-white text-xs font-bold">
+          <div class="w-10 h-10 rounded-[var(--ui-radius-md)] esim-orbit flex items-center justify-center text-white text-xs font-bold">
             ESIM
           </div>
           <div class="space-y-2 flex-1">
-            <div class="h-4 w-44 rounded-md esim-skeleton-line" />
-            <div class="h-3 w-64 rounded-md esim-skeleton-line esim-skeleton-line-soft" />
+            <div class="h-4 w-44 rounded-[var(--ui-radius-sm)] esim-skeleton-line" />
+            <div class="h-3 w-64 rounded-[var(--ui-radius-sm)] esim-skeleton-line esim-skeleton-line-soft" />
           </div>
           <div class="flex items-center gap-1.5">
             <span class="esim-dot" />
@@ -629,11 +629,11 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="ui-panel-muted p-4 space-y-3">
-        <div class="h-3 w-28 rounded-md esim-skeleton-line" />
+        <div class="h-3 w-28 rounded-[var(--ui-radius-sm)] esim-skeleton-line" />
         <div class="space-y-2">
-          <div class="h-10 rounded-xl esim-skeleton-line" />
-          <div class="h-10 rounded-xl esim-skeleton-line esim-skeleton-line-soft" />
-          <div class="h-10 rounded-xl esim-skeleton-line" />
+          <div class="h-10 rounded-[var(--ui-radius-lg)] esim-skeleton-line" />
+          <div class="h-10 rounded-[var(--ui-radius-lg)] esim-skeleton-line esim-skeleton-line-soft" />
+          <div class="h-10 rounded-[var(--ui-radius-lg)] esim-skeleton-line" />
         </div>
       </div>
     </div>
@@ -867,7 +867,7 @@ onBeforeUnmount(() => {
       <!-- 下载新 Profile -->
       <section v-if="chipInfo" class="esim-install-panel ui-panel-muted p-4">
       <div class="flex items-center gap-2 mb-3">
-        <div class="w-7 h-7 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+        <div class="w-7 h-7 rounded-[var(--ui-radius-sm)] bg-indigo-50 dark:bg-indigo-500/10 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
           <el-icon size="16"><Add24Regular /></el-icon>
         </div>
         <div>
@@ -1052,7 +1052,7 @@ onBeforeUnmount(() => {
 
 .esim-profile-group,
 .esim-install-panel {
-  border-radius: 12px;
+  border-radius: var(--ui-radius-xl);
 }
 
 .esim-profile-row {
@@ -1093,7 +1093,7 @@ onBeforeUnmount(() => {
   gap: 8px;
   padding: 8px;
   border: 1px dashed var(--ui-border);
-  border-radius: 6px;
+  border-radius: var(--ui-radius-md);
   outline: none;
 }
 

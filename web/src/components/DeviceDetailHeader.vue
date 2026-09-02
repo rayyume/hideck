@@ -104,7 +104,7 @@ const identityItems = computed(() => [
   width: 48px;
   height: 48px;
   border: 1px solid color-mix(in srgb, var(--ui-primary) 34%, var(--ui-border));
-  border-radius: 12px;
+  border-radius: var(--ui-radius-xl);
   display: grid;
   place-items: center;
   flex-shrink: 0;

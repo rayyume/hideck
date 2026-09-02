@@ -156,7 +156,7 @@ async function sendDigit(digit: string) {
   justify-content: space-between;
   gap: 12px;
   border: 1px solid color-mix(in srgb, var(--ui-success) 36%, var(--ui-border));
-  border-radius: 14px;
+  border-radius: var(--ui-radius-lg);
   background: color-mix(in srgb, var(--ui-success) 8%, var(--ui-surface));
   box-shadow: var(--ui-shadow-sm);
 }
@@ -165,7 +165,7 @@ async function sendDigit(digit: string) {
   margin-top: 8px;
   padding: 14px 16px 16px;
   border: 1px solid var(--ui-border);
-  border-radius: 14px;
+  border-radius: var(--ui-radius-lg);
   background: var(--ui-surface);
   box-shadow: var(--ui-shadow-sm);
 }
@@ -202,7 +202,7 @@ async function sendDigit(digit: string) {
 .call-copy { min-width: 0; display: grid; }
 .call-copy strong { overflow: hidden; text-overflow: ellipsis; font-family: "v-mono", monospace; font-size: 13px; white-space: nowrap; }
 .call-copy small { color: var(--ui-text-muted); font-size: 11px; }
-.read-only-tag { padding: 2px 7px; border-radius: 12px; background: var(--ui-surface-muted); color: var(--ui-text-muted); font-size: 10px; }
+.read-only-tag { padding: 2px 7px; border-radius: var(--ui-radius-sm); background: var(--ui-surface-muted); color: var(--ui-text-muted); font-size: 10px; }
 .call-actions { display: flex; gap: 8px; }
 .call-action { width: 44px; height: 44px; display: grid; place-items: center; border: 1px solid var(--ui-border); border-radius: 50%; background: var(--ui-surface); color: var(--ui-text); cursor: pointer; }
 .call-action.is-danger { border-color: color-mix(in srgb, var(--ui-danger) 40%, var(--ui-border)); background: var(--ui-danger); color: #fff; }

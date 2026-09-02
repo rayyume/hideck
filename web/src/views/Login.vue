@@ -277,7 +277,7 @@ async function redirectAfterLogin() {
   grid-template-columns: minmax(0, 1.08fr) minmax(380px, .92fr);
   overflow: hidden;
   border: 1px solid var(--ui-border);
-  border-radius: 24px;
+  border-radius: var(--ui-radius-xl);
   background: var(--ui-surface);
   box-shadow: var(--ui-shadow-lg);
 }
@@ -378,7 +378,7 @@ async function redirectAfterLogin() {
   display: grid;
   place-items: center;
   border: 1px solid var(--ui-accent);
-  border-radius: 13px;
+  border-radius: var(--ui-radius-md);
   background: var(--ui-accent);
   color: #fff;
   font-size: 18px;
@@ -441,7 +441,7 @@ async function redirectAfterLogin() {
   align-items: center;
   gap: 14px;
   border: 1px solid var(--ui-border);
-  border-radius: 16px;
+  border-radius: var(--ui-radius-md);
   background: var(--ui-surface);
 }
 
@@ -629,7 +629,7 @@ button svg { width: 18px; height: 18px; }
   width: 100%;
   height: 44px;
   margin: 0;
-  border-radius: 8px;
+  border-radius: var(--ui-radius-pill);
 }
 
 .password-change-actions :deep(.el-button:not(.el-button--primary)) {

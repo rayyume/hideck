@@ -79,7 +79,7 @@ function submit() {
 </template>
 
 <style scoped>
-.manual-balance-context { margin-bottom: 16px; padding: 12px; border: 1px solid var(--ui-border); border-radius: 6px; background: var(--ui-surface-muted); }
+.manual-balance-context { margin-bottom: 16px; padding: 12px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); background: var(--ui-surface-muted); }
 .manual-balance-context strong, .manual-balance-context span { display: block; }
 .manual-balance-context strong { color: var(--ui-text); font-size: var(--ui-font-body); }
 .manual-balance-context span, p { margin: 4px 0 0; color: var(--ui-text-muted); font-size: var(--ui-font-body-sm); line-height: 1.5; }

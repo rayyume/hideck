@@ -159,7 +159,7 @@ function copyFact(fact: IdentityFact) {
   min-width: 0;
   overflow: hidden;
   border: 1px solid var(--ui-border);
-  border-radius: 12px;
+  border-radius: var(--ui-radius-xl);
   background: var(--ui-surface-strong);
 }
 
@@ -168,7 +168,7 @@ function copyFact(fact: IdentityFact) {
 .identity-header span { color: var(--ui-primary); font: 700 var(--ui-font-caption) "v-mono", ui-monospace, monospace; letter-spacing: .14em; }
 .identity-header h3 { margin: 4px 0 0; color: var(--ui-text); font-size: 17px; font-weight: 650; }
 .identity-header p { margin: 3px 0 0; color: var(--ui-text-muted); font-size: var(--ui-font-body-sm); }
-.identity-visibility { width: 38px; height: 38px; flex: 0 0 38px; display: grid; place-items: center; border: 1px solid var(--ui-border); border-radius: 8px; background: var(--ui-surface-strong); color: var(--ui-text-muted); cursor: pointer; transition: border-color 160ms var(--ui-ease-out), color 160ms var(--ui-ease-out), background-color 160ms var(--ui-ease-out); }
+.identity-visibility { width: 38px; height: 38px; flex: 0 0 38px; display: grid; place-items: center; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); background: var(--ui-surface-strong); color: var(--ui-text-muted); cursor: pointer; transition: border-color 160ms var(--ui-ease-out), color 160ms var(--ui-ease-out), background-color 160ms var(--ui-ease-out); }
 .identity-visibility:hover,
 .identity-visibility:focus-visible { border-color: var(--ui-primary); color: var(--ui-primary); }
 .identity-visibility:focus-visible { outline: 2px solid color-mix(in srgb, var(--ui-primary) 35%, transparent); outline-offset: 2px; }

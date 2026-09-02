@@ -273,7 +273,7 @@ function audioAttachments(event: CommandEvent) {
   min-height: 58px;
   padding: 10px 14px;
   border: 1px solid var(--ui-border);
-  border-radius: 7px;
+  border-radius: var(--ui-radius-lg);
   background: color-mix(in srgb, var(--ui-surface-strong) 76%, transparent);
 }
 .event-card header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
@@ -310,7 +310,7 @@ function audioAttachments(event: CommandEvent) {
   height: 42px;
   margin-bottom: 3px;
   border: 1px solid var(--ui-border);
-  border-radius: 6px;
+  border-radius: var(--ui-radius-md);
   display: grid;
   place-items: center;
   color: var(--ui-primary);

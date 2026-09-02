@@ -356,7 +356,7 @@ async function save(kind: string, payload: Record<string, unknown>) {
   align-items: center;
   gap: 7px;
   border: 1px solid var(--ui-border);
-  border-radius: 10px;
+  border-radius: var(--ui-radius-md);
   background: color-mix(in srgb, var(--ui-surface-strong) 84%, transparent);
 }
 .ut-fact strong {
@@ -380,7 +380,7 @@ async function save(kind: string, payload: Record<string, unknown>) {
 .ut-panel {
   overflow: hidden;
   border: 1px solid var(--ui-border);
-  border-radius: 12px;
+  border-radius: var(--ui-radius-xl);
   background: var(--ui-surface-strong);
   animation: ut-panel-enter 240ms var(--ui-ease-out) both;
 }

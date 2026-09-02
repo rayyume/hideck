@@ -128,7 +128,7 @@ const {
 </script>
 
 <template>
-  <div class="px-4 py-3 bg-[var(--ui-surface-muted)] rounded-lg space-y-3">
+  <div class="px-4 py-3 bg-[var(--ui-surface-muted)] rounded-[var(--ui-radius-lg)] space-y-3">
     <div v-if="loading" class="text-xs text-[var(--ui-muted)] flex items-center gap-1">
       <el-icon class="animate-spin"><Loading /></el-icon> 正在加载策略...
     </div>
@@ -139,7 +139,7 @@ const {
     <template v-else>
       <div v-if="hint" class="text-xs text-amber-600 dark:text-amber-400">{{ hint }}</div>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        <div class="flex items-center justify-between rounded-lg px-3 py-2 bg-[var(--ui-surface)]">
+        <div class="flex items-center justify-between rounded-[var(--ui-radius-lg)] px-3 py-2 bg-[var(--ui-surface)]">
           <span class="text-sm text-[var(--ui-text)]">飞行<small class="block text-xs text-[var(--ui-muted)] font-normal">{{ wifiCallingLocksRadio ? 'WiFi calling 已锁定' : '关闭后注册运营商' }}</small></span>
           <div class="flex items-center gap-2">
             <span v-if="airplaneFailed" class="text-xs text-orange-500">未生效</span>
@@ -151,7 +151,7 @@ const {
             />
           </div>
         </div>
-        <div class="flex items-center justify-between rounded-lg px-3 py-2 bg-[var(--ui-surface)]">
+        <div class="flex items-center justify-between rounded-[var(--ui-radius-lg)] px-3 py-2 bg-[var(--ui-surface)]">
           <span class="text-sm text-[var(--ui-text)]">网络<small class="block text-xs text-[var(--ui-muted)] font-normal">只开流量</small></span>
           <div class="flex items-center gap-2">
             <span v-if="networkFailed" class="text-xs text-orange-500">未生效</span>
@@ -165,7 +165,7 @@ const {
         </div>
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        <div class="flex items-center justify-between rounded-lg px-3 py-2 bg-[var(--ui-surface)]">
+        <div class="flex items-center justify-between rounded-[var(--ui-radius-lg)] px-3 py-2 bg-[var(--ui-surface)]">
           <span class="text-sm text-[var(--ui-text)]">通话方式</span>
           <el-select
             :model-value="local.phone_mode ?? 'wifi'"
@@ -181,7 +181,7 @@ const {
         </div>
         <div
           v-if="(local.phone_mode ?? 'wifi') === 'cellular'"
-          class="flex items-center justify-between rounded-lg px-3 py-2 bg-[var(--ui-surface)]"
+          class="flex items-center justify-between rounded-[var(--ui-radius-lg)] px-3 py-2 bg-[var(--ui-surface)]"
         >
           <span class="text-sm text-[var(--ui-text)]">数据策略</span>
           <el-select
@@ -196,7 +196,7 @@ const {
           </el-select>
         </div>
       </div>
-      <div class="flex items-center justify-between rounded-lg px-3 py-2 bg-[var(--ui-surface)]">
+      <div class="flex items-center justify-between rounded-[var(--ui-radius-lg)] px-3 py-2 bg-[var(--ui-surface)]">
         <span class="text-sm text-[var(--ui-text)]">
           {{ (local.phone_mode ?? 'wifi') === 'wifi' ? '启动' : '软件电话' }}
           <small class="block text-xs text-[var(--ui-muted)] font-normal">{{ (local.phone_mode ?? 'wifi') === 'wifi'

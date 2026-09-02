@@ -224,7 +224,7 @@ function retryStartup() {
                   @click="acceptDisclaimer" 
                   :disabled="!canAccept"
                   :class="[
-                    'flex-[1.5] px-4 py-3 text-sm font-bold tracking-wide transition-all duration-300 rounded-md',
+                    'flex-[1.5] px-4 py-3 text-sm font-bold tracking-wide transition-all duration-300 rounded-[var(--ui-radius-pill)]',
                     canAccept 
                       ? 'license-accept cursor-pointer'
                       : 'license-accept license-accept-disabled cursor-not-allowed'
@@ -254,7 +254,7 @@ function retryStartup() {
 
 .license-dialog {
   border: 1px solid var(--ui-border);
-  border-radius: 8px;
+  border-radius: var(--ui-radius-lg);
   background: var(--ui-surface-strong);
   box-shadow: var(--ui-shadow-lg);
 }
@@ -268,7 +268,7 @@ function retryStartup() {
 
 .license-icon {
   border: 1px solid color-mix(in srgb, var(--ui-warning) 34%, var(--ui-border));
-  border-radius: 6px;
+  border-radius: var(--ui-radius-md);
   background: color-mix(in srgb, var(--ui-warning) 12%, var(--ui-surface));
   color: var(--ui-warning);
 }
@@ -280,7 +280,7 @@ function retryStartup() {
   flex: 0 0 24px;
   display: grid;
   place-items: center;
-  border-radius: 4px;
+  border-radius: var(--ui-radius-sm);
   background: color-mix(in srgb, var(--ui-primary) 12%, var(--ui-surface));
   color: var(--ui-primary);
   font-family: "v-mono", ui-monospace, monospace;
@@ -294,7 +294,7 @@ function retryStartup() {
 
 .license-input {
   border: 1px solid var(--ui-border);
-  border-radius: 4px;
+  border-radius: var(--ui-radius-pill);
   background: var(--ui-surface-subtle);
   color: var(--ui-text);
 }
@@ -307,7 +307,7 @@ function retryStartup() {
 .license-reject,
 .license-accept {
   border: 1px solid var(--ui-border);
-  border-radius: 4px;
+  border-radius: var(--ui-radius-pill);
 }
 
 .license-reject {

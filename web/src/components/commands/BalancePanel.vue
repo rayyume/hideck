@@ -202,7 +202,7 @@ function ruleSourceLabel(rule: CarrierQueryRule): string {
 <style scoped>
 .balance-panel { min-width: 0; min-height: 0; height: 100%; padding: 18px; overflow: auto; }
 .panel-heading { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; }
-.panel-icon { width: 36px; height: 36px; border-radius: 6px; background: color-mix(in srgb, var(--ui-primary) 12%, transparent); color: var(--ui-primary); display: grid; place-items: center; }
+.panel-icon { width: 36px; height: 36px; border-radius: var(--ui-radius-md); background: color-mix(in srgb, var(--ui-primary) 12%, transparent); color: var(--ui-primary); display: grid; place-items: center; }
 .panel-icon .el-icon { font-size: 19px; }
 .panel-heading h2 { margin: 0; color: var(--ui-text); font-size: 18px; }
 .panel-heading div > span { color: var(--ui-muted); font-size: var(--ui-font-caption); }
@@ -213,7 +213,8 @@ function ruleSourceLabel(rule: CarrierQueryRule): string {
 .query-row { display: grid; grid-template-columns: minmax(0, 1fr); }
 .query-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
 .device-select { min-width: 0; }
-.query-row :deep(.el-input__wrapper), .query-actions :deep(.el-button) { min-height: 40px; border-radius: 4px; }
+.query-row :deep(.el-input__wrapper) { min-height: 40px; border-radius: var(--ui-radius-pill); }
+.query-actions :deep(.el-button) { min-height: 40px; }
 .latest-result { display: flex; flex-direction: column; gap: 6px; padding: 15px 0; border-block: 1px solid var(--ui-border); }
 .latest-result > strong { color: var(--ui-primary); font-size: clamp(25px, 2.4vw, 36px); font-weight: 550; overflow-wrap: anywhere; }
 .latest-meta { color: var(--ui-muted); display: flex; align-items: center; gap: 5px; font-size: var(--ui-font-caption); }
@@ -246,7 +247,7 @@ function ruleSourceLabel(rule: CarrierQueryRule): string {
 .rule-source strong { color: var(--ui-text); font-size: var(--ui-font-body-sm); }
 .rule-source span { margin-top: 2px; color: var(--ui-muted); font-size: var(--ui-font-caption); }
 .source-counts { display: flex; gap: 5px; }
-.source-counts small { padding: 3px 5px; border: 1px solid var(--ui-border); border-radius: 3px; color: var(--ui-text-muted); font-size: var(--ui-font-caption); white-space: nowrap; }
+.source-counts small { padding: 3px 8px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-sm); color: var(--ui-text-muted); font-size: var(--ui-font-caption); white-space: nowrap; }
 .rules-state { min-height: 72px; padding: 12px; border-bottom: 1px solid var(--ui-border); color: var(--ui-muted); display: flex; align-items: center; justify-content: center; gap: 8px; font-size: var(--ui-font-caption); text-align: center; }
 .rules-error { color: var(--ui-danger); flex-direction: column; }
 .rules-error :deep(.el-button) { color: var(--ui-danger); }
@@ -261,7 +262,7 @@ function ruleSourceLabel(rule: CarrierQueryRule): string {
 .rule-list small { color: var(--ui-primary); font-size: var(--ui-font-caption); white-space: nowrap; }
 .rule-list button > span { color: var(--ui-text-muted); font: var(--ui-font-body-sm) "v-mono", monospace; text-align: right; overflow-wrap: anywhere; }
 .rule-list button > .el-icon { color: var(--ui-primary); }
-.rules-empty { width: 100%; min-height: 48px; border: 1px solid var(--ui-border); border-radius: 4px; background: transparent; color: var(--ui-text-muted); font-size: var(--ui-font-body-sm); }
+.rules-empty { width: 100%; min-height: 48px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); background: transparent; color: var(--ui-text-muted); font-size: var(--ui-font-body-sm); }
 @media (max-width: 1023px) {
   .balance-panel { min-height: 560px; }
   .latest-result > strong { font-size: 34px; }

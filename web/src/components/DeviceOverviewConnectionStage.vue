@@ -87,7 +87,7 @@ function stageLabel(ready: boolean | undefined): string {
   gap: 26px;
   overflow: hidden;
   border: 1px solid var(--ui-border);
-  border-radius: 16px;
+  border-radius: var(--ui-radius-xl);
   background:
     radial-gradient(circle at 72% 35%, color-mix(in srgb, var(--ui-primary) 10%, transparent), transparent 34%),
     var(--ui-surface-strong);
@@ -198,7 +198,7 @@ function stageLabel(ready: boolean | undefined): string {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   border: 1px solid var(--ui-border);
-  border-radius: 12px;
+  border-radius: var(--ui-radius-xl);
   background: color-mix(in srgb, var(--ui-surface) 82%, transparent);
 }
 

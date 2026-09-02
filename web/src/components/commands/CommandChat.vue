@@ -154,7 +154,7 @@ const emit = defineEmits<{
   height: 100%;
   overflow: hidden;
   border: 1px solid var(--ui-border);
-  border-radius: 8px;
+  border-radius: var(--ui-radius-xl);
   background: var(--ui-surface);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
@@ -174,7 +174,7 @@ const emit = defineEmits<{
   height: 36px;
   flex: 0 0 36px;
   border: 1px solid color-mix(in srgb, var(--ui-info) 55%, var(--ui-border));
-  border-radius: 7px;
+  border-radius: var(--ui-radius-md);
   color: var(--ui-info);
   display: grid;
   place-items: center;
@@ -189,12 +189,12 @@ const emit = defineEmits<{
 .chat-actions { grid-area: actions; display: flex; align-items: center; justify-content: flex-end; gap: 0; }
 .chat-actions :deep(.el-button) { min-height: 36px; margin: 0; border-radius: 0; }
 .chat-actions :deep(.el-button + .el-button) { margin-left: -1px; }
-.chat-actions :deep(.el-button:first-child) { border-radius: 4px 0 0 4px; }
-.chat-actions :deep(.el-button:last-child) { border-radius: 0 4px 4px 0; }
+.chat-actions :deep(.el-button:first-child) { border-radius: var(--ui-radius-sm) 0 0 var(--ui-radius-sm); }
+.chat-actions :deep(.el-button:last-child) { border-radius: 0 var(--ui-radius-sm) var(--ui-radius-sm) 0; }
 .chat-actions :deep(.el-button span) { display: inline-flex; align-items: center; gap: 6px; }
 .device-target { width: 220px; min-width: 0; grid-area: device; display: grid; gap: 5px; }
 .device-label { color: var(--ui-muted); font-size: var(--ui-font-caption); }
-.device-target :deep(.el-input__wrapper) { min-height: 36px; border-radius: 4px; }
+.device-target :deep(.el-input__wrapper) { min-height: 36px; border-radius: var(--ui-radius-pill); }
 .sync-warning {
   min-width: 0;
   margin: 0;

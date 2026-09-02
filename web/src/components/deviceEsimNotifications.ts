@@ -57,7 +57,7 @@ export function notificationDialogWidth() {
 }
 
 export function notificationListItemLayoutClass() {
-  return 'rounded-xl border border-[var(--ui-border)] p-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between'
+  return 'rounded-[var(--ui-radius-lg)] border border-[var(--ui-border)] p-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between'
 }
 
 export function notificationMetaContainerClass() {
@@ -65,5 +65,5 @@ export function notificationMetaContainerClass() {
 }
 
 export function notificationMetaItemClass() {
-  return 'w-full min-w-0 rounded-lg bg-[var(--ui-surface-muted)] px-2 py-0.5 text-xs leading-[18px] text-[var(--ui-muted)]'
+  return 'w-full min-w-0 rounded-[var(--ui-radius-sm)] bg-[var(--ui-surface-muted)] px-2 py-0.5 text-xs leading-[18px] text-[var(--ui-muted)]'
 }

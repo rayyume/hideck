@@ -353,7 +353,7 @@ watch(levelFilter, () => {
 
 .logs-toolbar {
   box-shadow: none;
-  border-radius: 14px;
+  border-radius: var(--ui-radius-lg);
 }
 
 .log-frame {

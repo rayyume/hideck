@@ -453,7 +453,7 @@ function lines(value: string) {
 
 <style scoped>
 :global(.command-rule-tray-scrim) { background: color-mix(in srgb, #000 54%, transparent); }
-:global(.command-rule-drawer) { border-radius: 8px 0 0 8px; background: var(--ui-surface); }
+:global(.command-rule-drawer) { border-radius: var(--ui-radius-lg) 0 0 var(--ui-radius-lg); background: var(--ui-surface); }
 :global(.command-rule-drawer .el-drawer__header) { min-height: 64px; margin: 0; padding: 10px 18px; border-bottom: 1px solid var(--ui-border); color: var(--ui-text); }
 :global(.command-rule-drawer .el-drawer__title) { font-size: 18px; font-weight: 650; }
 :global(.command-rule-drawer .el-drawer__body) { min-height: 0; padding: 0 18px 24px; overflow-y: auto; }
@@ -465,12 +465,12 @@ function lines(value: string) {
 .source-banner strong { color: var(--ui-text); font-size: var(--ui-font-body-sm); }
 .source-banner span { margin-top: 2px; color: var(--ui-muted); font-size: var(--ui-font-body-sm); }
 .source-summary { display: flex; gap: 6px; }
-.source-summary small { padding: 4px 6px; border: 1px solid var(--ui-border); border-radius: 3px; color: var(--ui-text-muted); font-size: var(--ui-font-caption); white-space: nowrap; }
+.source-summary small { padding: 4px 8px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-sm); color: var(--ui-text-muted); font-size: var(--ui-font-caption); white-space: nowrap; }
 .source-banner :deep(.el-button) { min-height: 40px; color: var(--ui-primary); }
 .source-error, .form-error { padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--ui-danger) 38%, var(--ui-border)); background: color-mix(in srgb, var(--ui-danger) 7%, transparent); color: var(--ui-danger); font-size: var(--ui-font-body-sm); }
 .source-error { margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .source-error :deep(.el-button) { color: var(--ui-danger); }
-.restore-confirmation { position: sticky; top: 8px; z-index: 4; margin: 12px 0; padding: 12px; border: 1px solid color-mix(in srgb, var(--ui-warning) 48%, var(--ui-border)); border-radius: 6px; background: var(--ui-surface-strong); box-shadow: var(--ui-shadow-md); display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 8px; }
+.restore-confirmation { position: sticky; top: 8px; z-index: 4; margin: 12px 0; padding: 12px; border: 1px solid color-mix(in srgb, var(--ui-warning) 48%, var(--ui-border)); border-radius: var(--ui-radius-md); background: var(--ui-surface-strong); box-shadow: var(--ui-shadow-md); display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 8px; }
 .restore-confirmation strong, .restore-confirmation span { display: block; }
 .restore-confirmation strong { color: var(--ui-text); font-size: var(--ui-font-body); }
 .restore-confirmation span { margin-top: 3px; color: var(--ui-text-muted); font-size: var(--ui-font-body-sm); line-height: 1.45; }

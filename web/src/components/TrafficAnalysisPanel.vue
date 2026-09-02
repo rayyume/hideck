@@ -630,7 +630,7 @@ function handleRangeChange(value: string | number | boolean | undefined) {
 
 .traffic-analysis-panel {
   padding: 30px;
-  border-radius: 22px;
+  border-radius: var(--ui-radius-xl);
   background: linear-gradient(155deg, color-mix(in srgb, var(--ui-surface) 98%, var(--ui-primary) 2%), var(--ui-surface));
 }
 
@@ -680,7 +680,7 @@ function handleRangeChange(value: string | number | boolean | undefined) {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 14px;
+  border-radius: var(--ui-radius-lg);
   color: var(--ui-text-muted);
   font-size: 13px;
 }

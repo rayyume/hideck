@@ -50,7 +50,7 @@ withDefaults(defineProps<{
   grid-template-columns: minmax(0, 1fr) 320px;
   overflow: hidden;
   border: 1px solid var(--ui-border);
-  border-radius: 24px;
+  border-radius: var(--ui-radius-xl);
   background:
     radial-gradient(circle at 61% 54%, color-mix(in srgb, var(--ui-primary) 13%, transparent), transparent 27%),
     linear-gradient(125deg, var(--ui-surface) 0 54%, color-mix(in srgb, var(--ui-surface) 88%, var(--ui-nav)));
@@ -90,7 +90,7 @@ withDefaults(defineProps<{
 .workspace-stage.is-compact {
   min-height: 154px;
   grid-template-columns: minmax(0, 1fr) minmax(390px, 38%);
-  border-radius: 18px;
+  border-radius: var(--ui-radius-lg);
 }
 
 .workspace-stage.is-compact::before {
@@ -256,7 +256,7 @@ withDefaults(defineProps<{
   align-items: center;
   gap: 7px;
   border: 1px solid var(--ui-border);
-  border-radius: 10px;
+  border-radius: var(--ui-radius-md);
   background: color-mix(in srgb, var(--ui-surface-strong) 84%, transparent);
   color: var(--ui-text-muted);
   font-size: 11px;

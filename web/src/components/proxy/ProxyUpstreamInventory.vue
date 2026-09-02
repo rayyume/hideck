@@ -122,13 +122,13 @@ defineEmits<{
 .proxy-row-id { display: block; margin-top: 3px; color: var(--ui-text-muted); font: var(--ui-font-caption) "v-mono", ui-monospace, monospace; }
 .proxy-health-detail { max-width: 100%; margin-top: 5px; display: -webkit-box; overflow: hidden; color: var(--ui-danger); font-size: var(--ui-font-caption); line-height: 1.35; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .proxy-inventory-table code { color: var(--ui-text); font: var(--ui-font-body-sm)/1.5 "v-mono", ui-monospace, monospace; }
-.proxy-rule-button { min-height: 34px; padding: 0 8px; display: inline-flex; align-items: center; gap: 5px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--ui-communication); cursor: pointer; }
+.proxy-rule-button { min-height: 34px; padding: 0 8px; display: inline-flex; align-items: center; gap: 5px; border: 1px solid transparent; border-radius: var(--ui-radius-sm); background: transparent; color: var(--ui-communication); cursor: pointer; }
 .proxy-rule-button:hover,
 .proxy-rule-button:focus-visible { border-color: var(--ui-border); background: var(--ui-surface-muted); }
 .proxy-rule-button svg { width: 15px; height: 15px; }
 .proxy-rule-button small { color: var(--ui-text-muted); font-size: var(--ui-font-caption); }
 .proxy-row-actions { display: flex; justify-content: flex-end; gap: 4px; }
-.proxy-row-actions button { width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--ui-text-muted); cursor: pointer; }
+.proxy-row-actions button { width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid transparent; border-radius: var(--ui-radius-sm); background: transparent; color: var(--ui-text-muted); cursor: pointer; }
 .proxy-row-actions button:hover,
 .proxy-row-actions button:focus-visible { border-color: var(--ui-border); background: var(--ui-surface-muted); color: var(--ui-text); }
 .proxy-row-actions button.is-danger:hover,
@@ -139,7 +139,7 @@ defineEmits<{
   .proxy-inventory-table thead { display: none; }
   .proxy-inventory-table,
   .proxy-inventory-table tbody { display: grid; gap: 10px; }
-  .proxy-inventory-table tr { margin: 0 12px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid var(--ui-border); border-radius: 7px; overflow: hidden; background: var(--ui-surface-strong); }
+  .proxy-inventory-table tr { margin: 0 12px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); overflow: hidden; background: var(--ui-surface-strong); }
   .proxy-inventory-table tr:first-child { margin-top: 12px; }
   .proxy-inventory-table tr:last-child { margin-bottom: 12px; }
   .proxy-inventory-table td { min-height: 66px; padding: 11px 12px; display: grid; align-content: center; gap: 6px; border-bottom: 1px solid var(--ui-border-muted) !important; }

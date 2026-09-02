@@ -101,7 +101,7 @@ const emit = defineEmits<{
   display: grid;
   place-items: center;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: var(--ui-radius-md);
   background: transparent;
   color: var(--ui-text-muted);
   cursor: pointer;

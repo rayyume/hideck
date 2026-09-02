@@ -61,7 +61,7 @@ function start() {
         <div class="min-w-0">
           <div class="flex flex-wrap items-center gap-2">
             <h4 id="weixin-manual-title" class="text-base font-semibold text-[var(--ui-text)]">个人微信 iLink</h4>
-            <span class="rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs font-semibold leading-none text-amber-700 dark:text-amber-300">
+            <span class="rounded-[var(--ui-radius-sm)] border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs font-semibold leading-none text-amber-700 dark:text-amber-300">
               会话型通知渠道
             </span>
           </div>

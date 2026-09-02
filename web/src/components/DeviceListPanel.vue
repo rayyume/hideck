@@ -228,7 +228,7 @@ const secondaryStatus = (d: DeviceMgmtListItem) => {
   display: flex;
   justify-content: space-between;
   border: 1px solid var(--ui-border-muted);
-  border-radius: 9px;
+  border-radius: var(--ui-radius-md);
   color: var(--ui-text-muted);
   font-size: var(--ui-font-caption);
 }
@@ -253,7 +253,7 @@ const secondaryStatus = (d: DeviceMgmtListItem) => {
   min-height: 82px;
   padding: 11px 10px;
   border: 1px solid transparent;
-  border-radius: 11px;
+  border-radius: var(--ui-radius-lg);
   transition: background-color 150ms ease, border-color 150ms ease, transform 120ms ease-out;
 }
 

@@ -139,7 +139,7 @@ const networkPanelMessage = computed(() => {
     <section v-if="!isWifiPath" class="overview-fact-panel ui-panel-muted p-4">
       <div class="overview-panel-title">蜂窝运行时</div>
         <!-- 运营商 hero（与 VoWiFi pill 统一样式） -->
-        <div class="flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 mb-3 border"
+        <div class="flex items-center gap-2.5 rounded-[var(--ui-radius-lg)] px-3.5 py-2.5 mb-3 border"
           :class="isRegistered
             ? 'bg-[var(--ui-success-surface)] border-[color-mix(in_srgb,var(--ui-success)_28%,var(--ui-border))]'
             : controlOnline
@@ -170,7 +170,7 @@ const networkPanelMessage = computed(() => {
         </div>
 
         <!-- 信号大字 -->
-        <div class="rounded-xl border border-[var(--ui-border)] px-3.5 py-3 mb-3">
+        <div class="rounded-[var(--ui-radius-lg)] border border-[var(--ui-border)] px-3.5 py-3 mb-3">
           <div class="text-xs font-bold text-[var(--ui-muted)] uppercase tracking-wider mb-1.5">信号强度</div>
           <div class="flex items-center gap-3">
             <div>
@@ -263,7 +263,7 @@ const networkPanelMessage = computed(() => {
 
 .overview-fact-panel {
   min-width: 0;
-  border-radius: 12px;
+  border-radius: var(--ui-radius-xl);
 }
 
 .overview-network-panel {
