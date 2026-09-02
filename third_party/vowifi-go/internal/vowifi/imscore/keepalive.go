@@ -311,10 +311,45 @@ func (s *Service) sendProtectedFlowCRLFKeepalives(skip net.Conn) {
 			continue
 		}
 		if err := s.writeTCPCRLF(conn); err != nil {
-			logging.RunDebug("IMS port-s CRLF keepalive failed",
-				"device", s.DeviceID(), "err", err)
+			s.portSWriteErr.Add(1)
+			// The push flow carries MT SMS, so a write that stops landing is
+			// the first sign the network can no longer reach us.
+			logging.WarnRate("ims-ports-crlf-"+s.DeviceID(), 30*time.Second,
+				"IMS port-s CRLF keepalive write failed",
+				"device", s.DeviceID(), "err", err,
+				"ok_writes", s.portSWriteOK.Load(),
+				"failed_writes", s.portSWriteErr.Load())
+			continue
 		}
+		s.portSWriteOK.Add(1)
+		s.portSLastWriteOKAt.Store(time.Now().UnixNano())
 	}
+}
+
+// resetPortSWriteStats starts the counters over for a freshly accepted flow.
+func (s *Service) resetPortSWriteStats() {
+	if s == nil {
+		return
+	}
+	s.portSWriteOK.Store(0)
+	s.portSWriteErr.Store(0)
+	s.portSLastWriteOKAt.Store(0)
+}
+
+// portSLastWriteOKAge reports how long ago a CRLF keepalive last left for the
+// push flow. A reset that arrives while writes are still landing means the
+// peer answered at the TCP level and tore the flow down deliberately. Zero
+// means no write has landed yet, which the ok_writes count logged alongside
+// it distinguishes from a write that just went out.
+func (s *Service) portSLastWriteOKAge() time.Duration {
+	if s == nil {
+		return 0
+	}
+	at := s.portSLastWriteOKAt.Load()
+	if at == 0 {
+		return 0
+	}
+	return time.Since(time.Unix(0, at)).Round(time.Microsecond)
 }
 
 func (s *Service) snapshotProtectedConns() []net.Conn {

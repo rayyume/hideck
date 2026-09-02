@@ -249,6 +249,7 @@ func (s *Service) acceptProtectedSIP(listener net.Listener) {
 			_ = conn.Close()
 			return
 		}
+		s.resetPortSWriteStats()
 		if s.portSPushLost.CompareAndSwap(true, false) {
 			s.networkDone.Add(1)
 			go func() {
@@ -291,7 +292,9 @@ func (s *Service) handleProtectedServerPushClosed() {
 	// the flow for an RP-SMMA prompt once port-s is back.
 	s.portSPushLost.Store(true)
 	logging.Info("IMS protected server push closed; wait for port-s reconnect",
-		"device", s.DeviceID(), "grace", s.portSReconnectWait())
+		"device", s.DeviceID(), "grace", s.portSReconnectWait(),
+		"ok_writes", s.portSWriteOK.Load(), "failed_writes", s.portSWriteErr.Load(),
+		"since_last_write_ok", s.portSLastWriteOKAge())
 	s.schedulePortSReconnectWatch()
 }
 

@@ -724,6 +724,59 @@ func TestProtectedServerPushClosureReRegistersAfterGrace(t *testing.T) {
 	t.Fatal("port-s close did not schedule RFC 5626 flow recovery")
 }
 
+// A reset that arrives while CRLF keepalives are still landing tells us the
+// peer was reachable and tore the flow down, so the counters have to survive
+// until the closure is logged and only then start over.
+func TestPortSWriteStatsRecordKeepaliveLiveness(t *testing.T) {
+	service := newProtectedKeepaliveTestService(t)
+	service.portSReconnectGrace = time.Hour
+
+	client, server := net.Pipe()
+	t.Cleanup(func() {
+		_ = client.Close()
+		_ = server.Close()
+	})
+	go func() {
+		buf := make([]byte, 8)
+		for {
+			if _, err := server.Read(buf); err != nil {
+				return
+			}
+		}
+	}()
+	if !service.trackProtectedConnection(client) {
+		t.Fatal("trackProtectedConnection")
+	}
+
+	service.sendProtectedFlowCRLFKeepalives(nil)
+	if ok := service.portSWriteOK.Load(); ok != 1 {
+		t.Fatalf("ok_writes = %d, want 1", ok)
+	}
+	if failed := service.portSWriteErr.Load(); failed != 0 {
+		t.Fatalf("failed_writes = %d, want 0", failed)
+	}
+	if service.portSLastWriteOKAt.Load() == 0 {
+		t.Fatal("a landed write left no timestamp to age from")
+	}
+	if age := service.portSLastWriteOKAge(); age > time.Minute {
+		t.Fatalf("since_last_write_ok = %s, want a fresh timestamp", age)
+	}
+
+	_ = client.Close()
+	service.sendProtectedFlowCRLFKeepalives(nil)
+	if failed := service.portSWriteErr.Load(); failed != 1 {
+		t.Fatalf("failed_writes after close = %d, want 1", failed)
+	}
+
+	service.resetPortSWriteStats()
+	if service.portSWriteOK.Load() != 0 || service.portSWriteErr.Load() != 0 {
+		t.Fatal("a new flow reused the previous flow's counters")
+	}
+	if age := service.portSLastWriteOKAge(); age != 0 {
+		t.Fatalf("since_last_write_ok = %s, want zero for an unwritten flow", age)
+	}
+}
+
 func TestProtectedServerPushClosureKeepsOtherInboundFlows(t *testing.T) {
 	service := newProtectedKeepaliveTestService(t)
 	service.mu.Lock()
