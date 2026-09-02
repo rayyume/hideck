@@ -484,7 +484,7 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
   place-items: center;
   border: 1px solid color-mix(in srgb, var(--ui-accent) 34%, var(--ui-border));
   border-radius: 14px;
-  background: var(--ui-primary-solid);
+  background: var(--ui-accent);
   color: #fff;
   box-shadow: none;
   font-size: 20px;

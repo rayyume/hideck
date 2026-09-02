@@ -13,8 +13,8 @@ const emit = defineEmits(['toggle-theme'])
 </script>
 
 <template>
-  <div class="unauthenticated-shell">
-    <div class="unauthenticated-theme">
+  <div class="unauthenticated-shell h-screen flex items-center justify-center transition-colors duration-300">
+    <div class="absolute top-4 right-4 z-50">
       <SwitchDark :is-dark="isDark" @toggle="(e) => emit('toggle-theme', e)" />
     </div>
     <router-view v-slot="{ Component }">
@@ -32,23 +32,13 @@ const emit = defineEmits(['toggle-theme'])
 
 <style scoped>
 .unauthenticated-shell {
-  position: relative;
-  min-height: 100%;
-  overflow: auto;
+  padding: 20px;
   background: var(--ui-bg);
 }
 
-.unauthenticated-theme {
-  position: absolute;
-  top: 18px;
-  right: 20px;
-  z-index: 50;
-}
-
 @media (max-width: 640px) {
-  .unauthenticated-theme {
-    top: 12px;
-    right: 12px;
+  .unauthenticated-shell {
+    padding: 12px;
   }
 }
 </style>

@@ -27,7 +27,8 @@ defineProps<{
 <style scoped>
 .empty-state {
   border-color: var(--ui-border);
-  border-radius: 6px;
+  border-radius: var(--ui-radius-lg);
+  box-shadow: var(--ui-shadow-sm);
 }
 
 .empty-state-icon {

@@ -2,10 +2,9 @@
 import { ref } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useRoute, useRouter } from 'vue-router'
+import { Person24Regular, LockClosed24Regular, ArrowRight24Regular } from '@vicons/fluent'
 import { systemService } from '../services/system'
 import type { PasswordCredentialStatus } from '../types/credentials'
-import WorkspacePreviewCard from '../components/WorkspacePreviewCard.vue'
-import { LOGIN_PREVIEW_DEMO } from '../utils/workspacePreview'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -121,49 +120,92 @@ async function redirectAfterLogin() {
 </script>
 
 <template>
-  <main class="login-landing">
-    <header class="login-brand">
-      <span class="login-brand-mark">H</span>
-      <strong>HiDeck</strong>
-    </header>
+  <main class="login-page">
+    <section class="login-identity" aria-label="HiDeck 产品信息">
+      <div class="network-map" aria-hidden="true">
+        <span class="network-line line-a" />
+        <span class="network-line line-b" />
+        <span class="network-line line-c" />
+        <span class="network-line line-d" />
+        <span class="network-node node-a" />
+        <span class="network-node node-b" />
+        <span class="network-node node-c" />
+        <span class="network-node node-d" />
+        <span class="network-label label-a">CORE-01</span>
+        <span class="network-label label-b">GW-02</span>
+        <span class="network-label label-c">BTS-07</span>
+      </div>
 
-    <section class="login-hero">
-      <h1>设备在线，直接进工作区。</h1>
-      <p class="login-sub">通信模组控制台 · 管理射频、电话和 eSIM</p>
+      <div class="identity-topline">
+        <span class="identity-mark">H</span>
+        <div>
+          <strong>HiDeck</strong>
+          <span>MODEM CONTROL</span>
+        </div>
+      </div>
 
-      <form class="login-form" @submit.prevent="handleLogin">
-        <label for="login-username">账号</label>
-        <input
-          id="login-username"
-          v-model.trim="form.username"
-          class="login-input"
-          type="text"
-          name="username"
-          autocomplete="username"
-          placeholder="admin"
-        />
+      <div class="identity-copy">
+        <span class="identity-kicker">TELECOM OPERATIONS</span>
+        <h1>通信模组控制台</h1>
+        <p>设备、网络、短信与 VoWiFi 状态集中管理。</p>
+      </div>
 
-        <label for="login-password">密码</label>
-        <input
-          id="login-password"
-          v-model="form.password"
-          class="login-input"
-          type="password"
-          name="password"
-          autocomplete="current-password"
-          placeholder=""
-        />
-
-        <button type="submit" class="login-submit" :disabled="loading">
-          {{ loading ? '正在验证' : '登录' }}
-        </button>
-      </form>
-
-      <p class="login-footnote">弱密码登录后必须修改</p>
+      <div class="signal-panel" aria-label="控制台状态">
+        <div class="signal-bars" aria-hidden="true">
+          <i /><i /><i /><i />
+        </div>
+        <div>
+          <strong>CONTROL PLANE READY</strong>
+          <span>QMI · MBIM · AT · IMS</span>
+        </div>
+        <span class="ready-dot" aria-hidden="true" />
+      </div>
     </section>
 
-    <section class="login-preview-wrap" aria-label="工作区预览">
-      <WorkspacePreviewCard :model="LOGIN_PREVIEW_DEMO" />
+    <section class="login-access">
+      <div class="login-form-wrap">
+        <header>
+          <span class="form-kicker">SECURE ACCESS</span>
+          <h2>登录 HiDeck</h2>
+          <p>使用管理账户进入控制台</p>
+        </header>
+
+        <form @submit.prevent="handleLogin">
+          <label for="login-username">用户名</label>
+          <div class="field-shell">
+            <Person24Regular aria-hidden="true" />
+            <input
+              id="login-username"
+              v-model.trim="form.username"
+              type="text"
+              name="username"
+              autocomplete="username"
+              placeholder="请输入用户名"
+            />
+          </div>
+
+          <label for="login-password">密码</label>
+          <div class="field-shell">
+            <LockClosed24Regular aria-hidden="true" />
+            <input
+              id="login-password"
+              v-model="form.password"
+              type="password"
+              name="password"
+              autocomplete="current-password"
+              placeholder="请输入密码"
+            />
+          </div>
+
+          <button type="submit" :disabled="loading">
+            <span v-if="loading" class="login-spinner" aria-hidden="true" />
+            <span>{{ loading ? '正在验证' : '登录' }}</span>
+            <ArrowRight24Regular v-if="!loading" aria-hidden="true" />
+          </button>
+        </form>
+
+        <footer>HiDeck · 2026</footer>
+      </div>
     </section>
 
     <el-dialog
@@ -228,151 +270,333 @@ async function redirectAfterLogin() {
 </template>
 
 <style scoped>
-.login-landing {
-  position: relative;
-  min-height: 100%;
-  padding: 28px 28px 48px;
+.login-page {
+  width: min(1080px, calc(100% - 40px));
+  min-height: 650px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(380px, .92fr);
   overflow: hidden;
-  background: var(--ui-bg);
+  border: 1px solid var(--ui-border);
+  border-radius: 24px;
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow-lg);
+}
+
+.login-identity {
+  position: relative;
+  padding: 38px 42px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 76% 46%, color-mix(in srgb, var(--ui-accent) 8%, transparent), transparent 32%),
+    var(--ui-bg);
   color: var(--ui-text);
 }
 
-.login-landing::before,
-.login-landing::after {
+.login-identity::before,
+.login-identity::after {
   position: absolute;
   content: "";
   pointer-events: none;
-  z-index: 0;
 }
 
-.login-landing::before {
-  left: -8%;
-  bottom: 4%;
-  width: 42%;
-  height: 38%;
-  background: radial-gradient(circle, color-mix(in srgb, #E8B4C8 36%, transparent), transparent 72%);
+.login-identity::before {
+  inset: 0;
+  opacity: .16;
+  background-size: 54px 54px;
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--ui-nav-muted) 20%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--ui-nav-muted) 20%, transparent) 1px, transparent 1px);
 }
 
-.login-landing::after {
-  right: -6%;
-  bottom: 0;
-  width: 40%;
-  height: 36%;
-  background: radial-gradient(circle, color-mix(in srgb, #C4B5E8 32%, transparent), transparent 74%);
+.login-identity::after {
+  inset: 0;
+  background: radial-gradient(circle at 70% 40%, color-mix(in srgb, var(--ui-accent) 8%, transparent), transparent 44%);
 }
 
-.login-brand,
-.login-hero,
-.login-preview-wrap {
-  position: relative;
+.network-map {
+  position: absolute;
+  inset: 0;
   z-index: 1;
+  pointer-events: none;
 }
 
-.login-brand {
+.network-line {
+  position: absolute;
+  height: 1px;
+  transform-origin: left center;
+  background: color-mix(in srgb, var(--ui-accent) 42%, transparent);
+}
+
+.line-a { top: 18%; left: 8%; width: 44%; transform: rotate(9deg); }
+.line-b { top: 36%; left: 46%; width: 42%; transform: rotate(-16deg); }
+.line-c { top: 72%; left: 5%; width: 48%; transform: rotate(-7deg); }
+.line-d { top: 60%; left: 63%; width: 34%; transform: rotate(21deg); }
+
+.network-node {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border: 1px solid var(--ui-accent);
+  background: var(--ui-surface);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ui-accent) 9%, transparent);
+}
+
+.node-a { top: 21%; left: 27%; }
+.node-b { top: 30%; right: 17%; }
+.node-c { bottom: 24%; left: 15%; }
+.node-d { bottom: 15%; right: 9%; }
+
+.network-label {
+  position: absolute;
+  color: color-mix(in srgb, var(--ui-accent) 66%, transparent);
+  font: 9px/1 "v-mono", ui-monospace, monospace;
+}
+
+.label-a { top: 14%; left: 29%; }
+.label-b { top: 26%; right: 9%; }
+.label-c { bottom: 20%; left: 17%; }
+
+.identity-topline,
+.identity-copy,
+.signal-panel {
+  position: relative;
+  z-index: 2;
+}
+
+.identity-topline {
   display: flex;
   align-items: center;
-  gap: 10px;
-  color: var(--ui-text);
+  gap: 12px;
 }
 
-.login-brand-mark {
-  width: 34px;
-  height: 34px;
+.identity-mark {
+  width: 38px;
+  height: 38px;
   display: grid;
   place-items: center;
-  border-radius: 10px;
+  border: 1px solid var(--ui-accent);
+  border-radius: 13px;
   background: var(--ui-accent);
   color: #fff;
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 700;
 }
 
-.login-brand strong {
-  font-size: 20px;
+.identity-topline div {
+  display: flex;
+  flex-direction: column;
+}
+
+.identity-topline strong {
+  font-size: 18px;
+  line-height: 1.1;
+}
+
+.identity-topline div span,
+.identity-kicker,
+.form-kicker {
+  font-family: "v-mono", ui-monospace, monospace;
+  letter-spacing: 0;
+}
+
+.identity-topline div span {
+  margin-top: 3px;
+  color: var(--ui-nav-muted);
+  font-size: 12px;
+}
+
+.identity-copy {
+  max-width: 430px;
+}
+
+.identity-kicker,
+.form-kicker {
+  color: var(--ui-accent);
+  font-size: 12px;
   font-weight: 700;
 }
 
-.login-hero {
-  width: min(420px, 100%);
-  margin: 56px auto 0;
-  text-align: center;
+.identity-copy h1 {
+  margin: 13px 0 14px;
+  font-size: 44px;
+  font-weight: 580;
+  line-height: 1.15;
+  letter-spacing: 0;
 }
 
-.login-hero h1 {
+.identity-copy p {
   margin: 0;
-  color: var(--ui-text);
-  font-size: 32px;
-  font-weight: 700;
-  line-height: 1.25;
+  color: var(--ui-nav-muted);
+  font-size: 15px;
 }
 
-.login-sub {
-  margin: 12px 0 0;
-  color: var(--ui-muted);
-  font-size: 14px;
-  line-height: 1.5;
-}
-
-.login-form {
-  margin-top: 28px;
+.signal-panel {
+  min-height: 72px;
+  padding: 14px 16px;
   display: grid;
-  gap: 8px;
-  text-align: left;
+  grid-template-columns: 38px 1fr auto;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid var(--ui-border);
+  border-radius: 16px;
+  background: var(--ui-surface);
 }
 
-.login-form label {
-  margin-top: 8px;
+.signal-bars {
+  height: 28px;
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+}
+
+.signal-bars i {
+  width: 5px;
+  border-radius: 1px;
+  background: var(--ui-accent);
+}
+
+.signal-bars i:nth-child(1) { height: 8px; }
+.signal-bars i:nth-child(2) { height: 14px; }
+.signal-bars i:nth-child(3) { height: 21px; }
+.signal-bars i:nth-child(4) { height: 28px; }
+
+.signal-panel div:nth-child(2) {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.signal-panel strong {
+  font-family: "v-mono", ui-monospace, monospace;
+  font-size: 12px;
+}
+
+.signal-panel div span {
+  color: var(--ui-nav-muted);
+  font-size: 12px;
+}
+
+.ready-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ui-success);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--ui-success) 12%, transparent);
+}
+
+.login-access {
+  padding: 52px;
+  display: grid;
+  place-items: center;
+  background: var(--ui-surface);
+}
+
+.login-form-wrap {
+  width: min(100%, 360px);
+}
+
+.login-form-wrap header {
+  margin-bottom: 32px;
+}
+
+.login-form-wrap h2 {
+  margin: 9px 0 7px;
+  color: var(--ui-text);
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.login-form-wrap header p {
+  margin: 0;
+  color: var(--ui-text-muted);
+  font-size: 13px;
+}
+
+form {
+  display: grid;
+  gap: 9px;
+}
+
+label {
+  margin-top: 7px;
   color: var(--ui-text);
   font-size: 13px;
   font-weight: 650;
 }
 
-.login-input {
-  height: 50px;
-  padding: 0 20px;
+.field-shell {
+  height: 46px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   border: 1px solid var(--ui-border);
   border-radius: var(--ui-radius-pill);
   background: var(--ui-surface);
-  color: var(--ui-text);
-  outline: 0;
+  color: var(--ui-text-muted);
+  transition: border-color 160ms ease, box-shadow 160ms ease;
 }
 
-.login-input:focus {
-  border-color: var(--ui-accent);
+.field-shell:focus-within {
+  border-color: var(--ui-primary);
   box-shadow: var(--ui-focus);
 }
 
-.login-submit {
-  height: 50px;
-  margin-top: 16px;
+.field-shell svg {
+  width: 19px;
+  height: 19px;
+  flex: 0 0 19px;
+}
+
+input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ui-text);
+  font-size: 14px;
+}
+
+button {
+  height: 46px;
+  margin-top: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
   border: 0;
   border-radius: var(--ui-radius-pill);
   background: var(--ui-primary-solid);
   color: #fff;
-  font-size: 16px;
   font-weight: 700;
   cursor: pointer;
+  transition: background-color 160ms ease;
 }
 
-.login-submit:hover:not(:disabled) {
-  background: var(--ui-primary-hover);
+button:hover:not(:disabled) { background: var(--ui-primary-hover); }
+button:disabled { opacity: .58; cursor: not-allowed; }
+button svg { width: 18px; height: 18px; }
+
+.login-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, .36);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
 }
 
-.login-submit:disabled {
-  opacity: .58;
-  cursor: not-allowed;
-}
-
-.login-footnote {
-  margin: 14px 0 0;
-  color: var(--ui-muted);
+.login-form-wrap footer {
+  margin-top: 30px;
+  color: var(--ui-text-muted);
+  font-family: "v-mono", ui-monospace, monospace;
   font-size: 12px;
   text-align: center;
-}
-
-.login-preview-wrap {
-  width: min(760px, 100%);
-  margin: 48px auto 0;
 }
 
 .password-change-form {
@@ -414,21 +638,23 @@ async function redirectAfterLogin() {
   color: var(--ui-text);
 }
 
-@media (max-width: 640px) {
-  .login-landing {
-    padding: 20px 16px 36px;
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 800px) {
+  .login-page {
+    width: min(520px, calc(100% - 24px));
+    min-height: 0;
+    grid-template-columns: 1fr;
   }
 
-  .login-hero {
-    margin-top: 40px;
+  .login-identity {
+    min-height: 210px;
+    padding: 24px;
   }
 
-  .login-hero h1 {
-    font-size: 26px;
-  }
-
-  .login-preview-wrap {
-    margin-top: 32px;
-  }
+  .identity-copy h1 { font-size: 28px; }
+  .identity-copy p { display: none; }
+  .signal-panel { display: none; }
+  .login-access { padding: 32px 24px; }
 }
 </style>

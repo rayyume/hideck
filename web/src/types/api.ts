@@ -338,7 +338,6 @@ export type DiscoveredDevicesResponse = {
 export type DashboardDevice = {
   id: string
   name?: string
-  iface?: string
   healthy: boolean
   operator?: string
   network_mode?: string
