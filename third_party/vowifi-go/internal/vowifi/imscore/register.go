@@ -419,11 +419,19 @@ func (s *Service) applyRegistrationFailureStatus(err error) {
 		result = attemptErr.result
 	}
 	errors.As(err, &responseErr)
-	transportFailure := result.statusCode == 0
+	// The AKA challenge leaves its 401 in the attempt result, so a follow-up
+	// request that never gets a final response would be classified from that
+	// stale status and rejected as permanent for 10 minutes, tearing the
+	// session down instead of retrying in 5s.
+	transportFailure := result.statusCode == 0 || registerAttemptTransportFailure(err)
 	if responseErr != nil {
 		result.statusCode = responseErr.statusCode
 		result.retryAfter = responseErr.retryAfter
 		result.minExpires = responseErr.minExpires
+	} else if transportFailure {
+		result.statusCode = 0
+		result.retryAfter = 0
+		result.minExpires = 0
 	}
 	outcome := decideRegisterFailureOutcome(
 		time.Now(), result, s.cfg.IMSRegisterTemplate.RegisterPolicy, transportFailure,

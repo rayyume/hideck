@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/emiago/sipgo/sip"
 	enginesim "github.com/iniwex5/vowifi-go/engine/sim"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/policy"
 )
@@ -57,6 +58,22 @@ func decideRegisterFailureOutcome(
 		return permanentRegisterFailure(now, "permanent", 10*time.Minute)
 	}
 	return outcome
+}
+
+// errProtectedFlowNeedsFreshPorts abandons an attempt whose SA was re-issued on
+// client ports that are still draining, so the next attempt can offer new ones.
+var errProtectedFlowNeedsFreshPorts = errors.New(
+	"imscore: protected IPsec SA re-issued on client ports still in use",
+)
+
+// registerAttemptTransportFailure reports whether the attempt failed below the
+// SIP response level, leaving the registrar's own verdict unknown. RFC 3261
+// 17.1.2 makes a timed-out or transport-failed client transaction a transport
+// failure, which retries, rather than a rejection.
+func registerAttemptTransportFailure(err error) bool {
+	return errors.Is(err, sip.ErrTransactionTimeout) ||
+		errors.Is(err, sip.ErrTransactionTransport) ||
+		errors.Is(err, errProtectedFlowNeedsFreshPorts)
 }
 
 func permanentRegisterFailure(now time.Time, reason string, delay time.Duration) registerFailureOutcome {

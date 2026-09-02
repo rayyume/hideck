@@ -4,12 +4,14 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/emiago/sipgo/sip"
 	enginesim "github.com/iniwex5/vowifi-go/engine/sim"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/policy"
 )
@@ -247,6 +249,57 @@ func TestDecideRegisterFailureOutcome(t *testing.T) {
 	useProxy := decideRegisterFailureOutcome(now, registerAttemptResult{statusCode: 305}, registerPolicy, false)
 	if useProxy.kind != registrationRejectedTemporary || useProxy.reason != "use_proxy" {
 		t.Fatalf("305 outcome = %+v", useProxy)
+	}
+}
+
+// A REGISTER that follows an AKA challenge and never gets answered must retry.
+// Classifying it from the challenge's 401 rejected the registrar as permanent
+// for 10 minutes and rebuilt the whole session instead.
+func TestUnansweredRegisterAfterChallengeRetriesAsTransportFailure(t *testing.T) {
+	service, err := New(registerTransportTestConfig("tcp", "127.0.0.1:5060"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer service.StopCurrent()
+
+	challenged := registerAttemptResult{statusCode: 401, challengeCount: 1, secAgree: true}
+	for _, lost := range []error{sip.ErrTransactionTimeout, sip.ErrTransactionTransport} {
+		attemptErr := &registerAttemptError{
+			result: challenged,
+			err:    fmt.Errorf("imscore: REGISTER CSeq 6 transaction: %w", lost),
+		}
+		service.reRegisterPending.Store(false)
+		service.applyRegistrationFailureStatus(attemptErr)
+
+		if !service.reRegisterPending.Load() {
+			t.Fatalf("%v: registration was not retried", lost)
+		}
+		if status := service.StatusCurrent().RegStatus; status != "RejectedTemporary" {
+			t.Fatalf("%v: reg status = %q, want RejectedTemporary", lost, status)
+		}
+		service.mu.Lock()
+		next := service.nextRegister
+		service.mu.Unlock()
+		if wait := time.Until(next); wait > time.Minute {
+			t.Fatalf("%v: next REGISTER in %s, want a short transport retry", lost, wait)
+		}
+	}
+
+	// A real rejection must still back off instead of retrying at once.
+	rejected := &registerAttemptError{
+		result: registerAttemptResult{statusCode: 401, challengeCount: 1},
+		err:    &registerResponseError{statusCode: 403},
+	}
+	service.reRegisterPending.Store(true)
+	service.applyRegistrationFailureStatus(rejected)
+	if service.reRegisterPending.Load() {
+		t.Fatal("a 403 rejection was retried like a lost transaction")
+	}
+	service.mu.Lock()
+	next := service.nextRegister
+	service.mu.Unlock()
+	if wait := time.Until(next); wait < time.Minute {
+		t.Fatalf("next REGISTER after 403 in %s, want a long back-off", wait)
 	}
 }
 
