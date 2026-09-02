@@ -100,6 +100,11 @@ type messagingRuntime struct {
 	mtSMSSeenMu sync.Mutex
 	mtSMSSeen   map[string]time.Time
 
+	// RP-SMMA has no MO message to correlate, so its Call-IDs live here
+	// instead of smsPending; the network still reports on it (24.341 5.3.2.5).
+	smmaSentMu sync.Mutex
+	smmaSent   map[string]time.Time
+
 	moSelfHealLastAt atomic.Int64
 	smmaPromptLastAt atomic.Int64
 	lastMTAckMu      sync.Mutex

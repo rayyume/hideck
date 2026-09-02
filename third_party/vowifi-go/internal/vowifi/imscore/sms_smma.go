@@ -90,8 +90,11 @@ func (s *Service) dispatchRPSMMA(target string, rpMR byte) error {
 		return err
 	}
 	traceID := common.NewTraceID()
+	callID := outboundRequestCallID(request)
+	s.rememberRPSMMA(callID)
 	logging.RunDebug("IMS RP-SMMA send",
-		"trace_id", traceID, "target", request.Recipient.String(), "rp_mr", int(rpMR))
+		"trace_id", traceID, "target", request.Recipient.String(),
+		"rp_mr", int(rpMR), "call_id", callID)
 	ctx, cancel := context.WithTimeout(common.WithTraceID(context.Background(), traceID), inboundSMSAckTimeout)
 	defer cancel()
 	result, dispatchErr := s.dispatchOutboundMESSAGEWithCallbacks(outboundDispatchOptions{
@@ -99,6 +102,39 @@ func (s *Service) dispatchRPSMMA(target string, rpMR byte) error {
 		Timeout: inboundSMSAckTimeout,
 	})
 	return rpReportTransactionError(result.SIPCode, dispatchErr)
+}
+
+// rememberRPSMMA records the Call-ID of an RP-SMMA we sent. The network
+// acknowledges RP-SMMA with its own RP-ACK/RP-ERROR MESSAGE (24.341 5.3.2.5),
+// and that report carries no MO part, so without this record it looks
+// unsolicited and gets rejected with 488.
+func (s *Service) rememberRPSMMA(callID string) {
+	key := normalizeSMSCallID(callID)
+	if s == nil || key == "" {
+		return
+	}
+	now := time.Now()
+	s.smmaSentMu.Lock()
+	defer s.smmaSentMu.Unlock()
+	for sent, at := range s.smmaSent {
+		if now.Sub(at) > pendingSMSReportMatchWindow {
+			delete(s.smmaSent, sent)
+		}
+	}
+	s.smmaSent[key] = now
+}
+
+// matchRPSMMAReport reports whether inReplyTo refers to an RP-SMMA we sent.
+// The record is kept so retransmissions of the same report still match.
+func (s *Service) matchRPSMMAReport(inReplyTo string) bool {
+	key := normalizeSMSCallID(inReplyTo)
+	if s == nil || key == "" {
+		return false
+	}
+	s.smmaSentMu.Lock()
+	defer s.smmaSentMu.Unlock()
+	at, ok := s.smmaSent[key]
+	return ok && time.Since(at) <= pendingSMSReportMatchWindow
 }
 
 func (s *Service) rpSMMATarget() (string, error) {

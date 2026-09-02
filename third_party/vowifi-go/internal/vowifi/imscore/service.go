@@ -58,6 +58,7 @@ func New(cfg *IMSConfig) (*Service, error) {
 			inboundSeen:    make(map[string]time.Time),
 			inboundSeenRsp: make(map[string]inboundRequestResponseMemo),
 			mtSMSSeen:      make(map[string]time.Time),
+			smmaSent:       make(map[string]time.Time),
 		},
 		fragmentState: fragmentState{
 			fragmentCache:          make(map[string][]*smsFragment),

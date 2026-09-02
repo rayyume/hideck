@@ -208,6 +208,33 @@ func TestReportPersistenceFailureDoesNotCompletePendingSend(t *testing.T) {
 	}
 }
 
+func TestReportForOurRPSMMAIsAccepted(t *testing.T) {
+	service, _, _ := newInboundSMSTestService(t)
+	smmaCallID := ""
+	service.transport.SetSendFn(func(raw string) error {
+		_, body, _ := strings.Cut(raw, "\r\n\r\n")
+		if smscodec.ClassifyRPDU([]byte(body)).Kind == smscodec.RPDUKindSMMA {
+			smmaCallID = rawSIPHeaderValue(raw, "Call-ID")
+		}
+		service.transport.DeliverResponse(registerResponseForRequest(raw, 202, nil))
+		return nil
+	})
+	if err := service.sendRPSMMA(); err != nil {
+		t.Fatal(err)
+	}
+	if smmaCallID == "" {
+		t.Fatal("RP-SMMA carried no Call-ID to correlate the report with")
+	}
+
+	// RP-SMMA has no MO part, so the report must still be accepted (24.341
+	// 5.3.2.5) rather than rejected as an unsolicited report.
+	response := dispatchDeliveryReport(t, service,
+		deliveryReportRequest([]byte{0x03, 0x51}, smmaCallID))
+	if !strings.HasPrefix(response, "SIP/2.0 200") {
+		t.Fatalf("report response = %q, want 200", response[:min(len(response), 24)])
+	}
+}
+
 func newDeliveryReportTestService(t *testing.T) (*Service, *captureIMSEventSubscriber, *memoryDeliveryStore, <-chan string) {
 	t.Helper()
 	bus := NewEventBus()

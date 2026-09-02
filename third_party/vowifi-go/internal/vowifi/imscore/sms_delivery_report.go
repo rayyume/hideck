@@ -39,6 +39,9 @@ func (s *Service) handleInboundRPReport(raw string, info smscodec.RPDUInfo, stat
 		rpCause: info.Cause, errorText: errorText,
 	}
 	inReplyTo := strings.TrimSpace(rawSIPHeaderValue(raw, "In-Reply-To"))
+	if s.matchRPSMMAReport(inReplyTo) {
+		return s.acknowledgeRPSMMAReport(raw, info)
+	}
 	matchedPending := false
 	if inReplyTo != "" {
 		s.outboundMu.Lock()
@@ -59,6 +62,19 @@ func (s *Service) handleInboundRPReport(raw string, info smscodec.RPDUInfo, stat
 		return inboundSIPResult{}, err
 	}
 	return inboundSIPResult{response: response}, recordErr
+}
+
+// acknowledgeRPSMMAReport answers the report the network returns for our
+// RP-SMMA. There is no MO part to mark, so it is accepted without touching the
+// delivery store.
+func (s *Service) acknowledgeRPSMMAReport(raw string, info smscodec.RPDUInfo) (inboundSIPResult, error) {
+	response, err := buildSIPRequestResponse(raw, 200)
+	if err != nil {
+		return inboundSIPResult{}, err
+	}
+	logging.RunDebug("IMS report for our RP-SMMA accepted",
+		"device", s.DeviceID(), "rp_mr", int(info.MR), "rp_cause", info.Cause)
+	return inboundSIPResult{response: response}, nil
 }
 
 func (s *Service) handleInboundTPStatusReport(raw string, rpMR byte, payload []byte) (inboundSIPResult, error) {
