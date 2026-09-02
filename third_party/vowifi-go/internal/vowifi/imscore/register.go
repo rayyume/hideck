@@ -127,6 +127,7 @@ func (s *Service) registerLocked(ctx context.Context) error {
 		s.signalingFailureReason = err.Error()
 		s.sipOutboundKeepalive = false
 		s.sipOutbound = false
+		s.outboundBindingRequired = false
 		s.outboundContactOffered = false
 		s.outboundContactRegistered = false
 		s.flowTimer = 0
@@ -726,7 +727,7 @@ func (s *Service) needsOutboundBindingRefresh() bool {
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.sipOutbound && !s.outboundContactRegistered
+	return s.sipOutbound && s.outboundBindingRequired && !s.outboundContactRegistered
 }
 
 func withOutboundContactParams(order []string) []string {
