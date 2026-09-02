@@ -23,8 +23,10 @@ const (
 	imsSMSAcceptContact      = `*;+g.3gpp.smsip;+g.3gpp.icsi-ref="urn%3Aurn-7%3A3gpp-service.ims.icsi.sms"`
 	imsSMSContentDisposition = "signal;handling=required"
 	rpCauseTemporaryFailure  = byte(41)
-	// TS 24.341 5.3.2.3: MT RP-DATA is accepted with SIP 202, then RP-ACK
-	// is sent in a separate MESSAGE. RP-ACK/RP-ERROR of our MO stay 200.
+	// TS 24.341 5.3.2.3 / B.6-4: MT RP-DATA gets a body-less RFC 3428
+	// response (RFC 3428 7: 2xx to MESSAGE MUST NOT carry a body), then
+	// RP-ACK/RP-ERROR goes in a separate MESSAGE (5.3.2.4, B.6-7).
+	// RP-ACK/RP-ERROR of our MO stay 200.
 	inboundRPDataSIPStatus = 202
 	inboundSMSAckTimeout   = 10 * time.Second
 	inboundSMSFragmentTTL  = 3 * time.Minute
@@ -399,23 +401,17 @@ func (s *Service) buildInboundSMSControlRequest(inbound string, body []byte, rem
 	if strings.ContainsAny(remoteURI, "\r\n") {
 		return "", errors.New("IMS RP-ACK target is unavailable")
 	}
-	inboundCallID := inboundCallIDForReply(inbound)
-	if inboundCallID == "" && !omitInReplyTo {
+	callID := inboundCallIDForReply(inbound)
+	if callID == "" && !omitInReplyTo {
 		return "", errors.New("IMS RP-ACK In-Reply-To is unavailable")
 	}
-	inReplyTo := inboundCallID
 	if omitInReplyTo {
-		inReplyTo = ""
+		callID = ""
 	}
-	// Reuse the MT Call-ID so originating iFC / IP-SM-GW affinity
-	// lands on the instance that stored this In-Reply-To session.
-	// A fresh Call-ID hashes to another worker and 24.341 5.3.3.4.1
-	// 488s even when In-Reply-To itself is correct.
 	return s.buildSMSMESSAGEWithOptions(smsMESSAGEOptions{
 		RemoteURI:     remoteURI,
 		Body:          body,
-		CallID:        inboundCallID,
-		InReplyTo:     inReplyTo,
+		InReplyTo:     callID,
 		ContentType:   contentType,
 		OmitBinaryCTE: omitBinaryCTE,
 		OmitInReplyTo: omitInReplyTo,

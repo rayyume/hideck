@@ -21,7 +21,6 @@ func (s *Service) buildSMSMESSAGE(remoteURI string, body []byte) (string, error)
 type smsMESSAGEOptions struct {
 	RemoteURI     string
 	Body          []byte
-	CallID        string
 	InReplyTo     string
 	ContentType   string
 	OmitBinaryCTE bool
@@ -43,18 +42,14 @@ func (s *Service) buildSMSMESSAGEWithOptions(options smsMESSAGEOptions) (string,
 	if strings.ContainsAny(inReplyTo, "\r\n") {
 		return "", errors.New("imscore: invalid SMS In-Reply-To")
 	}
-	callID := strings.TrimSpace(options.CallID)
-	if strings.ContainsAny(callID, "\r\n") {
-		return "", errors.New("imscore: invalid SMS Call-ID")
-	}
-	if callID == "" {
-		callID = newCallID()
-	}
 	profile, err := s.reserveRegisteredSIPProfile()
 	if err != nil {
 		return "", fmt.Errorf("imscore: SMS registered profile: %w", err)
 	}
 	branch := "z9hG4bK" + newBranch()
+	// RFC 3261 8.1.1.4: out-of-dialog request Call-ID is UAC-generated.
+	// 24.341 5.3.2.4 d) links to the MT via In-Reply-To, not Call-ID.
+	callID := newCallID()
 	var request strings.Builder
 	fmt.Fprintf(&request, "MESSAGE %s SIP/2.0\r\n", remoteURI)
 	fmt.Fprintf(&request, "Via: SIP/2.0/%s %s;rport;branch=%s\r\n", transportUpper(profile.Transport), profile.LocalAddress, branch)

@@ -12,6 +12,7 @@ import (
 type outboundMessageResult struct {
 	DispatchSeq uint64
 	SIPCode     int
+	Response    *sip.Response
 }
 
 type outboundMessageReply struct {

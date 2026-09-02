@@ -30,7 +30,7 @@ func (s *Service) runOutboundMessageDispatcher() {
 				},
 				true,
 			)
-			result := outboundMessageResult{DispatchSeq: seq}
+			result := outboundMessageResult{DispatchSeq: seq, Response: response}
 			if response != nil {
 				result.SIPCode = response.StatusCode
 			}

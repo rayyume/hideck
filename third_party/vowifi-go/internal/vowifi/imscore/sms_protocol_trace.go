@@ -144,7 +144,7 @@ func (s *Service) logInboundSMSProtocolTrace(raw string) {
 		"rp_cause_ie_bytes", trace.causeIEBytes, "rp_cause_diagnostic", trace.causeDiagnostic,
 		"rp_user_data_bytes", trace.rpUserDataBytes,
 		"tp_submit_report", trace.tpSubmitReport, "tp_fcs", trace.tpFCS,
-		"parse_error", traceErrorText(err))
+		"parse_error", traceErrorText(err), "headers", sipHeadersDebugText(raw))
 }
 
 func (s *Service) logRegisterSMSCapabilityTrace(response *sipResponse) {
@@ -227,14 +227,15 @@ func (s *Service) logRPReportProtocolTrace(
 	if !s.smsProtocolTraceEnabled() || request == nil {
 		return
 	}
-	outboundCallID := outboundRequestCallID(request)
-	inboundCallID := inboundCallIDForReply(report.Inbound)
+	fromURI := firstSIPHeaderURI(sipkit.FirstHeaderValue(request, "From", true))
 	logging.Debug("IMS SMS protocol trace: RP report write",
-		"device", s.DeviceID(), "call_id_hash", smsTraceToken(outboundCallID),
+		"device", s.DeviceID(), "call_id_hash", smsTraceToken(outboundRequestCallID(request)),
 		"cseq", sipkit.FirstHeaderValue(request, "CSeq", true),
 		"in_reply_to_hash", smsTraceToken(sipkit.FirstHeaderValue(request, "In-Reply-To", true)),
-		"inbound_call_id_hash", smsTraceToken(inboundCallID),
-		"session_call_id", strings.TrimSpace(outboundCallID) != "" && strings.TrimSpace(outboundCallID) == inboundCallID,
+		"inbound_call_id_hash", smsTraceToken(inboundCallIDForReply(report.Inbound)),
+		"from_scheme", strings.ToLower(strings.TrimSpace(strings.SplitN(fromURI, ":", 2)[0])),
+		"from_user_kind", smsTraceUserKind(sipURIUser(fromURI)),
+		"from_hash", smsTraceToken(fromURI),
 		"target_domain", strings.ToLower(strings.Trim(strings.TrimSpace(request.Recipient.Host), "[]")),
 		"target_user_kind", smsTraceUserKind(request.Recipient.User),
 		"preferred_service", sipkit.FirstHeaderValue(request, "P-Preferred-Service", true) != "",
@@ -244,6 +245,26 @@ func (s *Service) logRPReportProtocolTrace(
 		"transport", strings.ToLower(strings.TrimSpace(modeCtx.Transport)),
 		"rp_mr", int(report.RPMR), "sip_status", status,
 		"transaction_ok", sendErr == nil, "transaction_error", traceErrorText(sendErr))
+}
+
+// Redacted header dump of the RP report request and its final response,
+// so a 488 can be compared field by field against a 202 without a pcap.
+func (s *Service) logRPReportWireTrace(request *sip.Request, response *sip.Response) {
+	if !s.smsProtocolTraceEnabled() || request == nil {
+		return
+	}
+	responseText := ""
+	if response != nil {
+		responseText = sipHeadersDebugText(response.String())
+	}
+	logging.Debug("IMS SMS protocol trace: RP report wire",
+		"device", s.DeviceID(), "call_id_hash", smsTraceToken(outboundRequestCallID(request)),
+		"request", sipHeadersDebugText(request.String()), "response", responseText)
+}
+
+func sipHeadersDebugText(raw string) string {
+	headers, _, _ := strings.Cut(raw, "\r\n\r\n")
+	return sipDebugRawText(headers)
 }
 
 func traceErrorText(err error) string {

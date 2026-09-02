@@ -244,7 +244,7 @@ func TestResolveRpAckTargetsPrefersAssertedIdentity(t *testing.T) {
 	}
 }
 
-func TestRPReportRetriesServerErrorsNot488(t *testing.T) {
+func TestRPReportRetriesServerErrors(t *testing.T) {
 	service, _, _ := newInboundSMSTestService(t)
 	attempts := 0
 	service.transport.SetSendFn(func(raw string) error {
@@ -289,15 +289,15 @@ func TestRPAckHostOnlyKeepsInReplyToFirst(t *testing.T) {
 	if got := rawSIPHeaderValue(requests[0], "In-Reply-To"); got != "inbound-sms" {
 		t.Fatalf("host-only first In-Reply-To = %q", got)
 	}
-	if got := rawSIPHeaderValue(requests[0], "Call-ID"); got != "inbound-sms" {
-		t.Fatalf("host-only RP-ACK Call-ID = %q", got)
+	if got := rawSIPHeaderValue(requests[0], "Call-ID"); got == "" || got == "inbound-sms" {
+		t.Fatalf("host-only RP-ACK Call-ID = %q, want a fresh UAC Call-ID", got)
 	}
 	if got := strings.SplitN(requests[0], "\r\n", 2)[0]; got != "MESSAGE sip:ipsmms1mc06.ims.example SIP/2.0" {
 		t.Fatalf("Request-URI = %q", got)
 	}
 }
 
-func TestRPAckReusesInboundCallIDForSessionAffinity(t *testing.T) {
+func TestRPAckUsesFreshCallIDAndInReplyTo(t *testing.T) {
 	service, _, _ := newInboundSMSTestService(t)
 	var requests []string
 	service.transport.SetSendFn(func(raw string) error {
@@ -313,8 +313,10 @@ func TestRPAckReusesInboundCallIDForSessionAffinity(t *testing.T) {
 	if err != nil || len(requests) != 1 {
 		t.Fatalf("attempts=%d error=%v", len(requests), err)
 	}
-	if got := rawSIPHeaderValue(requests[0], "Call-ID"); got != "mt-session-3a@ipsmms1mc06.ims.example" {
-		t.Fatalf("Call-ID = %q", got)
+	// RFC 3261 8.1.1.4: Call-ID of a new out-of-dialog request is
+	// UAC-generated; 24.341 5.3.2.4 d) correlates via In-Reply-To.
+	if got := rawSIPHeaderValue(requests[0], "Call-ID"); got == "" || got == "mt-session-3a@ipsmms1mc06.ims.example" {
+		t.Fatalf("Call-ID = %q, want a fresh UAC Call-ID", got)
 	}
 	if got := rawSIPHeaderValue(requests[0], "In-Reply-To"); got != "mt-session-3a@ipsmms1mc06.ims.example" {
 		t.Fatalf("In-Reply-To = %q", got)
@@ -324,29 +326,55 @@ func TestRPAckReusesInboundCallIDForSessionAffinity(t *testing.T) {
 	}
 }
 
-func TestRPAckKeepsInReplyToAndStopsOn488(t *testing.T) {
+func TestRPAckRetries488WithSamePackaging(t *testing.T) {
 	service, _, _ := newInboundSMSTestService(t)
 	var requests []string
 	service.transport.SetSendFn(func(raw string) error {
 		requests = append(requests, raw)
-		service.transport.DeliverResponse(registerResponseForRequest(raw, 488, nil))
+		status := 488
+		if len(requests) == 2 {
+			status = 202
+		}
+		service.transport.DeliverResponse(registerResponseForRequest(raw, status, nil))
 		return nil
 	})
 	raw := inboundSMSRequest(t, imsSMSContentType, inboundRPData(t, 0x34, "+447700900123", "ack"))
 	err := service.sendRPReportWithRetryPolicy(rpReportRequest{
 		Inbound: raw, Body: smscodec.BuildRPAck(0x34), RPMR: 0x34,
 	}, 0, 0)
-	if rpReportRejectStatus(err) != 488 || len(requests) != 1 {
+	if err != nil || len(requests) != 2 {
 		t.Fatalf("attempts=%d error=%v", len(requests), err)
 	}
-	if got := rawSIPHeaderValue(requests[0], "In-Reply-To"); got != "inbound-sms" {
-		t.Fatalf("In-Reply-To = %q", got)
+	callIDs := map[string]bool{}
+	for _, request := range requests {
+		if got := rawSIPHeaderValue(request, "In-Reply-To"); got != "inbound-sms" {
+			t.Fatalf("In-Reply-To = %q", got)
+		}
+		callID := rawSIPHeaderValue(request, "Call-ID")
+		if callID == "" || callID == "inbound-sms" || callIDs[callID] {
+			t.Fatalf("Call-ID = %q, want a fresh UAC Call-ID per attempt", callID)
+		}
+		callIDs[callID] = true
+		if got := rawSIPHeaderValue(request, "Content-Transfer-Encoding"); got != "binary" {
+			t.Fatalf("CTE = %q", got)
+		}
 	}
-	if got := rawSIPHeaderValue(requests[0], "Call-ID"); got != "inbound-sms" {
-		t.Fatalf("Call-ID = %q", got)
-	}
-	if got := rawSIPHeaderValue(requests[0], "Content-Transfer-Encoding"); got != "binary" {
-		t.Fatalf("CTE = %q", got)
+}
+
+func TestRPAckGivesUpAfterRepeated488(t *testing.T) {
+	service, _, _ := newInboundSMSTestService(t)
+	attempts := 0
+	service.transport.SetSendFn(func(raw string) error {
+		attempts++
+		service.transport.DeliverResponse(registerResponseForRequest(raw, 488, nil))
+		return nil
+	})
+	raw := inboundSMSRequest(t, imsSMSContentType, inboundRPData(t, 0x35, "+447700900123", "ack"))
+	err := service.sendRPReportWithRetryPolicy(rpReportRequest{
+		Inbound: raw, Body: smscodec.BuildRPAck(0x35), RPMR: 0x35,
+	}, 0, 0)
+	if rpReportRejectStatus(err) != 488 || attempts != rpReportMaxAttempts {
+		t.Fatalf("attempts=%d error=%v", attempts, err)
 	}
 }
 
@@ -407,11 +435,13 @@ func TestRPAckDoesNotRotateToSMSCAfter488(t *testing.T) {
 		Inbound: raw, Body: smscodec.BuildRPAck(0x38), RPMR: 0x38,
 		ServiceCenter: "+447802002606",
 	}, 0, 0)
-	if rpReportRejectStatus(err) != 488 || len(requests) != 1 {
+	if rpReportRejectStatus(err) != 488 || len(requests) != rpReportMaxAttempts {
 		t.Fatalf("attempts=%d error=%v", len(requests), err)
 	}
-	if got := strings.SplitN(requests[0], "\r\n", 2)[0]; got != "MESSAGE sip:ipsmms1mc06.ims.example SIP/2.0" {
-		t.Fatalf("Request-URI = %q", got)
+	for _, request := range requests {
+		if got := strings.SplitN(request, "\r\n", 2)[0]; got != "MESSAGE sip:ipsmms1mc06.ims.example SIP/2.0" {
+			t.Fatalf("Request-URI = %q", got)
+		}
 	}
 }
 

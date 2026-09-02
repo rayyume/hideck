@@ -40,7 +40,11 @@ func (e *rpReportRejectError) Error() string {
 var errRPReportAborted = errors.New("imscore: RP report aborted because IMS is stopping")
 
 const (
-	rpReportInitialDelay = 0
+	// Let our 202 to the MT MESSAGE reach the IP-SM-GW before the RP-ACK
+	// does; the same IP-SM-GW instance has answered byte-identical RP-ACKs
+	// with 202 and 488 minutes apart, so ordering is the remaining
+	// variable. 24.011 TR1M leaves tens of seconds for the report.
+	rpReportInitialDelay = 500 * time.Millisecond
 	rpReportRetryDelay   = time.Second
 	rpReportMaxAttempts  = 4
 )
@@ -100,6 +104,7 @@ func (s *Service) sendRPReport(report rpReportRequest) error {
 	})
 	err = rpReportTransactionError(result.SIPCode, dispatchErr)
 	s.logRPReportProtocolTrace(request, modeCtx, report, result.SIPCode, err)
+	s.logRPReportWireTrace(request, result.Response)
 	if err != nil {
 		s.mtAckSendErr.Add(1)
 		s.recordMTAckAudit(audit, err)
@@ -189,7 +194,10 @@ func rpReportRetryable(err error) bool {
 	if status == 0 {
 		return true
 	}
-	return status == 408 || status >= 500
+	// 488 (24.341 5.3.3.4.1: In-Reply-To not correlated) is retried with
+	// the same packaging: an idempotent resend is harmless and a later
+	// 202 tells us the IP-SM-GW state was simply not ready yet.
+	return status == 408 || status == 488 || status >= 500
 }
 
 func specRPAckReport(report rpReportRequest) rpReportRequest {

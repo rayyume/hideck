@@ -63,8 +63,10 @@ func TestInboundSMSDeliversEventAndSendsRPAck(t *testing.T) {
 	if got := rawSIPHeaderValue(request, "In-Reply-To"); got != "inbound-sms" {
 		t.Fatalf("RP-ACK In-Reply-To = %q", got)
 	}
-	if got := rawSIPHeaderValue(request, "Call-ID"); got != "inbound-sms" {
-		t.Fatalf("RP-ACK Call-ID = %q, want inbound Call-ID for IP-SM-GW session affinity", got)
+	// RFC 3261 8.1.1.4 / 24.341 B.6-7: the RP-ACK MESSAGE is a new
+	// out-of-dialog request with its own Call-ID; In-Reply-To links it.
+	if got := rawSIPHeaderValue(request, "Call-ID"); got == "" || got == "inbound-sms" {
+		t.Fatalf("RP-ACK Call-ID = %q, want a fresh UAC Call-ID", got)
 	}
 	assertSMSOverIPServiceHeaders(t, request)
 	if got := rawSIPHeaderValue(request, "Content-Transfer-Encoding"); got != "binary" {
@@ -163,8 +165,8 @@ func TestInboundRPAckCopiesQuotedAndCompactCallID(t *testing.T) {
 			if got := rawSIPHeaderValue(request, "In-Reply-To"); got != test.want {
 				t.Fatalf("In-Reply-To = %q, want %q", got, test.want)
 			}
-			if got := rawSIPHeaderValue(request, "Call-ID"); got != test.want {
-				t.Fatalf("Call-ID = %q, want %q", got, test.want)
+			if got := rawSIPHeaderValue(request, "Call-ID"); got == "" || got == test.want {
+				t.Fatalf("Call-ID = %q, want a fresh UAC Call-ID", got)
 			}
 		})
 	}
