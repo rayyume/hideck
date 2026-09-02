@@ -146,10 +146,12 @@ test('fills a missing dashboard operator from the real managed device identity',
   const devices = [createDevice({ operator: '' })]
   const merged = mergeDashboardDeviceOperators(devices, [{
     id: 'modem-1',
+    interface: 'wwan0',
     modem: { native_spn: 'giffgaff' }
   }])
 
   assert.equal(merged[0]?.operator, 'giffgaff')
+  assert.equal(merged[0]?.iface, 'wwan0')
   assert.equal(devices[0]?.operator, '')
 })
 

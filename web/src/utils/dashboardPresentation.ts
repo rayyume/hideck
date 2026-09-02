@@ -30,6 +30,7 @@ export type DashboardDeviceFilter = Readonly<{
 
 export type DashboardOperatorSource = Readonly<{
   id: string
+  interface?: string
   modem?: Readonly<{
     operator?: string
     native_spn?: string
@@ -93,14 +94,20 @@ export function mergeDashboardDeviceOperators(
   devices: readonly DashboardDevice[],
   managedDevices: readonly DashboardOperatorSource[]
 ): DashboardDevice[] {
-  const operators = new Map(managedDevices.map((device) => [
+  const extras = new Map(managedDevices.map((device) => [
     device.id,
-    managedOperatorFallback(device.modem)
+    {
+      operator: managedOperatorFallback(device.modem),
+      iface: String(device.interface || '').trim()
+    }
   ]))
   return devices.map((device) => {
-    if (String(device.operator || '').trim()) return device
-    const operator = operators.get(device.id)
-    return operator ? { ...device, operator } : device
+    const extra = extras.get(device.id)
+    if (!extra) return device
+    const next = { ...device }
+    if (!String(next.operator || '').trim() && extra.operator) next.operator = extra.operator
+    if (!String(next.iface || '').trim() && extra.iface) next.iface = extra.iface
+    return next
   })
 }
 

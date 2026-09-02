@@ -6,6 +6,7 @@ const MIN_READABLE_FONT_SIZE = 12
 const globalStyles = await readFile(new URL('../src/style.css', import.meta.url), 'utf8')
 const dashboardTypographyFiles = [
   '../src/views/Dashboard.vue',
+  '../src/components/WorkspacePreviewCard.vue',
   '../src/components/DeviceCard.vue',
   '../src/components/ConnectionFocusStage.vue',
   '../src/components/TrafficAnalysisPanel.vue',

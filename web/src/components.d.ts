@@ -112,6 +112,7 @@ declare module 'vue' {
     TrafficAnalysisPanel: typeof import('./components/TrafficAnalysisPanel.vue')['default']
     WeComBotNotificationTab: typeof import('./components/settings/WeComBotNotificationTab.vue')['default']
     WeixinNotificationTab: typeof import('./components/settings/WeixinNotificationTab.vue')['default']
+    WorkspacePreviewCard: typeof import('./components/WorkspacePreviewCard.vue')['default']
     WorkspaceStage: typeof import('./components/WorkspaceStage.vue')['default']
   }
   export interface GlobalDirectives {
