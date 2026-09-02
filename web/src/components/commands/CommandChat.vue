@@ -192,7 +192,7 @@ const emit = defineEmits<{
 .chat-actions :deep(.el-button span) { display: inline-flex; align-items: center; gap: 6px; }
 .device-target { width: 220px; min-width: 0; grid-area: device; display: grid; gap: 5px; }
 .device-label { color: var(--ui-muted); font-size: var(--ui-font-caption); }
-.device-target :deep(.el-input__wrapper) { min-height: 36px; border-radius: var(--ui-radius-input); }
+.device-target :deep(.el-input__wrapper) { min-height: 36px; border-radius: 16px; }
 .sync-warning {
   min-width: 0;
   margin: 0;

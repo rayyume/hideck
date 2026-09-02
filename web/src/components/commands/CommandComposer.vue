@@ -156,7 +156,7 @@ function submit() {
 .quick-list .el-icon { font-size: 14px; }
 .input-row { display: grid; grid-template-columns: minmax(0, 1fr) 44px; gap: 8px; }
 .send-button { width: 44px; height: 40px; padding: 0; border-radius: var(--ui-radius-pill); }
-.input-row :deep(.el-input__wrapper) { min-height: 40px; border-radius: var(--ui-radius-input); }
+.input-row :deep(.el-input__wrapper) { min-height: 40px; border-radius: 16px; }
 .suggestions {
   position: absolute;
   z-index: 12;

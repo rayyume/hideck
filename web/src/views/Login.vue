@@ -535,7 +535,7 @@ label {
   align-items: center;
   gap: 10px;
   border: 1px solid var(--ui-border);
-  border-radius: var(--ui-radius-input);
+  border-radius: 16px;
   background: var(--ui-surface);
   color: var(--ui-text-muted);
   transition: border-color 160ms ease, box-shadow 160ms ease;
