@@ -6,6 +6,9 @@
 *.so
 *.dylib
 
+# Go workspace 校验和（由 go 命令自动改写，与代码变更无关）
+go.work.sum
+
 # 数据和日志目录
 /data/
 /logs/
