@@ -1005,13 +1005,74 @@ func (s *Session) InnerNetwork() InnerNetworkConfig {
 }
 
 func (s *Session) primaryInnerIP() net.IP {
-	if s.innerIPv6 != nil && s.innerIPv6.To4() == nil {
-		return s.innerIPv6
+	if s == nil {
+		return nil
 	}
-	if s.innerIP != nil {
-		return s.innerIP
+	ip, _ := InnerNetworkConfig{
+		IPv4: s.innerIP, IPv6: s.innerIPv6,
+		PrefixLen: s.innerPrefix, IPv6PrefixLen: s.innerIPv6Prefix,
+		PCSCF: s.pcscfServers,
+	}.PreferredIMSAddress()
+	return ip
+}
+
+// IPv6IMSSkipReason is empty when the IPv6 inner address can be used for IMS.
+// A non-empty value is why REGISTER must not bind that IPv6 (detect before Contact).
+func (inner InnerNetworkConfig) IPv6IMSSkipReason() string {
+	if inner.IPv6 == nil || inner.IPv6.To4() != nil {
+		return "no_ipv6"
 	}
-	return s.innerIPv6
+	if inner.IPv6.IsUnspecified() || inner.IPv6.IsLinkLocalUnicast() || inner.IPv6.IsMulticast() {
+		return "ipv6_not_unicast"
+	}
+	if inner.hasPCSCFFamily(false) {
+		return ""
+	}
+	if inner.hasPCSCFFamily(true) {
+		return "no_ipv6_pcscf"
+	}
+	return ""
+}
+
+func (inner InnerNetworkConfig) ipv4IMSSkipReason() string {
+	if inner.IPv4.To4() == nil {
+		return "no_ipv4"
+	}
+	if inner.hasPCSCFFamily(true) {
+		return ""
+	}
+	if inner.hasPCSCFFamily(false) {
+		return "no_ipv4_pcscf"
+	}
+	return ""
+}
+
+func (inner InnerNetworkConfig) hasPCSCFFamily(ipv4 bool) bool {
+	for _, server := range inner.PCSCF {
+		if server == nil {
+			continue
+		}
+		if (server.To4() != nil) == ipv4 {
+			return true
+		}
+	}
+	return false
+}
+
+// PreferredIMSAddress is the IMS bind/Contact address. Dual-stack still
+// prefers IPv6 when it is usable; IPv4 is only used when IPv6 cannot
+// register (no matching P-CSCF, or not a unicast address).
+func (inner InnerNetworkConfig) PreferredIMSAddress() (net.IP, int) {
+	if inner.IPv6IMSSkipReason() == "" && inner.IPv6 != nil && inner.IPv6.To4() == nil {
+		return inner.IPv6, inner.IPv6PrefixLen
+	}
+	if inner.ipv4IMSSkipReason() == "" && inner.IPv4.To4() != nil {
+		return inner.IPv4, inner.PrefixLen
+	}
+	if inner.IPv4.To4() != nil {
+		return inner.IPv4, inner.PrefixLen
+	}
+	return inner.IPv6, inner.IPv6PrefixLen
 }
 
 // InnerPacketIO returns the packet boundary for the user-space IMS stack.

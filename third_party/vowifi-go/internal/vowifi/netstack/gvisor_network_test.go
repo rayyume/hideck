@@ -11,9 +11,12 @@ import (
 
 	"github.com/iniwex5/vowifi-go/internal/vowifi/ipsec3gpp"
 	"gvisor.dev/gvisor/pkg/tcpip"
+	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
 	"gvisor.dev/gvisor/pkg/tcpip/header"
+	"gvisor.dev/gvisor/pkg/tcpip/link/loopback"
 	"gvisor.dev/gvisor/pkg/tcpip/network/ipv4"
 	"gvisor.dev/gvisor/pkg/tcpip/network/ipv6"
+	"gvisor.dev/gvisor/pkg/tcpip/stack"
 	"gvisor.dev/gvisor/pkg/tcpip/transport/tcp"
 	"gvisor.dev/gvisor/pkg/waiter"
 )
@@ -141,6 +144,68 @@ func TestIMSLinkMTUClampsIPv4TCPSegments(t *testing.T) {
 	}
 }
 
+func TestListenTCPWithMSSEnablesKeepaliveOnAccept(t *testing.T) {
+	networkStack := newStack()
+	defer networkStack.Destroy()
+	if err := networkStack.CreateNIC(1, loopback.New()); err != nil {
+		t.Fatalf("CreateNIC: %s", err)
+	}
+	addr := tcpip.AddrFrom4([4]byte{10, 0, 0, 1})
+	if err := networkStack.AddProtocolAddress(1, tcpip.ProtocolAddress{
+		Protocol:          ipv4.ProtocolNumber,
+		AddressWithPrefix: tcpip.AddressWithPrefix{Address: addr, PrefixLen: 32},
+	}, stack.AddressProperties{}); err != nil {
+		t.Fatalf("AddProtocolAddress: %s", err)
+	}
+	networkStack.SetRouteTable([]tcpip.Route{{
+		Destination: header.IPv4EmptySubnet, NIC: 1,
+	}})
+
+	listener, err := listenTCPWithMSS(networkStack, tcpip.FullAddress{NIC: 1, Addr: addr, Port: 0}, ipv4.ProtocolNumber)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	imsListener, ok := listener.(*imsTCPListener)
+	if !ok {
+		t.Fatalf("listener type %T", listener)
+	}
+	local, ok := listener.Addr().(*net.TCPAddr)
+	if !ok || local.Port == 0 {
+		t.Fatalf("listener addr = %v", listener.Addr())
+	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		conn, err := gonet.DialTCP(networkStack, tcpip.FullAddress{
+			NIC: 1, Addr: addr, Port: uint16(local.Port),
+		}, ipv4.ProtocolNumber)
+		if err != nil {
+			errCh <- err
+			return
+		}
+		errCh <- nil
+		time.Sleep(100 * time.Millisecond)
+		_ = conn.Close()
+	}()
+
+	_, endpoint, err := imsListener.acceptTCP()
+	if err != nil {
+		t.Fatalf("acceptTCP: %v", err)
+	}
+	defer endpoint.Close()
+	if dialErr := <-errCh; dialErr != nil {
+		t.Fatalf("DialTCP: %v", dialErr)
+	}
+	if !endpoint.SocketOptions().GetKeepAlive() {
+		t.Fatal("accepted IMS TCP keepalive was not enabled")
+	}
+	var idle tcpip.KeepaliveIdleOption
+	if err := endpoint.GetSockOpt(&idle); err != nil || time.Duration(idle) != imsTCPKeepaliveIdle {
+		t.Fatalf("accepted keepalive idle = %s, err = %v", time.Duration(idle), err)
+	}
+}
+
 func TestConfigureIMSTCPKeepalive(t *testing.T) {
 	networkStack := newStack()
 	defer networkStack.Close()
@@ -158,11 +223,11 @@ func TestConfigureIMSTCPKeepalive(t *testing.T) {
 		t.Fatal("IMS TCP keepalive was not enabled")
 	}
 	var idle tcpip.KeepaliveIdleOption
-	if err := endpoint.GetSockOpt(&idle); err != nil || time.Duration(idle) != imsTCPKeepalivePeriod {
+	if err := endpoint.GetSockOpt(&idle); err != nil || time.Duration(idle) != imsTCPKeepaliveIdle {
 		t.Fatalf("keepalive idle = %s, err = %v", time.Duration(idle), err)
 	}
 	var interval tcpip.KeepaliveIntervalOption
-	if err := endpoint.GetSockOpt(&interval); err != nil || time.Duration(interval) != imsTCPKeepalivePeriod {
+	if err := endpoint.GetSockOpt(&interval); err != nil || time.Duration(interval) != imsTCPKeepaliveInterval {
 		t.Fatalf("keepalive interval = %s, err = %v", time.Duration(interval), err)
 	}
 	probes, err := endpoint.GetSockOptInt(tcpip.KeepaliveCountOption)

@@ -63,6 +63,9 @@ func TestInboundSMSDeliversEventAndSendsRPAck(t *testing.T) {
 	if got := rawSIPHeaderValue(request, "In-Reply-To"); got != "inbound-sms" {
 		t.Fatalf("RP-ACK In-Reply-To = %q", got)
 	}
+	if got := rawSIPHeaderValue(request, "Call-ID"); got != "inbound-sms" {
+		t.Fatalf("RP-ACK Call-ID = %q, want inbound Call-ID for IP-SM-GW session affinity", got)
+	}
 	assertSMSOverIPServiceHeaders(t, request)
 	if got := rawSIPHeaderValue(request, "Content-Transfer-Encoding"); got != "binary" {
 		t.Fatalf("RP-ACK Content-Transfer-Encoding = %q", got)
@@ -93,7 +96,7 @@ func TestInboundRPAckTargetsAssertedIPSMGW(t *testing.T) {
 	}
 }
 
-func TestInboundRPAckPrefersContactOverFrom(t *testing.T) {
+func TestInboundRPAckUsesFromWhenPAIMissing(t *testing.T) {
 	service, _, outbound := newInboundSMSTestService(t)
 	raw := inboundSMSRequest(t, imsSMSContentType, inboundRPData(t, 0x36, "+447700900123", "hello"))
 	raw = strings.Replace(raw, "To: <sip:234102356143376@ims.example>\r\n",
@@ -103,7 +106,7 @@ func TestInboundRPAckPrefersContactOverFrom(t *testing.T) {
 		t.Fatal(err)
 	}
 	request := waitForOutboundSMSControl(t, outbound)
-	if !strings.HasPrefix(request, "MESSAGE sip:ipsmgw-term@ims.example;transport=tcp SIP/2.0") {
+	if !strings.HasPrefix(request, "MESSAGE sip:+447802002606@ims.example SIP/2.0") {
 		t.Fatalf("RP-ACK request target = %q", strings.SplitN(request, "\r\n", 2)[0])
 	}
 }
@@ -159,6 +162,9 @@ func TestInboundRPAckCopiesQuotedAndCompactCallID(t *testing.T) {
 			request := waitForOutboundSMSControl(t, outbound)
 			if got := rawSIPHeaderValue(request, "In-Reply-To"); got != test.want {
 				t.Fatalf("In-Reply-To = %q, want %q", got, test.want)
+			}
+			if got := rawSIPHeaderValue(request, "Call-ID"); got != test.want {
+				t.Fatalf("Call-ID = %q, want %q", got, test.want)
 			}
 		})
 	}

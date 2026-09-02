@@ -140,6 +140,17 @@ func TestCPConfigPreservesAddressFamiliesAndOrder(t *testing.T) {
 	}
 }
 
+func TestCPConfigSplitsConcatenated3GPPPCSCFIPv6(t *testing.T) {
+	first := net.ParseIP("2001:db8::10").To16()
+	second := net.ParseIP("2001:db8::11").To16()
+	config := ParseCPConfig(&EncryptedPayloadCP{CFGType: CFG_REPLY, Attributes: []*CPAttribute{
+		{Type: ASSIGNED_PCSCF_IP6_ADDRESS, Value: append(append([]byte(nil), first...), second...)},
+	}})
+	if len(config.IPv6PCSCF) != 2 || !config.IPv6PCSCF[0].Equal(first) || !config.IPv6PCSCF[1].Equal(second) {
+		t.Fatalf("IPv6 P-CSCF = %v", config.IPv6PCSCF)
+	}
+}
+
 func TestNATDetectionOriginalKnownVector(t *testing.T) {
 	want, _ := hex.DecodeString("d798d986143f878f70765e0e869c80bbc375f701")
 	got := CalculateNATDetectionHash(

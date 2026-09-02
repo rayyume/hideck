@@ -377,6 +377,7 @@ func (s *Service) publishInboundSMSWithFragment(
 func (s *Service) rpReportForInbound(raw string, message inboundSMS, rpdu []byte) rpReportRequest {
 	report := rpReportRequest{
 		Inbound: raw, Body: rpdu, RPMR: message.rpMR,
+		ServiceCenter: message.serviceCenter,
 	}
 	if message.msisdnLess && strings.TrimSpace(message.deliveryReportTo) != "" {
 		if contentType, body, err := buildMSISDNLessSMSPayload(shortMessageInfo{To: message.deliveryReportTo}, rpdu); err == nil {
@@ -390,30 +391,31 @@ func (s *Service) rpReportForInbound(raw string, message inboundSMS, rpdu []byte
 func (s *Service) buildInboundSMSControlRequest(inbound string, body []byte, remoteURI, contentType string, omitBinaryCTE, omitInReplyTo bool) (string, error) {
 	remoteURI = strings.TrimSpace(remoteURI)
 	if remoteURI == "" {
-		targets := resolveRpAckTargets(
-			rawSIPHeaderValue(inbound, "P-Asserted-Identity"),
-			rawSIPHeaderValue(inbound, "From"),
-			rawSIPHeaderValue(inbound, "Contact"),
-		)
-		if len(targets) == 0 {
-			return "", errors.New("IMS RP-ACK target is unavailable")
-		}
-		remoteURI = targets[0]
+		remoteURI = specRPAckURI(rpReportRequest{Inbound: inbound})
+	}
+	if remoteURI == "" {
+		return "", errors.New("IMS RP-ACK target is unavailable")
 	}
 	if strings.ContainsAny(remoteURI, "\r\n") {
 		return "", errors.New("IMS RP-ACK target is unavailable")
 	}
-	callID := inboundCallIDForReply(inbound)
-	if callID == "" && !omitInReplyTo {
+	inboundCallID := inboundCallIDForReply(inbound)
+	if inboundCallID == "" && !omitInReplyTo {
 		return "", errors.New("IMS RP-ACK In-Reply-To is unavailable")
 	}
+	inReplyTo := inboundCallID
 	if omitInReplyTo {
-		callID = ""
+		inReplyTo = ""
 	}
+	// Reuse the MT Call-ID so originating iFC / IP-SM-GW affinity
+	// lands on the instance that stored this In-Reply-To session.
+	// A fresh Call-ID hashes to another worker and 24.341 5.3.3.4.1
+	// 488s even when In-Reply-To itself is correct.
 	return s.buildSMSMESSAGEWithOptions(smsMESSAGEOptions{
 		RemoteURI:     remoteURI,
 		Body:          body,
-		InReplyTo:     callID,
+		CallID:        inboundCallID,
+		InReplyTo:     inReplyTo,
 		ContentType:   contentType,
 		OmitBinaryCTE: omitBinaryCTE,
 		OmitInReplyTo: omitInReplyTo,

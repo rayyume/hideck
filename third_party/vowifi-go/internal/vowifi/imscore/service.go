@@ -396,6 +396,7 @@ func (s *Service) StopCurrent() {
 		close(s.stop)
 	}
 	s.stopInboundStatsLogger()
+	s.cancelPortSReconnectWatch()
 	s.clearPendingSMS()
 	s.getIMSEventBus().close()
 	s.mu.Lock()

@@ -227,11 +227,14 @@ func (s *Service) logRPReportProtocolTrace(
 	if !s.smsProtocolTraceEnabled() || request == nil {
 		return
 	}
+	outboundCallID := outboundRequestCallID(request)
+	inboundCallID := inboundCallIDForReply(report.Inbound)
 	logging.Debug("IMS SMS protocol trace: RP report write",
-		"device", s.DeviceID(), "call_id_hash", smsTraceToken(request.CallID().Value()),
+		"device", s.DeviceID(), "call_id_hash", smsTraceToken(outboundCallID),
 		"cseq", sipkit.FirstHeaderValue(request, "CSeq", true),
 		"in_reply_to_hash", smsTraceToken(sipkit.FirstHeaderValue(request, "In-Reply-To", true)),
-		"inbound_call_id_hash", smsTraceToken(rawSIPHeaderValue(report.Inbound, "Call-ID")),
+		"inbound_call_id_hash", smsTraceToken(inboundCallID),
+		"session_call_id", strings.TrimSpace(outboundCallID) != "" && strings.TrimSpace(outboundCallID) == inboundCallID,
 		"target_domain", strings.ToLower(strings.Trim(strings.TrimSpace(request.Recipient.Host), "[]")),
 		"target_user_kind", smsTraceUserKind(request.Recipient.User),
 		"preferred_service", sipkit.FirstHeaderValue(request, "P-Preferred-Service", true) != "",

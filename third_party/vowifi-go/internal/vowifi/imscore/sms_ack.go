@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/emiago/sipgo/sip"
-	"github.com/iniwex5/vowifi-go/internal/smscodec"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/common"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/logging"
 )
@@ -21,6 +20,7 @@ type rpReportRequest struct {
 	Fingerprint   string
 	RemoteURI     string
 	ContentType   string
+	ServiceCenter string
 	OmitBinaryCTE bool
 	OmitInReplyTo bool
 }
@@ -72,6 +72,7 @@ func (s *Service) recordMTAckAudit(audit mtAckAudit, err error) {
 }
 
 func (s *Service) sendRPReport(report rpReportRequest) error {
+	report = specRPAckReport(report)
 	request, err := s.buildRPAckMESSAGE(report.Inbound, report.Body, report.RemoteURI, report.ContentType, report.OmitBinaryCTE, report.OmitInReplyTo)
 	if err != nil {
 		s.mtAckSendErr.Add(1)
@@ -154,40 +155,27 @@ func (s *Service) sendRPReportWithRetryPolicy(
 	if !s.waitSMSRetryDelay(initialDelay) {
 		return errRPReportAborted
 	}
-	current := report
-	if targets := report.ackTargets(); len(targets) > 0 {
-		current.RemoteURI = targets[0]
-	}
+	current := specRPAckReport(report)
 	delay := retryDelay
-	attempts := 0
 	var lastErr error
-	for _, variant := range rpAckRequestVariants(current) {
-		for {
-			if attempts > 0 && delay > 0 && !s.waitSMSRetryDelay(delay) {
-				if lastErr != nil {
-					return lastErr
-				}
-				return errRPReportAborted
-			}
-			attempts++
-			lastErr = s.sendRPReport(variant)
-			if lastErr == nil {
-				return nil
-			}
-			if rpReportFallbackStatus(lastErr) {
-				// Next packing must go out on the same IP-SM-GW
-				// transaction. Waiting here turned a 488 into 481.
-				delay = 0
-				break
-			}
-			if !rpReportRetryable(lastErr) || attempts >= rpReportMaxAttempts {
+	for attempt := 1; attempt <= rpReportMaxAttempts; attempt++ {
+		if attempt > 1 && delay > 0 && !s.waitSMSRetryDelay(delay) {
+			if lastErr != nil {
 				return lastErr
 			}
-			if delay <= 0 {
-				delay = retryDelay
-			} else {
-				delay *= 2
-			}
+			return errRPReportAborted
+		}
+		lastErr = s.sendRPReport(current)
+		if lastErr == nil {
+			return nil
+		}
+		if !rpReportRetryable(lastErr) {
+			return lastErr
+		}
+		if delay <= 0 {
+			delay = retryDelay
+		} else {
+			delay *= 2
 		}
 	}
 	return lastErr
@@ -204,94 +192,27 @@ func rpReportRetryable(err error) bool {
 	return status == 408 || status >= 500
 }
 
-func rpReportFallbackStatus(err error) bool {
-	switch rpReportRejectStatus(err) {
-	case 406, 415, 481, 488:
-		return true
-	default:
-		return false
-	}
+func specRPAckReport(report rpReportRequest) rpReportRequest {
+	report.RemoteURI = specRPAckURI(report)
+	report.OmitInReplyTo = false
+	report.OmitBinaryCTE = false
+	return report
 }
 
-func rpAckRequestVariants(report rpReportRequest) []rpReportRequest {
-	var variants []rpReportRequest
-	for _, uri := range rpAckURICandidates(report) {
-		withURI := report
-		withURI.RemoteURI = uri
-		// 24.341 5.3.2.4: In-Reply-To is shall on the first attempt.
-		// Live Vodafone host-only IP-SM-GW 481s an omitted In-Reply-To.
-		variants = append(variants, withURI)
-		if extra := rpAckDeliverReportVariant(withURI); extra != nil {
-			variants = append(variants, *extra)
-		}
-		if !withURI.OmitInReplyTo {
-			withoutIRT := withURI
-			withoutIRT.OmitInReplyTo = true
-			variants = append(variants, withoutIRT)
-		}
-		if !withURI.OmitBinaryCTE {
-			withoutCTE := withURI
-			withoutCTE.OmitBinaryCTE = true
-			variants = append(variants, withoutCTE)
+// specRPAckURI is TS 24.341 5.3.2.4 a) / NOTE 1: Request-URI is the
+// IP-SM-GW from P-Asserted-Identity of the delivered MESSAGE. From is
+// only used when PAI is absent. Caller RemoteURI is last-resort only.
+func specRPAckURI(report rpReportRequest) string {
+	for _, header := range []string{"P-Asserted-Identity", "From"} {
+		uri := firstSIPHeaderURI(rawSIPHeaderValue(report.Inbound, header))
+		if uri != "" && !strings.ContainsAny(uri, "\r\n") {
+			return uri
 		}
 	}
-	if len(variants) == 0 {
-		return []rpReportRequest{report}
+	if uri := strings.TrimSpace(report.RemoteURI); uri != "" && !strings.ContainsAny(uri, "\r\n") {
+		return uri
 	}
-	return variants
-}
-
-func rpAckDeliverReportVariant(report rpReportRequest) *rpReportRequest {
-	if len(report.Body) != 2 || report.Body[0] != 0x02 {
-		return nil
-	}
-	next := report
-	next.Body = smscodec.BuildRPAckWithDeliverReport(report.RPMR)
-	if len(next.Body) <= len(report.Body) {
-		return nil
-	}
-	return &next
-}
-
-func rpAckURICandidates(report rpReportRequest) []string {
-	primary := strings.TrimSpace(report.RemoteURI)
-	if primary == "" {
-		targets := resolveRpAckTargets(
-			rawSIPHeaderValue(report.Inbound, "P-Asserted-Identity"),
-			rawSIPHeaderValue(report.Inbound, "From"),
-			rawSIPHeaderValue(report.Inbound, "Contact"),
-		)
-		if len(targets) == 0 {
-			return nil
-		}
-		primary = targets[0]
-	}
-	out := []string{primary}
-	if sipURIUser(primary) != "" {
-		return out
-	}
-	// RFC 3261 488 is location-specific. Host-only PAI can 488 while the
-	// same-host From/Contact still names the IP-SM-GW (24.341 5.3.2.4).
-	seen := map[string]struct{}{primary: {}}
-	host := sipURIHost(primary)
-	for _, extra := range []string{
-		firstSIPHeaderURI(rawSIPHeaderValue(report.Inbound, "From")),
-		firstSIPHeaderURI(rawSIPHeaderValue(report.Inbound, "Contact")),
-	} {
-		extra = strings.TrimSpace(extra)
-		if extra == "" || strings.ContainsAny(extra, "\r\n") || sipURIUser(extra) == "" {
-			continue
-		}
-		if host == "" || sipURIHost(extra) != host {
-			continue
-		}
-		if _, ok := seen[extra]; ok {
-			continue
-		}
-		seen[extra] = struct{}{}
-		out = append(out, extra)
-	}
-	return out
+	return ""
 }
 
 func sipURIUser(value string) string {
@@ -308,17 +229,6 @@ func sipURIHost(value string) string {
 		return ""
 	}
 	return strings.ToLower(strings.Trim(strings.TrimSpace(uri.Host), "[]"))
-}
-
-func (report rpReportRequest) ackTargets() []string {
-	if strings.TrimSpace(report.RemoteURI) != "" {
-		return []string{strings.TrimSpace(report.RemoteURI)}
-	}
-	return resolveRpAckTargets(
-		rawSIPHeaderValue(report.Inbound, "P-Asserted-Identity"),
-		rawSIPHeaderValue(report.Inbound, "From"),
-		rawSIPHeaderValue(report.Inbound, "Contact"),
-	)
 }
 
 func (s *Service) waitSMSRetryDelay(delay time.Duration) bool {
@@ -341,15 +251,15 @@ func (s *Service) waitSMSRetryDelay(delay time.Duration) bool {
 }
 
 func resolveRpAckTarget(assertedIdentity, from string) (string, error) {
-	targets := resolveRpAckTargets(assertedIdentity, from, "")
+	targets := resolveRpAckTargets(assertedIdentity, from)
 	if len(targets) == 0 {
 		return "", errors.New("IMS RP-ACK target is unavailable")
 	}
 	return targets[0], nil
 }
 
-func resolveRpAckTargets(assertedIdentity, from, contact string) []string {
-	for _, value := range []string{assertedIdentity, contact, from} {
+func resolveRpAckTargets(assertedIdentity, from string) []string {
+	for _, value := range []string{assertedIdentity, from} {
 		target := firstSIPHeaderURI(value)
 		if target == "" || strings.ContainsAny(target, "\r\n") {
 			continue

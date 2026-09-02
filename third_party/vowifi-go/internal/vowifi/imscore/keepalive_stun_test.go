@@ -221,6 +221,64 @@ func TestFlowTimerSetsUDPKeepaliveInterval(t *testing.T) {
 	}
 }
 
+func TestRFC5626KeepaliveIdle(t *testing.T) {
+	if got, want := rfc5626KeepaliveIdle(0), 114*time.Second; got != want {
+		t.Fatalf("default idle = %s, want %s", got, want)
+	}
+	if got, want := rfc5626KeepaliveIdle(120*time.Second), 114*time.Second; got != want {
+		t.Fatalf("120s idle = %s, want %s", got, want)
+	}
+	if got, want := rfc5626KeepaliveIdle(40*time.Second), 38*time.Second; got != want {
+		t.Fatalf("40s idle = %s, want %s", got, want)
+	}
+}
+
+func TestTCPKeepaliveIntervalHonorsFlowTimer(t *testing.T) {
+	service := newProtectedKeepaliveTestService(t)
+	client, server := net.Pipe()
+	defer server.Close()
+	service.activateProtectedRegistrationTCP(client)
+	service.logRegisterFlowNegotiation(&sipResponse{
+		StatusCode: 200,
+		Headers:    map[string]string{"Flow-Timer": "40"},
+	})
+	service.mu.RLock()
+	got := service.keepaliveIntervalLocked()
+	flow := service.flowTimer
+	service.mu.RUnlock()
+	if flow != 40*time.Second {
+		t.Fatalf("flow timer = %s", flow)
+	}
+	want := rfc5626KeepaliveIdle(40 * time.Second)
+	if got != want {
+		t.Fatalf("TCP CRLF interval = %s, want RFC 5626 %s", got, want)
+	}
+}
+
+func TestTCPSocketKeepaliveIdleDefaultsTo30s(t *testing.T) {
+	service := newProtectedKeepaliveTestService(t)
+	if got, want := service.tcpSocketKeepaliveIdle(), 30*time.Second; got != want {
+		t.Fatalf("socket keepalive idle = %s, want %s", got, want)
+	}
+	service.cfg.TCPKeepaliveSeconds = 45
+	if got, want := service.tcpSocketKeepaliveIdle(), 45*time.Second; got != want {
+		t.Fatalf("configured socket keepalive idle = %s, want %s", got, want)
+	}
+}
+
+func TestTCPKeepaliveIntervalDefaultsToRFC5626(t *testing.T) {
+	service := newProtectedKeepaliveTestService(t)
+	service.mu.Lock()
+	service.keepaliveInterval = 0
+	service.flowTimer = 0
+	got := service.keepaliveIntervalLocked()
+	service.mu.Unlock()
+	want := rfc5626KeepaliveIdle(0)
+	if got != want {
+		t.Fatalf("TCP keepalive interval = %s, want RFC 5626 %s", got, want)
+	}
+}
+
 func TestInboundUDPDemuxesSTUNFromSIP(t *testing.T) {
 	registrar, service := newUDPKeepaliveTestService(t)
 	go func() {

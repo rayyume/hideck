@@ -200,10 +200,14 @@ func (c *CPConfig) addAttribute(attribute *CPAttribute) {
 }
 
 func appendIP(addresses []net.IP, value []byte, length int) []net.IP {
-	if len(value) < length {
+	if length <= 0 {
 		return addresses
 	}
-	return append(addresses, net.IP(value[:length]))
+	for len(value) >= length {
+		addresses = append(addresses, append(net.IP(nil), value[:length]...))
+		value = value[length:]
+	}
+	return addresses
 }
 
 func (c *CPConfig) HasIPv4() bool { return c != nil && len(c.IPv4Addresses) > 0 }

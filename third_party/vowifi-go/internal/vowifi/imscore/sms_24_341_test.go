@@ -264,6 +264,9 @@ func TestInboundMSISDNLessMultipartUsesXMLFromAndMultipartAck(t *testing.T) {
 	if got := rawSIPHeaderValue(request, "In-Reply-To"); got != "inbound-sms" {
 		t.Fatalf("In-Reply-To = %q", got)
 	}
+	if got := rawSIPHeaderValue(request, "Call-ID"); got != "inbound-sms" {
+		t.Fatalf("Call-ID = %q", got)
+	}
 	ackType := rawSIPHeaderValue(request, "Content-Type")
 	if !strings.HasPrefix(ackType, "multipart/mixed") {
 		t.Fatalf("RP-ACK Content-Type = %q", ackType)

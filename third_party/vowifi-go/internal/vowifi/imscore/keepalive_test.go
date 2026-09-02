@@ -161,6 +161,46 @@ func TestProtectedTCPKeepaliveSendsRFC5626CRLF(t *testing.T) {
 	}
 }
 
+func TestPortSFlowGetsRFC5626CRLFKeepalive(t *testing.T) {
+	service := newProtectedKeepaliveTestService(t)
+	regClient, regServer := net.Pipe()
+	defer regServer.Close()
+	service.activateProtectedRegistrationTCP(regClient)
+	pushClient, pushServer := net.Pipe()
+	defer pushServer.Close()
+	if !service.trackProtectedConnection(pushClient) {
+		t.Fatal("trackProtectedConnection")
+	}
+	done := make(chan error, 1)
+	go func() {
+		buf := make([]byte, 4)
+		if _, err := io.ReadFull(pushServer, buf); err != nil {
+			done <- err
+			return
+		}
+		if string(buf) != "\r\n\r\n" {
+			done <- fmt.Errorf("port-s CRLF = %q", buf)
+			return
+		}
+		done <- nil
+	}()
+	go func() {
+		buf := make([]byte, 4)
+		_, _ = io.ReadFull(regServer, buf)
+	}()
+	if err := service.sendIMSKeepalive(); err != nil {
+		t.Fatalf("sendIMSKeepalive: %v", err)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("port-s did not receive RFC 5626 CRLF")
+	}
+}
+
 func TestIMSMaintenanceChoosesEarliestRegistrationOrKeepaliveDeadline(t *testing.T) {
 	service := newProtectedKeepaliveTestService(t)
 	now := time.Date(2026, 8, 8, 18, 0, 0, 0, time.UTC)

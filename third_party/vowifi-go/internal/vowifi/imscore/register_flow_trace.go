@@ -32,6 +32,7 @@ func (s *Service) logRegisterFlowNegotiation(response *sipResponse) {
 	s.flowTimer = parseFlowTimerHeader(response.HeaderValues("Flow-Timer"))
 	s.stunMappedAddr = nil
 	s.mu.Unlock()
+	s.applyRFC5626TCPKeepalive()
 	logging.Info("IMS REGISTER flow negotiation",
 		"device", s.DeviceID(),
 		"supported_outbound", supportedOutbound,

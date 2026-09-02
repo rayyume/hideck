@@ -437,7 +437,8 @@ func imscoreFromPrepared(req StartRequest, tunnel Tunnel) (*imscore.Service, err
 	logging.Info("IMS inner address selected",
 		"device", req.DeviceID, "ip", innerIP.String(), "prefix", prefixLen,
 		"ipv4", inner.IPv4.To4() != nil,
-		"ipv6", inner.IPv6 != nil && inner.IPv6.To4() == nil)
+		"ipv6", inner.IPv6 != nil && inner.IPv6.To4() == nil,
+		"ipv6_skip", inner.IPv6IMSSkipReason())
 	dns := common.ToStrings(inner.DNS)
 	imsNetwork, err := netstack.NewTunnelNetwork(innerIP, prefixLen, dns, tunnel.InnerPacketIO())
 	if err != nil {
@@ -453,7 +454,7 @@ func imscoreFromPrepared(req StartRequest, tunnel Tunnel) (*imscore.Service, err
 		return nil, err
 	}
 	cfg := &imscore.IMSConfig{
-		DeviceID:    req.DeviceID,
+		DeviceID: req.DeviceID,
 		IMEI: firstNonEmptyString(
 			req.Prepared.Profile.IMEI,
 			imscore.GenerateRandomIMEIForModel(defaultIMSDeviceModel),
@@ -519,10 +520,7 @@ func preferredPCSCF(servers []net.IP, innerIP net.IP) net.IP {
 }
 
 func preferredInnerAddress(inner swu.InnerNetworkConfig) (net.IP, int) {
-	if inner.IPv6 != nil {
-		return inner.IPv6, inner.IPv6PrefixLen
-	}
-	return inner.IPv4, inner.PrefixLen
+	return inner.PreferredIMSAddress()
 }
 
 // imsiOf extracts the IMSI from an IMPI (the part before '@').

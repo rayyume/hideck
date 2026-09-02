@@ -259,10 +259,41 @@ func TestStartSMSReadyTracksReportedPrerequisites(t *testing.T) {
 	}
 }
 
-func TestPreferredInnerAddressUsesIPv6ForDualStack(t *testing.T) {
+func TestPreferredInnerAddressUsesIPv6WhenUsable(t *testing.T) {
 	inner := swu.InnerNetworkConfig{
 		IPv4: net.ParseIP("192.0.2.8"), PrefixLen: 32,
 		IPv6: net.ParseIP("2001:db8::8"), IPv6PrefixLen: 64,
+		PCSCF: []net.IP{net.ParseIP("192.0.2.20"), net.ParseIP("2001:db8::20")},
+	}
+	address, prefixLen := preferredInnerAddress(inner)
+	if !address.Equal(inner.IPv6) || prefixLen != 64 {
+		t.Fatalf("preferred inner address = %s/%d", address, prefixLen)
+	}
+	if reason := inner.IPv6IMSSkipReason(); reason != "" {
+		t.Fatalf("ipv6 skip = %q", reason)
+	}
+}
+
+func TestPreferredInnerAddressSkipsIPv6WithoutPCSCF(t *testing.T) {
+	inner := swu.InnerNetworkConfig{
+		IPv4: net.ParseIP("192.0.2.8"), PrefixLen: 32,
+		IPv6: net.ParseIP("2001:db8::8"), IPv6PrefixLen: 64,
+		PCSCF: []net.IP{net.ParseIP("192.0.2.20")},
+	}
+	address, prefixLen := preferredInnerAddress(inner)
+	if !address.Equal(inner.IPv4) || prefixLen != 32 {
+		t.Fatalf("preferred inner address = %s/%d", address, prefixLen)
+	}
+	if reason := inner.IPv6IMSSkipReason(); reason != "no_ipv6_pcscf" {
+		t.Fatalf("ipv6 skip = %q", reason)
+	}
+}
+
+func TestPreferredInnerAddressUsesIPv6WhenPCSCFIsIPv6Only(t *testing.T) {
+	inner := swu.InnerNetworkConfig{
+		IPv4: net.ParseIP("192.0.2.8"), PrefixLen: 32,
+		IPv6: net.ParseIP("2001:db8::8"), IPv6PrefixLen: 64,
+		PCSCF: []net.IP{net.ParseIP("2001:db8::20")},
 	}
 	address, prefixLen := preferredInnerAddress(inner)
 	if !address.Equal(inner.IPv6) || prefixLen != 64 {

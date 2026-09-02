@@ -189,6 +189,21 @@ func TestChildTrafficSelectorsCoverBothInnerFamilies(t *testing.T) {
 	}
 }
 
+func TestPreferredIMSAddressSkipsLinkLocalIPv6(t *testing.T) {
+	inner := InnerNetworkConfig{
+		IPv4: net.ParseIP("10.0.0.2"), PrefixLen: 32,
+		IPv6: net.ParseIP("fe80::1"), IPv6PrefixLen: 64,
+		PCSCF: []net.IP{net.ParseIP("10.0.0.1"), net.ParseIP("fe80::2")},
+	}
+	if got := inner.IPv6IMSSkipReason(); got != "ipv6_not_unicast" {
+		t.Fatalf("skip = %q", got)
+	}
+	address, prefixLen := inner.PreferredIMSAddress()
+	if !address.Equal(inner.IPv4) || prefixLen != 32 {
+		t.Fatalf("address = %s/%d", address, prefixLen)
+	}
+}
+
 func TestTunnelMTUKeepsIPv6PayloadAtLeast1280(t *testing.T) {
 	session := NewSession(&Config{TUNMTU: 1280})
 	session.innerIPv6 = net.ParseIP("2001:db8::1")

@@ -702,22 +702,10 @@ func parseAssignedInnerConfig(payloads []ikev2.Payload) (assignedInnerConfig, er
 	if err != nil {
 		return result, err
 	}
+	// TS 24.302 private attr 16390: one or more IPv6 P-CSCF addresses.
+	// Lebara concatenates two IPv6s in one attribute instead of RFC 7651 20/21.
+	result.pcscf = appendUniqueIPs(result.pcscf, cpChunkedAddresses(cp, ikev2.ASSIGNED_PCSCF_IP6_ADDRESS, net.IPv6len))
 
-	// T-Mobile 可能通过 3GPP 私有属性 16390 下发 IPv6 P-CSCF。
-	// 通用 IKE 解析器支持该属性，但 SWu 会话原本没有复制它。
-	if raw, ok := cpAttributeValue(cp, ikev2.ASSIGNED_PCSCF_IP6_ADDRESS); ok {
-		if len(raw) != net.IPv6len {
-			return result, fmt.Errorf(
-				"swu: invalid assigned P-CSCF IPv6 length %d",
-				len(raw),
-			)
-		}
-		result.pcscf = append(
-			result.pcscf,
-			append(net.IP(nil), raw...),
-		)
-	}
-	
 	if result.ipv4 == nil && result.ipv6 == nil {
 		return result, fmt.Errorf("swu: CFG_REPLY omitted an assigned address (attributes=%s)", cpAttributeSummary(cp))
 	}
@@ -750,6 +738,40 @@ func ipv4PrefixFromCP(cp *ikev2.EncryptedPayloadCP) int {
 		return defaultIPv4Prefix
 	}
 	return ones
+}
+
+func cpChunkedAddresses(cp *ikev2.EncryptedPayloadCP, attributeType uint16, chunk int) []net.IP {
+	if cp == nil || chunk <= 0 {
+		return nil
+	}
+	var addresses []net.IP
+	for _, attribute := range cp.Attributes {
+		if attribute == nil || attribute.Type != attributeType {
+			continue
+		}
+		value := attribute.Value
+		for len(value) >= chunk {
+			addresses = append(addresses, append(net.IP(nil), value[:chunk]...))
+			value = value[chunk:]
+		}
+	}
+	return addresses
+}
+
+func appendUniqueIPs(dst []net.IP, extra []net.IP) []net.IP {
+	for _, ip := range extra {
+		already := false
+		for _, existing := range dst {
+			if existing.Equal(ip) {
+				already = true
+				break
+			}
+		}
+		if !already {
+			dst = append(dst, ip)
+		}
+	}
+	return dst
 }
 
 func cpAttributeValue(cp *ikev2.EncryptedPayloadCP, attributeType uint16) ([]byte, bool) {

@@ -19,7 +19,14 @@ import (
 )
 
 const (
-	imsKeepaliveInterval           = 60 * time.Second
+	// RFC 5626 §4.4.1: default Flow-Timer is 120s; the UA MUST use a
+	// server-provided Flow-Timer and SHOULD send keepalives slightly
+	// before it expires (95% is the RFC's typical recommendation).
+	rfc5626DefaultFlowTimer        = 120 * time.Second
+	rfc5626KeepaliveNumerator      = 95
+	rfc5626KeepaliveDenominator    = 100
+	imsKeepaliveInterval           = rfc5626DefaultFlowTimer
+	imsTCPSocketKeepaliveIdle      = 30 * time.Second
 	imsKeepaliveTransactionTimeout = 15 * time.Second
 	imsTCPCRLFWriteTimeout         = 2 * time.Second
 	imsTCPCRLFPongTimeout          = 10 * time.Second
@@ -30,6 +37,9 @@ const (
 	imsKeepaliveFailureLimit       = 3
 	imsMaintenancePollInterval     = 5 * time.Second
 	imsMaintenanceMinimumDelay     = 100 * time.Millisecond
+	// Wait for P-CSCF to reopen port-s before RFC 5626 flow recovery.
+	// Immediate re-REGISTER on RST replaced Contact and delayed MT SMS.
+	defaultPortSReconnectGrace     = 15 * time.Second
 	imsLongRegistrationThreshold   = 1200 * time.Second
 	imsLongRegistrationRefreshLead = 600 * time.Second
 	imsSubscriptionRefreshAdvance  = 60 * time.Second
@@ -285,25 +295,95 @@ func registrationRefreshDelay(expires time.Duration) time.Duration {
 
 func (s *Service) sendIMSKeepalive() error {
 	if conn := s.liveRegistrationTCP(); conn != nil {
-		return s.sendTCPCRLFKeepalive(conn)
+		err := s.sendTCPCRLFKeepalive(conn)
+		s.sendProtectedFlowCRLFKeepalives(conn)
+		return err
 	}
+	s.sendProtectedFlowCRLFKeepalives(nil)
 	return s.sendSTUNKeepalive()
 }
 
-func (s *Service) keepaliveIntervalLocked() time.Duration {
-	if !s.udpSTUNKeepaliveLocked() {
-		if s.keepaliveInterval > 0 {
-			return s.keepaliveInterval
+func (s *Service) sendProtectedFlowCRLFKeepalives(skip net.Conn) {
+	for _, conn := range s.snapshotProtectedConns() {
+		if conn == nil || conn == skip {
+			continue
 		}
-		return imsKeepaliveInterval
+		if err := s.writeTCPCRLF(conn); err != nil {
+			logging.RunDebug("IMS port-s CRLF keepalive failed",
+				"device", s.DeviceID(), "err", err)
+		}
 	}
-	if s.stunKeepaliveInterval > 0 {
-		return s.stunKeepaliveInterval
+}
+
+func (s *Service) snapshotProtectedConns() []net.Conn {
+	if s == nil {
+		return nil
+	}
+	s.protectedConnMu.Lock()
+	defer s.protectedConnMu.Unlock()
+	conns := make([]net.Conn, 0, len(s.protectedConns))
+	for conn := range s.protectedConns {
+		conns = append(conns, conn)
+	}
+	return conns
+}
+
+func (s *Service) keepaliveIntervalLocked() time.Duration {
+	if s.udpSTUNKeepaliveLocked() {
+		if s.stunKeepaliveInterval > 0 {
+			return s.stunKeepaliveInterval
+		}
+		if s.flowTimer > 0 {
+			return stunIntervalFromFlowTimer(s.flowTimer)
+		}
+		return stunUDPKeepaliveInterval()
 	}
 	if s.flowTimer > 0 {
-		return stunIntervalFromFlowTimer(s.flowTimer)
+		return rfc5626KeepaliveIdle(s.flowTimer)
 	}
-	return stunUDPKeepaliveInterval()
+	if s.keepaliveInterval > 0 {
+		return s.keepaliveInterval
+	}
+	return rfc5626KeepaliveIdle(0)
+}
+
+func rfc5626KeepaliveIdle(flowTimer time.Duration) time.Duration {
+	if flowTimer <= 0 {
+		flowTimer = rfc5626DefaultFlowTimer
+	}
+	idle := flowTimer * rfc5626KeepaliveNumerator / rfc5626KeepaliveDenominator
+	if idle <= 0 {
+		return flowTimer
+	}
+	return idle
+}
+
+func (s *Service) tcpSocketKeepaliveIdle() time.Duration {
+	if s != nil && s.cfg != nil && s.cfg.TCPKeepaliveSeconds > 0 {
+		return time.Duration(s.cfg.TCPKeepaliveSeconds) * time.Second
+	}
+	return imsTCPSocketKeepaliveIdle
+}
+
+func (s *Service) configureRegistrationTCPKeepalive(conn net.Conn) {
+	configureTCPKeepalive(conn, s.tcpSocketKeepaliveIdle())
+}
+
+func (s *Service) applyRFC5626TCPKeepalive() {
+	if s == nil {
+		return
+	}
+	idle := s.tcpSocketKeepaliveIdle()
+	s.mu.RLock()
+	registration := s.registrationTCP
+	s.mu.RUnlock()
+	conns := s.snapshotProtectedConns()
+	if registration != nil {
+		conns = append(conns, registration)
+	}
+	for _, conn := range conns {
+		configureTCPKeepalive(conn, idle)
+	}
 }
 
 func (s *Service) udpSTUNKeepaliveLocked() bool {
@@ -513,6 +593,20 @@ func stunIntervalFromFlowTimer(flowTimer time.Duration) time.Duration {
 	return flowTimer * time.Duration(percent) / 100
 }
 
+func (s *Service) writeTCPCRLF(conn net.Conn) error {
+	if conn == nil {
+		return errors.New("imscore: SIP TCP keepalive has no stream")
+	}
+	s.sipWriteMu.Lock()
+	defer s.sipWriteMu.Unlock()
+	if err := conn.SetWriteDeadline(time.Now().Add(imsTCPCRLFWriteTimeout)); err != nil {
+		return err
+	}
+	defer func() { _ = conn.SetWriteDeadline(time.Time{}) }()
+	_, err := io.WriteString(conn, "\r\n\r\n")
+	return err
+}
+
 func (s *Service) sendTCPCRLFKeepalive(conn net.Conn) error {
 	if conn == nil {
 		return errors.New("imscore: SIP TCP keepalive has no registration stream")
@@ -523,17 +617,7 @@ func (s *Service) sendTCPCRLFKeepalive(conn net.Conn) error {
 	s.mu.Unlock()
 	defer s.clearTCPKeepalivePong(wait)
 
-	s.sipWriteMu.Lock()
-	writeErr := func() error {
-		if err := conn.SetWriteDeadline(time.Now().Add(imsTCPCRLFWriteTimeout)); err != nil {
-			return err
-		}
-		defer func() { _ = conn.SetWriteDeadline(time.Time{}) }()
-		_, err := io.WriteString(conn, "\r\n\r\n")
-		return err
-	}()
-	s.sipWriteMu.Unlock()
-	if writeErr != nil {
+	if writeErr := s.writeTCPCRLF(conn); writeErr != nil {
 		return fmt.Errorf("TCP CRLF keepalive: %w", writeErr)
 	}
 	if !s.expectsCRLFPong() {

@@ -182,6 +182,9 @@ type Service struct {
 	externalTransport         bool
 	protectedConnMu           sync.Mutex
 	protectedConns            map[net.Conn]struct{}
+	portSReconnectGrace       time.Duration
+	portSWatchMu              sync.Mutex
+	portSWatchTimer           *time.Timer
 	sipWriteMu                sync.Mutex
 	receiverMu                sync.Mutex
 	activeReceivers           int
