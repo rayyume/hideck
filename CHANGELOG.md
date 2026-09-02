@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.1.3 - 2026-09-02
+
+### VoWiFi / IMS
+
+- 入向短信按 RFC 3428 回 200。RP-ACK 按 TS 24.341：Request-URI 用 PAI，必带 In-Reply-To 和 binary CTE；488 不再换 URI 重试。
+- port-s 入向 TCP 补 30s 套接字保活和 RFC 5626 双 CRLF；对端 RST 后先等重连，不立刻重注册把 Contact 换掉。
+- 双栈只在没有可用 IPv6 P-CSCF、或地址不是单播时才跳过 IPv6 Contact。
+- CFG_REPLY 能拆开 16390 里拼在一起的 IPv6 P-CSCF。
+- 只在 `Require: outbound`、`Path;ob` 或 Contact 带回 `reg-id` 时才补 outbound REGISTER。2degrees 等只广告 `Supported: outbound` 的不再多发一次被 503 拆掉会话（#6 / #8）。
+- REGISTER 超时会重试；IPsec SA 被重发时丢掉这次尝试；200 里还有旧 Contact 时先保住当前绑定。
+
+### 修复
+
+- 不再把 `go.work` / `go.work.sum` 纳入版本库。
+
 ## 2.1.2 - 2026-09-01
 
 ### 修复
