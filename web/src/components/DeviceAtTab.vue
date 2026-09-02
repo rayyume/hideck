@@ -268,24 +268,24 @@ function exportATHistory() {
   overflow: auto;
   border: 1px solid var(--ui-border);
   border-radius: 9px;
-  background: var(--ui-nav);
-  color: var(--ui-nav-text);
+  background: var(--ui-console);
+  color: var(--ui-console-text);
   font: var(--ui-font-body-sm)/1.6 "v-mono", ui-monospace, monospace;
 }
 
-.at-terminal-empty { position: absolute; inset: 0; display: grid; place-content: center; gap: 5px; color: var(--ui-nav-muted); text-align: center; }
+.at-terminal-empty { position: absolute; inset: 0; display: grid; place-content: center; gap: 5px; color: var(--ui-console-muted); text-align: center; }
 .at-terminal-empty span { color: var(--ui-accent); font-size: 13px; }
 .at-terminal-entry { padding-bottom: 16px; }
-.at-terminal-command { display: flex; gap: 8px; color: var(--ui-nav-text); overflow-wrap: anywhere; }
+.at-terminal-command { display: flex; gap: 8px; color: var(--ui-console-text); overflow-wrap: anywhere; }
 .at-terminal-command span { color: var(--ui-accent); }
-.at-terminal-entry pre { margin: 5px 0 0; color: color-mix(in srgb, var(--ui-nav-text) 72%, var(--ui-nav-muted)); font: inherit; white-space: pre-wrap; overflow-wrap: anywhere; }
+.at-terminal-entry pre { margin: 5px 0 0; color: color-mix(in srgb, var(--ui-console-text) 72%, var(--ui-console-muted)); font: inherit; white-space: pre-wrap; overflow-wrap: anywhere; }
 .at-terminal-entry pre.is-error { color: var(--ui-danger); }
-.at-terminal-entry small { color: var(--ui-nav-muted); }
+.at-terminal-entry small { color: var(--ui-console-muted); }
 .at-terminal-pending { display: flex; align-items: center; gap: 5px; color: var(--ui-accent); }
 .at-terminal-pending > span { width: 5px; height: 5px; border-radius: 50%; background: currentColor; animation: at-pending 1.1s ease-in-out infinite; }
 .at-terminal-pending > span:nth-child(2) { animation-delay: 120ms; }
 .at-terminal-pending > span:nth-child(3) { animation-delay: 240ms; }
-.at-terminal-pending small { margin-left: 5px; color: var(--ui-nav-muted); }
+.at-terminal-pending small { margin-left: 5px; color: var(--ui-console-muted); }
 
 .at-command-composer { padding: 14px 16px 16px; display: grid; grid-template-columns: 200px minmax(180px, 1fr) 110px auto; gap: 12px; }
 .at-quick-command-row { grid-column: 1 / -1; flex-wrap: wrap; gap: 7px; color: var(--ui-text-muted); font-size: var(--ui-font-caption); }

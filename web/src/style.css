@@ -7,10 +7,13 @@
   font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   font-synthesis: none;
   --ui-bg: #FBF9F6;
-  --ui-nav: #0B3558;
-  --ui-nav-text: #F5F8FB;
-  --ui-nav-muted: #9EB3C2;
+  --ui-nav: #FFFFFF;
+  --ui-nav-text: #0B3558;
+  --ui-nav-muted: #5B6B7A;
   --ui-nav-active: #0B3558;
+  --ui-console: #0B3558;
+  --ui-console-text: #F5F8FB;
+  --ui-console-muted: #9EB3C2;
   --ui-surface: #ffffff;
   --ui-surface-strong: #ffffff;
   --ui-surface-muted: #F3F6F9;
@@ -99,6 +102,9 @@ html.dark {
   --ui-nav-text: #E8EEF4;
   --ui-nav-muted: #8A96A3;
   --ui-nav-active: #E8EEF4;
+  --ui-console: #0A1018;
+  --ui-console-text: #E8EEF4;
+  --ui-console-muted: #8A96A3;
   --ui-surface: #121A24;
   --ui-surface-strong: #161F2C;
   --ui-surface-muted: #171F2B;
@@ -155,6 +161,9 @@ html.classic {
   --ui-nav-text: #f5fbfb;
   --ui-nav-muted: #8f9b95;
   --ui-nav-active: #dffff1;
+  --ui-console: #080b0a;
+  --ui-console-text: #f5fbfb;
+  --ui-console-muted: #8f9b95;
   --ui-surface: #0b100e;
   --ui-surface-strong: #101613;
   --ui-surface-muted: #141b17;

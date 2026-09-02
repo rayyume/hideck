@@ -249,7 +249,7 @@ function retryStartup() {
 
 .license-overlay {
   padding: 16px;
-  background: color-mix(in srgb, var(--ui-nav) 72%, transparent);
+  background: color-mix(in srgb, var(--ui-primary-solid) 56%, transparent);
 }
 
 .license-dialog {
@@ -323,7 +323,7 @@ function retryStartup() {
 .license-accept {
   border-color: var(--ui-primary);
   background: var(--ui-primary-solid);
-  color: var(--ui-nav-text);
+  color: #fff;
 }
 
 .license-accept:hover {

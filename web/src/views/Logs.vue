@@ -322,7 +322,7 @@ watch(levelFilter, () => {
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid var(--ui-border);
-  background: var(--ui-nav);
+  background: var(--ui-console);
 }
 
 .log-console-header small {
@@ -363,15 +363,15 @@ watch(levelFilter, () => {
 .log-console {
   background:
     linear-gradient(90deg, color-mix(in srgb, var(--ui-accent) 6%, transparent) 1px, transparent 1px),
-    var(--ui-nav);
+    var(--ui-console);
   background-size: 36px 100%;
-  color: var(--ui-nav-text);
+  color: var(--ui-console-text);
   font-variant-numeric: tabular-nums;
 }
 
 .log-empty,
 .log-time {
-  color: var(--ui-nav-muted);
+  color: var(--ui-console-muted);
 }
 
 .log-caller {
@@ -379,14 +379,14 @@ watch(levelFilter, () => {
 }
 
 .log-message {
-  color: var(--ui-nav-text);
+  color: var(--ui-console-text);
 }
 
 .log-fields {
-  color: color-mix(in srgb, var(--ui-warning) 70%, var(--ui-nav-text));
+  color: color-mix(in srgb, var(--ui-warning) 70%, var(--ui-console-text));
 }
 
-.log-level-debug { color: var(--ui-nav-muted); }
+.log-level-debug { color: var(--ui-console-muted); }
 .log-level-info { color: var(--ui-communication); }
 .log-level-warn { color: var(--ui-warning); }
 .log-level-error,
@@ -399,7 +399,7 @@ watch(levelFilter, () => {
 
 .log-row:hover {
   border-left-color: var(--ui-accent);
-  background: color-mix(in srgb, var(--ui-nav-text) 4.5%, transparent);
+  background: color-mix(in srgb, var(--ui-console-text) 4.5%, transparent);
 }
 
 @keyframes logs-workspace-enter {

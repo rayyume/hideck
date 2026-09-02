@@ -290,8 +290,8 @@ async function redirectAfterLogin() {
   justify-content: space-between;
   overflow: hidden;
   background:
-    radial-gradient(circle at 76% 46%, color-mix(in srgb, var(--ui-accent) 16%, transparent), transparent 28%),
-    linear-gradient(145deg, var(--ui-nav), color-mix(in srgb, var(--ui-nav) 86%, var(--ui-accent)));
+    radial-gradient(circle at 76% 46%, color-mix(in srgb, var(--ui-accent) 10%, transparent), transparent 30%),
+    linear-gradient(165deg, var(--ui-nav), color-mix(in srgb, var(--ui-selected) 42%, var(--ui-nav)));
   color: var(--ui-nav-text);
 }
 
@@ -313,7 +313,7 @@ async function redirectAfterLogin() {
 
 .login-identity::after {
   inset: 0;
-  background: color-mix(in srgb, var(--ui-nav) 22%, transparent);
+  background: radial-gradient(circle at 70% 40%, color-mix(in srgb, var(--ui-accent) 8%, transparent), transparent 44%);
 }
 
 .network-map {
@@ -340,7 +340,7 @@ async function redirectAfterLogin() {
   width: 7px;
   height: 7px;
   border: 1px solid var(--ui-accent);
-  background: var(--ui-nav);
+  background: var(--ui-surface);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--ui-accent) 9%, transparent);
 }
 
@@ -377,10 +377,10 @@ async function redirectAfterLogin() {
   height: 38px;
   display: grid;
   place-items: center;
-  border: 1px solid color-mix(in srgb, var(--ui-accent) 45%, transparent);
+  border: 1px solid var(--ui-primary-solid);
   border-radius: 13px;
-  background: color-mix(in srgb, var(--ui-accent) 12%, transparent);
-  color: var(--ui-accent);
+  background: var(--ui-primary-solid);
+  color: #fff;
   font-size: 18px;
   font-weight: 700;
 }
@@ -440,9 +440,9 @@ async function redirectAfterLogin() {
   grid-template-columns: 38px 1fr auto;
   align-items: center;
   gap: 14px;
-  border: 1px solid color-mix(in srgb, var(--ui-nav-text) 11%, transparent);
+  border: 1px solid var(--ui-border);
   border-radius: 16px;
-  background: color-mix(in srgb, var(--ui-nav-text) 4%, transparent);
+  background: var(--ui-surface);
 }
 
 .signal-bars {

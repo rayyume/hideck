@@ -875,7 +875,7 @@ async function confirmDeleteThread(thread: SmsThread) {
   position: fixed;
   inset: 0;
   z-index: 2200;
-  background: color-mix(in srgb, var(--ui-nav) 36%, transparent);
+  background: color-mix(in srgb, var(--ui-primary-solid) 36%, transparent);
   display: flex;
   align-items: flex-end;
   justify-content: center;

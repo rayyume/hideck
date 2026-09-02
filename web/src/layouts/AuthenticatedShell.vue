@@ -483,8 +483,8 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
   place-items: center;
   border: 1px solid color-mix(in srgb, var(--ui-accent) 34%, var(--ui-border));
   border-radius: 14px;
-  background: color-mix(in srgb, var(--ui-accent) 16%, var(--ui-nav));
-  color: var(--ui-nav-text);
+  background: var(--ui-primary-solid);
+  color: #fff;
   box-shadow: none;
   font-size: 20px;
   font-weight: 800;
@@ -673,7 +673,7 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
     border: 1px solid color-mix(in srgb, var(--ui-text) 12%, transparent);
     border-radius: 18px;
     background: color-mix(in srgb, var(--ui-surface) 88%, transparent);
-    box-shadow: 0 1px 0 color-mix(in srgb, var(--ui-text) 7%, transparent) inset, 0 22px 64px color-mix(in srgb, var(--ui-nav) 38%, transparent);
+    box-shadow: 0 1px 0 color-mix(in srgb, var(--ui-text) 7%, transparent) inset, 0 22px 64px color-mix(in srgb, var(--ui-text) 16%, transparent);
     backdrop-filter: blur(22px) saturate(1.2);
     overflow: hidden;
   }
