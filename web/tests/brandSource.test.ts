@@ -28,7 +28,7 @@ test('production Vue surfaces present the HiDeck brand consistently', async () =
   assert.match(shell, /topbar-product">HIDECK</)
   assert.match(login, /login-brand-mark">H</)
   assert.match(login, /设备在线，直接进工作区/)
-  assert.match(login, />登录</)
+  assert.match(login, /loading \? '正在验证' : '登录'/)
   assert.match(app, /HiDeck 最终用户许可与免责声明/)
   assert.match(commands, /HiDeck 命令会话/)
   assert.match(settings, /title="HiDeck Gateway"/)
