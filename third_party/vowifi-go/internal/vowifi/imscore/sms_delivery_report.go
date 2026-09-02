@@ -72,7 +72,7 @@ func (s *Service) acknowledgeRPSMMAReport(raw string, info smscodec.RPDUInfo) (i
 	if err != nil {
 		return inboundSIPResult{}, err
 	}
-	logging.RunDebug("IMS report for our RP-SMMA accepted",
+	logging.Debug("IMS report for our RP-SMMA accepted",
 		"device", s.DeviceID(), "rp_mr", int(info.MR), "rp_cause", info.Cause)
 	return inboundSIPResult{response: response}, nil
 }

@@ -92,7 +92,7 @@ func (s *Service) dispatchRPSMMA(target string, rpMR byte) error {
 	traceID := common.NewTraceID()
 	callID := outboundRequestCallID(request)
 	s.rememberRPSMMA(callID)
-	logging.RunDebug("IMS RP-SMMA send",
+	logging.Debug("IMS RP-SMMA send",
 		"trace_id", traceID, "target", request.Recipient.String(),
 		"rp_mr", int(rpMR), "call_id", callID)
 	ctx, cancel := context.WithTimeout(common.WithTraceID(context.Background(), traceID), inboundSMSAckTimeout)
