@@ -378,7 +378,7 @@ async function redirectAfterLogin() {
   display: grid;
   place-items: center;
   border: 1px solid var(--ui-accent);
-  border-radius: var(--ui-radius-md);
+  border-radius: 50%;
   background: var(--ui-accent);
   color: #fff;
   font-size: 18px;
@@ -441,7 +441,7 @@ async function redirectAfterLogin() {
   align-items: center;
   gap: 14px;
   border: 1px solid var(--ui-border);
-  border-radius: var(--ui-radius-md);
+  border-radius: var(--ui-radius-pill);
   background: var(--ui-surface);
 }
 
