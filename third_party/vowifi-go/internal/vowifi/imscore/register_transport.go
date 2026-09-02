@@ -13,11 +13,6 @@ import (
 
 const defaultSIPPort = 5060
 
-// protectedPushReconnectGrace waits for P-CSCF to reopen port-s after it
-// RSTs the previous push TCP (normal after REGISTER refresh). Re-REGISTER
-// only if no replacement connection appears.
-var protectedPushReconnectGrace = 5 * time.Second
-
 func registerTransportDeadline(ctx context.Context, timeout time.Duration) time.Time {
 	deadline := time.Now().Add(timeout)
 	if ctx == nil {
@@ -271,9 +266,11 @@ func (s *Service) serveProtectedSIPConnection(conn net.Conn) {
 	}
 }
 
-// handleProtectedServerPushClosed re-registers when the last P-CSCF inbound
-// TCP (port-s) flow is gone. Outbound REGISTER TCP can still look healthy, so
-// MT SMS/INVITE would otherwise stay undeliverable until the next refresh.
+// handleProtectedServerPushClosed keeps the protected registration alive when
+// the last P-CSCF-initiated portS connection ends. portS is a reverse,
+// on-demand flow: it can be reopened when the P-CSCF has downlink SIP traffic.
+// Re-registering here is harmful on networks that reject a refresh over the
+// still-open portC flow.
 func (s *Service) handleProtectedServerPushClosed() {
 	if s == nil || s.stopped() {
 		return
@@ -284,36 +281,6 @@ func (s *Service) handleProtectedServerPushClosed() {
 	if remaining > 0 {
 		return
 	}
-	grace := protectedPushReconnectGrace
-	if grace <= 0 {
-		s.triggerRegisterImmediate("protected server push closed")
-		return
-	}
-	s.networkDone.Add(1)
-	go s.confirmProtectedPushReRegister(grace)
-}
-
-func (s *Service) confirmProtectedPushReRegister(grace time.Duration) {
-	defer s.networkDone.Done()
-	timer := time.NewTimer(grace)
-	defer timer.Stop()
-	select {
-	case <-s.stop:
-		return
-	case <-timer.C:
-	}
-	if s.stopped() {
-		return
-	}
-	s.protectedConnMu.Lock()
-	remaining := len(s.protectedConns)
-	s.protectedConnMu.Unlock()
-	if remaining > 0 {
-		logging.Info("IMS protected server push replaced; skip re-REGISTER",
-			"device", s.DeviceID(), "connections", remaining)
-		return
-	}
-	s.triggerRegisterImmediate("protected server push closed")
 }
 
 func (s *Service) trackProtectedConnection(conn net.Conn) bool {
