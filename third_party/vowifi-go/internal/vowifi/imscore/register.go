@@ -113,7 +113,13 @@ func (s *Service) registerLocked(ctx context.Context) error {
 	if err == nil && s.needsOutboundBindingRefresh() {
 		logging.Info("IMS REGISTER completing outbound flow", "device", s.DeviceID())
 		if again, againErr := s.runRegisterFlow(ctx); againErr != nil {
-			err = againErr
+			if s.outboundBindingRequired() {
+				err = againErr
+			} else {
+				logging.WarnRate("ims-outbound-refresh-"+s.DeviceID(), 30*time.Second,
+					"IMS outbound binding refresh failed; keep current registration",
+					"device", s.DeviceID(), "err", againErr)
+			}
 		} else {
 			expires = again
 		}
@@ -127,6 +133,7 @@ func (s *Service) registerLocked(ctx context.Context) error {
 		s.signalingFailureReason = err.Error()
 		s.sipOutboundKeepalive = false
 		s.sipOutbound = false
+		s.sipOutboundRequired = false
 		s.outboundContactOffered = false
 		s.outboundContactRegistered = false
 		s.flowTimer = 0
@@ -727,6 +734,15 @@ func (s *Service) needsOutboundBindingRefresh() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.sipOutbound && !s.outboundContactRegistered
+}
+
+func (s *Service) outboundBindingRequired() bool {
+	if s == nil {
+		return false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.sipOutboundRequired
 }
 
 func withOutboundContactParams(order []string) []string {

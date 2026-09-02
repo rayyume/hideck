@@ -450,6 +450,43 @@ func TestInitialRegisterOmitsOutboundContactWithoutSupportedOutbound(t *testing.
 	}
 }
 
+func TestSupportedOutboundDoesNotRequireFollowUpRegister(t *testing.T) {
+	service := &Service{cfg: &IMSConfig{
+		IMPI: "user@ims.example", IMPU: "sip:user@ims.example", Domain: "ims.example",
+		LocalIP: net.ParseIP("192.0.2.10"), LocalPort: 5060, Transport: "udp",
+	}}
+	service.logRegisterFlowNegotiation(&sipResponse{
+		StatusCode: 200,
+		Headers: map[string]string{
+			"Supported": "path, outbound",
+			"Path":      "<sip:pcscf.example;lr>",
+		},
+	})
+	if service.needsOutboundBindingRefresh() {
+		t.Fatal("Supported: outbound without Path;ob or Require must not send a follow-up REGISTER")
+	}
+	if service.outboundBindingRequired() {
+		t.Fatal("Supported: outbound is not Require: outbound")
+	}
+}
+
+func TestRequireOutboundRequiresFollowUpRegister(t *testing.T) {
+	service := &Service{cfg: &IMSConfig{
+		IMPI: "user@ims.example", IMPU: "sip:user@ims.example", Domain: "ims.example",
+		LocalIP: net.ParseIP("192.0.2.10"), LocalPort: 5060, Transport: "udp",
+	}}
+	service.logRegisterFlowNegotiation(&sipResponse{
+		StatusCode: 200,
+		Headers:    map[string]string{"Require": "outbound"},
+	})
+	if !service.needsOutboundBindingRefresh() {
+		t.Fatal("Require: outbound must trigger a follow-up REGISTER with reg-id")
+	}
+	if !service.outboundBindingRequired() {
+		t.Fatal("Require: outbound must fail registration if the follow-up REGISTER fails")
+	}
+}
+
 func TestPathOBRequiresFollowUpRegisterWithRegID(t *testing.T) {
 	service := &Service{cfg: &IMSConfig{
 		IMPI: "user@ims.example", IMPU: "sip:user@ims.example", Domain: "ims.example",
