@@ -23,11 +23,12 @@ const (
 	imsSMSAcceptContact      = `*;+g.3gpp.smsip;+g.3gpp.icsi-ref="urn%3Aurn-7%3A3gpp-service.ims.icsi.sms"`
 	imsSMSContentDisposition = "signal;handling=required"
 	rpCauseTemporaryFailure  = byte(41)
-	// TS 24.341 5.3.2.3 / B.6-4: MT RP-DATA gets a body-less RFC 3428
-	// response (RFC 3428 7: 2xx to MESSAGE MUST NOT carry a body), then
-	// RP-ACK/RP-ERROR goes in a separate MESSAGE (5.3.2.4, B.6-7).
-	// RP-ACK/RP-ERROR of our MO stay 200.
-	inboundRPDataSIPStatus = 202
+	// TS 24.341 5.3.2.3 leaves the MT response to RFC 3428, which reserves
+	// 202 for a relay that has not delivered end to end (7) and tells the
+	// sender not to assume delivery on 202 (4). We are the final recipient,
+	// so 200. The report still goes in a separate MESSAGE (5.3.2.4, B.6-7),
+	// and 2xx carries no body (RFC 3428 7).
+	inboundRPDataSIPStatus = 200
 	inboundSMSAckTimeout   = 10 * time.Second
 	inboundSMSFragmentTTL  = 3 * time.Minute
 	// A carrier response arrived 35m37s late in production. One hour keeps a

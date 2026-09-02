@@ -178,7 +178,7 @@ func dispatchInboundMultipartPart(t *testing.T, service *Service, rawTPDU []byte
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(response, "SIP/2.0 202") {
+	if !strings.HasPrefix(response, "SIP/2.0 200") {
 		t.Fatalf("SIP response = %q", response)
 	}
 }
