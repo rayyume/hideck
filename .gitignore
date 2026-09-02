@@ -6,7 +6,9 @@
 *.so
 *.dylib
 
-# Go workspace 校验和（由 go 命令自动改写，与代码变更无关）
+# Go workspace 属于本地开发配置；go.mod 的 replace 已指向 third_party，
+# 因此 GOWORK=off 也能构建，不需要入库
+go.work
 go.work.sum
 
 # 数据和日志目录
