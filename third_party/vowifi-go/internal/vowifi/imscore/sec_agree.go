@@ -247,6 +247,15 @@ func (s *Service) installNegotiatedIPSec(ctx context.Context, session *registerS
 		return s.rollbackInstalledIPSec(err, previousRemote)
 	}
 	externalTransport, connected := s.protectedTransportState()
+	// A repeat challenge re-issues the SA on the same client port, so the flow
+	// already established now runs under SPIs the P-CSCF has replaced and the
+	// next REGISTER over it is dropped without any response. That port cannot
+	// be rebound while it drains, and the ports are what the Security-Client
+	// offer negotiated, so the attempt is abandoned for a fresh one that
+	// reserves new ports and offers them again (TS 33.203 7.4).
+	if !externalTransport && connected && protectedRegistrationSAReplaced(session, server) {
+		return s.rollbackInstalledIPSec(errProtectedFlowNeedsFreshPorts, previousRemote)
+	}
 	if !externalTransport && !connected {
 		if err := s.connectProtectedRegistrationTCP(ctx, client, *server); err != nil {
 			return s.rollbackInstalledIPSec(err, previousRemote)
@@ -255,6 +264,15 @@ func (s *Service) installNegotiatedIPSec(ctx context.Context, session *registerS
 	s.recordSecurityAgreement(session, server, verify)
 	s.recordSecurityMode(decision.mode, "", false)
 	return nil
+}
+
+// protectedRegistrationSAReplaced reports whether the offer just accepted
+// carries different SPIs or ports than the one the session is already using.
+func protectedRegistrationSAReplaced(session *registerSession, server *securityMechanism) bool {
+	if session == nil || session.security == nil || session.security.server == nil || server == nil {
+		return false
+	}
+	return !ipsec3gppOfferEqualForSA(*session.security.server, *server)
 }
 
 func (s *Service) recordSecurityAgreement(session *registerSession, server *securityMechanism, verify string) {
