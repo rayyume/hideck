@@ -181,7 +181,7 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
         <div class="sidebar-account flex items-center gap-3">
           <div class="sidebar-account-icon"><el-icon><Settings24Regular /></el-icon></div>
           <div class="flex-1 min-w-0">
-            <div class="text-sm font-semibold truncate text-white">Admin</div>
+            <div class="text-sm font-semibold truncate text-[var(--ui-nav-text)]">Admin</div>
             <div class="text-xs truncate sidebar-account-role">Administrator</div>
           </div>
           <el-button text type="danger" aria-label="退出登录" @click="handleLogout">
@@ -220,7 +220,7 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
               <el-icon><Settings24Regular /></el-icon>
             </div>
             <div class="flex-1 min-w-0">
-              <div class="text-sm font-semibold truncate text-white">Admin</div>
+              <div class="text-sm font-semibold truncate text-[var(--ui-nav-text)]">Admin</div>
               <div class="text-xs truncate sidebar-account-role">Administrator</div>
             </div>
             <el-button text type="danger" @click="handleLogout">
@@ -291,7 +291,7 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
   font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  --sidebar-menu-text: var(--ui-nav-muted);
+  --sidebar-menu-text: var(--ui-nav-text);
   --sidebar-menu-hover-bg: color-mix(in srgb, var(--ui-selected) 42%, transparent);
   --sidebar-menu-active-bg: var(--ui-selected);
   --sidebar-menu-active-color: var(--ui-nav-active);
@@ -443,7 +443,8 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
   border: 0;
   border-right: 1px solid var(--ui-border);
   border-radius: 0;
-  background: var(--ui-nav);
+  background: var(--ui-nav-surface);
+  background-color: var(--ui-nav-surface);
   box-shadow: none;
   color: var(--ui-nav-text);
 }

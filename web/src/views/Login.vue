@@ -290,9 +290,9 @@ async function redirectAfterLogin() {
   justify-content: space-between;
   overflow: hidden;
   background:
-    radial-gradient(circle at 76% 46%, color-mix(in srgb, var(--ui-accent) 10%, transparent), transparent 30%),
-    linear-gradient(165deg, var(--ui-nav), color-mix(in srgb, var(--ui-selected) 42%, var(--ui-nav)));
-  color: var(--ui-nav-text);
+    radial-gradient(circle at 76% 46%, color-mix(in srgb, var(--ui-accent) 8%, transparent), transparent 32%),
+    var(--ui-bg);
+  color: var(--ui-text);
 }
 
 .login-identity::before,

@@ -8,6 +8,7 @@
   font-synthesis: none;
   --ui-bg: #FBF9F6;
   --ui-nav: #FFFFFF;
+  --ui-nav-surface: #FFFFFF;
   --ui-nav-text: #0B3558;
   --ui-nav-muted: #5B6B7A;
   --ui-nav-active: #0B3558;
@@ -99,6 +100,7 @@ html.dark {
   color-scheme: dark;
   --ui-bg: #0B1420;
   --ui-nav: #0A1018;
+  --ui-nav-surface: #0A1018;
   --ui-nav-text: #E8EEF4;
   --ui-nav-muted: #8A96A3;
   --ui-nav-active: #E8EEF4;
@@ -158,6 +160,7 @@ html.classic {
   color-scheme: dark;
   --ui-bg: #050807;
   --ui-nav: #080b0a;
+  --ui-nav-surface: #080b0a;
   --ui-nav-text: #f5fbfb;
   --ui-nav-muted: #8f9b95;
   --ui-nav-active: #dffff1;
@@ -563,11 +566,16 @@ html.dark .el-table td.el-table__cell {
   font-weight: 600;
 }
 
+.el-aside {
+  --el-bg-color: var(--ui-nav-surface);
+  background-color: var(--ui-nav-surface);
+}
+
 .el-menu {
   --el-menu-bg-color: transparent;
   --el-menu-hover-bg-color: color-mix(in srgb, var(--ui-nav-text) 7%, transparent);
   --el-menu-active-color: var(--ui-nav-active);
-  --el-menu-text-color: var(--ui-nav-muted);
+  --el-menu-text-color: var(--ui-nav-text);
 }
 
 .el-menu-item {
