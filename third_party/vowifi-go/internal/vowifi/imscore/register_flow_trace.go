@@ -26,6 +26,9 @@ func (s *Service) logRegisterFlowNegotiation(response *sipResponse) {
 	s.mu.Lock()
 	s.sipOutboundKeepalive = requiredOutbound || viaKeep
 	s.sipOutbound = supportedOutbound || requiredOutbound || pathOB || contactRegID
+	// Supported: outbound advertises a capability only. A follow-up REGISTER
+	// with reg-id/ob is required only when the network explicitly asks for it.
+	s.outboundBindingRequired = requiredOutbound || pathOB || contactRegID
 	if s.outboundContactOffered {
 		s.outboundContactRegistered = true
 	}

@@ -212,6 +212,7 @@ type Service struct {
 	tcpCRLFPongWait           time.Duration
 	sipOutboundKeepalive      bool
 	sipOutbound               bool
+	outboundBindingRequired   bool
 	outboundContactOffered    bool
 	outboundContactRegistered bool
 	flowTimer                 time.Duration
