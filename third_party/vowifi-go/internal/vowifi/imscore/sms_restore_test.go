@@ -352,6 +352,40 @@ func TestRPAckKeepsInReplyToAndStopsOn488(t *testing.T) {
 	}
 }
 
+func TestRejectedRPAckPromptsSMMARedelivery(t *testing.T) {
+	service, _, _ := newInboundSMSTestService(t)
+	var bodies [][]byte
+	service.transport.SetSendFn(func(raw string) error {
+		_, body, _ := strings.Cut(raw, "\r\n\r\n")
+		bodies = append(bodies, []byte(body))
+		status := 488
+		if smscodec.ClassifyRPDU([]byte(body)).Kind == smscodec.RPDUKindSMMA {
+			status = 202
+		}
+		service.transport.DeliverResponse(registerResponseForRequest(raw, status, nil))
+		return nil
+	})
+	raw := inboundSMSRequest(t, imsSMSContentType, inboundRPData(t, 0x41, "+447700900123", "ack"))
+	service.sendRPReportWithRetry(rpReportRequest{
+		Inbound: raw, Body: smscodec.BuildRPAck(0x41), RPMR: 0x41,
+	})
+	if len(bodies) != 2 {
+		t.Fatalf("sent %d requests, want the RP-ACK and an RP-SMMA prompt", len(bodies))
+	}
+	if kind := smscodec.ClassifyRPDU(bodies[1]).Kind; kind != smscodec.RPDUKindSMMA {
+		t.Fatalf("second request RPDU = %q, want RP-SMMA", kind)
+	}
+
+	// One prompt per flush: a second rejection inside the window stays quiet.
+	before := len(bodies)
+	service.sendRPReportWithRetry(rpReportRequest{
+		Inbound: raw, Body: smscodec.BuildRPAck(0x42), RPMR: 0x42,
+	})
+	if got := len(bodies) - before; got != 1 {
+		t.Fatalf("second rejection sent %d requests, want only the RP-ACK", got)
+	}
+}
+
 func TestRPAckUsesPAINotFrom(t *testing.T) {
 	service, _, _ := newInboundSMSTestService(t)
 	var requests []string

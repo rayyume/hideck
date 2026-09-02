@@ -43,6 +43,9 @@ const (
 	rpReportInitialDelay = 0
 	rpReportRetryDelay   = time.Second
 	rpReportMaxAttempts  = 4
+	// One prompt covers every message the SMSC releases in the same flush,
+	// so rate limit it rather than sending one per rejected report.
+	smmaPromptMinInterval = time.Minute
 )
 
 type mtAckAudit struct {
@@ -145,7 +148,37 @@ func (s *Service) sendRPReportWithRetry(report rpReportRequest) {
 			"IMS RP report delivery failed",
 			"device", deviceID, "attempts", attempts,
 			"rp_mr", int(report.RPMR), "error", err)
+		s.promptSMSCRedeliveryAfterRejectedReport(err)
 	}
+}
+
+// A rejected delivery report leaves the SMSC believing the short message is
+// still outstanding, so it holds later messages behind it until its own
+// retransmission timer fires — observed at 13 to 66 minutes. RP-SMMA is the
+// only receiver-initiated way to ask for that queue now (TS 24.011 clears
+// MCEF and alerts the service centre), so send one instead of waiting.
+func (s *Service) promptSMSCRedeliveryAfterRejectedReport(reportErr error) {
+	if s == nil || s.stopped() || rpReportRejectStatus(reportErr) == 0 {
+		return
+	}
+	now := time.Now()
+	last := s.smmaPromptLastAt.Load()
+	if last != 0 && now.Sub(time.Unix(0, last)) < smmaPromptMinInterval {
+		return
+	}
+	if !s.smmaPromptLastAt.CompareAndSwap(last, now.UnixNano()) {
+		return
+	}
+	s.smsSendMu.Lock()
+	err := s.sendRPSMMA()
+	s.smsSendMu.Unlock()
+	if err != nil {
+		logging.RunDebug("IMS RP-SMMA redelivery prompt failed",
+			"device", s.DeviceID(), "error", err)
+		return
+	}
+	logging.Info("IMS RP-SMMA sent to release the SMSC queue after a rejected report",
+		"device", s.DeviceID())
 }
 
 func (s *Service) sendRPReportWithRetryPolicy(
