@@ -49,6 +49,8 @@
   --ui-radius-md: 20px;
   --ui-radius-lg: 24px;
   --ui-radius-xl: 24px;
+  --ui-radius-input: 16px;
+  --ui-radius-nav: 12px;
   --ui-radius-pill: 999px;
   --ui-shadow-sm: none;
   --ui-shadow-md: none;
@@ -506,12 +508,12 @@ html.dark .el-table td.el-table__cell {
 .el-select__wrapper,
 .el-input-number,
 .el-date-editor {
-  border-radius: var(--ui-radius-pill) !important;
+  border-radius: var(--ui-radius-input) !important;
   box-shadow: 0 0 0 1px var(--ui-border) inset !important;
 }
 
 .el-textarea__inner {
-  border-radius: var(--ui-radius-xl) !important;
+  border-radius: var(--ui-radius-input) !important;
   box-shadow: 0 0 0 1px var(--ui-border) inset !important;
 }
 
@@ -598,7 +600,7 @@ html.dark .el-table td.el-table__cell {
   height: 40px;
   line-height: 40px;
   margin: 2px 8px;
-  border-radius: var(--ui-radius-sm);
+  border-radius: var(--ui-radius-nav);
 }
 
 .el-menu-item.is-active {

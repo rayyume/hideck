@@ -213,7 +213,7 @@ function ruleSourceLabel(rule: CarrierQueryRule): string {
 .query-row { display: grid; grid-template-columns: minmax(0, 1fr); }
 .query-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
 .device-select { min-width: 0; }
-.query-row :deep(.el-input__wrapper) { min-height: 40px; border-radius: var(--ui-radius-pill); }
+.query-row :deep(.el-input__wrapper) { min-height: 40px; border-radius: var(--ui-radius-input); }
 .query-actions :deep(.el-button) { min-height: 40px; }
 .latest-result { display: flex; flex-direction: column; gap: 6px; padding: 15px 0; border-block: 1px solid var(--ui-border); }
 .latest-result > strong { color: var(--ui-primary); font-size: clamp(25px, 2.4vw, 36px); font-weight: 550; overflow-wrap: anywhere; }

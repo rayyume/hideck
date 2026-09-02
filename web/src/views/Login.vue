@@ -441,7 +441,7 @@ async function redirectAfterLogin() {
   align-items: center;
   gap: 14px;
   border: 1px solid var(--ui-border);
-  border-radius: var(--ui-radius-pill);
+  border-radius: var(--ui-radius-xl);
   background: var(--ui-surface);
 }
 
@@ -535,7 +535,7 @@ label {
   align-items: center;
   gap: 10px;
   border: 1px solid var(--ui-border);
-  border-radius: var(--ui-radius-pill);
+  border-radius: var(--ui-radius-input);
   background: var(--ui-surface);
   color: var(--ui-text-muted);
   transition: border-color 160ms ease, box-shadow 160ms ease;

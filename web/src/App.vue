@@ -294,7 +294,7 @@ function retryStartup() {
 
 .license-input {
   border: 1px solid var(--ui-border);
-  border-radius: var(--ui-radius-pill);
+  border-radius: var(--ui-radius-input);
   background: var(--ui-surface-subtle);
   color: var(--ui-text);
 }

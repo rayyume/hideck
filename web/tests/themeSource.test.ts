@@ -44,6 +44,8 @@ test('navy-light tokens match the approved palette', () => {
   assert.match(globalStyles, /:root \{[\s\S]*--ui-radius-md: 20px;/)
   assert.match(globalStyles, /:root \{[\s\S]*--ui-radius-lg: 24px;/)
   assert.match(globalStyles, /:root \{[\s\S]*--ui-radius-xl: 24px;/)
+  assert.match(globalStyles, /:root \{[\s\S]*--ui-radius-input: 16px;/)
+  assert.match(globalStyles, /:root \{[\s\S]*--ui-radius-nav: 12px;/)
   assert.match(globalStyles, /:root \{[\s\S]*--ui-radius-pill: 999px;/)
   assert.match(globalStyles, /:root \{[\s\S]*--ui-font-weight-body: 500;/)
   assert.match(globalStyles, /:root \{[\s\S]*--ui-font-weight-title: 700;/)
@@ -76,6 +78,8 @@ test('classic preserves the previous dark theme tokens', () => {
 test('primary buttons are navy pills and selected nav uses the accent bar token', () => {
   assert.match(globalStyles, /\.el-button \{[\s\S]*border-radius: var\(--ui-radius-pill\);/)
   assert.match(globalStyles, /\.el-button--primary:not\(\.is-plain\):not\(\.is-text\):not\(\.is-link\) \{[\s\S]*var\(--ui-primary-solid\)/)
+  assert.match(globalStyles, /\.el-input__wrapper,\s*\.el-select__wrapper,\s*\.el-input-number,\s*\.el-date-editor \{\s*border-radius: var\(--ui-radius-input\) !important;/)
+  assert.match(globalStyles, /\.el-menu-item \{[\s\S]*border-radius: var\(--ui-radius-nav\);/)
   assert.match(globalStyles, /\.el-menu-item\.is-active \{[\s\S]*var\(--ui-selected\)/)
   assert.match(shell, /--sidebar-menu-active-bg: var\(--ui-selected\);/)
   assert.match(shell, /background: var\(--ui-accent\);/)

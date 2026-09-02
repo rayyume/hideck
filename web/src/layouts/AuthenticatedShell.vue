@@ -312,7 +312,7 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
   min-height: 46px;
   line-height: 46px;
   margin: 0 0 5px;
-  border-radius: var(--ui-radius-md);
+  border-radius: var(--ui-radius-nav);
   padding-left: 14px !important;
   padding-right: 14px !important;
   font-size: 14px;
@@ -376,7 +376,7 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
   min-height: 46px;
   line-height: 46px;
   margin: 0 auto 5px;
-  border-radius: var(--ui-radius-md);
+  border-radius: var(--ui-radius-nav);
   display: grid;
   place-items: center;
   padding: 0 !important;
