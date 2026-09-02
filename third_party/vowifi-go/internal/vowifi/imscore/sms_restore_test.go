@@ -386,6 +386,38 @@ func TestRejectedRPAckPromptsSMMARedelivery(t *testing.T) {
 	}
 }
 
+func TestPushConnectionRecoveryPromptsSMMARedelivery(t *testing.T) {
+	service, _, _ := newInboundSMSTestService(t)
+	// Keep RFC 5626 flow recovery out of the way; this test only covers the prompt.
+	service.portSReconnectGrace = time.Hour
+	var bodies [][]byte
+	service.transport.SetSendFn(func(raw string) error {
+		_, body, _ := strings.Cut(raw, "\r\n\r\n")
+		bodies = append(bodies, []byte(body))
+		service.transport.DeliverResponse(registerResponseForRequest(raw, 202, nil))
+		return nil
+	})
+
+	service.handleProtectedServerPushClosed()
+	if !service.portSPushLost.Load() {
+		t.Fatal("a closed push flow did not arm the RP-SMMA prompt")
+	}
+
+	service.promptSMSCRedeliveryAfterPushRecovery()
+	if len(bodies) != 1 {
+		t.Fatalf("sent %d requests, want one RP-SMMA prompt", len(bodies))
+	}
+	if kind := smscodec.ClassifyRPDU(bodies[0]).Kind; kind != smscodec.RPDUKindSMMA {
+		t.Fatalf("prompt RPDU = %q, want RP-SMMA", kind)
+	}
+
+	// Vodafone resets port-s several times an hour; one prompt per window.
+	service.promptSMSCRedeliveryAfterPushRecovery()
+	if len(bodies) != 1 {
+		t.Fatalf("sent %d requests, want the prompt to stay rate limited", len(bodies))
+	}
+}
+
 func TestRPAckUsesPAINotFrom(t *testing.T) {
 	service, _, _ := newInboundSMSTestService(t)
 	var requests []string
