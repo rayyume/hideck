@@ -219,7 +219,7 @@ func TestReportForOurRPSMMAIsAccepted(t *testing.T) {
 		service.transport.DeliverResponse(registerResponseForRequest(raw, 202, nil))
 		return nil
 	})
-	if err := service.sendRPSMMA(); err != nil {
+	if err := service.NotifySMSMemoryAvailable(); err != nil {
 		t.Fatal(err)
 	}
 	if smmaCallID == "" {

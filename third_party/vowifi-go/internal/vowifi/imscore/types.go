@@ -183,7 +183,6 @@ type Service struct {
 	protectedConnMu           sync.Mutex
 	protectedConns            map[net.Conn]struct{}
 	portSReconnectGrace       time.Duration
-	portSPushLost             atomic.Bool
 	portSWriteOK              atomic.Int64
 	portSWriteErr             atomic.Int64
 	portSLastWriteOKAt        atomic.Int64

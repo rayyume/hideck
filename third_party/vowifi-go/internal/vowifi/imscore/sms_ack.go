@@ -43,9 +43,6 @@ const (
 	rpReportInitialDelay = 0
 	rpReportRetryDelay   = time.Second
 	rpReportMaxAttempts  = 4
-	// One prompt covers every message the SMSC releases in the same flush,
-	// so rate limit it rather than sending one per rejected report.
-	smmaPromptMinInterval = time.Minute
 )
 
 type mtAckAudit struct {
@@ -148,57 +145,7 @@ func (s *Service) sendRPReportWithRetry(report rpReportRequest) {
 			"IMS RP report delivery failed",
 			"device", deviceID, "attempts", attempts,
 			"rp_mr", int(report.RPMR), "error", err)
-		s.promptSMSCRedeliveryAfterRejectedReport(err)
 	}
-}
-
-// A rejected delivery report leaves the SMSC believing the short message is
-// still outstanding, so it holds later messages behind it until its own
-// retransmission timer fires — observed at 13 to 66 minutes. RP-SMMA is the
-// only receiver-initiated way to ask for that queue now (TS 24.011 clears
-// MCEF and alerts the service centre), so send one instead of waiting.
-func (s *Service) promptSMSCRedeliveryAfterRejectedReport(reportErr error) {
-	if rpReportRejectStatus(reportErr) == 0 {
-		return
-	}
-	s.promptSMSCRedelivery("a rejected report")
-}
-
-// promptSMSCRedeliveryAfterPushRecovery runs when port-s comes back after the
-// P-CSCF dropped it. Whatever the network was pushing over the dead flow is
-// gone, and the SMSC only retries on its own timer — measured at 13 to 30
-// minutes — so ask for the queue as soon as the flow is usable again.
-func (s *Service) promptSMSCRedeliveryAfterPushRecovery() {
-	// Same gate as RFC 5626 flow recovery in portSReconnectWatchFired: the
-	// REGISTER binding has to be live before anything is worth sending.
-	if s == nil || s.RegState() != regRegistered {
-		return
-	}
-	s.promptSMSCRedelivery("a push connection reset")
-}
-
-func (s *Service) promptSMSCRedelivery(reason string) {
-	if s == nil || s.stopped() || !s.reserveSMMAPrompt(time.Now()) {
-		return
-	}
-	s.smsSendMu.Lock()
-	err := s.sendRPSMMA()
-	s.smsSendMu.Unlock()
-	if err != nil {
-		logging.RunDebug("IMS RP-SMMA redelivery prompt failed",
-			"device", s.DeviceID(), "reason", reason, "error", err)
-		return
-	}
-	logging.Info("IMS RP-SMMA sent to release the SMSC queue",
-		"device", s.DeviceID(), "reason", reason)
-}
-
-func (s *Service) reserveSMMAPrompt(now time.Time) bool {
-	last := s.smmaPromptLastAt.Load()
-	if last != 0 && now.Sub(time.Unix(0, last)) < smmaPromptMinInterval {
-		return false
-	}
-	return s.smmaPromptLastAt.CompareAndSwap(last, now.UnixNano())
 }
 
 func (s *Service) sendRPReportWithRetryPolicy(

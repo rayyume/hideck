@@ -42,10 +42,6 @@ func (s *Service) NotifySMSMemoryAvailable() error {
 	return s.sendRPSMMAWithRetryPolicy(rpReportInitialDelay, rpReportRetryDelay)
 }
 
-func (s *Service) sendRPSMMA() error {
-	return s.sendRPSMMAWithRetryPolicy(rpReportInitialDelay, rpReportRetryDelay)
-}
-
 func (s *Service) sendRPSMMAWithRetryPolicy(initialDelay, retryDelay time.Duration) error {
 	if !s.waitSMSRetryDelay(initialDelay) {
 		return errRPReportAborted

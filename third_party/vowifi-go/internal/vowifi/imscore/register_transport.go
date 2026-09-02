@@ -250,13 +250,6 @@ func (s *Service) acceptProtectedSIP(listener net.Listener) {
 			return
 		}
 		s.resetPortSFlowStats()
-		if s.portSPushLost.CompareAndSwap(true, false) {
-			s.networkDone.Add(1)
-			go func() {
-				defer s.networkDone.Done()
-				s.promptSMSCRedeliveryAfterPushRecovery()
-			}()
-		}
 		s.networkDone.Add(1)
 		go s.serveProtectedSIPConnection(conn)
 	}
@@ -288,9 +281,6 @@ func (s *Service) handleProtectedServerPushClosed() {
 	if remaining > 0 {
 		return
 	}
-	// Any MT delivery the network attempted on the dead flow is lost, so mark
-	// the flow for an RP-SMMA prompt once port-s is back.
-	s.portSPushLost.Store(true)
 	logging.Info("IMS protected server push closed; wait for port-s reconnect",
 		"device", s.DeviceID(), "grace", s.portSReconnectWait(),
 		"ok_writes", s.portSWriteOK.Load(), "failed_writes", s.portSWriteErr.Load(),
