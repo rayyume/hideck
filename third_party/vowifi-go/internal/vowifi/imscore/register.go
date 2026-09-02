@@ -99,16 +99,12 @@ func (s *Service) registerLocked(ctx context.Context) error {
 		expires, err = s.runRegisterFlow(ctx)
 	}
 	if err == nil && s.lastRegisterContactCount.Load() > 1 {
-		logging.Info("IMS REGISTER listed multiple Contacts; clearing stale bindings",
+		// A binding left by an earlier run keeps its own Contact URI, so this
+		// registration adds to it rather than replacing it. Clearing it took a
+		// wildcard de-registration, which dropped this registration and its SA
+		// too and cost a whole extra attempt to get back.
+		logging.Info("IMS REGISTER listed multiple Contacts; keeping this binding",
 			"device", s.DeviceID(), "contacts", s.lastRegisterContactCount.Load())
-		if clearErr := s.clearRegistrationBindingsLocked(ctx); clearErr != nil {
-			logging.Info("IMS stale Contact cleanup failed",
-				"device", s.DeviceID(), "err", clearErr)
-		} else if again, againErr := s.runRegisterFlow(ctx); againErr != nil {
-			err = againErr
-		} else {
-			expires = again
-		}
 	}
 	if err == nil && s.needsOutboundBindingRefresh() {
 		logging.Info("IMS REGISTER completing outbound flow", "device", s.DeviceID())

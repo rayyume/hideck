@@ -820,7 +820,10 @@ func TestStopUnregistersBeforeClosingRegisteredTransport(t *testing.T) {
 	}
 }
 
-func TestRegisterClearsStaleContactsAdvertisedIn200(t *testing.T) {
+// A binding left by an earlier run carries its own Contact URI, so it cannot be
+// replaced by registering again. Clearing it took a wildcard de-registration,
+// which dropped this registration and its SA with it.
+func TestRegisterKeepsItsBindingWhenStaleContactsAreAdvertised(t *testing.T) {
 	service, err := New(registerTransportTestConfig("udp", "127.0.0.1:5060"))
 	if err != nil {
 		t.Fatal(err)
@@ -834,28 +837,26 @@ func TestRegisterClearsStaleContactsAdvertisedIn200(t *testing.T) {
 	requests := make(chan string, 3)
 	service.transport.SetSendFn(func(request string) error {
 		requests <- request
-		headers := map[string]string{}
-		if sipHeaderValue(request, "Contact") != "*" {
-			headers["Contact"] = `<sip:contact-1@new.example>, <sip:stale@old.example>`
-		}
-		service.transport.DeliverResponse(registerResponseForRequest(request, 200, headers))
+		service.transport.DeliverResponse(registerResponseForRequest(request, 200, map[string]string{
+			"Contact": `<sip:contact-1@new.example>, <sip:stale@old.example>`,
+		}))
 		return nil
 	})
 	if err := service.Register(context.Background()); err != nil {
 		t.Fatalf("Register: %v", err)
 	}
 	first := <-requests
-	wildcard := <-requests
-	again := <-requests
 	if sipHeaderValue(first, "Contact") == "*" {
-		t.Fatal("initial REGISTER used wildcard Contact")
+		t.Fatal("initial REGISTER used a wildcard Contact")
 	}
-	if sipHeaderValue(wildcard, "Contact") != "*" || sipHeaderValue(wildcard, "Expires") != "0" {
-		t.Fatalf("stale cleanup Contact=%q Expires=%q",
-			sipHeaderValue(wildcard, "Contact"), sipHeaderValue(wildcard, "Expires"))
+	select {
+	case extra := <-requests:
+		t.Fatalf("the stale binding triggered another REGISTER with Contact=%q Expires=%q",
+			sipHeaderValue(extra, "Contact"), sipHeaderValue(extra, "Expires"))
+	case <-time.After(200 * time.Millisecond):
 	}
-	if sipHeaderValue(again, "Contact") == "*" {
-		t.Fatal("REGISTER after stale cleanup retained wildcard Contact")
+	if status := service.StatusCurrent().RegStatus; status != "Registered" {
+		t.Fatalf("reg status = %q, want the registration kept", status)
 	}
 }
 
