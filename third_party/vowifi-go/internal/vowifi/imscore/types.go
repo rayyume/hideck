@@ -187,6 +187,7 @@ type Service struct {
 	portSWriteOK              atomic.Int64
 	portSWriteErr             atomic.Int64
 	portSLastWriteOKAt        atomic.Int64
+	portSLastReadAt           atomic.Int64
 	portSWatchMu              sync.Mutex
 	portSWatchTimer           *time.Timer
 	sipWriteMu                sync.Mutex

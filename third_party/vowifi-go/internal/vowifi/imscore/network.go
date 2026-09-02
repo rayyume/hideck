@@ -256,6 +256,28 @@ func (s *Service) newInboundCountingConn(conn net.Conn) net.Conn {
 	return &inboundCountingConn{conn: conn, service: s, onRead: s.handleTCPTraffic}
 }
 
+// newPortSInboundConn counts the push flow separately from the registration
+// stream. Both share tcp_socket_reads, so that counter cannot attribute
+// inbound activity to the flow that carries MT SMS, which is what a reset has
+// to be read against.
+func (s *Service) newPortSInboundConn(conn net.Conn) net.Conn {
+	if conn == nil {
+		return nil
+	}
+	if _, counted := conn.(*inboundCountingConn); counted {
+		return conn
+	}
+	return &inboundCountingConn{conn: conn, service: s, onRead: s.handlePortSTraffic}
+}
+
+func (s *Service) handlePortSTraffic() {
+	if s == nil {
+		return
+	}
+	s.portSLastReadAt.Store(time.Now().UnixNano())
+	s.handleTCPTraffic()
+}
+
 // Read reads and counts.
 func (c *inboundCountingConn) Read(b []byte) (int, error) {
 	if c == nil || c.conn == nil {

@@ -326,14 +326,17 @@ func (s *Service) sendProtectedFlowCRLFKeepalives(skip net.Conn) {
 	}
 }
 
-// resetPortSWriteStats starts the counters over for a freshly accepted flow.
-func (s *Service) resetPortSWriteStats() {
+// resetPortSFlowStats starts the counters over for a freshly accepted flow.
+// The read clock starts at the accept so silence is measured from the moment
+// the flow existed rather than from the first byte the peer happens to send.
+func (s *Service) resetPortSFlowStats() {
 	if s == nil {
 		return
 	}
 	s.portSWriteOK.Store(0)
 	s.portSWriteErr.Store(0)
 	s.portSLastWriteOKAt.Store(0)
+	s.portSLastReadAt.Store(time.Now().UnixNano())
 }
 
 // portSLastWriteOKAge reports how long ago a CRLF keepalive last left for the
@@ -350,6 +353,23 @@ func (s *Service) portSLastWriteOKAge() time.Duration {
 		return 0
 	}
 	return time.Since(time.Unix(0, at)).Round(time.Microsecond)
+}
+
+// portSSinceLastRead reports how long the push flow has received nothing.
+// Zero means no flow is being tracked yet. This is diagnostics only: the
+// P-CSCF runs no CRLF ping/pong on port-s, so a healthy flow measured over
+// 234 idle windows stayed silent for a median of 60s and up to 48m. Silence
+// therefore cannot tell a dead flow from an idle one, and the flow instead
+// ends with a peer RST while our writes are still landing.
+func (s *Service) portSSinceLastRead() time.Duration {
+	if s == nil {
+		return 0
+	}
+	at := s.portSLastReadAt.Load()
+	if at == 0 {
+		return 0
+	}
+	return time.Since(time.Unix(0, at)).Round(time.Millisecond)
 }
 
 func (s *Service) snapshotProtectedConns() []net.Conn {

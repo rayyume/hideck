@@ -244,12 +244,12 @@ func (s *Service) acceptProtectedSIP(listener net.Listener) {
 			"device", s.DeviceID(), "remote", conn.RemoteAddr(), "local", conn.LocalAddr())
 		s.inboundTCPAccept.Add(1)
 		s.configureRegistrationTCPKeepalive(conn)
-		conn = s.newInboundCountingConn(conn)
+		conn = s.newPortSInboundConn(conn)
 		if !s.trackProtectedConnection(conn) {
 			_ = conn.Close()
 			return
 		}
-		s.resetPortSWriteStats()
+		s.resetPortSFlowStats()
 		if s.portSPushLost.CompareAndSwap(true, false) {
 			s.networkDone.Add(1)
 			go func() {
@@ -294,7 +294,8 @@ func (s *Service) handleProtectedServerPushClosed() {
 	logging.Info("IMS protected server push closed; wait for port-s reconnect",
 		"device", s.DeviceID(), "grace", s.portSReconnectWait(),
 		"ok_writes", s.portSWriteOK.Load(), "failed_writes", s.portSWriteErr.Load(),
-		"since_last_write_ok", s.portSLastWriteOKAge())
+		"since_last_write_ok", s.portSLastWriteOKAge(),
+		"since_last_read", s.portSSinceLastRead())
 	s.schedulePortSReconnectWatch()
 }
 

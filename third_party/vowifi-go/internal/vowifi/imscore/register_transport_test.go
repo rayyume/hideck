@@ -768,12 +768,42 @@ func TestPortSWriteStatsRecordKeepaliveLiveness(t *testing.T) {
 		t.Fatalf("failed_writes after close = %d, want 1", failed)
 	}
 
-	service.resetPortSWriteStats()
+	service.resetPortSFlowStats()
 	if service.portSWriteOK.Load() != 0 || service.portSWriteErr.Load() != 0 {
 		t.Fatal("a new flow reused the previous flow's counters")
 	}
 	if age := service.portSLastWriteOKAge(); age != 0 {
 		t.Fatalf("since_last_write_ok = %s, want zero for an unwritten flow", age)
+	}
+	if service.portSLastReadAt.Load() == 0 {
+		t.Fatal("a fresh flow left no read clock to measure silence from")
+	}
+}
+
+// port-s and the registration stream share tcp_socket_reads, so the push flow
+// needs its own read clock for a reset to be told apart from plain idling.
+func TestPortSReadClockTracksOnlyThePushFlow(t *testing.T) {
+	service := newProtectedKeepaliveTestService(t)
+
+	service.resetPortSFlowStats()
+	if silence := service.portSSinceLastRead(); silence > time.Minute {
+		t.Fatalf("since_last_read = %s, want a fresh clock", silence)
+	}
+
+	service.portSLastReadAt.Store(time.Now().Add(-10 * time.Minute).UnixNano())
+	if silence := service.portSSinceLastRead(); silence < 9*time.Minute {
+		t.Fatalf("since_last_read = %s, want the backdated age", silence)
+	}
+
+	// Registration-stream traffic must not refresh the push flow's clock.
+	service.handleTCPTraffic()
+	if silence := service.portSSinceLastRead(); silence < 9*time.Minute {
+		t.Fatalf("since_last_read = %s, want registration traffic ignored", silence)
+	}
+
+	service.handlePortSTraffic()
+	if silence := service.portSSinceLastRead(); silence > time.Minute {
+		t.Fatalf("since_last_read after push inbound = %s, want the clock to advance", silence)
 	}
 }
 
