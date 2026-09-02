@@ -39,7 +39,9 @@ const (
 	imsMaintenanceMinimumDelay     = 100 * time.Millisecond
 	// Wait for P-CSCF to reopen port-s before RFC 5626 flow recovery.
 	// Immediate re-REGISTER on RST replaced Contact and delayed MT SMS.
-	defaultPortSReconnectGrace     = 15 * time.Second
+	// Measured over 30 resets: P-CSCF either reconnects within 3s or never,
+	// so a longer grace only widens the window where MT SMS is dropped.
+	defaultPortSReconnectGrace     = 4 * time.Second
 	imsLongRegistrationThreshold   = 1200 * time.Second
 	imsLongRegistrationRefreshLead = 600 * time.Second
 	imsSubscriptionRefreshAdvance  = 60 * time.Second
