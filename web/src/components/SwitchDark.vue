@@ -22,8 +22,8 @@ function onToggle() {
       :aria-label="isDark ? '切换到浅色模式' : '切换到深色模式'"
       @click="onToggle"
     >
-      <el-icon v-if="isDark"><WeatherSunny24Regular /></el-icon>
-      <el-icon v-else><WeatherMoon24Regular /></el-icon>
+      <el-icon v-if="isDark"><WeatherMoon24Regular /></el-icon>
+      <el-icon v-else><WeatherSunny24Regular /></el-icon>
     </el-button>
   </el-tooltip>
 </template>

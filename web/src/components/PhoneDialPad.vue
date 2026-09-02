@@ -45,7 +45,7 @@ const keys = [
   justify-content: center;
   flex-direction: column;
   border: 1px solid var(--ui-border);
-  border-radius: 6px;
+  border-radius: var(--ui-radius-md);
   background: var(--ui-surface-muted);
   color: var(--ui-text);
   cursor: pointer;

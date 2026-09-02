@@ -613,7 +613,7 @@ usePollingScheduler(() => fetchUpstream({ silent: true }), 10000, {
 .proxy-workspace-content { min-width: 0; }
 
 .proxy-page :deep(.ui-panel-muted) {
-  border-radius: 7px;
+  border-radius: var(--ui-radius-xl);
 }
 
 .proxy-mode-enter-active {

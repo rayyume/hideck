@@ -93,7 +93,7 @@ const emit = defineEmits<{
   gap: 10px;
   border: 1px solid transparent;
   border-bottom-color: var(--ui-border-muted);
-  border-radius: 9px;
+  border-radius: var(--ui-radius-md);
   background: transparent;
   color: var(--ui-text);
   cursor: pointer;

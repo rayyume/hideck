@@ -1541,7 +1541,7 @@ usePollingScheduler(async () => {
 .tab-loading-state {
   min-height: 220px;
   padding: 28px;
-  border-radius: 10px;
+  border-radius: var(--ui-radius-xl);
 }
 
 .device-action-row,
@@ -1672,7 +1672,7 @@ usePollingScheduler(async () => {
   display: grid;
   place-items: center;
   border: 1px solid var(--ui-border);
-  border-radius: 13px;
+  border-radius: var(--ui-radius-md);
   background: var(--ui-surface-strong);
   color: var(--ui-primary);
   font-size: 24px;

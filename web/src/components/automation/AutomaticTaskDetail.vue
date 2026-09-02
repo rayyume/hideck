@@ -70,14 +70,14 @@ const emit = defineEmits<{
 .task-detail > header span { color: var(--ui-primary); font: var(--ui-font-caption)/1.2 "v-mono", monospace; letter-spacing: .14em; }
 .task-detail h2 { margin: 5px 0 0; color: var(--ui-text); font-size: 20px; overflow-wrap: anywhere; }
 .task-detail > header :deep(.el-button) { width: 40px; height: 40px; flex: 0 0 40px; margin: -5px -5px 0 0; }
-.detail-panel { padding: 14px; border: 1px solid var(--ui-border); border-radius: 6px; background: color-mix(in srgb, var(--ui-surface) 62%, transparent); }
+.detail-panel { padding: 14px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); background: color-mix(in srgb, var(--ui-surface) 62%, transparent); }
 .detail-panel + .detail-panel { margin-top: 10px; }
 .detail-panel h3 { margin: 0 0 8px; color: var(--ui-text); font-size: 16px; }
 .detail-panel dl { margin: 0; }
 .detail-panel dl > div { min-height: 42px; display: grid; grid-template-columns: minmax(112px, 1fr) minmax(0, auto); align-items: center; gap: 10px; border-bottom: 1px solid var(--ui-border); }
 .detail-panel dl > div:last-child { border-bottom: 0; }
 .detail-panel dt { color: var(--ui-text-muted); display: flex; align-items: center; gap: 8px; font-size: var(--ui-font-body-sm); }
-.detail-panel dt .el-icon { color: var(--ui-text-subtle); font-size: 17px; }
+.detail-panel dt .el-icon { color: var(--ui-muted); font-size: 17px; }
 .detail-panel dd { min-width: 0; margin: 0; color: var(--ui-text); font-size: var(--ui-font-body-sm); font-weight: 550; text-align: right; overflow-wrap: anywhere; }
 .detail-panel dd.enabled { color: var(--ui-success); }
 .detail-code { font-family: "v-mono", ui-monospace, monospace; }

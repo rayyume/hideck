@@ -50,7 +50,7 @@ const metaText = computed(() => {
 <style scoped>
 .error-state {
   border-color: color-mix(in srgb, var(--ui-danger) 28%, var(--ui-border));
-  border-radius: 6px;
+  border-radius: var(--ui-radius-lg);
   background: color-mix(in srgb, var(--ui-danger) 8%, var(--ui-surface));
   box-shadow: inset 3px 0 0 var(--ui-danger);
 }

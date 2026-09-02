@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, ref, onMounted, watch } from 'vue'
+import { computed, defineAsyncComponent, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from './stores/auth'
 import LoadingScreen from './components/LoadingScreen.vue'
@@ -13,11 +13,11 @@ import {
   type StartupState
 } from './utils/startupGate'
 import { Warning24Regular } from '@vicons/fluent'
+import { useTheme } from './composables/useTheme'
 
 const route = useRoute()
 const auth = useAuthStore()
-
-const isDark = ref(localStorage.getItem('theme') === 'dark')
+const { isDark, toggleTheme } = useTheme()
 const disclaimerAccepted = ref(false)
 const confirmText = ref('')
 const expectedConfirmText = '我同意并确认'
@@ -30,25 +30,6 @@ const disclaimerState = ref<StartupState>(auth.isAuthenticated ? 'loading' : 'id
 const disclaimerError = ref('')
 let deviceTimeGeneration = 0
 let disclaimerGeneration = 0
-
-function toggleTheme() {
-  isDark.value = !isDark.value
-  const mode = isDark.value ? 'dark' : 'light'
-  localStorage.setItem('theme', mode)
-  updateHtmlClass(mode)
-}
-
-function updateHtmlClass(mode: 'dark' | 'light') {
-  if (mode === 'dark') {
-    document.documentElement.classList.add('dark')
-  } else {
-    document.documentElement.classList.remove('dark')
-  }
-}
-
-onMounted(() => {
-  updateHtmlClass(isDark.value ? 'dark' : 'light')
-})
 
 async function syncDeviceTime() {
   const generation = ++deviceTimeGeneration
@@ -129,7 +110,7 @@ function rejectDisclaimer() {
     headers: token ? { Authorization: `Bearer ${token}` } : undefined
   })
     .finally(() => {
-      document.body.innerHTML = '<div style="display:flex;height:100vh;background:#0a0a0a;align-items:center;justify-content:center;font-size:24px;color:#ef4444;font-weight:bold;font-family:sans-serif;flex-direction:column;gap:16px;"><div><svg style="width:64px;height:64px;" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg></div><div>软件已被卸载 / 服务已终止</div></div>'
+      document.body.innerHTML = '<div style="display:flex;height:100vh;background:var(--ui-bg);align-items:center;justify-content:center;font-size:24px;color:var(--ui-danger);font-weight:bold;font-family:sans-serif;flex-direction:column;gap:16px;"><div><svg style="width:64px;height:64px;" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg></div><div>软件已被卸载 / 服务已终止</div></div>'
     })
 }
 
@@ -194,9 +175,9 @@ function retryStartup() {
               <Warning24Regular class="w-6 h-6" />
             </div>
             
-            <h2 class="mb-5 text-2xl font-extrabold text-center text-gray-900 dark:text-white tracking-tight">HiDeck 最终用户许可与免责声明</h2>
+            <h2 class="mb-5 text-2xl font-extrabold text-center text-[var(--ui-text)] tracking-tight">HiDeck 最终用户许可与免责声明</h2>
             
-            <div class="space-y-4 text-[14px] text-gray-600 dark:text-gray-300 leading-relaxed font-medium">
+            <div class="space-y-4 text-[14px] text-[var(--ui-muted)] leading-relaxed font-medium">
               <div class="flex items-start">
                 <div class="license-index">1</div>
                 <p>本软件（HiDeck）属于个人开发者业余时间开发的工具软件，仅供技术研究、学习交流和个人内部测试使用。<strong class="license-emphasis">严禁用于任何商业用途</strong>，严禁作为生产环境的基础设施。</p>
@@ -215,8 +196,8 @@ function retryStartup() {
               </div>
             </div>
             
-            <div class="mt-6 pt-5 border-t border-gray-100 dark:border-gray-800">
-              <p class="mb-3 text-xs font-bold text-center text-gray-500 dark:text-gray-400">
+            <div class="mt-6 pt-5 border-t border-[var(--ui-border)]">
+              <p class="mb-3 text-xs font-bold text-center text-[var(--ui-muted)]">
                 请输入「<span class="license-emphasis select-all">{{ expectedConfirmText }}</span>」以解锁按钮
               </p>
               
@@ -243,7 +224,7 @@ function retryStartup() {
                   @click="acceptDisclaimer" 
                   :disabled="!canAccept"
                   :class="[
-                    'flex-[1.5] px-4 py-3 text-sm font-bold tracking-wide transition-all duration-300 rounded-md',
+                    'flex-[1.5] px-4 py-3 text-sm font-bold tracking-wide transition-all duration-300 rounded-[var(--ui-radius-pill)]',
                     canAccept 
                       ? 'license-accept cursor-pointer'
                       : 'license-accept license-accept-disabled cursor-not-allowed'
@@ -268,12 +249,12 @@ function retryStartup() {
 
 .license-overlay {
   padding: 16px;
-  background: rgba(4, 17, 20, 0.72);
+  background: color-mix(in srgb, var(--ui-primary-solid) 56%, transparent);
 }
 
 .license-dialog {
   border: 1px solid var(--ui-border);
-  border-radius: 8px;
+  border-radius: var(--ui-radius-lg);
   background: var(--ui-surface-strong);
   box-shadow: var(--ui-shadow-lg);
 }
@@ -287,7 +268,7 @@ function retryStartup() {
 
 .license-icon {
   border: 1px solid color-mix(in srgb, var(--ui-warning) 34%, var(--ui-border));
-  border-radius: 6px;
+  border-radius: var(--ui-radius-md);
   background: color-mix(in srgb, var(--ui-warning) 12%, var(--ui-surface));
   color: var(--ui-warning);
 }
@@ -299,7 +280,7 @@ function retryStartup() {
   flex: 0 0 24px;
   display: grid;
   place-items: center;
-  border-radius: 4px;
+  border-radius: var(--ui-radius-sm);
   background: color-mix(in srgb, var(--ui-primary) 12%, var(--ui-surface));
   color: var(--ui-primary);
   font-family: "v-mono", ui-monospace, monospace;
@@ -313,7 +294,7 @@ function retryStartup() {
 
 .license-input {
   border: 1px solid var(--ui-border);
-  border-radius: 4px;
+  border-radius: 16px;
   background: var(--ui-surface-subtle);
   color: var(--ui-text);
 }
@@ -326,7 +307,7 @@ function retryStartup() {
 .license-reject,
 .license-accept {
   border: 1px solid var(--ui-border);
-  border-radius: 4px;
+  border-radius: var(--ui-radius-pill);
 }
 
 .license-reject {
@@ -380,16 +361,10 @@ function retryStartup() {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: color-mix(in srgb, var(--ui-text-muted) 55%, var(--ui-border));
   border-radius: 4px;
 }
-.dark ::-webkit-scrollbar-thumb {
-  background: #334155;
-}
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
-}
-.dark ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: color-mix(in srgb, var(--ui-text-muted) 75%, var(--ui-border));
 }
 </style>

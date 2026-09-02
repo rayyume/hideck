@@ -247,7 +247,7 @@ onUnmounted(clearLongPress)
   padding: 0 5px;
   display: grid;
   place-items: center;
-  border-radius: 6px;
+  border-radius: var(--ui-radius-md);
   background: var(--ui-primary);
   color: var(--ui-surface-subtle);
   font-size: var(--ui-font-caption);
@@ -265,7 +265,7 @@ onUnmounted(clearLongPress)
   display: grid;
   place-items: center;
   border: 1px solid color-mix(in srgb, var(--ui-danger) 30%, var(--ui-border));
-  border-radius: 6px;
+  border-radius: var(--ui-radius-md);
   background: color-mix(in srgb, var(--ui-danger) 8%, var(--ui-surface));
   color: var(--ui-danger);
   cursor: pointer;

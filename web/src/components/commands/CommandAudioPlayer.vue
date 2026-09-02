@@ -230,7 +230,7 @@ function releaseRecording() {
   height: 26px;
   flex: 0 0 26px;
   border: 1px solid var(--ui-border);
-  border-radius: 4px;
+  border-radius: var(--ui-radius-sm);
   color: var(--ui-primary);
   display: grid;
   place-items: center;
@@ -241,12 +241,12 @@ function releaseRecording() {
 .recording-copy span {
   min-width: 0;
   overflow: hidden;
-  color: var(--ui-text-subtle);
+  color: var(--ui-muted);
   font: var(--ui-font-body-sm) "v-mono", ui-monospace, monospace;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.recording-format { color: var(--ui-text-subtle); font: var(--ui-font-caption) "v-mono", ui-monospace, monospace; }
+.recording-format { color: var(--ui-muted); font: var(--ui-font-caption) "v-mono", ui-monospace, monospace; }
 .audio-controls {
   min-width: 0;
   display: grid;
@@ -278,7 +278,7 @@ function releaseRecording() {
   outline: 2px solid var(--ui-primary);
   outline-offset: 2px;
 }
-.audio-controls time { color: var(--ui-text-subtle); font: var(--ui-font-caption) "v-mono", ui-monospace, monospace; }
+.audio-controls time { color: var(--ui-muted); font: var(--ui-font-caption) "v-mono", ui-monospace, monospace; }
 .playback-range, .volume-range {
   --range-progress: 0%;
   min-width: 0;
@@ -334,7 +334,7 @@ function releaseRecording() {
 .audio-state .el-icon { flex: 0 0 auto; color: var(--ui-primary); font-size: 16px; }
 .audio-state.is-error { color: var(--ui-danger); }
 .audio-state.is-error .el-icon { color: currentColor; }
-.retry-button { min-height: 30px; margin-left: auto; padding: 0 10px; border-radius: 4px; }
+.retry-button { min-height: 30px; margin-left: auto; padding: 0 10px; border-radius: var(--ui-radius-pill); }
 .is-loading { animation: audio-loading 900ms linear infinite; }
 @keyframes audio-loading { to { transform: rotate(360deg); } }
 @media (max-width: 640px) {

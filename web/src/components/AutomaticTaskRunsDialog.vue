@@ -162,20 +162,20 @@ function handleOpenChange(open: boolean) {
 
 <style scoped>
 :global(.automatic-task-runs-scrim) { background: color-mix(in srgb, #000 54%, transparent); }
-:global(.automatic-task-runs) { border-radius: 8px 0 0 8px; background: var(--ui-surface); }
+:global(.automatic-task-runs) { border-radius: var(--ui-radius-lg) 0 0 var(--ui-radius-lg); background: var(--ui-surface); }
 :global(.automatic-task-runs .el-drawer__header) { min-height: 70px; margin: 0; padding: 12px 18px; border-bottom: 1px solid var(--ui-border); color: var(--ui-text); }
 :global(.automatic-task-runs .el-drawer__body) { min-height: 0; padding: 0 18px 24px; overflow-y: auto; }
 .runs-header { width: 100%; min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; }
-.runs-icon { width: 38px; height: 38px; border: 1px solid color-mix(in srgb, var(--ui-primary) 42%, var(--ui-border)); border-radius: 6px; background: color-mix(in srgb, var(--ui-primary) 9%, transparent); color: var(--ui-primary); display: grid; place-items: center; }
+.runs-icon { width: 38px; height: 38px; border: 1px solid color-mix(in srgb, var(--ui-primary) 42%, var(--ui-border)); border-radius: var(--ui-radius-md); background: color-mix(in srgb, var(--ui-primary) 9%, transparent); color: var(--ui-primary); display: grid; place-items: center; }
 .runs-header div > span { color: var(--ui-primary); font: var(--ui-font-caption)/1.2 "v-mono", monospace; letter-spacing: .14em; }
 .runs-header h2 { margin: 4px 0 0; color: var(--ui-text); font-size: 18px; overflow-wrap: anywhere; }
 .runs-header :deep(.el-button) { width: 44px; height: 44px; }
 .runs-toolbar { min-height: 68px; border-bottom: 1px solid var(--ui-border); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .runs-toolbar strong, .runs-toolbar span { display: block; }
 .runs-toolbar strong { color: var(--ui-text); font-size: 18px; }
-.runs-toolbar span { margin-top: 2px; color: var(--ui-text-subtle); font-size: var(--ui-font-caption); }
+.runs-toolbar span { margin-top: 2px; color: var(--ui-muted); font-size: var(--ui-font-caption); }
 .runs-toolbar :deep(.el-button) { min-height: 40px; }
-.runs-error { margin-top: 12px; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--ui-danger) 40%, var(--ui-border)); border-radius: 4px; background: color-mix(in srgb, var(--ui-danger) 7%, transparent); color: var(--ui-danger); display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: var(--ui-font-body-sm); }
+.runs-error { margin-top: 12px; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--ui-danger) 40%, var(--ui-border)); border-radius: var(--ui-radius-md); background: color-mix(in srgb, var(--ui-danger) 7%, transparent); color: var(--ui-danger); display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: var(--ui-font-body-sm); }
 .runs-state { min-height: 220px; color: var(--ui-text-muted); display: grid; place-items: center; align-content: center; gap: 7px; text-align: center; }
 .runs-state strong { color: var(--ui-text); }
 .runs-state span { font-size: var(--ui-font-body-sm); }
@@ -195,7 +195,7 @@ function handleOpenChange(open: boolean) {
 .run-content > header strong { color: currentColor; font-size: var(--ui-font-body-sm); }
 .run-content p { margin: 8px 0; color: var(--ui-text); font-size: var(--ui-font-body); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .run-content p.run-error-text { color: var(--ui-danger); }
-.run-content dl { margin: 0; display: grid; grid-template-columns: auto 1fr auto 1fr auto 1fr; gap: 5px 8px; color: var(--ui-text-subtle); font-size: var(--ui-font-caption); }
+.run-content dl { margin: 0; display: grid; grid-template-columns: auto 1fr auto 1fr auto 1fr; gap: 5px 8px; color: var(--ui-muted); font-size: var(--ui-font-caption); }
 .run-content dl div { display: contents; }
 .run-content dd { min-width: 0; margin: 0; color: var(--ui-text-muted); overflow-wrap: anywhere; }
 .runs-pagination { padding-top: 16px; display: flex; justify-content: flex-end; }

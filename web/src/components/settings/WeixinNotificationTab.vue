@@ -60,18 +60,18 @@ function start() {
       <div class="mb-5 flex items-center justify-between gap-4">
         <div class="min-w-0">
           <div class="flex flex-wrap items-center gap-2">
-            <h4 id="weixin-manual-title" class="text-base font-semibold text-gray-800 dark:text-gray-100">个人微信 iLink</h4>
-            <span class="rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs font-semibold leading-none text-amber-700 dark:text-amber-300">
+            <h4 id="weixin-manual-title" class="text-base font-semibold text-[var(--ui-text)]">个人微信 iLink</h4>
+            <span class="rounded-[var(--ui-radius-sm)] border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs font-semibold leading-none text-amber-700 dark:text-amber-300">
               会话型通知渠道
             </span>
           </div>
-          <p class="mt-2 max-w-2xl text-sm leading-6 text-gray-500 dark:text-gray-400" role="note">
+          <p class="mt-2 max-w-2xl text-sm leading-6 text-[var(--ui-muted)]" role="note">
             个人微信通知依赖最近一次聊天。太久没互动时，微信可能会暂停推送；给机器人发条消息就能恢复。
           </p>
         </div>
         <el-switch v-model="weixinForm.enabled" aria-label="启用个人微信" />
       </div>
-      <div class="mb-4 flex min-h-11 flex-wrap items-center justify-between gap-3 text-sm text-gray-700 dark:text-gray-200" aria-live="polite">
+      <div class="mb-4 flex min-h-11 flex-wrap items-center justify-between gap-3 text-sm text-[var(--ui-text)]" aria-live="polite">
         <span class="min-w-0 break-all">
           {{ boundUsers.length ? `通知会发给 ${boundUsers.join(', ')}` : '还没绑定接收人。扫码后给机器人发条消息，这里就会自动显示你的用户 ID。' }}
         </span>
@@ -79,16 +79,16 @@ function start() {
       </div>
       <div class="space-y-4">
         <div class="space-y-1">
-          <label class="text-xs font-semibold text-gray-500">iLink 服务地址</label>
+          <label class="text-xs font-semibold text-[var(--ui-muted)]">iLink 服务地址</label>
           <el-input v-model="weixinForm.base_url" placeholder="https://ilinkai.weixin.qq.com" />
         </div>
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div class="space-y-1">
-            <label class="text-xs font-semibold text-gray-500">允许私聊用户 ID</label>
+            <label class="text-xs font-semibold text-[var(--ui-muted)]">允许私聊用户 ID</label>
             <el-input v-model="weixinForm.allowed_user_ids" placeholder="多个使用英文逗号分隔" />
           </div>
           <div class="space-y-1">
-            <label class="text-xs font-semibold text-gray-500">允许群聊 ID</label>
+            <label class="text-xs font-semibold text-[var(--ui-muted)]">允许群聊 ID</label>
             <el-input v-model="weixinForm.allowed_group_ids" placeholder="多个使用英文逗号分隔" />
           </div>
         </div>

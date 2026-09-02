@@ -132,19 +132,19 @@ watch(scanState, (next) => {
     width="min(500px, 92vw)"
     class="glass-modal"
   >
-    <div class="mt-2 text-sm text-gray-600 dark:text-gray-300">
+    <div class="mt-2 text-sm text-[var(--ui-muted)]">
       <!-- 当前状态 -->
-      <div class="bg-gray-50 dark:bg-white/5 rounded-lg p-4 mb-4 border border-gray-100 dark:border-white/5">
+      <div class="bg-[var(--ui-surface-muted)] rounded-[var(--ui-radius-lg)] p-4 mb-4 border border-[var(--ui-border)]">
         <div class="flex justify-between items-center mb-2">
-          <span class="font-medium text-gray-700 dark:text-gray-200">当前模式</span>
-          <span class="px-2 py-0.5 rounded text-xs font-medium" 
+          <span class="font-medium text-[var(--ui-text)]">当前模式</span>
+          <span class="px-2 py-0.5 rounded-[var(--ui-radius-sm)] text-xs font-medium" 
             :class="currentSelection?.mode === 'automatic' ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300'">
             {{ currentSelection?.mode === 'automatic' ? '自动' : '手动锁定' }}
           </span>
         </div>
         <div v-if="currentSelection?.mode === 'manual'" class="flex justify-between items-center">
-          <span class="text-gray-500">已锁定 PLMN</span>
-          <span class="font-mono text-gray-900 dark:text-white">{{ currentSelection.plmn || '--' }}</span>
+          <span class="text-[var(--ui-muted)]">已锁定 PLMN</span>
+          <span class="font-mono text-[var(--ui-text)]">{{ currentSelection.plmn || '--' }}</span>
         </div>
       </div>
 
@@ -157,24 +157,24 @@ watch(scanState, (next) => {
         </el-button>
       </div>
 
-      <div v-if="scanning || scanMessage || scanError" class="mb-4 rounded-lg border px-3 py-2 text-xs"
+      <div v-if="scanning || scanMessage || scanError" class="mb-4 rounded-[var(--ui-radius-lg)] border px-3 py-2 text-xs"
         :class="scanError ? (scanRetryable ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300' : 'border-red-200 bg-red-50 text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300') : 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-300'">
         {{ scanError || scanMessage }}
       </div>
 
       <!-- 扫描结果列表 -->
-      <div v-if="candidates.length > 0" class="border border-gray-200 dark:border-white/10 rounded-lg overflow-hidden divide-y divide-gray-200 dark:divide-white/10 max-h-[300px] overflow-y-auto">
+      <div v-if="candidates.length > 0" class="border border-[var(--ui-border)] rounded-[var(--ui-radius-lg)] overflow-hidden divide-y divide-[var(--ui-border)] max-h-[300px] overflow-y-auto">
         <div v-for="c in candidates" :key="`${c.plmn}-${ratDisplay(c)}`" 
-          class="p-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-white/5 transition-colors cursor-pointer group"
+          class="p-3 flex items-center justify-between hover:bg-[var(--ui-selected)] transition-colors cursor-pointer group"
           @click="setModeManual(c)"
         >
           <div>
-            <div class="font-medium text-gray-900 dark:text-white flex items-center gap-2">
+            <div class="font-medium text-[var(--ui-text)] flex items-center gap-2">
               {{ c.operator_name || c.short_name || '未知网络' }}
-              <span v-if="c.status === 'current'" class="text-xs px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300 font-bold border border-emerald-200 dark:border-emerald-500/30">当前</span>
+              <span v-if="c.status === 'current'" class="text-xs px-1.5 py-0.5 rounded-full bg-[var(--ui-success-surface)] text-[var(--ui-success)] font-bold border border-[color-mix(in_srgb,var(--ui-success)_28%,var(--ui-border))]">当前</span>
               <span v-else-if="c.status === 'forbidden'" class="text-xs px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300 font-bold border border-red-200 dark:border-red-500/30">禁用</span>
             </div>
-            <div class="text-xs text-gray-500 dark:text-gray-400 font-mono mt-0.5">
+            <div class="text-xs text-[var(--ui-muted)] font-mono mt-0.5">
               {{ c.plmn }} • {{ ratDisplay(c) }}
             </div>
           </div>
@@ -185,7 +185,7 @@ watch(scanState, (next) => {
           </div>
         </div>
       </div>
-      <div v-else-if="scanning" class="py-8 text-center text-gray-500 flex flex-col items-center justify-center space-y-3">
+      <div v-else-if="scanning" class="py-8 text-center text-[var(--ui-muted)] flex flex-col items-center justify-center space-y-3">
         <span>正在搜索周围网络，这可能需要 1-3 分钟...</span>
       </div>
       <div v-else-if="scanRetryable" class="py-8 text-center text-amber-600 dark:text-amber-300 flex flex-col items-center justify-center space-y-3">

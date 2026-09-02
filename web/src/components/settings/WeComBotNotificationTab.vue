@@ -50,10 +50,10 @@ useNotificationBindingPoll({
 
     <section class="min-w-0" aria-labelledby="wecom-bot-manual-title">
       <div class="mb-5 flex items-center justify-between gap-4">
-        <h4 id="wecom-bot-manual-title" class="text-base font-semibold text-gray-800 dark:text-gray-100">企微长连接机器人</h4>
+        <h4 id="wecom-bot-manual-title" class="text-base font-semibold text-[var(--ui-text)]">企微长连接机器人</h4>
         <el-switch v-model="weComBotForm.enabled" aria-label="启用企业微信长连接机器人" />
       </div>
-      <div class="mb-4 flex min-h-11 flex-wrap items-center justify-between gap-3 text-sm text-gray-700 dark:text-gray-200" aria-live="polite">
+      <div class="mb-4 flex min-h-11 flex-wrap items-center justify-between gap-3 text-sm text-[var(--ui-text)]" aria-live="polite">
         <span class="min-w-0 break-all">
           {{ boundUsers.length ? `已绑定通知目标 ${boundUsers.join(', ')}` : '尚未绑定私聊用户。接入后请给这个机器人发一条消息，这里会自动填入用户 ID。' }}
         </span>
@@ -62,25 +62,25 @@ useNotificationBindingPoll({
       <div class="space-y-4">
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div class="space-y-1">
-            <label class="text-xs font-semibold text-gray-500">Bot ID</label>
+            <label class="text-xs font-semibold text-[var(--ui-muted)]">Bot ID</label>
             <el-input v-model="weComBotForm.bot_id" placeholder="企业微信 Bot ID" />
           </div>
           <div class="space-y-1">
-            <label class="text-xs font-semibold text-gray-500">Secret</label>
+            <label class="text-xs font-semibold text-[var(--ui-muted)]">Secret</label>
             <el-input v-model="weComBotForm.secret" type="password" show-password placeholder="********" />
           </div>
         </div>
         <div class="space-y-1">
-          <label class="text-xs font-semibold text-gray-500">WebSocket 地址</label>
+          <label class="text-xs font-semibold text-[var(--ui-muted)]">WebSocket 地址</label>
           <el-input v-model="weComBotForm.websocket_url" placeholder="wss://openws.work.weixin.qq.com" />
         </div>
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div class="space-y-1">
-            <label class="text-xs font-semibold text-gray-500">允许私聊用户 ID</label>
+            <label class="text-xs font-semibold text-[var(--ui-muted)]">允许私聊用户 ID</label>
             <el-input v-model="weComBotForm.allowed_user_ids" placeholder="首个私聊用户会自动绑定" />
           </div>
           <div class="space-y-1">
-            <label class="text-xs font-semibold text-gray-500">允许群聊 ID</label>
+            <label class="text-xs font-semibold text-[var(--ui-muted)]">允许群聊 ID</label>
             <el-input v-model="weComBotForm.allowed_group_ids" placeholder="多个使用英文逗号分隔" />
           </div>
         </div>

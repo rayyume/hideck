@@ -136,7 +136,7 @@ function submit() {
   min-height: 34px;
   padding: 0 10px;
   border: 1px solid var(--ui-border);
-  border-radius: 4px;
+  border-radius: var(--ui-radius-sm);
   background: transparent;
   color: var(--ui-text-muted);
   display: inline-flex;
@@ -155,8 +155,8 @@ function submit() {
 .quick-list button.dangerous { color: var(--ui-warning); }
 .quick-list .el-icon { font-size: 14px; }
 .input-row { display: grid; grid-template-columns: minmax(0, 1fr) 44px; gap: 8px; }
-.send-button { width: 44px; height: 40px; padding: 0; border-radius: 5px; }
-.input-row :deep(.el-input__wrapper) { min-height: 40px; border-radius: 5px; }
+.send-button { width: 44px; height: 40px; padding: 0; border-radius: var(--ui-radius-pill); }
+.input-row :deep(.el-input__wrapper) { min-height: 40px; border-radius: 16px; }
 .suggestions {
   position: absolute;
   z-index: 12;
@@ -166,7 +166,7 @@ function submit() {
   max-height: 240px;
   overflow: auto;
   border: 1px solid var(--ui-border);
-  border-radius: 6px;
+  border-radius: var(--ui-radius-md);
   background: var(--ui-surface-strong);
   box-shadow: var(--ui-shadow-md);
 }

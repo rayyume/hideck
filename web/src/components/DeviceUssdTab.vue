@@ -238,7 +238,7 @@ function selectHistory(command: string) {
 </template>
 
 <style scoped>
-.ussd-workspace { overflow: hidden; border: 1px solid var(--ui-border); border-radius: 12px; background: var(--ui-surface-strong); }
+.ussd-workspace { overflow: hidden; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-xl); background: var(--ui-surface-strong); }
 .ussd-workspace-header,
 .ussd-heading,
 .ussd-header-state,
@@ -246,7 +246,7 @@ function selectHistory(command: string) {
 .ussd-pending { display: flex; align-items: center; }
 .ussd-workspace-header { min-height: 90px; padding: 18px 20px; justify-content: space-between; gap: 18px; border-bottom: 1px solid var(--ui-border); }
 .ussd-heading { gap: 12px; }
-.ussd-heading-icon { width: 44px; height: 44px; display: grid; place-items: center; border: 1px solid var(--ui-border); border-radius: 11px; color: var(--ui-primary); font-size: 22px; }
+.ussd-heading-icon { width: 44px; height: 44px; display: grid; place-items: center; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); color: var(--ui-primary); font-size: 22px; }
 .ussd-heading span { color: var(--ui-primary); font: 700 var(--ui-font-caption) "v-mono", ui-monospace, monospace; letter-spacing: .15em; }
 .ussd-heading h2 { margin: 3px 0 0; color: var(--ui-text); font-size: 20px; font-weight: 650; }
 .ussd-heading p { margin: 3px 0 0; color: var(--ui-text-muted); font-size: var(--ui-font-body-sm); }
@@ -284,7 +284,7 @@ function selectHistory(command: string) {
 .ussd-history-rail h3 { margin: 0; color: var(--ui-text); font-size: var(--ui-font-body-sm); }
 .ussd-history-rail header button { border: 0; background: transparent; color: var(--ui-text-muted); font-size: var(--ui-font-caption); cursor: pointer; }
 .ussd-history-rail > p { margin: 12px 6px; color: var(--ui-text-muted); font-size: var(--ui-font-caption); }
-.ussd-history-rail > button { width: 100%; padding: 10px 9px; display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; border: 0; border-radius: 7px; background: transparent; color: var(--ui-text); text-align: left; cursor: pointer; }
+.ussd-history-rail > button { width: 100%; padding: 10px 9px; display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; border: 0; border-radius: var(--ui-radius-md); background: transparent; color: var(--ui-text); text-align: left; cursor: pointer; }
 .ussd-history-rail > button:hover { background: var(--ui-surface-muted); }
 .ussd-history-rail > button strong { min-width: 0; overflow: hidden; font: var(--ui-font-body-sm) "v-mono", ui-monospace, monospace; text-overflow: ellipsis; white-space: nowrap; }
 .ussd-history-rail > button small { flex: 0 0 auto; color: var(--ui-text-muted); font-size: var(--ui-font-caption); }

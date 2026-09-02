@@ -33,7 +33,7 @@ const emit = defineEmits(['toggle-theme'])
 <style scoped>
 .unauthenticated-shell {
   padding: 20px;
-  background: #07181b;
+  background: var(--ui-bg);
 }
 
 @media (max-width: 640px) {

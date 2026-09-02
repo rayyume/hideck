@@ -137,7 +137,7 @@ defineEmits<{
 .proxy-inventory-table code { color: var(--ui-text); font-size: var(--ui-font-body-sm); }
 .proxy-runtime-error { color: var(--ui-danger) !important; overflow-wrap: anywhere; }
 .proxy-row-actions { display: flex; justify-content: flex-end; gap: 3px; }
-.proxy-row-actions button { width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--ui-text-muted); cursor: pointer; }
+.proxy-row-actions button { width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid transparent; border-radius: var(--ui-radius-sm); background: transparent; color: var(--ui-text-muted); cursor: pointer; }
 .proxy-row-actions button:hover,
 .proxy-row-actions button:focus-visible { border-color: var(--ui-border); background: var(--ui-surface-muted); color: var(--ui-text); }
 .proxy-row-actions button:disabled { opacity: .35; cursor: not-allowed; }
@@ -155,7 +155,7 @@ defineEmits<{
   .proxy-inventory-table thead { display: none; }
   .proxy-inventory-table,
   .proxy-inventory-table tbody { display: grid; gap: 10px; }
-  .proxy-inventory-table tr { margin: 0 12px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid var(--ui-border); border-radius: 7px; overflow: hidden; background: var(--ui-surface-strong); }
+  .proxy-inventory-table tr { margin: 0 12px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); overflow: hidden; background: var(--ui-surface-strong); }
   .proxy-inventory-table tr:first-child { margin-top: 12px; }
   .proxy-inventory-table tr:last-child { margin-bottom: 12px; }
   .proxy-inventory-table td,

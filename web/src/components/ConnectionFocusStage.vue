@@ -158,10 +158,10 @@ function stageStatusLabel(ready: boolean | undefined): string {
   gap: 0;
   overflow: hidden;
   border: 1px solid var(--ui-border);
-  border-radius: 22px;
+  border-radius: var(--ui-radius-xl);
   background:
     radial-gradient(circle at 56% 51%, color-mix(in srgb, var(--ui-primary) 13%, transparent), transparent 31%),
-    linear-gradient(132deg, var(--ui-surface) 0 48%, color-mix(in srgb, var(--ui-surface) 90%, #06120e) 100%);
+    linear-gradient(132deg, var(--ui-surface) 0 48%, color-mix(in srgb, var(--ui-surface) 90%, var(--ui-nav)) 100%);
   box-shadow: var(--ui-shadow-sm);
 }
 
@@ -210,7 +210,7 @@ function stageStatusLabel(ready: boolean | undefined): string {
 .connection-signal-field i:nth-child(3) { top: 55%; transform: rotate(4deg); }
 .connection-signal-field i:nth-child(4) { top: 67%; transform: rotate(-8deg); }
 .connection-signal-field i:nth-child(5) { top: 50%; }
-.connection-stage-aside { padding: 22px 24px; display: flex; flex-direction: column; border: 1px solid var(--ui-border); border-radius: 17px; background: color-mix(in srgb, var(--ui-surface-strong) 82%, transparent); }
+.connection-stage-aside { padding: 22px 24px; display: flex; flex-direction: column; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); background: color-mix(in srgb, var(--ui-surface-strong) 82%, transparent); }
 .connection-stage-aside dl { margin: 0; }
 .connection-stage-aside dl > div { padding: 13px 0; display: grid; gap: 5px; border-bottom: 1px solid var(--ui-border); }
 .connection-stage-aside dt { color: var(--ui-text-muted); font-size: var(--ui-font-caption); }
@@ -220,7 +220,7 @@ function stageStatusLabel(ready: boolean | undefined): string {
 .connection-stage-aside .is-tabular,
 .connection-stage-aside .is-address { font-family: "v-mono", monospace; font-variant-numeric: tabular-nums; }
 .connection-stage-aside .is-address { font-size: var(--ui-font-body-sm); line-height: 1.45; }
-.focus-open-button { min-height: 38px; margin-top: auto; padding: 0 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid color-mix(in srgb, var(--ui-primary) 48%, var(--ui-border)); border-radius: 11px; background: color-mix(in srgb, var(--ui-primary) 8%, transparent); color: var(--ui-primary); cursor: pointer; transition: border-color 160ms var(--ui-ease-out), background-color 160ms var(--ui-ease-out), transform 140ms var(--ui-ease-out); }
+.focus-open-button { min-height: 38px; margin-top: auto; padding: 0 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid color-mix(in srgb, var(--ui-primary) 48%, var(--ui-border)); border-radius: var(--ui-radius-pill); background: color-mix(in srgb, var(--ui-primary) 8%, transparent); color: var(--ui-primary); cursor: pointer; transition: border-color 160ms var(--ui-ease-out), background-color 160ms var(--ui-ease-out), transform 140ms var(--ui-ease-out); }
 .focus-open-button svg { width: 18px; height: 18px; }
 .focus-open-button:active { transform: scale(.97); }
 

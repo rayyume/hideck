@@ -122,12 +122,12 @@ const showCellularFacts = computed(() => presentation.value.showsCellularFacts)
 </template>
 
 <style scoped>
-.device-card { position: relative; min-width: 0; min-height: 188px; padding: 0; overflow: hidden; border-color: var(--ui-border); border-radius: 12px; background: linear-gradient(145deg, color-mix(in srgb, var(--ui-surface) 98%, var(--ui-primary) 2%), var(--ui-surface)); color: var(--ui-text); text-align: left; cursor: pointer; }
+.device-card { position: relative; min-width: 0; min-height: 188px; padding: 0; overflow: hidden; border-color: var(--ui-border); border-radius: var(--ui-radius-xl); background: linear-gradient(145deg, color-mix(in srgb, var(--ui-surface) 98%, var(--ui-primary) 2%), var(--ui-surface)); color: var(--ui-text); text-align: left; cursor: pointer; }
 .device-card.is-vowifi { min-height: 112px; }
 .device-card-selected { border-color: color-mix(in srgb, var(--ui-primary) 58%, var(--ui-border)); background: linear-gradient(150deg, color-mix(in srgb, var(--ui-surface) 84%, var(--ui-primary) 16%), var(--ui-surface) 62%); box-shadow: 0 0 0 1px color-mix(in srgb, var(--ui-primary) 8%, transparent), var(--ui-shadow-md); }
 .device-card-header { min-height: 62px; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .device-title-group { min-width: 0; display: flex; align-items: center; gap: 11px; }
-.device-glyph { width: 36px; height: 36px; flex: 0 0 36px; display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--ui-primary) 35%, var(--ui-border)); border-radius: 9px; background: color-mix(in srgb, var(--ui-primary) 12%, transparent); color: var(--ui-primary); }
+.device-glyph { width: 36px; height: 36px; flex: 0 0 36px; display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--ui-primary) 35%, var(--ui-border)); border-radius: var(--ui-radius-sm); background: color-mix(in srgb, var(--ui-primary) 12%, transparent); color: var(--ui-primary); }
 .device-glyph svg { width: 20px; height: 20px; }
 .device-identity { min-width: 0; display: grid; }
 .device-identity strong,

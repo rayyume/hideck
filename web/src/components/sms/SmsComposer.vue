@@ -62,7 +62,7 @@ function updateMessage(value: unknown) {
   gap: 7px;
   align-self: end;
   border: 1px solid var(--ui-primary);
-  border-radius: 7px;
+  border-radius: var(--ui-radius-lg);
   background: var(--ui-primary);
   color: var(--ui-surface-subtle);
   cursor: pointer;

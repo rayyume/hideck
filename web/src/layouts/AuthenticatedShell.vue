@@ -181,7 +181,7 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
         <div class="sidebar-account flex items-center gap-3">
           <div class="sidebar-account-icon"><el-icon><Settings24Regular /></el-icon></div>
           <div class="flex-1 min-w-0">
-            <div class="text-sm font-semibold truncate text-white">Admin</div>
+            <div class="text-sm font-semibold truncate text-[var(--ui-nav-text)]">Admin</div>
             <div class="text-xs truncate sidebar-account-role">Administrator</div>
           </div>
           <el-button text type="danger" aria-label="退出登录" @click="handleLogout">
@@ -220,7 +220,7 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
               <el-icon><Settings24Regular /></el-icon>
             </div>
             <div class="flex-1 min-w-0">
-              <div class="text-sm font-semibold truncate text-white">Admin</div>
+              <div class="text-sm font-semibold truncate text-[var(--ui-nav-text)]">Admin</div>
               <div class="text-xs truncate sidebar-account-role">Administrator</div>
             </div>
             <el-button text type="danger" @click="handleLogout">
@@ -291,11 +291,11 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
   font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  --sidebar-menu-text: #9bb2b6;
-  --sidebar-menu-hover-bg: rgba(255, 255, 255, 0.06);
-  --sidebar-menu-active-bg: rgba(56, 189, 180, 0.14);
-  --sidebar-menu-active-color: #d8fffa;
-  --sidebar-menu-active-ring: rgba(56, 189, 180, 0.24);
+  --sidebar-menu-text: var(--ui-nav-text);
+  --sidebar-menu-hover-bg: color-mix(in srgb, var(--ui-selected) 42%, transparent);
+  --sidebar-menu-active-bg: var(--ui-selected);
+  --sidebar-menu-active-color: var(--ui-nav-active);
+  --sidebar-menu-active-ring: color-mix(in srgb, var(--ui-accent) 24%, transparent);
 }
 
 :deep(.sidebar-menu) {
@@ -312,7 +312,7 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
   min-height: 46px;
   line-height: 46px;
   margin: 0 0 5px;
-  border-radius: 8px;
+  border-radius: 12px;
   padding-left: 14px !important;
   padding-right: 14px !important;
   font-size: 14px;
@@ -346,10 +346,10 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
 :deep(.sidebar-menu .el-menu-item.is-active::before) {
   position: absolute;
   left: 0;
-  width: 2px;
+  width: 3px;
   height: 30px;
-  border-radius: 2px;
-  background: var(--ui-primary);
+  border-radius: 0 2px 2px 0;
+  background: var(--ui-accent);
   box-shadow: none;
   content: "";
 }
@@ -376,7 +376,7 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
   min-height: 46px;
   line-height: 46px;
   margin: 0 auto 5px;
-  border-radius: 8px;
+  border-radius: 12px;
   display: grid;
   place-items: center;
   padding: 0 !important;
@@ -443,22 +443,23 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
   border: 0;
   border-right: 1px solid var(--ui-border);
   border-radius: 0;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--ui-nav) 99%, transparent), color-mix(in srgb, #050a0c 98%, transparent));
+  background: var(--ui-nav-surface);
+  background-color: var(--ui-nav-surface);
   box-shadow: none;
-  color: #fff;
+  color: var(--ui-nav-text);
 }
 
 .sidebar-brand {
   height: 78px !important;
   flex: 0 0 78px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid color-mix(in srgb, var(--ui-nav-text) 8%, transparent);
 }
 
 .sidebar-brand-title {
   min-height: auto;
   padding: 0;
   background: none;
-  color: #f5fbfb;
+  color: var(--ui-nav-text);
   filter: none;
   -webkit-text-fill-color: currentColor;
   font-size: 18px;
@@ -469,7 +470,7 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
 
 .sidebar-brand-subtitle {
   margin-top: 3px;
-  color: #7fa4a8;
+  color: var(--ui-nav-muted);
   font-family: "v-mono", ui-monospace, monospace;
   font-size: var(--ui-font-caption);
   font-weight: 600;
@@ -481,21 +482,13 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
   height: 44px;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(130, 232, 223, 0.34);
-  border-radius: 14px;
-  background: linear-gradient(145deg, rgba(92, 234, 177, 0.24), rgba(91, 225, 222, 0.08));
-  color: #8ff7cb;
-  box-shadow: inset 0 0 20px rgba(92, 234, 177, 0.08);
+  border: 1px solid color-mix(in srgb, var(--ui-accent) 34%, var(--ui-border));
+  border-radius: var(--ui-radius-md);
+  background: var(--ui-accent);
+  color: #fff;
+  box-shadow: none;
   font-size: 20px;
   font-weight: 800;
-}
-
-:global(html.dark) .sidebar-shell {
-  --sidebar-menu-text: #93a8ad;
-  --sidebar-menu-hover-bg: rgba(255, 255, 255, 0.06);
-  --sidebar-menu-active-bg: rgba(56, 189, 180, 0.14);
-  --sidebar-menu-active-color: #d8fffa;
-  --sidebar-menu-active-ring: rgba(56, 189, 180, 0.24);
 }
 
 .sidebar-menu-label {
@@ -506,9 +499,9 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
 .sidebar-account {
   min-height: 52px;
   padding: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid color-mix(in srgb, var(--ui-nav-text) 10%, transparent);
+  border-radius: var(--ui-radius-md);
+  background: color-mix(in srgb, var(--ui-nav-text) 4%, transparent);
 }
 
 .sidebar-account-compact {
@@ -532,9 +525,9 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
   height: 44px;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid color-mix(in srgb, var(--ui-nav-text) 10%, transparent);
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.035);
+  background: color-mix(in srgb, var(--ui-nav-text) 3.5%, transparent);
   color: var(--sidebar-menu-text);
   cursor: pointer;
 }
@@ -545,13 +538,13 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
   height: 32px;
   flex: 0 0 32px;
   place-items: center;
-  border-radius: 4px;
-  background: rgba(56, 189, 180, 0.12);
-  color: #83e0d8;
+  border-radius: var(--ui-radius-sm);
+  background: color-mix(in srgb, var(--ui-accent) 12%, transparent);
+  color: var(--ui-accent);
 }
 
 .sidebar-account-role {
-  color: #789398;
+  color: var(--ui-nav-muted);
 }
 
 .app-topbar {
@@ -560,7 +553,7 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
   padding: 0 22px !important;
   flex: 0 0 64px;
   border: 1px solid var(--ui-border);
-  border-radius: 20px;
+  border-radius: var(--ui-radius-lg);
   background: color-mix(in srgb, var(--ui-surface-subtle) 92%, transparent);
   box-shadow: var(--ui-shadow-sm);
   backdrop-filter: blur(18px);
@@ -679,9 +672,9 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
     display: grid;
     grid-template-columns: repeat(5, minmax(44px, 1fr));
     border: 1px solid color-mix(in srgb, var(--ui-text) 12%, transparent);
-    border-radius: 18px;
+    border-radius: var(--ui-radius-lg);
     background: color-mix(in srgb, var(--ui-surface) 88%, transparent);
-    box-shadow: 0 1px 0 color-mix(in srgb, var(--ui-text) 7%, transparent) inset, 0 22px 64px rgba(0, 0, 0, .38);
+    box-shadow: 0 1px 0 color-mix(in srgb, var(--ui-text) 7%, transparent) inset, 0 22px 64px color-mix(in srgb, var(--ui-text) 16%, transparent);
     backdrop-filter: blur(22px) saturate(1.2);
     overflow: hidden;
   }

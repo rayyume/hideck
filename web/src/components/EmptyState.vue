@@ -16,8 +16,8 @@ defineProps<{
         <span class="text-xl font-bold">∅</span>
       </slot>
     </div>
-    <div class="mt-4 text-sm font-bold text-gray-700 dark:text-gray-200">{{ title }}</div>
-    <div v-if="subtitle" class="mt-1 text-xs text-gray-400">{{ subtitle }}</div>
+    <div class="mt-4 text-sm font-bold text-[var(--ui-text)]">{{ title }}</div>
+    <div v-if="subtitle" class="mt-1 text-xs text-[var(--ui-muted)]">{{ subtitle }}</div>
     <div class="mt-5 flex items-center justify-center gap-2">
       <slot name="actions" />
     </div>
@@ -27,12 +27,12 @@ defineProps<{
 <style scoped>
 .empty-state {
   border-color: var(--ui-border);
-  border-radius: 6px;
+  border-radius: var(--ui-radius-lg);
 }
 
 .empty-state-icon {
   border: 1px solid var(--ui-border);
-  border-radius: 5px;
+  border-radius: var(--ui-radius-md);
   background: var(--ui-surface);
   color: var(--ui-text-muted);
 }

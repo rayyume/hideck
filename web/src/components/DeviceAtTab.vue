@@ -174,7 +174,7 @@ function exportATHistory() {
 
     <div class="at-command-composer">
       <div class="space-y-1">
-        <div class="text-xs font-bold text-gray-500 uppercase tracking-wider">快捷指令模板</div>
+        <div class="text-xs font-bold text-[var(--ui-muted)] uppercase tracking-wider">快捷指令模板</div>
         <el-select v-model="atTemplate" filterable clearable placeholder="选择常用命令（可选）">
            <el-option-group v-for="g in atTemplates" :key="g.label" :label="g.label">
             <el-option v-for="it in g.items" :key="it.value" :label="it.label" :value="it.value" />
@@ -183,7 +183,7 @@ function exportATHistory() {
       </div>
 
       <div class="space-y-1">
-        <div class="text-xs font-bold text-gray-500 uppercase tracking-wider">命令</div>
+        <div class="text-xs font-bold text-[var(--ui-muted)] uppercase tracking-wider">命令</div>
         <el-input
           v-model="atCmd"
           placeholder='例如 AT+CSQ (可自由编辑)'
@@ -193,12 +193,12 @@ function exportATHistory() {
       </div>
 
       <div class="space-y-1">
-        <div class="text-xs font-bold text-gray-500 uppercase tracking-wider">超时(ms)</div>
+        <div class="text-xs font-bold text-[var(--ui-muted)] uppercase tracking-wider">超时(ms)</div>
         <el-input v-model.number="atTimeoutMs" type="number" inputmode="numeric" placeholder="10000" />
       </div>
 
       <div class="space-y-1 self-end at-send-action">
-        <div class="text-xs font-bold text-gray-500 uppercase tracking-wider opacity-0 select-none">操作</div>
+        <div class="text-xs font-bold text-[var(--ui-muted)] uppercase tracking-wider opacity-0 select-none">操作</div>
         <div class="flex items-center justify-end gap-2">
           <el-button type="primary" :loading="atSending" :disabled="!atCmd" @click="sendAT" class="!border-0">
             <el-icon><Send24Regular /></el-icon>
@@ -221,7 +221,7 @@ function exportATHistory() {
 .at-workspace {
   overflow: hidden;
   border: 1px solid var(--ui-border);
-  border-radius: 12px;
+  border-radius: var(--ui-radius-xl);
   background: var(--ui-surface-strong);
 }
 
@@ -243,7 +243,7 @@ function exportATHistory() {
 }
 
 .at-terminal-status { gap: 12px; }
-.at-terminal-icon { width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid var(--ui-border); border-radius: 10px; color: var(--ui-primary); font-size: 21px; }
+.at-terminal-icon { width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); color: var(--ui-primary); font-size: 21px; }
 .at-terminal-status span { color: var(--ui-primary); font: 700 var(--ui-font-caption) "v-mono", ui-monospace, monospace; letter-spacing: .14em; }
 .at-terminal-status h2 { margin: 3px 0 0; color: var(--ui-text); font: 600 15px "v-mono", ui-monospace, monospace; }
 .at-terminal-status p { margin: 4px 0 0; gap: 6px; color: var(--ui-text-muted); font-size: var(--ui-font-caption); }
@@ -252,13 +252,13 @@ function exportATHistory() {
   margin: 14px 16px 0;
   padding: 9px 11px;
   border: 1px solid color-mix(in srgb, var(--ui-primary) 22%, var(--ui-border));
-  border-radius: 8px;
+  border-radius: var(--ui-radius-md);
   background: color-mix(in srgb, var(--ui-primary) 5%, transparent);
   color: var(--ui-text-muted);
   font-size: var(--ui-font-body-sm);
 }
 
-.at-unavailable-state { margin: 16px; padding: 42px 24px; display: flex; align-items: center; justify-content: center; flex-direction: column; border: 1px solid color-mix(in srgb, var(--ui-warning) 30%, var(--ui-border)); border-radius: 10px; background: color-mix(in srgb, var(--ui-warning) 6%, var(--ui-surface)); }
+.at-unavailable-state { margin: 16px; padding: 42px 24px; display: flex; align-items: center; justify-content: center; flex-direction: column; border: 1px solid color-mix(in srgb, var(--ui-warning) 30%, var(--ui-border)); border-radius: var(--ui-radius-lg); background: color-mix(in srgb, var(--ui-warning) 6%, var(--ui-surface)); }
 
 .at-terminal-output {
   position: relative;
@@ -267,29 +267,29 @@ function exportATHistory() {
   padding: 16px;
   overflow: auto;
   border: 1px solid var(--ui-border);
-  border-radius: 9px;
-  background: #050706;
-  color: #c8d5ce;
+  border-radius: var(--ui-radius-md);
+  background: var(--ui-console);
+  color: var(--ui-console-text);
   font: var(--ui-font-body-sm)/1.6 "v-mono", ui-monospace, monospace;
 }
 
-.at-terminal-empty { position: absolute; inset: 0; display: grid; place-content: center; gap: 5px; color: #7d8c84; text-align: center; }
-.at-terminal-empty span { color: #66e9ad; font-size: 13px; }
+.at-terminal-empty { position: absolute; inset: 0; display: grid; place-content: center; gap: 5px; color: var(--ui-console-muted); text-align: center; }
+.at-terminal-empty span { color: var(--ui-accent); font-size: 13px; }
 .at-terminal-entry { padding-bottom: 16px; }
-.at-terminal-command { display: flex; gap: 8px; color: #f1f5f2; overflow-wrap: anywhere; }
-.at-terminal-command span { color: #66e9ad; }
-.at-terminal-entry pre { margin: 5px 0 0; color: #acb9b2; font: inherit; white-space: pre-wrap; overflow-wrap: anywhere; }
-.at-terminal-entry pre.is-error { color: #ef8186; }
-.at-terminal-entry small { color: #68746e; }
-.at-terminal-pending { display: flex; align-items: center; gap: 5px; color: #66e9ad; }
+.at-terminal-command { display: flex; gap: 8px; color: var(--ui-console-text); overflow-wrap: anywhere; }
+.at-terminal-command span { color: var(--ui-accent); }
+.at-terminal-entry pre { margin: 5px 0 0; color: color-mix(in srgb, var(--ui-console-text) 72%, var(--ui-console-muted)); font: inherit; white-space: pre-wrap; overflow-wrap: anywhere; }
+.at-terminal-entry pre.is-error { color: var(--ui-danger); }
+.at-terminal-entry small { color: var(--ui-console-muted); }
+.at-terminal-pending { display: flex; align-items: center; gap: 5px; color: var(--ui-accent); }
 .at-terminal-pending > span { width: 5px; height: 5px; border-radius: 50%; background: currentColor; animation: at-pending 1.1s ease-in-out infinite; }
 .at-terminal-pending > span:nth-child(2) { animation-delay: 120ms; }
 .at-terminal-pending > span:nth-child(3) { animation-delay: 240ms; }
-.at-terminal-pending small { margin-left: 5px; color: #7d8c84; }
+.at-terminal-pending small { margin-left: 5px; color: var(--ui-console-muted); }
 
 .at-command-composer { padding: 14px 16px 16px; display: grid; grid-template-columns: 200px minmax(180px, 1fr) 110px auto; gap: 12px; }
 .at-quick-command-row { grid-column: 1 / -1; flex-wrap: wrap; gap: 7px; color: var(--ui-text-muted); font-size: var(--ui-font-caption); }
-.at-quick-command-row button { min-height: 28px; padding: 0 9px; border: 1px solid var(--ui-border); border-radius: 6px; background: var(--ui-surface); color: var(--ui-text-muted); font: var(--ui-font-caption) "v-mono", ui-monospace, monospace; cursor: pointer; }
+.at-quick-command-row button { min-height: 28px; padding: 0 9px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-pill); background: var(--ui-surface); color: var(--ui-text-muted); font: var(--ui-font-caption) "v-mono", ui-monospace, monospace; cursor: pointer; }
 
 @keyframes at-pending { 0%, 100% { opacity: .35; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-2px); } }
 

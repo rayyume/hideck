@@ -277,7 +277,7 @@ async function redirectAfterLogin() {
   grid-template-columns: minmax(0, 1.08fr) minmax(380px, .92fr);
   overflow: hidden;
   border: 1px solid var(--ui-border);
-  border-radius: 24px;
+  border-radius: var(--ui-radius-xl);
   background: var(--ui-surface);
   box-shadow: var(--ui-shadow-lg);
 }
@@ -290,9 +290,9 @@ async function redirectAfterLogin() {
   justify-content: space-between;
   overflow: hidden;
   background:
-    radial-gradient(circle at 76% 46%, rgba(92, 234, 177, .16), transparent 28%),
-    linear-gradient(145deg, #071014, #0a1719 72%, #071012);
-  color: #f2fbfb;
+    radial-gradient(circle at 76% 46%, color-mix(in srgb, var(--ui-accent) 8%, transparent), transparent 32%),
+    var(--ui-bg);
+  color: var(--ui-text);
 }
 
 .login-identity::before,
@@ -307,13 +307,13 @@ async function redirectAfterLogin() {
   opacity: .16;
   background-size: 54px 54px;
   background-image:
-    linear-gradient(rgba(121, 170, 174, .2) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(121, 170, 174, .2) 1px, transparent 1px);
+    linear-gradient(color-mix(in srgb, var(--ui-nav-muted) 20%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--ui-nav-muted) 20%, transparent) 1px, transparent 1px);
 }
 
 .login-identity::after {
   inset: 0;
-  background: rgba(4, 24, 27, .22);
+  background: radial-gradient(circle at 70% 40%, color-mix(in srgb, var(--ui-accent) 8%, transparent), transparent 44%);
 }
 
 .network-map {
@@ -327,7 +327,7 @@ async function redirectAfterLogin() {
   position: absolute;
   height: 1px;
   transform-origin: left center;
-  background: rgba(94, 194, 185, .42);
+  background: color-mix(in srgb, var(--ui-accent) 42%, transparent);
 }
 
 .line-a { top: 18%; left: 8%; width: 44%; transform: rotate(9deg); }
@@ -339,9 +339,9 @@ async function redirectAfterLogin() {
   position: absolute;
   width: 7px;
   height: 7px;
-  border: 1px solid #67d2ca;
-  background: #102a2e;
-  box-shadow: 0 0 0 3px rgba(103, 210, 202, .09);
+  border: 1px solid var(--ui-accent);
+  background: var(--ui-surface);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ui-accent) 9%, transparent);
 }
 
 .node-a { top: 21%; left: 27%; }
@@ -351,7 +351,7 @@ async function redirectAfterLogin() {
 
 .network-label {
   position: absolute;
-  color: rgba(131, 224, 216, .66);
+  color: color-mix(in srgb, var(--ui-accent) 66%, transparent);
   font: 9px/1 "v-mono", ui-monospace, monospace;
 }
 
@@ -377,10 +377,10 @@ async function redirectAfterLogin() {
   height: 38px;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(131, 224, 216, .45);
-  border-radius: 13px;
-  background: rgba(92, 234, 177, .12);
-  color: #8ff7cb;
+  border: 1px solid var(--ui-accent);
+  border-radius: 50%;
+  background: var(--ui-accent);
+  color: #fff;
   font-size: 18px;
   font-weight: 700;
 }
@@ -404,8 +404,8 @@ async function redirectAfterLogin() {
 
 .identity-topline div span {
   margin-top: 3px;
-  color: #86a5a9;
-  font-size: 9px;
+  color: var(--ui-nav-muted);
+  font-size: 12px;
 }
 
 .identity-copy {
@@ -414,8 +414,8 @@ async function redirectAfterLogin() {
 
 .identity-kicker,
 .form-kicker {
-  color: #67d2ca;
-  font-size: 11px;
+  color: var(--ui-accent);
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -429,7 +429,7 @@ async function redirectAfterLogin() {
 
 .identity-copy p {
   margin: 0;
-  color: #a9bfc2;
+  color: var(--ui-nav-muted);
   font-size: 15px;
 }
 
@@ -440,9 +440,9 @@ async function redirectAfterLogin() {
   grid-template-columns: 38px 1fr auto;
   align-items: center;
   gap: 14px;
-  border: 1px solid rgba(255, 255, 255, .11);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, .04);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-xl);
+  background: var(--ui-surface);
 }
 
 .signal-bars {
@@ -455,7 +455,7 @@ async function redirectAfterLogin() {
 .signal-bars i {
   width: 5px;
   border-radius: 1px;
-  background: #67d2ca;
+  background: var(--ui-accent);
 }
 
 .signal-bars i:nth-child(1) { height: 8px; }
@@ -471,20 +471,20 @@ async function redirectAfterLogin() {
 
 .signal-panel strong {
   font-family: "v-mono", ui-monospace, monospace;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .signal-panel div span {
-  color: #86a5a9;
-  font-size: 11px;
+  color: var(--ui-nav-muted);
+  font-size: 12px;
 }
 
 .ready-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #4cc38a;
-  box-shadow: 0 0 0 4px rgba(76, 195, 138, .12);
+  background: var(--ui-success);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--ui-success) 12%, transparent);
 }
 
 .login-access {
@@ -530,13 +530,13 @@ label {
 
 .field-shell {
   height: 46px;
-  padding: 0 13px;
+  padding: 0 16px;
   display: flex;
   align-items: center;
   gap: 10px;
   border: 1px solid var(--ui-border);
-  border-radius: 11px;
-  background: var(--ui-surface-subtle);
+  border-radius: 16px;
+  background: var(--ui-surface);
   color: var(--ui-text-muted);
   transition: border-color 160ms ease, box-shadow 160ms ease;
 }
@@ -570,7 +570,7 @@ button {
   justify-content: center;
   gap: 9px;
   border: 0;
-  border-radius: 11px;
+  border-radius: var(--ui-radius-pill);
   background: var(--ui-primary-solid);
   color: #fff;
   font-weight: 700;
@@ -595,7 +595,7 @@ button svg { width: 18px; height: 18px; }
   margin-top: 30px;
   color: var(--ui-text-muted);
   font-family: "v-mono", ui-monospace, monospace;
-  font-size: 10px;
+  font-size: 12px;
   text-align: center;
 }
 
@@ -629,7 +629,7 @@ button svg { width: 18px; height: 18px; }
   width: 100%;
   height: 44px;
   margin: 0;
-  border-radius: 8px;
+  border-radius: var(--ui-radius-pill);
 }
 
 .password-change-actions :deep(.el-button:not(.el-button--primary)) {

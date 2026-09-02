@@ -9,11 +9,9 @@
   <script>
     try {
       const theme = localStorage.getItem('theme')
-      if (theme === 'dark') {
-        document.documentElement.classList.add('dark')
-      } else {
-        document.documentElement.classList.remove('dark')
-      }
+      const dark = theme === 'dark' || theme === 'navy-night' || theme === 'classic'
+      document.documentElement.classList.toggle('dark', dark)
+      document.documentElement.classList.toggle('classic', theme === 'classic')
     } catch { }
   </script>
   <style>
@@ -28,10 +26,14 @@
     }
 
     body {
-      background: #f4f7f8;
+      background: #FBF9F6;
     }
 
     html.dark body {
+      background: #0B1420;
+    }
+
+    html.classic body {
       background: #0d1518;
     }
   </style>
