@@ -91,7 +91,12 @@ func (s *Service) logInboundStatsSnapshot(stats inboundStatsSnapshot) {
 		"tcp_socket_bytes", stats.TCPSocketBytes,
 		"sip_parsed_messages", stats.SIPParsedMessages,
 		"sip_parsed_requests", stats.SIPParsedRequests,
-		"sip_parsed_responses", stats.SIPParsedResponses)
+		"sip_parsed_responses", stats.SIPParsedResponses,
+		// Outbound side of the same push flow: without it a silently dead
+		// port-s looks the same as an idle healthy one.
+		"ports_write_ok", s.portSWriteOK.Load(),
+		"ports_write_failed", s.portSWriteErr.Load(),
+		"ports_since_last_write_ok", s.portSLastWriteOKAge())
 }
 
 func (s *Service) captureInboundStats() inboundStatsSnapshot {
