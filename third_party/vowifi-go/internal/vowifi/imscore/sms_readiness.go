@@ -35,7 +35,7 @@ func (s *Service) SMSReadiness() SMSReadiness {
 }
 
 func (s *Service) protectedSMSPushRequiredLocked() bool {
-	return !s.externalTransport && !s.portSRecoveryRejected.Load() &&
+	return !s.externalTransport && !s.portSOnDemandObserved.Load() &&
 		s.regSession != nil &&
 		s.regSession.security != nil &&
 		strings.TrimSpace(s.regSession.security.verifyHeader) != ""

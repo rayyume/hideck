@@ -185,8 +185,10 @@ type Service struct {
 	portSReconnectGrace       time.Duration
 	portSLastReadAt           atomic.Int64
 	portSPushReady            atomic.Bool
+	portSReconnectWaiting     atomic.Bool
 	portSRecoveryPending      atomic.Bool
-	portSRecoveryRejected     atomic.Bool
+	portSRecoveryDeferred     atomic.Bool
+	portSOnDemandObserved     atomic.Bool
 	portSWatchMu              sync.Mutex
 	portSWatchTimer           *time.Timer
 	sipWriteMu                sync.Mutex

@@ -34,7 +34,7 @@ func TestProtectedSMSReadinessRequiresPortSFlow(t *testing.T) {
 	if got := service.SMSReadiness(); got.ReceiverReady || got.Ready {
 		t.Fatalf("readiness after port-s closed = %+v", got)
 	}
-	service.portSRecoveryRejected.Store(true)
+	service.portSOnDemandObserved.Store(true)
 	if got := service.SMSReadiness(); !got.ReceiverReady || !got.Ready {
 		t.Fatalf("on-demand port-s listener readiness = %+v", got)
 	}

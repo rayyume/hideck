@@ -146,12 +146,12 @@ func (s *Service) registerLocked(ctx context.Context) error {
 		s.mu.Unlock()
 		if !isRegisterOperationCanceled(err) {
 			s.applyRegistrationFailureStatus(err)
-			s.notePortSRecoveryOutcome(err)
 		}
+		s.completePortSRecovery(err, false)
 		s.notifySMSReadiness()
 		return err
 	}
-	s.portSRecoveryPending.Store(false)
+	s.completePortSRecovery(nil, true)
 	s.mu.Lock()
 	s.regState = regRegistered
 	s.lastError = ""
@@ -811,7 +811,7 @@ func (s *Service) keepRegistrationAfterFailedRefresh(hadBinding bool, err error)
 }
 
 func (s *Service) restoreRegistrationAfterFailedRefresh(err error) {
-	s.notePortSRecoveryOutcome(err)
+	s.completePortSRecovery(err, true)
 	now := time.Now()
 	next := now.Add(5 * time.Minute)
 	s.mu.Lock()

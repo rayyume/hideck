@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -209,6 +208,7 @@ func TestFailedPortSRecoveryKeepsRegistrationWhenFlowIntact(t *testing.T) {
 	service.lastRegisterOKAt = time.Now().Add(-time.Minute)
 	service.nextRegister = time.Now()
 	service.mu.Unlock()
+	service.portSReconnectWaiting.Store(true)
 	service.portSRecoveryPending.Store(true)
 
 	err := registrationResponseError(&sipResponse{StatusCode: 503, Reason: "Service Unavailable"}, true)
@@ -219,8 +219,14 @@ func TestFailedPortSRecoveryKeepsRegistrationWhenFlowIntact(t *testing.T) {
 	if service.RegState() != regRegistered {
 		t.Fatalf("registration state = %s", service.RegState())
 	}
-	if !service.portSRecoveryRejected.Load() {
-		t.Fatal("a rejected recovery left the fallback armed")
+	if service.portSOnDemandObserved.Load() {
+		t.Fatal("a rejected recovery was mistaken for an on-demand reconnect")
+	}
+	if !service.portSReconnectWaiting.Load() {
+		t.Fatal("a rejected recovery stopped waiting for the peer")
+	}
+	if !service.portSRecoveryDeferred.Load() {
+		t.Fatal("a rejected recovery left repeated recovery armed for this binding")
 	}
 	if service.reRegisterPending.Load() {
 		t.Fatal("keeping the binding still scheduled another REGISTER")
@@ -790,23 +796,23 @@ func TestProtectedServerPushClosureRecoversTheFlow(t *testing.T) {
 	}
 }
 
-// A network that answers flow recovery with a failure gets it retired: the
-// flow was already gone, so the refresh cost a working registration for
-// nothing and would do so again on every closure (2degrees 503, hideck#9).
-func TestRejectedPortSRecoveryRetiresTheFallback(t *testing.T) {
+// 2degrees reopens port-s when downlink traffic arrives even after rejecting
+// the proactive REGISTER. That observed reconnect, not the 503 by itself,
+// proves that future closures can wait for the peer.
+func TestPeerReconnectAfterRejectedRecoveryEnablesOnDemandMode(t *testing.T) {
 	service := newProtectedKeepaliveTestService(t)
 	service.portSReconnectGrace = time.Millisecond
-
+	service.portSReconnectWaiting.Store(true)
 	service.portSRecoveryPending.Store(true)
-	service.notePortSRecoveryOutcome(nil)
-	if service.portSRecoveryRejected.Load() {
-		t.Fatal("a successful recovery retired the fallback")
+	service.completePortSRecovery(
+		registrationResponseError(&sipResponse{StatusCode: 503, Reason: "Service Unavailable"}, true),
+		true,
+	)
+	if service.portSOnDemandObserved.Load() {
+		t.Fatal("503 alone enabled on-demand mode")
 	}
-
-	service.portSRecoveryPending.Store(true)
-	service.notePortSRecoveryOutcome(errors.New("imscore: REGISTER rejected with SIP status 503"))
-	if !service.portSRecoveryRejected.Load() {
-		t.Fatal("a rejected recovery left the fallback armed")
+	if !service.portSRecoveryDeferred.Load() {
+		t.Fatal("503 did not defer repeated recovery for this binding")
 	}
 
 	client, server := net.Pipe()
@@ -817,11 +823,124 @@ func TestRejectedPortSRecoveryRetiresTheFallback(t *testing.T) {
 	if !service.trackProtectedConnection(client) {
 		t.Fatal("trackProtectedConnection")
 	}
+	if !service.portSOnDemandObserved.Load() {
+		t.Fatal("peer reconnect after failed REGISTER did not enable on-demand mode")
+	}
+	if service.portSRecoveryDeferred.Load() {
+		t.Fatal("observed on-demand reconnect kept recovery deferred")
+	}
 	service.untrackProtectedConnection(client)
 	service.handleProtectedServerPushClosed()
 	time.Sleep(20 * time.Millisecond)
 	if service.reRegisterPending.Load() {
-		t.Fatal("a retired fallback still scheduled re-REGISTER")
+		t.Fatal("proven on-demand flow scheduled re-REGISTER")
+	}
+}
+
+func TestSuccessfulRecoveryDoesNotEnableOnDemandMode(t *testing.T) {
+	service := newProtectedKeepaliveTestService(t)
+	service.portSReconnectWaiting.Store(true)
+	service.portSRecoveryPending.Store(true)
+	service.portSRecoveryDeferred.Store(true)
+	service.completePortSRecovery(nil, true)
+	if service.portSRecoveryDeferred.Load() {
+		t.Fatal("successful REGISTER kept recovery deferred")
+	}
+
+	client, server := net.Pipe()
+	t.Cleanup(func() {
+		_ = client.Close()
+		_ = server.Close()
+	})
+	if !service.trackProtectedConnection(client) {
+		t.Fatal("trackProtectedConnection")
+	}
+	if service.portSOnDemandObserved.Load() {
+		t.Fatal("port-s opened after successful REGISTER enabled on-demand mode")
+	}
+}
+
+func TestAbortedRecoveryClearsPendingState(t *testing.T) {
+	service := newProtectedKeepaliveTestService(t)
+	service.portSReconnectWaiting.Store(true)
+	service.portSRecoveryPending.Store(true)
+
+	service.completePortSRecovery(context.DeadlineExceeded, false)
+
+	if service.portSReconnectWaiting.Load() || service.portSRecoveryPending.Load() ||
+		service.portSOnDemandObserved.Load() {
+		t.Fatal("aborted recovery kept stale port-s state")
+	}
+}
+
+func TestConnectionDuringFailedRecoveryDoesNotEnableOnDemandMode(t *testing.T) {
+	service := newProtectedKeepaliveTestService(t)
+	service.portSReconnectWaiting.Store(true)
+	service.portSRecoveryPending.Store(true)
+
+	client, server := net.Pipe()
+	t.Cleanup(func() {
+		_ = client.Close()
+		_ = server.Close()
+	})
+	if !service.trackProtectedConnection(client) {
+		t.Fatal("trackProtectedConnection")
+	}
+	service.completePortSRecovery(
+		registrationResponseError(&sipResponse{StatusCode: 503, Reason: "Service Unavailable"}, true),
+		true,
+	)
+	if service.portSOnDemandObserved.Load() {
+		t.Fatal("connection opened during failed REGISTER enabled on-demand mode")
+	}
+	if service.portSReconnectWaiting.Load() {
+		t.Fatal("completed recovery kept a stale reconnect wait")
+	}
+	if !service.portSRecoveryDeferred.Load() {
+		t.Fatal("failed recovery did not defer another REGISTER for this binding")
+	}
+
+	service.untrackProtectedConnection(client)
+	service.handleProtectedServerPushClosed()
+	time.Sleep(20 * time.Millisecond)
+	if service.reRegisterPending.Load() {
+		t.Fatal("another port-s closure repeated a rejected REGISTER recovery")
+	}
+}
+
+func TestConnectionDuringPeriodicRegisterDoesNotEnableOnDemandMode(t *testing.T) {
+	service := newProtectedKeepaliveTestService(t)
+	service.portSReconnectWaiting.Store(true)
+	service.mu.Lock()
+	service.regState = regRegistering
+	service.mu.Unlock()
+
+	client, server := net.Pipe()
+	t.Cleanup(func() {
+		_ = client.Close()
+		_ = server.Close()
+	})
+	if !service.trackProtectedConnection(client) {
+		t.Fatal("trackProtectedConnection")
+	}
+	if service.portSOnDemandObserved.Load() {
+		t.Fatal("connection opened during periodic REGISTER enabled on-demand mode")
+	}
+}
+
+func TestPCSCFFailoverClearsOnDemandPortSKnowledge(t *testing.T) {
+	service := newProtectedKeepaliveTestService(t)
+	service.portSReconnectWaiting.Store(true)
+	service.portSRecoveryPending.Store(true)
+	service.portSRecoveryDeferred.Store(true)
+	service.portSOnDemandObserved.Store(true)
+
+	service.resetRegistrationTransportForRegistrarRetry()
+
+	if service.portSReconnectWaiting.Load() || service.portSRecoveryPending.Load() ||
+		service.portSRecoveryDeferred.Load() ||
+		service.portSOnDemandObserved.Load() {
+		t.Fatal("P-CSCF failover kept port-s recovery knowledge")
 	}
 }
 

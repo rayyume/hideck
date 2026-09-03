@@ -268,27 +268,31 @@ func (s *Service) serveProtectedSIPConnection(conn net.Conn) {
 }
 
 // handleProtectedServerPushClosed waits for the P-CSCF to reopen port-s and
-// falls back to RFC 5626 flow recovery if it does not. port-s is a reverse
-// flow the P-CSCF dials to us and the only path MT SMS and INVITE can take,
-// while the outbound REGISTER flow keeps looking healthy, so nothing else
-// reports it gone. Some networks reopen it on demand and a refresh only
-// disrupts them (2degrees 503, hideck#9); those are handled by giving the
-// peer the full grace first and then disabling recovery for good the moment
-// its REGISTER is rejected, rather than by never recovering anywhere.
+// falls back to a REGISTER refresh if it does not. A failed refresh is not
+// evidence of an on-demand flow: only a later peer connection without a
+// successful refresh proves that behavior for the active P-CSCF.
 func (s *Service) handleProtectedServerPushClosed() {
 	if s == nil || s.stopped() {
 		return
 	}
 	s.protectedConnMu.Lock()
 	remaining := len(s.protectedConns)
-	s.protectedConnMu.Unlock()
 	if remaining > 0 {
+		s.protectedConnMu.Unlock()
 		return
 	}
-	if s.portSRecoveryRejected.Load() {
-		logging.Info("IMS protected server push closed; keep REGISTER for port-s reconnect",
+	s.portSReconnectWaiting.Store(true)
+	s.protectedConnMu.Unlock()
+	if s.portSOnDemandObserved.Load() {
+		logging.Info("IMS protected server push closed; wait for proven on-demand port-s reconnect",
 			"device", s.DeviceID(), "since_last_read", s.portSSinceLastRead(),
-			"reason", "this network rejected port-s flow recovery")
+			"reason", "peer previously reopened port-s without a successful REGISTER")
+		return
+	}
+	if s.portSRecoveryDeferred.Load() {
+		logging.Info("IMS protected server push closed; keep current binding and wait for port-s reconnect",
+			"device", s.DeviceID(), "since_last_read", s.portSSinceLastRead(),
+			"reason", "port-s recovery REGISTER already failed for this binding")
 		return
 	}
 	logging.Info("IMS protected server push closed; wait for port-s reconnect",
@@ -335,28 +339,75 @@ func (s *Service) portSReconnectWatchFired() {
 	}
 	s.protectedConnMu.Lock()
 	remaining := len(s.protectedConns)
-	s.protectedConnMu.Unlock()
-	if remaining > 0 {
+	if remaining > 0 || s.portSOnDemandObserved.Load() || s.portSRecoveryDeferred.Load() {
+		s.protectedConnMu.Unlock()
 		return
 	}
 	s.portSRecoveryPending.Store(true)
+	s.protectedConnMu.Unlock()
 	s.triggerRegisterImmediate("port-s flow failed")
 }
 
-// notePortSRecoveryOutcome retires flow recovery on a network that answers it
-// with a failure. One rejected refresh is all the evidence needed: the flow
-// was already gone, so the REGISTER cost a working registration for nothing
-// and would do so again on every closure.
-func (s *Service) notePortSRecoveryOutcome(err error) {
-	if s == nil || !s.portSRecoveryPending.Swap(false) || err == nil {
+func (s *Service) completePortSRecovery(err error, bindingPreserved bool) {
+	if s == nil {
 		return
 	}
-	if s.portSRecoveryRejected.Swap(true) {
+	pending := s.portSRecoveryPending.Swap(false)
+	if err == nil {
+		s.portSReconnectWaiting.Store(false)
+		s.portSRecoveryDeferred.Store(false)
 		return
+	}
+	if !pending {
+		if s.portSPushReady.Load() {
+			s.portSReconnectWaiting.Store(false)
+		}
+		return
+	}
+	if !bindingPreserved {
+		s.portSReconnectWaiting.Store(false)
+		s.portSRecoveryDeferred.Store(false)
+		return
+	}
+	s.portSRecoveryDeferred.Store(true)
+	if s.portSPushReady.Load() {
+		// The failed REGISTER itself may have prompted this connection.
+		// It does not prove that the peer reconnects on demand.
+		s.portSReconnectWaiting.Store(false)
 	}
 	logging.WarnRate("ims-ports-recovery-rejected-"+s.DeviceID(), time.Hour,
-		"IMS port-s flow recovery rejected; leaving the flow to the P-CSCF",
+		"IMS port-s REGISTER recovery failed; keep current binding and wait for the P-CSCF",
 		"device", s.DeviceID(), "err", err)
+}
+
+func (s *Service) recordOnDemandPortSReconnect() {
+	if s == nil || s.portSRecoveryPending.Load() || s.registrationInProgress() {
+		return
+	}
+	if !s.portSReconnectWaiting.CompareAndSwap(true, false) || s.portSOnDemandObserved.Swap(true) {
+		return
+	}
+	s.portSRecoveryDeferred.Store(false)
+	logging.Info("IMS on-demand port-s reconnect observed",
+		"device", s.DeviceID(),
+		"reason", "peer reopened port-s without a successful REGISTER")
+}
+
+func (s *Service) registrationInProgress() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.regState == regRegistering || s.regState == regReregister
+}
+
+func (s *Service) resetPortSRecoveryKnowledge() {
+	if s == nil {
+		return
+	}
+	s.cancelPortSReconnectWatch()
+	s.portSReconnectWaiting.Store(false)
+	s.portSRecoveryPending.Store(false)
+	s.portSRecoveryDeferred.Store(false)
+	s.portSOnDemandObserved.Store(false)
 }
 
 func (s *Service) trackProtectedConnection(conn net.Conn) bool {
@@ -370,6 +421,7 @@ func (s *Service) trackProtectedConnection(conn net.Conn) bool {
 		changed := !s.portSPushReady.Swap(true)
 		s.protectedConnMu.Unlock()
 		s.cancelPortSReconnectWatch()
+		s.recordOnDemandPortSReconnect()
 		if changed {
 			s.notifySMSReadiness()
 		}
