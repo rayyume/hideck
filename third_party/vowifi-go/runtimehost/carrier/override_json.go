@@ -98,6 +98,9 @@ func validateCarrierOverride(value CarrierOverride) error {
 	if value.ReauthIntervalSeconds < 0 {
 		return fmt.Errorf("reauth interval must not be negative")
 	}
+	if value.IKERekeyIntervalSeconds < 0 {
+		return fmt.Errorf("IKE rekey interval must not be negative")
+	}
 	if err := validateE911Override(value.E911); err != nil {
 		return err
 	}
@@ -170,11 +173,12 @@ func carrierOverrideToInternal(value CarrierOverride) policy.CarrierOverride {
 	result := policy.CarrierOverride{
 		ID: strings.TrimSpace(value.PresetID), PresetID: strings.TrimSpace(value.PresetID),
 		MCC: strings.TrimSpace(value.MCC), MNC: strings.TrimSpace(value.MNC),
-		DeviceModel:           strings.TrimSpace(value.DeviceModel),
-		IKEProposals:          cloneStrings(value.IKEProposals),
-		ESPProposals:          cloneStrings(value.ESPProposals),
-		ReauthIntervalSeconds: value.ReauthIntervalSeconds,
-		IMSTransport:          strings.TrimSpace(value.IMS.Transport),
+		DeviceModel:             strings.TrimSpace(value.DeviceModel),
+		IKEProposals:            cloneStrings(value.IKEProposals),
+		ESPProposals:            cloneStrings(value.ESPProposals),
+		ReauthIntervalSeconds:   value.ReauthIntervalSeconds,
+		IKERekeyIntervalSeconds: value.IKERekeyIntervalSeconds,
+		IMSTransport:            strings.TrimSpace(value.IMS.Transport),
 		E911: policy.E911PolicyOverride{
 			Provider: value.E911.Provider, EntitlementURL: value.E911.EntitlementURL,
 			WebsheetHostPolicy:  value.E911.WebsheetHostPolicy,

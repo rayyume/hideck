@@ -27,6 +27,7 @@ func (s *Service) runOutboundMessageDispatcher() {
 				outboundDispatchOptions{
 					Context: task.ctx, Flow: task.flow, Request: task.req,
 					Timeout: time.Duration(task.timeout), Callbacks: task.callbacks,
+					PeerConn: task.peerConn,
 				},
 				true,
 			)
@@ -81,6 +82,7 @@ func (s *Service) dispatchOutboundMESSAGEWithCallbacks(
 		ctx: options.Context, flow: options.Flow,
 		req: options.Request.Clone(), timeout: int64(options.Timeout),
 		callbacks: options.Callbacks,
+		peerConn:  options.PeerConn,
 		done:      make(chan outboundMessageReply, 1),
 	}
 	select {

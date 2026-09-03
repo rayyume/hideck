@@ -16,6 +16,7 @@ import (
 type rpReportRequest struct {
 	Inbound       string
 	Body          []byte
+	PeerConn      net.Conn
 	RPMR          byte
 	Fingerprint   string
 	Identity      string
@@ -79,7 +80,7 @@ func (s *Service) sendRPReport(report rpReportRequest) error {
 		s.mtAckSendErr.Add(1)
 		return err
 	}
-	modeCtx, resolveErr := s.resolveOutboundModeContext("mt-rp-ack", request)
+	modeCtx, resolveErr := s.resolveOutboundModeContextForPeer("mt-rp-ack", request, report.PeerConn)
 	if resolveErr != nil {
 		s.mtAckSendErr.Add(1)
 		return resolveErr
@@ -97,7 +98,7 @@ func (s *Service) sendRPReport(report rpReportRequest) error {
 	defer cancel()
 	result, dispatchErr := s.dispatchOutboundMESSAGEWithCallbacks(outboundDispatchOptions{
 		Context: ctx, Flow: "mt-rp-ack", Request: request,
-		Timeout: inboundSMSAckTimeout,
+		Timeout: inboundSMSAckTimeout, PeerConn: report.PeerConn,
 	})
 	err = rpReportTransactionError(result.SIPCode, dispatchErr)
 	s.logRPReportProtocolTrace(request, modeCtx, report, result.SIPCode, err)

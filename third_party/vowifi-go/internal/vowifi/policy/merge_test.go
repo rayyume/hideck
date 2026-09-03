@@ -69,12 +69,14 @@ func TestMergeFromPresetPreservesDefaultsForInvalidIMSValues(t *testing.T) {
 		IMSOptionsPingIntervalSeconds: &zero,
 		DPDKeepaliveIntervalSeconds:   -1,
 		ReauthIntervalSeconds:         -1,
+		IKERekeyIntervalSeconds:       -1,
 	})
 	if config.IMSLocalPort != 5060 || config.IMSTCPKeepaliveSeconds != 30 ||
 		config.IMSOptionsPingIntervalSeconds != 45 {
 		t.Fatalf("invalid IMS values changed defaults: %+v", config)
 	}
-	if config.DPDKeepaliveIntervalSeconds != 0 || config.ReauthIntervalSeconds != 0 {
+	if config.DPDKeepaliveIntervalSeconds != 0 || config.ReauthIntervalSeconds != 0 ||
+		config.IKERekeyIntervalSeconds != 0 {
 		t.Fatalf("invalid timers were applied: %+v", config)
 	}
 }

@@ -41,6 +41,7 @@ func CarrierPlanFromEffectiveConfig(config EffectiveCarrierConfig) CarrierPlan {
 			AllowedLegacyCiphers: cloneStrings(config.AllowedLegacyCiphers), AlgorithmPolicy: config.AlgorithmPolicy,
 			DPDKeepaliveIntervalSeconds: config.DPDKeepaliveIntervalSeconds,
 			ReauthIntervalSeconds:       config.ReauthIntervalSeconds,
+			IKERekeyIntervalSeconds:     config.IKERekeyIntervalSeconds,
 			AKAPrimePreferred:           config.AKAPrimePreferred,
 		},
 		IMS: IMSPlan{
@@ -85,6 +86,7 @@ func EffectiveCarrierConfigFromCarrierPlan(plan CarrierPlan) EffectiveCarrierCon
 		AllowedLegacyCiphers: cloneStrings(plan.IKE.AllowedLegacyCiphers), AlgorithmPolicy: plan.IKE.AlgorithmPolicy,
 		DPDKeepaliveIntervalSeconds: plan.IKE.DPDKeepaliveIntervalSeconds,
 		ReauthIntervalSeconds:       plan.IKE.ReauthIntervalSeconds,
+		IKERekeyIntervalSeconds:     plan.IKE.IKERekeyIntervalSeconds,
 		AKAPrimePreferred:           plan.IKE.AKAPrimePreferred,
 		IMSDomain:                   plan.IMS.Domain, IMSRealm: plan.IMS.Realm, IMSRegistrar: plan.IMS.Registrar,
 		IMSPCSCF: plan.IMS.PCSCF, IMSUserAgent: plan.IMS.UserAgent, IMSTransport: plan.IMS.Transport,

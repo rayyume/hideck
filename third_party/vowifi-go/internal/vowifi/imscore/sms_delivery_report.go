@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"time"
 
@@ -28,6 +29,13 @@ type smsDeliveryReport struct {
 	rpCause    int
 	errorText  string
 	reportedAt time.Time
+}
+
+type inboundTPStatusReportRequest struct {
+	raw      string
+	rpMR     byte
+	payload  []byte
+	peerConn net.Conn
 }
 
 func (s *Service) handleInboundRPReport(raw string, info smscodec.RPDUInfo, state, errorText string) (inboundSIPResult, error) {
@@ -78,20 +86,30 @@ func (s *Service) acknowledgeRPSMMAReport(raw string, info smscodec.RPDUInfo) (i
 }
 
 func (s *Service) handleInboundTPStatusReport(raw string, rpMR byte, payload []byte) (inboundSIPResult, error) {
-	report, err := parseTPStatusReport(payload)
+	return s.handleInboundTPStatusReportRequest(inboundTPStatusReportRequest{
+		raw: raw, rpMR: rpMR, payload: payload,
+	})
+}
+
+func (s *Service) handleInboundTPStatusReportRequest(request inboundTPStatusReportRequest) (inboundSIPResult, error) {
+	report, err := parseTPStatusReport(request.payload)
 	if err != nil {
-		return s.inboundSMSProtocolError(raw, 400, rpMR, true, err)
+		return s.handleInboundSMSProtocolFailure(inboundSMSProtocolFailure{
+			raw: request.raw, status: 400, rpMR: request.rpMR,
+			sendRPError: true, err: err, peerConn: request.peerConn,
+		})
 	}
-	response, err := buildSIPRequestResponse(raw, inboundRPDataSIPStatus)
+	response, err := buildSIPRequestResponse(request.raw, inboundRPDataSIPStatus)
 	if err != nil {
 		return inboundSIPResult{}, err
 	}
-	recordErr := s.recordSMSDeliveryReport(raw, report)
+	recordErr := s.recordSMSDeliveryReport(request.raw, report)
 	return inboundSIPResult{
 		response: response,
 		afterReply: func() {
 			s.sendRPReportWithRetry(rpReportRequest{
-				Inbound: raw, Body: smscodec.BuildRPAck(rpMR), RPMR: rpMR,
+				Inbound: request.raw, Body: smscodec.BuildRPAck(request.rpMR),
+				PeerConn: request.peerConn, RPMR: request.rpMR,
 			})
 		},
 	}, recordErr

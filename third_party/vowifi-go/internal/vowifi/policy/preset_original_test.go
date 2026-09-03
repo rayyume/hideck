@@ -25,7 +25,7 @@ func TestOriginalCarrierPresetAssetsRemainExact(t *testing.T) {
 		"ee_uk_23431.yaml":         "6ce981d9065cfcba1beb69385ffda4e3305aec6878fcc0ed3f3b9847f0176b5a",
 		"ee_uk_23432.yaml":         "0ccae7020f4151d0e31f3440a1a09bb87f39ee16362a0c556e1ac02824f8a559",
 		"elisa_ee_24802.yaml":      "e7d833e821deda5145033d70536b4820ac1d4685ef4a272996df7e66fc355243",
-		"giffgaff_23410.yaml":      "eef48a627da016888187fbe28f59213a22b6f584e9267b9b3236bd7cb6bba531",
+		"giffgaff_23410.yaml":      "06f01db9a8c6f0d57569174aa596b9a67e2fa568d06449b50c10b2a41611d3ef",
 		"globe_ph_51502.yaml":      "12f8308437a4ad127111060288bde09b153961460f0561355f32b5a44fa76bac",
 		"hotlink_my_50212.yaml":    "e3aae045a505983376a7b9627a5e43e13af136a747f545087c7b97d0a8a67c8c",
 		"kddi_44051.yaml":          "b6ea22aecd795b8265b7dddd59e8a83831f11201515b8dc9439b1892d5f0fd45",

@@ -2,6 +2,7 @@ mcc: "234"
 mnc: "10"
 id: giffgaff_23410
 device_model: rmx3366
+ike_rekey_interval_seconds: 9000
 ike_proposals:
   - aes256-sha512-prfsha512-modp2048
 esp_proposals:

@@ -542,7 +542,10 @@ func (s *Service) answerDigestChallenge(ctx context.Context, session *registerSe
 		return "", false, authErr
 	}
 	if session.security != nil && !syncFailure {
-		if err := s.installNegotiatedIPSec(ctx, session, response, aka); err != nil {
+		if s.canReuseProtectedSecurityAgreement(session, response) {
+			logging.Info("IMS re-authentication reusing established security agreement",
+				"device", s.DeviceID(), "cseq", session.cseq)
+		} else if err := s.installNegotiatedIPSec(ctx, session, response, aka); err != nil {
 			return "", false, err
 		}
 	}

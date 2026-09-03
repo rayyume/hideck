@@ -78,6 +78,25 @@ func updateAuthResponseRouteSecurity(session *registerSession, response *sipResp
 	}
 }
 
+func (s *Service) canReuseProtectedSecurityAgreement(session *registerSession, response *sipResponse) bool {
+	if !isProtectedSecurityRefreshWithoutOffer(session, response) || s == nil {
+		return false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.regSession == session && s.registrationTCP != nil &&
+		s.registrationTCPProtected && s.signalingReady
+}
+
+func isProtectedSecurityRefreshWithoutOffer(session *registerSession, response *sipResponse) bool {
+	if session == nil || response == nil || response.StatusCode != 401 ||
+		len(response.HeaderValues("Security-Server")) != 0 || session.expires <= 0 {
+		return false
+	}
+	return session.security != nil && session.security.server != nil &&
+		strings.TrimSpace(session.security.verifyHeader) != ""
+}
+
 func classifySecurityFallbackReason(decision secAgreeDecision) string {
 	if decision.reason != "" {
 		return decision.reason

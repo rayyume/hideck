@@ -55,6 +55,7 @@ func TestLoadCarrierOverridesJSONCompatibility(t *testing.T) {
   {"MCC":"310","MNC":"260","PresetID":"json_external",
    "IKEProposals":["aes256-sha512-prfsha512-modp2048","aes128-sha256-modp2048"],
    "ESPProposals":["aes256-sha512","aes128-sha256"],
+   "IKERekeyIntervalSeconds":9000,
    "IMS":{"ExpiresSeconds":321,"Transport":"tcp"}}
 ]`)
 	result, err := LoadCarrierOverridesCurrent(path)
@@ -64,7 +65,7 @@ func TestLoadCarrierOverridesJSONCompatibility(t *testing.T) {
 	config := ResolveEffectiveCarrierConfig("310", "260")
 	if config.PresetID != "json_external" || config.IKEProposals[0] != "aes256-sha512-prfsha512-modp2048" ||
 		config.IKEProposals[1] != "aes128-sha256-modp2048" || config.IMSTransport != "tcp" ||
-		config.IMS.ExpiresSeconds != 321 {
+		config.IKERekeyIntervalSeconds != 9000 || config.IMS.ExpiresSeconds != 321 {
 		t.Fatalf("resolved JSON override = %+v", config)
 	}
 }
@@ -88,6 +89,7 @@ func TestJSONOverrideValidationIsAtomic(t *testing.T) {
 		{"duplicate mechanism", `[{"MCC":"234","MNC":"10","IMS":{"SecurityClientMechanisms":[{"Alg":"hmac-md5-96","EAlg":"aes-cbc","Prot":"esp","Mode":"trans"},{"Alg":"hmac(md5)","EAlg":"cbc(aes)","Prot":"ESP","Mode":"TRANS"}]}}]`, "duplicate Security-Client"},
 		{"invalid E911 URL", `[{"MCC":"310","MNC":"280","E911":{"Websheet":"not-a-url"}}]`, "E911 websheet"},
 		{"incomplete E911", `[{"MCC":"001","MNC":"01","E911":{"Enabled":true}}]`, "enabled E911 has no provider"},
+		{"negative IKE rekey", `[{"MCC":"234","MNC":"10","IKERekeyIntervalSeconds":-1}]`, "IKE rekey interval"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

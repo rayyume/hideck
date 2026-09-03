@@ -144,6 +144,7 @@ type CarrierOverride struct {
 	IMSOptionsPingIntervalSeconds *int                        `yaml:"ims_options_ping_interval_seconds"`
 	DPDKeepaliveIntervalSeconds   int                         `yaml:"dpd_keepalive_interval_seconds"`
 	ReauthIntervalSeconds         int                         `yaml:"reauth_interval_seconds"`
+	IKERekeyIntervalSeconds       int                         `yaml:"ike_rekey_interval_seconds"`
 	IMSRegisterTemplate           IMSRegisterTemplateOverride `yaml:"ims_register_template"`
 	SMSRoutingMethod              string                      `yaml:"sms_routing_method"`
 	SMSRoutingGW                  string                      `yaml:"sms_routing_gw"`
@@ -184,6 +185,7 @@ type CarrierPreset struct {
 	IMSOptionsPingIntervalSeconds    *int
 	DPDKeepaliveIntervalSeconds      int
 	ReauthIntervalSeconds            int
+	IKERekeyIntervalSeconds          int
 	IMSRegisterTemplate              IMSRegisterTemplate
 	IPStackType                      string `json:"ip_stack,omitempty" yaml:"ip_stack,omitempty"`
 	SMSRoutingMethod, SMSRoutingGW   string
@@ -215,6 +217,7 @@ type EffectiveCarrierConfig struct {
 	IMSLocalPort, IMSTCPKeepaliveSeconds               int
 	IMSOptionsPingIntervalSeconds                      int
 	DPDKeepaliveIntervalSeconds, ReauthIntervalSeconds int
+	IKERekeyIntervalSeconds                            int
 	IMSRegisterTemplate                                IMSRegisterTemplate
 	IMSRegisterPolicySource                            string
 	SMSRoutingMethod, SMSRoutingGW                     string
@@ -258,6 +261,7 @@ type IKEPlan struct {
 	AllowedLegacyCiphers                               []string
 	AlgorithmPolicy                                    string
 	DPDKeepaliveIntervalSeconds, ReauthIntervalSeconds int
+	IKERekeyIntervalSeconds                            int
 	AKAPrimePreferred                                  bool
 }
 type IMSPlan struct {

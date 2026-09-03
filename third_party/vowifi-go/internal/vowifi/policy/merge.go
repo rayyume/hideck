@@ -111,6 +111,9 @@ func mergePresetIKE(config *EffectiveCarrierConfig, preset CarrierPreset) {
 	if preset.ReauthIntervalSeconds > 0 {
 		config.ReauthIntervalSeconds = preset.ReauthIntervalSeconds
 	}
+	if preset.IKERekeyIntervalSeconds > 0 {
+		config.IKERekeyIntervalSeconds = preset.IKERekeyIntervalSeconds
+	}
 }
 
 func mergePresetIMS(config *EffectiveCarrierConfig, preset CarrierPreset) {

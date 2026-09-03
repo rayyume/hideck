@@ -62,6 +62,9 @@ func validateTunnelConfig(config EffectiveCarrierConfig) error {
 	if config.ReauthIntervalSeconds < 0 {
 		return fmt.Errorf("carrier: reauth interval must not be negative")
 	}
+	if config.IKERekeyIntervalSeconds < 0 {
+		return fmt.Errorf("carrier: IKE rekey interval must not be negative")
+	}
 	return nil
 }
 

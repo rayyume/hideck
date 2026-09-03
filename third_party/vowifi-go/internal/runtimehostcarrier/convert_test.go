@@ -49,6 +49,7 @@ func TestCurrentCarrierDefaultsSurviveRoundTrip(t *testing.T) {
 	source := carrier.ResolveEffectiveCarrierConfig("234", "10")
 	got := FromInternal(ToInternal(source))
 	if got.PresetID != source.PresetID || got.DeviceModel != source.DeviceModel ||
+		got.IKERekeyIntervalSeconds != source.IKERekeyIntervalSeconds ||
 		!reflect.DeepEqual(got.IKEProposals, source.IKEProposals) ||
 		!reflect.DeepEqual(got.ESPProposals, source.ESPProposals) ||
 		got.IMS.ExpiresSeconds != source.IMS.ExpiresSeconds || got.IMS.Transport != source.IMS.Transport ||
@@ -91,7 +92,8 @@ func populatedCarrierConfig() carrier.EffectiveCarrierConfig {
 		IMSPCSCF: "pcscf.example", IMSUserAgent: "user-agent", IMSTransport: "tcp",
 		IMSIdentitySource: "isim", IMSLocalPort: 5060, IMSTCPKeepaliveSeconds: 40,
 		IMSOptionsPingIntervalSeconds: 50, DPDKeepaliveIntervalSeconds: 60,
-		ReauthIntervalSeconds: 70, IMSRegisterTemplate: populatedTemplate("flattened"),
+		ReauthIntervalSeconds: 70, IKERekeyIntervalSeconds: 80,
+		IMSRegisterTemplate:     populatedTemplate("flattened"),
 		IMSRegisterPolicySource: "preset", SMSRoutingMethod: "sip", SMSRoutingGW: "gw.example",
 		ForceSMSCAuth: true, IMS: populatedTemplate("compatibility"),
 	}

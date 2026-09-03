@@ -39,12 +39,21 @@ type outboundModeContext struct {
 	UDPConn                 net.PacketConn
 	Client                  *sipgo.Client
 	SkipGenericRawLog       bool
+	InboundPeer             bool
 	send                    func(context.Context, string) error
 }
 
 func (s *Service) resolveOutboundModeContext(
 	flow string,
 	req *sip.Request,
+) (outboundModeContext, error) {
+	return s.resolveOutboundModeContextForPeer(flow, req, nil)
+}
+
+func (s *Service) resolveOutboundModeContextForPeer(
+	flow string,
+	req *sip.Request,
+	peer net.Conn,
 ) (outboundModeContext, error) {
 	if s == nil || s.transport == nil {
 		return outboundModeContext{}, newOutboundModeResolveError(
@@ -63,13 +72,14 @@ func (s *Service) resolveOutboundModeContext(
 		)
 	}
 	modeCtx := s.outboundModeSnapshotLocked(flow, req, pani)
+	modeCtx.useInboundPeer(peer)
 	sender := s.outboundSenderLocked(&modeCtx)
 	if sender == nil {
 		return outboundModeContext{}, newOutboundModeResolveError(
 			"missing_direct_sender", "no direct sender for %s", destinationFromContext(modeCtx),
 		)
 	}
-	if modeCtx.IPSec3GPP && !modeCtx.SignalingReady && modeCtx.Mode != "external" {
+	if modeCtx.IPSec3GPP && !modeCtx.SignalingReady && modeCtx.Mode != "external" && !modeCtx.InboundPeer {
 		reason := strings.TrimSpace(modeCtx.SignalingNotReadyReason)
 		if reason == "" {
 			reason = "signaling_not_ready"
@@ -80,6 +90,19 @@ func (s *Service) resolveOutboundModeContext(
 	}
 	modeCtx.send = sender
 	return modeCtx, nil
+}
+
+func (modeCtx *outboundModeContext) useInboundPeer(peer net.Conn) {
+	if modeCtx == nil || peer == nil {
+		return
+	}
+	modeCtx.Mode = "tcp"
+	modeCtx.Transport = "TCP"
+	modeCtx.TCPConn = peer
+	modeCtx.UDPConn = nil
+	modeCtx.Client = nil
+	modeCtx.InboundPeer = true
+	modeCtx.RemoteIP, modeCtx.RemotePortS = splitOutboundAddress(peer.RemoteAddr())
 }
 
 func (s *Service) outboundModeSnapshotLocked(

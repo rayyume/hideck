@@ -3,6 +3,7 @@ package imscore
 import (
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"time"
 
@@ -50,12 +51,31 @@ type inboundSMS struct {
 	fragmentSessionID string
 	msisdnLess        bool
 	deliveryReportTo  string
+	peerConn          net.Conn
 }
 
 type decodedInboundSMSRequest struct {
 	rpdu []byte
 	info smscodec.RPDUInfo
 	xml  shortMessageInfo
+	peer net.Conn
+}
+
+type inboundRPDataRequest struct {
+	raw      string
+	rpdu     []byte
+	rpMR     byte
+	xml      shortMessageInfo
+	peerConn net.Conn
+}
+
+type inboundSMSProtocolFailure struct {
+	raw         string
+	status      int
+	rpMR        byte
+	sendRPError bool
+	err         error
+	peerConn    net.Conn
 }
 
 type fragmentLifecycleContext struct {
@@ -107,8 +127,15 @@ func (s *Service) decodeInboundSMSRequest(raw string) (*decodedInboundSMSRequest
 }
 
 func (s *Service) handleInboundSMS(raw string) (inboundSIPResult, error) {
+	return s.handleInboundSMSFromPeer(raw, nil)
+}
+
+func (s *Service) handleInboundSMSFromPeer(raw string, peer net.Conn) (inboundSIPResult, error) {
 	s.logInboundSMSProtocolTrace(raw)
 	decoded, err := s.decodeInboundSMSRequest(raw)
+	if decoded != nil {
+		decoded.peer = peer
+	}
 	if err != nil && decoded == nil && !isSupportedSMSContentType(rawSIPHeaderValue(raw, "Content-Type")) {
 		response, err := buildSIPRequestResponse(raw, 415)
 		return inboundSIPResult{response: response}, err
@@ -118,9 +145,11 @@ func (s *Service) handleInboundSMS(raw string) (inboundSIPResult, error) {
 		if decoded != nil {
 			info = decoded.info
 		}
-		return s.inboundSMSProtocolError(
-			raw, 400, info.MR, info.Kind == smscodec.RPDUKindData, err,
-		)
+		return s.handleInboundSMSProtocolFailure(inboundSMSProtocolFailure{
+			raw: raw, status: 400, rpMR: info.MR,
+			sendRPError: info.Kind == smscodec.RPDUKindData,
+			err:         err, peerConn: peer,
+		})
 	}
 	return s.routeDecodedInboundSMS(raw, decoded)
 }
@@ -138,7 +167,10 @@ func (s *Service) routeDecodedInboundSMS(raw string, decoded *decodedInboundSMSR
 	case info.Kind == smscodec.RPDUKindError && info.RawType == 0x05:
 		return s.handleInboundSMSReport(raw, info, "failed", rpErrorReason(rpdu, info.Cause))
 	default:
-		return s.inboundSMSProtocolError(raw, 400, info.MR, false, fmt.Errorf("unsupported inbound RPDU type 0x%02x", info.RawType))
+		return s.handleInboundSMSProtocolFailure(inboundSMSProtocolFailure{
+			raw: raw, status: 400, rpMR: info.MR,
+			err: fmt.Errorf("unsupported inbound RPDU type 0x%02x", info.RawType), peerConn: decoded.peer,
+		})
 	}
 }
 
@@ -167,47 +199,66 @@ func (s *Service) handleInboundSMSData(raw string, decoded *decodedInboundSMSReq
 	if decoded == nil {
 		return s.inboundSMSProtocolError(raw, 400, 0, false, errors.New("empty decoded IMS SMS"))
 	}
-	return s.handleInboundRPData(raw, decoded.rpdu, decoded.info.MR, decoded.xml)
+	return s.handleInboundRPDataRequest(inboundRPDataRequest{
+		raw: raw, rpdu: decoded.rpdu, rpMR: decoded.info.MR,
+		xml: decoded.xml, peerConn: decoded.peer,
+	})
 }
 
 func (s *Service) handleInboundRPData(raw string, rpdu []byte, rpMR byte, xml shortMessageInfo) (inboundSIPResult, error) {
-	_, _, _, payload, err := smscodec.ParseRPDataWithAddresses(rpdu)
+	return s.handleInboundRPDataRequest(inboundRPDataRequest{
+		raw: raw, rpdu: rpdu, rpMR: rpMR, xml: xml,
+	})
+}
+
+func (s *Service) handleInboundRPDataRequest(request inboundRPDataRequest) (inboundSIPResult, error) {
+	_, _, _, payload, err := smscodec.ParseRPDataWithAddresses(request.rpdu)
 	if err != nil {
-		return s.inboundSMSProtocolError(raw, 400, rpMR, true, err)
+		return s.handleInboundSMSProtocolFailure(inboundSMSProtocolFailure{
+			raw: request.raw, status: 400, rpMR: request.rpMR,
+			sendRPError: true, err: err, peerConn: request.peerConn,
+		})
 	}
 	if len(payload) > 0 && payload[0]&0x03 == 0x02 {
-		return s.handleInboundTPStatusReport(raw, rpMR, payload)
+		return s.handleInboundTPStatusReportRequest(inboundTPStatusReportRequest{
+			raw: request.raw, rpMR: request.rpMR,
+			payload: payload, peerConn: request.peerConn,
+		})
 	}
-	message, err := decodeInboundRPData(raw, rpdu)
+	message, err := decodeInboundRPData(request.raw, request.rpdu)
 	if err != nil {
-		return s.inboundSMSProtocolError(raw, 400, rpMR, true, err)
+		return s.handleInboundSMSProtocolFailure(inboundSMSProtocolFailure{
+			raw: request.raw, status: 400, rpMR: request.rpMR,
+			sendRPError: true, err: err, peerConn: request.peerConn,
+		})
 	}
+	message.peerConn = request.peerConn
 	if smscodec.IsDummyMSISDN(message.sender) {
-		if !hasMSISDNLessFeatureCaps(raw) {
-			response, responseErr := buildSIPRequestResponse(raw, inboundRPDataSIPStatus)
+		if !hasMSISDNLessFeatureCaps(request.raw) {
+			response, responseErr := buildSIPRequestResponse(request.raw, inboundRPDataSIPStatus)
 			return inboundSIPResult{response: response}, responseErr
 		}
 		message.msisdnLess = true
-		if from := strings.TrimSpace(xml.From); from != "" {
+		if from := strings.TrimSpace(request.xml.From); from != "" {
 			message.sender = from
 			message.deliveryReportTo = from
 		}
 	}
-	s.logInboundSMSCorrelation(raw, message)
-	response, err := buildSIPRequestResponse(raw, inboundRPDataSIPStatus)
+	s.logInboundSMSCorrelation(request.raw, message)
+	response, err := buildSIPRequestResponse(request.raw, inboundRPDataSIPStatus)
 	if err != nil {
 		return inboundSIPResult{}, err
 	}
 	if s.smsMemoryIsFull() {
-		s.rememberSMSMemoryDenied(raw)
+		s.rememberSMSMemoryDenied(request.raw)
 		return inboundSIPResult{
 			response: response,
 			afterReply: func() {
-				s.sendRPReportWithRetry(s.rpReportForInbound(raw, message, smscodec.BuildRPError(message.rpMR, smscodec.RPCauseMemoryCapacityExceeded)))
+				s.sendRPReportWithRetry(s.rpReportForInbound(request.raw, message, smscodec.BuildRPError(message.rpMR, smscodec.RPCauseMemoryCapacityExceeded)))
 			},
 		}, nil
 	}
-	return s.finalizeInboundSMSData(raw, message, response)
+	return s.finalizeInboundSMSData(request.raw, message, response)
 }
 
 func (s *Service) logInboundSMSCorrelation(raw string, message inboundSMS) {
@@ -230,7 +281,10 @@ func (s *Service) finalizeInboundSMSData(
 	fragmentKey := inboundSMSFragmentKey(message)
 	shouldDispatch, assembleErr := s.assembleInboundSMS(raw, &message)
 	if assembleErr != nil {
-		return s.inboundSMSProtocolError(raw, 400, message.rpMR, true, assembleErr)
+		return s.handleInboundSMSProtocolFailure(inboundSMSProtocolFailure{
+			raw: raw, status: 400, rpMR: message.rpMR,
+			sendRPError: true, err: assembleErr, peerConn: message.peerConn,
+		})
 	}
 	if shouldDispatch {
 		s.publishInboundSMSWithFragment(message, message.fragmentSessionID, false)
@@ -344,19 +398,27 @@ func (s *Service) assembleInboundSMS(raw string, message *inboundSMS) (bool, err
 }
 
 func (s *Service) inboundSMSProtocolError(raw string, status int, rpMR byte, sendRPError bool, protocolErr error) (inboundSIPResult, error) {
-	response, responseErr := buildSIPRequestResponse(raw, status)
+	return s.handleInboundSMSProtocolFailure(inboundSMSProtocolFailure{
+		raw: raw, status: status, rpMR: rpMR,
+		sendRPError: sendRPError, err: protocolErr,
+	})
+}
+
+func (s *Service) handleInboundSMSProtocolFailure(failure inboundSMSProtocolFailure) (inboundSIPResult, error) {
+	response, responseErr := buildSIPRequestResponse(failure.raw, failure.status)
 	if responseErr != nil {
 		return inboundSIPResult{}, responseErr
 	}
 	result := inboundSIPResult{response: response}
-	if sendRPError {
+	if failure.sendRPError {
 		result.afterReply = func() {
 			s.sendRPReportWithRetry(rpReportRequest{
-				Inbound: raw, Body: smscodec.BuildRPError(rpMR, rpCauseTemporaryFailure), RPMR: rpMR,
+				Inbound: failure.raw, Body: smscodec.BuildRPError(failure.rpMR, rpCauseTemporaryFailure),
+				PeerConn: failure.peerConn, RPMR: failure.rpMR,
 			})
 		}
 	}
-	return result, protocolErr
+	return result, failure.err
 }
 
 func (s *Service) publishInboundSMS(message inboundSMS) {
@@ -381,6 +443,7 @@ func (s *Service) publishInboundSMSWithFragment(
 func (s *Service) rpReportForInbound(raw string, message inboundSMS, rpdu []byte) rpReportRequest {
 	report := rpReportRequest{
 		Inbound: raw, Body: rpdu, RPMR: message.rpMR,
+		PeerConn:      message.peerConn,
 		ServiceCenter: message.serviceCenter,
 		Identity:      mtSMSIdentity(message),
 	}

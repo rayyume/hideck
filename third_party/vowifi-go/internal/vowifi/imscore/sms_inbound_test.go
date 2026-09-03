@@ -1,6 +1,7 @@
 package imscore
 
 import (
+	"bufio"
 	"fmt"
 	"net"
 	"strings"
@@ -15,6 +16,13 @@ import (
 type captureIMSEventSubscriber struct {
 	events  chan events.Event
 	onEvent func(events.Event)
+}
+
+type peerSMSCapture struct {
+	service *Service
+	peer    net.Conn
+	writes  chan<- string
+	readErr chan<- error
 }
 
 func (s *captureIMSEventSubscriber) OnIMSEvent(event events.Event) {
@@ -77,6 +85,93 @@ func TestInboundSMSDeliversEventAndSendsRPAck(t *testing.T) {
 	}
 	if got := rawSIPHeaderValue(request, "Request-Disposition"); got != "" {
 		t.Fatalf("RP-ACK Request-Disposition = %q", got)
+	}
+}
+
+func TestInboundRPAckUsesInboundTCPPeer(t *testing.T) {
+	service, _, outbound := newInboundSMSTestService(t)
+	serviceConn, networkConn := net.Pipe()
+	t.Cleanup(func() { _ = serviceConn.Close() })
+	t.Cleanup(func() { _ = networkConn.Close() })
+
+	writes := make(chan string, 2)
+	readErr := make(chan error, 1)
+	go (peerSMSCapture{service: service, peer: networkConn, writes: writes, readErr: readErr}).run()
+	raw := inboundSMSRequest(t, imsSMSContentType, inboundRPData(t, 0x34, "+447700900123", "peer"))
+	message, err := parseSIPMessage(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.dispatchInboundSIPMessageWithPeer(
+		message, raw, func(response string) error { return service.writeSIPStream(serviceConn, response) }, serviceConn,
+	); err != nil {
+		t.Fatalf("dispatch inbound SMS: %v", err)
+	}
+
+	response := waitForPeerSIPWrite(t, writes, readErr)
+	if !strings.HasPrefix(response, "SIP/2.0 200") {
+		t.Fatalf("peer response = %q", response)
+	}
+	request := waitForPeerSIPWrite(t, writes, readErr)
+	if !strings.HasPrefix(request, "MESSAGE sip:+447802002606@ims.example SIP/2.0") {
+		t.Fatalf("peer RP-ACK = %q", strings.SplitN(request, "\r\n", 2)[0])
+	}
+	select {
+	case request := <-outbound:
+		t.Fatalf("RP-ACK also used the registered outbound flow: %q", request)
+	default:
+	}
+}
+
+func (capture peerSMSCapture) run() {
+	reader := bufio.NewReader(capture.peer)
+	for index := 0; index < 2; index++ {
+		message, err := readSIPStreamMessage(reader)
+		if err != nil {
+			capture.readErr <- err
+			return
+		}
+		capture.writes <- message
+		if index == 1 {
+			capture.service.transport.DeliverResponse(registerResponseForRequest(message, 200, nil))
+		}
+	}
+}
+
+func waitForPeerSIPWrite(t *testing.T, writes <-chan string, readErr <-chan error) string {
+	t.Helper()
+	select {
+	case message := <-writes:
+		return message
+	case err := <-readErr:
+		t.Fatalf("read peer SIP message: %v", err)
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for peer SIP message")
+	}
+	return ""
+}
+
+func TestInboundPeerWriteFailureKeepsRegisteredFlowReady(t *testing.T) {
+	service, _, _ := newInboundSMSTestService(t)
+	service.mu.Lock()
+	service.signalingReady = true
+	service.mu.Unlock()
+	serviceConn, networkConn := net.Pipe()
+	_ = networkConn.Close()
+	_ = serviceConn.Close()
+
+	raw := inboundSMSRequest(t, imsSMSContentType, inboundRPData(t, 0x35, "+447700900123", "closed"))
+	err := service.sendRPReport(rpReportRequest{
+		Inbound: raw, Body: smscodec.BuildRPAck(0x35), PeerConn: serviceConn, RPMR: 0x35,
+	})
+	if err == nil {
+		t.Fatal("sendRPReport() unexpectedly succeeded on a closed inbound peer")
+	}
+	service.mu.RLock()
+	ready := service.signalingReady
+	service.mu.RUnlock()
+	if !ready {
+		t.Fatal("inbound peer failure marked the registered outbound flow unavailable")
 	}
 }
 

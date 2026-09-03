@@ -102,7 +102,8 @@ func TestVoWiFiBlocklistAndErrorChain(t *testing.T) {
 func TestResolveEmbeddedCarrierPresets(t *testing.T) {
 	giffgaff := ResolveEffectiveCarrierConfig("234", "10")
 	if giffgaff.PresetID != "giffgaff_23410" || giffgaff.DeviceModel != "rmx3366" ||
-		giffgaff.ReauthIntervalSeconds != 0 || giffgaff.EPDGAddrSource != "standard" ||
+		giffgaff.ReauthIntervalSeconds != 0 || giffgaff.IKERekeyIntervalSeconds != 9000 ||
+		giffgaff.EPDGAddrSource != "standard" ||
 		giffgaff.EmergencyEPDGAddr != DefaultCarrierEmergencyEPDGAddr("234", "10") {
 		t.Fatalf("giffgaff = %+v", giffgaff)
 	}
@@ -322,8 +323,10 @@ func TestCarrierOverrideStoreConcurrentReplacementAndResolution(t *testing.T) {
 }
 
 func TestLoadCarrierOverridesYAML(t *testing.T) {
+	ClearCarrierOverrides()
+	t.Cleanup(ClearCarrierOverrides)
 	path := filepath.Join(t.TempDir(), "carrier_overrides.yaml")
-	data := []byte("carrier_overrides:\n  23410:\n    id: local\n    custom_epdg: epdg.local\n")
+	data := []byte("carrier_overrides:\n  23410:\n    id: local\n    custom_epdg: epdg.local\n    ike_rekey_interval_seconds: 7200\n")
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -331,12 +334,15 @@ func TestLoadCarrierOverridesYAML(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadCarrierOverridesFile() error = %v", err)
 	}
-	if values["234010"].ID != "local" {
+	if values["234010"].ID != "local" || values["234010"].IKERekeyIntervalSeconds != 7200 {
 		t.Fatalf("values = %+v", values)
 	}
 	resolved, count, missing, err := LoadAndSetCarrierOverridesFile(path)
 	if err != nil || resolved != path || count != 1 || missing {
 		t.Fatalf("LoadAndSetCarrierOverridesFile() = %q %d %t %v", resolved, count, missing, err)
+	}
+	if got := ResolveEffectiveCarrierConfig("234", "10").IKERekeyIntervalSeconds; got != 7200 {
+		t.Fatalf("resolved IKE rekey interval = %d, want 7200", got)
 	}
 }
 
@@ -344,7 +350,9 @@ func TestCarrierPlanRoundTripAndSliceIsolation(t *testing.T) {
 	config := ResolveEffectiveCarrierConfig("234", "10")
 	plan := CarrierPlanFromEffectiveConfig(config)
 	back := EffectiveCarrierConfigFromCarrierPlan(plan)
-	if back.MCC != config.MCC || back.PresetID != config.PresetID || !reflect.DeepEqual(back.IKEProposals, config.IKEProposals) {
+	if back.MCC != config.MCC || back.PresetID != config.PresetID ||
+		back.IKERekeyIntervalSeconds != config.IKERekeyIntervalSeconds ||
+		!reflect.DeepEqual(back.IKEProposals, config.IKEProposals) {
 		t.Fatalf("round trip = %+v", back)
 	}
 	plan.IKE.IKEProposals[0] = "changed"

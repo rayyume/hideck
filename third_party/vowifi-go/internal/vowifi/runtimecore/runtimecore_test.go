@@ -193,6 +193,7 @@ func TestBuildSWUConfigCarriesRuntimeState(t *testing.T) {
 			IKE: policy.IKEPlan{
 				IKEProposals: []string{"aes128-sha256-modp2048"}, ESPProposals: []string{"aes128-sha256"},
 				NATKeepaliveSeconds: 20, DPDIntervalSeconds: 120, ReauthIntervalSeconds: 180,
+				IKERekeyIntervalSeconds: 9000,
 			},
 		},
 	}
@@ -205,7 +206,8 @@ func TestBuildSWUConfigCarriesRuntimeState(t *testing.T) {
 	if config.AKAProvider != provider || config.EPDGAddr != "epdg.example.com" || config.EpDGPort != 4500 {
 		t.Fatalf("SWu config missing production fields: %+v", config)
 	}
-	if config.ReauthSeconds != 180*time.Second || config.DataplaneMode != swu.DataplaneModeUserspace {
+	if config.ReauthSeconds != 180*time.Second || config.RekeyIKESeconds != 9000*time.Second ||
+		config.DataplaneMode != swu.DataplaneModeUserspace {
 		t.Fatalf("SWu timers/dataplane = %+v", config)
 	}
 	if config.FastReauthID != "reauth@example" || !bytes.Equal(config.FastReauthMK, []byte{3, 4}) {

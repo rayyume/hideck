@@ -115,7 +115,7 @@ func (s *Service) handleInboundSIPDispatch(
 		response, err := s.buildInboundOPTIONSResponse(dispatch.raw)
 		return inboundSIPResult{response: response}, err
 	case "MESSAGE":
-		return s.handleInboundSMS(dispatch.raw)
+		return s.handleInboundSMSFromPeer(dispatch.raw, dispatch.peerConn)
 	case "INFO", "BYE":
 		result, handled, err := s.handleInboundUSSI(dispatch.raw)
 		if handled {

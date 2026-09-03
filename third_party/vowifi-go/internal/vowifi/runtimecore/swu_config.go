@@ -51,6 +51,7 @@ func BuildSWUConfig(cfg SessionConfig) *swu.Config {
 		NATKeepaliveSeconds:       plan.IKE.NATKeepaliveSeconds,
 		DPDIntervalSeconds:        plan.IKE.DPDIntervalSeconds,
 		ReauthInterval:            plan.IKE.ReauthIntervalSeconds,
+		RekeyIKESeconds:           time.Duration(plan.IKE.IKERekeyIntervalSeconds) * time.Second,
 		ResumeTicket:              append([]byte(nil), cfg.ResumeTicket...),
 		ResumeOldSKd:              append([]byte(nil), cfg.ResumeOldSKd...),
 		OnTicketUpdate:            cfg.OnTicketUpdate,

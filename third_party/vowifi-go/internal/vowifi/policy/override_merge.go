@@ -76,6 +76,9 @@ func applyCarrierOverride(preset CarrierPreset, override CarrierOverride) Carrie
 	if override.ReauthIntervalSeconds > 0 {
 		preset.ReauthIntervalSeconds = override.ReauthIntervalSeconds
 	}
+	if override.IKERekeyIntervalSeconds > 0 {
+		preset.IKERekeyIntervalSeconds = override.IKERekeyIntervalSeconds
+	}
 	preset.IMSRegisterTemplate = applyIMSRegisterTemplateOverride(preset.IMSRegisterTemplate, override.IMSRegisterTemplate)
 	setStringIfPresent(&preset.SMSRoutingMethod, override.SMSRoutingMethod)
 	setStringIfPresent(&preset.SMSRoutingGW, override.SMSRoutingGW)

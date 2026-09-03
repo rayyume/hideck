@@ -138,6 +138,7 @@ func TestValidateEffectiveCarrierConfigRejectsWireErrors(t *testing.T) {
 		{"invalid expiry", func(c *EffectiveCarrierConfig) { c.IMS.ExpiresSeconds = 0 }, "expiry must be positive"},
 		{"unknown contact", func(c *EffectiveCarrierConfig) { c.IMS.ContactOrder = append(c.IMS.ContactOrder, "unknown") }, "unsupported IMS Contact"},
 		{"negative reauth", func(c *EffectiveCarrierConfig) { c.ReauthIntervalSeconds = -1 }, "reauth interval"},
+		{"negative IKE rekey", func(c *EffectiveCarrierConfig) { c.IKERekeyIntervalSeconds = -1 }, "IKE rekey interval"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

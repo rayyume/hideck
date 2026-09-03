@@ -2,6 +2,7 @@ package imscore
 
 import (
 	"context"
+	"net"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -26,6 +27,7 @@ type outboundDispatchOptions struct {
 	Request   *sip.Request
 	Timeout   time.Duration
 	Callbacks sipTransactionCallbacks
+	PeerConn  net.Conn
 }
 
 type outboundMessageTask struct {
@@ -34,6 +36,7 @@ type outboundMessageTask struct {
 	req       *sip.Request
 	timeout   int64
 	callbacks sipTransactionCallbacks
+	peerConn  net.Conn
 	done      chan outboundMessageReply
 }
 

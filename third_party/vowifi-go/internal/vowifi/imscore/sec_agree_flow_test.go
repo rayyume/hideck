@@ -3,6 +3,7 @@ package imscore
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net"
 	"strings"
 	"sync"
@@ -87,6 +88,68 @@ func TestRequiredSecAgreeRejectsInitialSuccess(t *testing.T) {
 	err := svc.Register(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "initial_200_security_server_without_ipsec_install_required") {
 		t.Fatalf("Register error = %v", err)
+	}
+}
+
+func TestReauthenticationReusesHealthyProtectedSecurityAgreement(t *testing.T) {
+	svc := newSecurityAgreementTestService(t, NewSystemIMSNetwork(testLocalIP))
+	clientConn, peerConn := net.Pipe()
+	t.Cleanup(func() { _ = clientConn.Close() })
+	t.Cleanup(func() { _ = peerConn.Close() })
+	server := &securityMechanism{Name: "ipsec-3gpp", SPIC: 3, SPIS: 4, PortC: 51000, PortS: 51001}
+	session := &registerSession{
+		callID: "reauth", fromTag: "tag", contactUser: "contact", cseq: 4,
+		expires: time.Hour, template: policy.DefaultIMSRegisterTemplate(),
+		security: &securityAgreement{server: server, verifyHeader: "ipsec-3gpp;spi-c=3;spi-s=4"},
+	}
+	svc.mu.Lock()
+	svc.regSession = session
+	svc.registrationTCP = clientConn
+	svc.registrationTCPProtected = true
+	svc.signalingReady = true
+	svc.mu.Unlock()
+
+	authorization, syncFailure, err := svc.answerDigestChallenge(
+		context.Background(), session, akaChallengeResponse("REGISTER sip:ims.example SIP/2.0\r\n\r\n", ""),
+	)
+	if err != nil {
+		t.Fatalf("answerDigestChallenge: %v", err)
+	}
+	if syncFailure || strings.TrimSpace(authorization) == "" {
+		t.Fatalf("authorization=%q syncFailure=%t", authorization, syncFailure)
+	}
+	if session.security.server != server {
+		t.Fatal("re-authentication replaced the established security agreement")
+	}
+}
+
+func TestReauthenticationDoesNotReuseWhenSecurityServerIsPresentButInvalid(t *testing.T) {
+	svc := newSecurityAgreementTestService(t, NewSystemIMSNetwork(testLocalIP))
+	template := policy.DefaultIMSRegisterTemplate()
+	template.SecAgreeMode = "required"
+	svc.cfg.IMSRegisterTemplate = template
+	clientConn, peerConn := net.Pipe()
+	t.Cleanup(func() { _ = clientConn.Close() })
+	t.Cleanup(func() { _ = peerConn.Close() })
+	session := &registerSession{
+		callID: "reauth", fromTag: "tag", contactUser: "contact", cseq: 4,
+		expires: time.Hour, template: template,
+		security: &securityAgreement{
+			server: &securityMechanism{Name: "ipsec-3gpp"}, verifyHeader: "ipsec-3gpp;spi-c=3;spi-s=4",
+		},
+	}
+	svc.mu.Lock()
+	svc.regSession = session
+	svc.registrationTCP = clientConn
+	svc.registrationTCPProtected = true
+	svc.signalingReady = true
+	svc.mu.Unlock()
+	response := akaChallengeResponse("REGISTER sip:ims.example SIP/2.0\r\n\r\n", "")
+	response.Headers["Security-Server"] = "malformed"
+
+	_, _, err := svc.answerDigestChallenge(context.Background(), session, response)
+	if err == nil || !errors.Is(err, errMissingUsableSecurityServer) {
+		t.Fatalf("answerDigestChallenge error = %v, want invalid Security-Server rejection", err)
 	}
 }
 

@@ -109,7 +109,7 @@ func (s *Service) executeOutboundRequestWithCallbacks(
 	}
 	response, err := s.sendByMode(operation)
 	if err != nil {
-		s.handleOutboundRequestError(operation.Request, err)
+		s.handleOutboundRequestError(operation.Mode, operation.Request, err)
 		return nil, err
 	}
 	if response == nil {
@@ -121,8 +121,8 @@ func (s *Service) executeOutboundRequestWithCallbacks(
 	return response.parsed.Clone(), nil
 }
 
-func (s *Service) handleOutboundRequestError(req *sip.Request, err error) {
-	if err == nil || !isFatalSIPTransportError(err) {
+func (s *Service) handleOutboundRequestError(mode outboundModeContext, req *sip.Request, err error) {
+	if err == nil || mode.InboundPeer || !isFatalSIPTransportError(err) {
 		return
 	}
 	method := "request"
@@ -182,7 +182,7 @@ func (s *Service) dispatchOutboundRequestWithCallbacks(
 	if options.Context == nil {
 		options.Context = context.Background()
 	}
-	modeCtx, err := s.resolveOutboundModeContext(options.Flow, options.Request)
+	modeCtx, err := s.resolveOutboundModeContextForPeer(options.Flow, options.Request, options.PeerConn)
 	if err != nil {
 		return nil, 0, err
 	}
