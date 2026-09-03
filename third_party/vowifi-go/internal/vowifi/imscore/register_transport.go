@@ -267,10 +267,11 @@ func (s *Service) serveProtectedSIPConnection(conn net.Conn) {
 	}
 }
 
-// handleProtectedServerPushClosed keeps the REGISTER binding long enough
-// for P-CSCF to reopen port-s (immediate re-REGISTER replaced Contact and
-// delayed queued MT SMS). RFC 5626 flow recovery runs only if no reconnect
-// arrives before portSReconnectWait.
+// handleProtectedServerPushClosed keeps the protected registration alive when
+// the last P-CSCF-initiated portS connection ends. portS is a reverse,
+// on-demand flow: it can be reopened when the P-CSCF has downlink SIP traffic.
+// Re-registering here is harmful on networks that reject a refresh over the
+// still-open portC flow (2degrees 503, hideck#9).
 func (s *Service) handleProtectedServerPushClosed() {
 	if s == nil || s.stopped() {
 		return
@@ -281,33 +282,11 @@ func (s *Service) handleProtectedServerPushClosed() {
 	if remaining > 0 {
 		return
 	}
-	logging.Info("IMS protected server push closed; wait for port-s reconnect",
-		"device", s.DeviceID(), "grace", s.portSReconnectWait(),
+	logging.Info("IMS protected server push closed; keep REGISTER for port-s reconnect",
+		"device", s.DeviceID(),
 		"ok_writes", s.portSWriteOK.Load(), "failed_writes", s.portSWriteErr.Load(),
 		"since_last_write_ok", s.portSLastWriteOKAge(),
 		"since_last_read", s.portSSinceLastRead())
-	s.schedulePortSReconnectWatch()
-}
-
-func (s *Service) portSReconnectWait() time.Duration {
-	if s != nil && s.portSReconnectGrace > 0 {
-		return s.portSReconnectGrace
-	}
-	return defaultPortSReconnectGrace
-}
-
-func (s *Service) schedulePortSReconnectWatch() {
-	if s == nil || s.stopped() {
-		return
-	}
-	grace := s.portSReconnectWait()
-	s.portSWatchMu.Lock()
-	defer s.portSWatchMu.Unlock()
-	if s.portSWatchTimer == nil {
-		s.portSWatchTimer = time.AfterFunc(grace, s.portSReconnectWatchFired)
-		return
-	}
-	s.portSWatchTimer.Reset(grace)
 }
 
 func (s *Service) cancelPortSReconnectWatch() {
@@ -319,19 +298,6 @@ func (s *Service) cancelPortSReconnectWatch() {
 	if s.portSWatchTimer != nil {
 		s.portSWatchTimer.Stop()
 	}
-}
-
-func (s *Service) portSReconnectWatchFired() {
-	if s == nil || s.stopped() || s.RegState() != regRegistered {
-		return
-	}
-	s.protectedConnMu.Lock()
-	remaining := len(s.protectedConns)
-	s.protectedConnMu.Unlock()
-	if remaining > 0 {
-		return
-	}
-	s.triggerRegisterImmediate("port-s flow failed")
 }
 
 func (s *Service) trackProtectedConnection(conn net.Conn) bool {
