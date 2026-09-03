@@ -43,6 +43,9 @@ const (
 	rpReportInitialDelay = 0
 	rpReportRetryDelay   = time.Second
 	rpReportMaxAttempts  = 4
+	// One prompt covers every message the SMSC releases in the same flush,
+	// so rate limit it rather than sending one per rejected report.
+	smmaPromptMinInterval = time.Minute
 )
 
 type mtAckAudit struct {
@@ -145,7 +148,43 @@ func (s *Service) sendRPReportWithRetry(report rpReportRequest) {
 			"IMS RP report delivery failed",
 			"device", deviceID, "attempts", attempts,
 			"rp_mr", int(report.RPMR), "error", err)
+		s.promptSMSCRedeliveryAfterRejectedReport(err)
 	}
+}
+
+// A report the gateway rejects leaves the SMSC believing the short message is
+// still outstanding. Measured on 2026-09-03: one message was redelivered three
+// times over 24 minutes on a rejection every time, on two different P-CSCF
+// instances and with a report byte-identical in structure to ones the same pool
+// accepts, and nothing else was delivered while it stayed at the head. RP-SMMA
+// is the only receiver-initiated way to ask for the queue (TS 24.011 clears
+// MCEF and alerts the service centre), so send one instead of waiting out a
+// retransmission timer that had already backed off past 18 minutes.
+func (s *Service) promptSMSCRedeliveryAfterRejectedReport(reportErr error) {
+	if rpReportRejectStatus(reportErr) == 0 {
+		return
+	}
+	if s == nil || s.stopped() || !s.reserveSMMAPrompt(time.Now()) {
+		return
+	}
+	s.smsSendMu.Lock()
+	err := s.sendRPSMMAWithRetryPolicy(rpReportInitialDelay, rpReportRetryDelay)
+	s.smsSendMu.Unlock()
+	if err != nil {
+		logging.WarnRate("smsip-smma-prompt-"+s.DeviceID(), 30*time.Second,
+			"IMS RP-SMMA redelivery prompt failed",
+			"device", s.DeviceID(), "error", err)
+		return
+	}
+	logging.Info("IMS RP-SMMA sent to release the SMSC queue", "device", s.DeviceID())
+}
+
+func (s *Service) reserveSMMAPrompt(now time.Time) bool {
+	last := s.smmaPromptLastAt.Load()
+	if last != 0 && now.Sub(time.Unix(0, last)) < smmaPromptMinInterval {
+		return false
+	}
+	return s.smmaPromptLastAt.CompareAndSwap(last, now.UnixNano())
 }
 
 func (s *Service) sendRPReportWithRetryPolicy(

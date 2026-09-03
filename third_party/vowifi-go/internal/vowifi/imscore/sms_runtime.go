@@ -106,6 +106,7 @@ type messagingRuntime struct {
 	smmaSent   map[string]time.Time
 
 	moSelfHealLastAt atomic.Int64
+	smmaPromptLastAt atomic.Int64
 	lastMTAckMu      sync.Mutex
 }
 
