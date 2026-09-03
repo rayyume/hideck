@@ -73,6 +73,16 @@ func performStartupQMIUIMReset(deviceID string, resetter startupUIMResetter, ens
 	if resetter == nil {
 		return false
 	}
+	if readyCheck != nil {
+		peekCtx, peekCancel := context.WithTimeout(context.Background(), time.Second)
+		ready, err := readyCheck(peekCtx)
+		peekCancel()
+		if err == nil && ready {
+			logger.Debug("启动期跳过 QMI UIM reset：SIM 已 ready",
+				"device", deviceID)
+			return true
+		}
+	}
 	resetCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	err := resetter.UIMReset(resetCtx)
 	cancel()

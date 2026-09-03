@@ -34,7 +34,7 @@ func TestPerformStartupQMIUIMReset(t *testing.T) {
 	readyCheckCalled := 0
 	readyCheck := func(ctx context.Context) (bool, error) {
 		readyCheckCalled++
-		return true, nil
+		return readyCheckCalled > 1, nil
 	}
 
 	res := performStartupQMIUIMReset("dev1", resetter, ensurer, readyCheck, time.Millisecond*50, time.Millisecond*10)
@@ -50,7 +50,7 @@ func TestPerformStartupQMIUIMReset(t *testing.T) {
 		t.Errorf("expected ensurer called 1 time, got %d", ensurer.called)
 	}
 
-	if readyCheckCalled != 1 {
-		t.Errorf("expected readyCheck called 1 time, got %d", readyCheckCalled)
+	if readyCheckCalled < 2 {
+		t.Errorf("expected readyCheck called at least 2 times, got %d", readyCheckCalled)
 	}
 }

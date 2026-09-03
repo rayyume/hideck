@@ -101,6 +101,7 @@ func (p *Pool) startQMICoreRetryLoop(worker *Worker) {
 	go func() {
 		defer worker.clearQMICoreStarting()
 		delay := 2 * time.Second
+		wedgeStreak := 0
 		for {
 			select {
 			case <-p.ctx.Done():
@@ -133,6 +134,12 @@ func (p *Pool) startQMICoreRetryLoop(worker *Worker) {
 			} else {
 				if errors.Is(err, context.Canceled) {
 					return
+				}
+				if p.maybeUnstickWedgedQMI(worker, err, &wedgeStreak) {
+					delay = 2 * time.Second
+					logger.Warn(fmt.Sprintf("[%s] 已复位本模组 USB，重新启动 QMI Core", worker.ID),
+						"next_retry_in", delay.String())
+					continue
 				}
 				if delay < 60*time.Second {
 					delay *= 2

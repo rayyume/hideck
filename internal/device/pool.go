@@ -144,6 +144,8 @@ type Worker struct {
 	qmiRegistrationInFlight bool
 	qmiRegistrationRun      *registrationReconcileRun
 	qmiCoreStarting         atomic.Bool
+	qmiUSBUnstickUntil      atomic.Int64
+	qmiLastUSBUnstick       atomic.Int64
 	cellularRadioSuppressed atomic.Bool
 
 	operatorScanMu      sync.Mutex
@@ -1601,10 +1603,10 @@ func (p *Pool) collectRescanHardware(discovered []QMIDevice, liveWorkerIndex Wor
 			if liveInfo.IMEI != "" {
 				imei = liveInfo.IMEI
 			} else {
-				raw, imei = resolveDiscoveredQMIDeviceFn(raw, 1600*time.Millisecond, true)
+				raw, imei = enrichDiscoveredQMIDeviceATFirst(raw, 1600*time.Millisecond, true)
 			}
 		} else {
-			raw, imei = resolveDiscoveredQMIDeviceFn(raw, 1600*time.Millisecond, true)
+			raw, imei = enrichDiscoveredQMIDeviceATFirst(raw, 1600*time.Millisecond, true)
 		}
 		logger.Debug("扫描到设备",
 			"imei", imei,

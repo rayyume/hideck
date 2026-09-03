@@ -30,6 +30,9 @@ func (p *Pool) suppressQMIUnhealthyEviction(worker *Worker) (bool, string) {
 	if registrationInFlight {
 		return true, "registration_reconcile_in_flight"
 	}
+	if worker.isQMIUSBUnsticking() {
+		return true, "qmi_usb_unstick"
+	}
 	if worker.isQMICoreStarting() {
 		return true, "qmi_core_starting"
 	}

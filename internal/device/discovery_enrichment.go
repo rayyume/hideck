@@ -26,6 +26,16 @@ type CompatibleModemEnrichOptions struct {
 	QMIClientOptions   qmiq.ClientOptions
 }
 
+func enrichDiscoveredQMIDeviceATFirst(dev QMIDevice, timeout time.Duration, allowQMIIMEIProbe bool) (QMIDevice, string) {
+	if atPort, imei := ResolveATPortForDevice(dev.ATPort, dev.ATPorts, timeout); imei != "" {
+		if atPort != "" {
+			dev.ATPort = atPort
+		}
+		return dev, imei
+	}
+	return resolveDiscoveredQMIDeviceFn(dev, timeout, allowQMIIMEIProbe)
+}
+
 func atProbeTimeoutOrDefault(timeout time.Duration) time.Duration {
 	if timeout > 0 {
 		return timeout

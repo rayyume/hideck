@@ -1,0 +1,131 @@
+package device
+
+import (
+	"errors"
+	"os"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/yibaiba/hideck/internal/config"
+)
+
+func TestQMIErrorIndicatesCTLWedged(t *testing.T) {
+	cases := []struct {
+		msg  string
+		want bool
+	}{
+		{"allocate client ID request failed after retries: context deadline exceeded", true},
+		{"CTL GET_VERSION_INFO 请求失败: context deadline exceeded", true},
+		{"QMI 服务未就绪: DMS", true},
+		{"write failed: write unix @->@qmi-proxy: write: broken pipe", false},
+		{"connection closed", false},
+		{"refresh_identity: live_identity_empty", false},
+	}
+	for _, tc := range cases {
+		if got := qmiErrorIndicatesCTLWedged(tc.msg); got != tc.want {
+			t.Fatalf("qmiErrorIndicatesCTLWedged(%q)=%v want %v", tc.msg, got, tc.want)
+		}
+	}
+}
+
+func TestUSBModemAuthorizedPathRejectsHubAndInterface(t *testing.T) {
+	if _, err := usbModemAuthorizedPath("/sys/bus/usb/devices/1-2/1-2:1.4"); err == nil {
+		t.Fatal("interface path must be rejected")
+	}
+	if _, err := usbModemAuthorizedPath("/tmp/1-2.1"); err == nil {
+		t.Fatal("non-sysfs path must be rejected")
+	}
+}
+
+func TestUSBResetWouldAffectOtherWorkers(t *testing.T) {
+	if !usbResetWouldAffectOtherWorkers("/sys/bus/usb/devices/1-2", []string{"/sys/bus/usb/devices/1-2.1"}) {
+		t.Fatal("resetting hub 1-2 must be treated as affecting 1-2.1")
+	}
+	if usbResetWouldAffectOtherWorkers("/sys/bus/usb/devices/1-2.1", []string{"/sys/bus/usb/devices/1-2.2"}) {
+		t.Fatal("resetting 1-2.1 must not affect sibling 1-2.2")
+	}
+}
+
+func TestMaybeUnstickWedgedQMIResetsOnlyAfterStreakAndATAlive(t *testing.T) {
+	origAuth := usbModemAuthorizedPathFn
+	origWrite := usbDeviceAuthorizeFn
+	origExists := qmiControlPathExistsFn
+	origSleep := qmiUSBUnstickSleepFn
+	origIMEI := probeIMEICachedFn
+	t.Cleanup(func() {
+		usbModemAuthorizedPathFn = origAuth
+		usbDeviceAuthorizeFn = origWrite
+		qmiControlPathExistsFn = origExists
+		qmiUSBUnstickSleepFn = origSleep
+		probeIMEICachedFn = origIMEI
+	})
+	qmiUSBUnstickSleepFn = func(time.Duration) {}
+	probeIMEICachedFn = func(atPort string, timeout time.Duration) (string, error) {
+		if atPort != "/dev/ttyUSB2" {
+			t.Fatalf("atPort=%q", atPort)
+		}
+		return "860000000000001", nil
+	}
+	writes := []string{}
+	usbModemAuthorizedPathFn = func(usbPath string) (string, error) {
+		if !strings.HasSuffix(usbPath, "1-2.1") {
+			t.Fatalf("usbPath=%q", usbPath)
+		}
+		return "/tmp/authorized-test", nil
+	}
+	usbDeviceAuthorizeFn = func(path, value string) error {
+		writes = append(writes, value)
+		return nil
+	}
+	qmiControlPathExistsFn = func(name string) (os.FileInfo, error) {
+		return nil, nil
+	}
+
+	p := NewPool(&config.Config{})
+	defer p.cancel()
+	worker := &Worker{
+		ID: "wwan1",
+		Config: config.DeviceConfig{
+			ID:            "wwan1",
+			ATPort:        "/dev/ttyUSB2",
+			USBPath:       "/sys/bus/usb/devices/1-2.1",
+			ControlDevice: "/dev/cdc-wdm0",
+		},
+	}
+	streak := 0
+	if p.maybeUnstickWedgedQMI(worker, errors.New("context deadline exceeded"), &streak) {
+		t.Fatal("first CTL timeout must not USB-reset")
+	}
+	if streak != 1 {
+		t.Fatalf("streak=%d want 1", streak)
+	}
+	if p.maybeUnstickWedgedQMI(worker, errors.New("allocate client ID request failed after retries: context deadline exceeded"), &streak) != true {
+		t.Fatal("second CTL timeout with AT alive should USB-reset")
+	}
+	if len(writes) != 2 || writes[0] != "0" || writes[1] != "1" {
+		t.Fatalf("writes=%v want [0 1]", writes)
+	}
+	if !worker.isQMIUSBUnsticking() {
+		t.Fatal("worker should suppress health during USB unstick")
+	}
+}
+
+func TestMaybeUnstickWedgedQMISkipsBrokenPipe(t *testing.T) {
+	p := NewPool(&config.Config{})
+	defer p.cancel()
+	w := &Worker{ID: "wwan1"}
+	streak := 2
+	if p.maybeUnstickWedgedQMI(w, errors.New("write unix @->@qmi-proxy: write: broken pipe"), &streak) {
+		t.Fatal("broken pipe is transport-down, not a USB unstick")
+	}
+	if streak != 0 {
+		t.Fatalf("streak=%d want 0 after non-wedge error", streak)
+	}
+}
+
+func TestQMITransportDownDoesNotOverrideUSBUnstick(t *testing.T) {
+	if qmiTransportDownOverridesSuppression(true, "qmi_usb_unstick") {
+		t.Fatal("USB unstick must not be overridden by broken pipe; the reset itself drops the fd")
+	}
+}

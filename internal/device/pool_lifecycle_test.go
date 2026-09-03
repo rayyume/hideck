@@ -52,6 +52,27 @@ func TestSuppressQMIUnhealthyEvictionAfterLifecycleDeadline(t *testing.T) {
 	}
 }
 
+func TestSuppressQMIUnhealthyEvictionWhileUSBUnstick(t *testing.T) {
+	pool := NewPool(&config.Config{})
+	worker := &Worker{
+		ID: "dev1",
+		Config: config.DeviceConfig{
+			ID:            "dev1",
+			DeviceBackend: backend.BackendQMI,
+			ControlDevice: "/dev/cdc-wdm0",
+		},
+		Backend: &workerStatusBackendStub{mode: backend.BackendQMI, opModeErr: errBackendUnavailable{}},
+	}
+	worker.markQMIUSBUnsticking(time.Minute)
+	suppressed, reason := pool.suppressQMIUnhealthyEviction(worker)
+	if !suppressed {
+		t.Fatal("expected USB unstick to suppress eviction")
+	}
+	if reason != "qmi_usb_unstick" {
+		t.Fatalf("reason=%q want qmi_usb_unstick", reason)
+	}
+}
+
 func TestSuppressQMIUnhealthyEvictionWhileQMICoreStarting(t *testing.T) {
 	pool := NewPool(&config.Config{})
 	worker := &Worker{

@@ -198,6 +198,19 @@ func TestStartupQMISIMReadyCheckRequiresSIMReadyStatus(t *testing.T) {
 	}
 }
 
+func TestPerformStartupQMIUIMResetSkipsWhenSIMAlreadyReady(t *testing.T) {
+	resetter := &startupUIMResetterStub{}
+	ok := performStartupQMIUIMReset("dev-qmi", resetter, nil, func(ctx context.Context) (bool, error) {
+		return true, nil
+	}, 100*time.Millisecond, time.Millisecond)
+	if !ok {
+		t.Fatal("performStartupQMIUIMReset() = false, want true when SIM already ready")
+	}
+	if resetter.calls != 0 {
+		t.Fatalf("UIMReset calls = %d, want 0 when SIM already ready", resetter.calls)
+	}
+}
+
 func TestPerformStartupQMIUIMResetWaitsUntilSIMReady(t *testing.T) {
 	resetter := &startupUIMResetterStub{}
 	readySeq := []bool{false, false, true}
@@ -228,7 +241,7 @@ func TestPerformStartupQMIUIMResetSkipsReadyWaitWhenResetFails(t *testing.T) {
 
 	ok := performStartupQMIUIMReset("dev-qmi", resetter, nil, func(ctx context.Context) (bool, error) {
 		readyCalls++
-		return true, nil
+		return false, nil
 	}, 100*time.Millisecond, time.Millisecond)
 
 	if ok {
@@ -237,8 +250,8 @@ func TestPerformStartupQMIUIMResetSkipsReadyWaitWhenResetFails(t *testing.T) {
 	if resetter.calls != 1 {
 		t.Fatalf("UIMReset calls = %d, want 1", resetter.calls)
 	}
-	if readyCalls != 0 {
-		t.Fatalf("ready calls = %d, want 0", readyCalls)
+	if readyCalls < 1 {
+		t.Fatalf("ready calls = %d, want at least 1 peek before reset", readyCalls)
 	}
 }
 

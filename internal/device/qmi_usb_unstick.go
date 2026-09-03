@@ -1,0 +1,226 @@
+package device
+
+import (
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/yibaiba/hideck/pkg/logger"
+)
+
+const (
+	qmiCTLWedgeUnstickAfter = 2
+	qmiUSBUnstickCooldown   = 10 * time.Minute
+	qmiUSBUnstickHold       = 8 * time.Second
+	qmiUSBUnstickOffHold    = 400 * time.Millisecond
+)
+
+var (
+	usbDeviceAuthorizeFn     = writeUSBDeviceAuthorized
+	usbModemAuthorizedPathFn = usbModemAuthorizedPath
+	qmiControlPathExistsFn   = os.Stat
+	qmiUSBUnstickSleepFn     = time.Sleep
+	qmiUSBUnstickNowFn       = time.Now
+	errUSBResetPathUnsafe    = errors.New("usb reset path is not a single modem device")
+	errUSBResetAffectsOthers = errors.New("usb reset would affect another modem")
+)
+
+func qmiErrorIndicatesCTLWedged(message string) bool {
+	if qmiErrorIndicatesTransportDown(message) {
+		return false
+	}
+	message = strings.ToLower(strings.TrimSpace(message))
+	if message == "" {
+		return false
+	}
+	for _, fragment := range []string{
+		"context deadline exceeded",
+		"allocate client id",
+		"ctl get_version_info",
+		"transaction timed out",
+		"服务未就绪",
+	} {
+		if strings.Contains(message, fragment) {
+			return true
+		}
+	}
+	return false
+}
+
+func (w *Worker) markQMIUSBUnsticking(hold time.Duration) {
+	if w == nil {
+		return
+	}
+	if hold <= 0 {
+		hold = qmiUSBUnstickHold
+	}
+	until := qmiUSBUnstickNowFn().Add(hold).UnixNano()
+	w.qmiUSBUnstickUntil.Store(until)
+	w.qmiLastUSBUnstick.Store(qmiUSBUnstickNowFn().UnixNano())
+}
+
+func (w *Worker) isQMIUSBUnsticking() bool {
+	if w == nil {
+		return false
+	}
+	until := w.qmiUSBUnstickUntil.Load()
+	return until > 0 && qmiUSBUnstickNowFn().UnixNano() < until
+}
+
+func (w *Worker) qmiUSBUnstickOnCooldown() bool {
+	if w == nil {
+		return false
+	}
+	last := w.qmiLastUSBUnstick.Load()
+	if last <= 0 {
+		return false
+	}
+	return qmiUSBUnstickNowFn().Sub(time.Unix(0, last)) < qmiUSBUnstickCooldown
+}
+
+func writeUSBDeviceAuthorized(authorizedPath string, value string) error {
+	return os.WriteFile(authorizedPath, []byte(value+"\n"), 0644)
+}
+
+func usbModemAuthorizedPath(usbPath string) (string, error) {
+	usbPath = filepath.Clean(strings.TrimSpace(usbPath))
+	const prefix = "/sys/bus/usb/devices/"
+	if usbPath == "" || usbPath == "/" || !strings.HasPrefix(usbPath, prefix) {
+		return "", errUSBResetPathUnsafe
+	}
+	rel := strings.TrimPrefix(usbPath, prefix)
+	if rel == "" || strings.Contains(rel, "/") || strings.Contains(rel, ":") {
+		return "", errUSBResetPathUnsafe
+	}
+	auth := filepath.Join(usbPath, "authorized")
+	if _, err := os.Stat(auth); err != nil {
+		return "", fmt.Errorf("usb authorized: %w", err)
+	}
+	return auth, nil
+}
+
+func usbResetWouldAffectOtherWorkers(usbPath string, others []string) bool {
+	usbPath = filepath.Clean(strings.TrimSpace(usbPath))
+	if usbPath == "" {
+		return false
+	}
+	base := filepath.Base(usbPath)
+	for _, other := range others {
+		other = filepath.Clean(strings.TrimSpace(other))
+		if other == "" || other == usbPath {
+			continue
+		}
+		otherBase := filepath.Base(other)
+		if strings.HasPrefix(otherBase, base+".") || strings.HasPrefix(other, usbPath+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+func (p *Pool) otherWorkerUSBPaths(exceptID string) []string {
+	if p == nil {
+		return nil
+	}
+	var out []string
+	for _, worker := range p.healthCheckWorkerSnapshot() {
+		if worker == nil || worker.ID == exceptID {
+			continue
+		}
+		if path := strings.TrimSpace(worker.Config.USBPath); path != "" {
+			out = append(out, path)
+		}
+	}
+	return out
+}
+
+func (p *Pool) maybeUnstickWedgedQMI(worker *Worker, startErr error, wedgeStreak *int) bool {
+	if p == nil || worker == nil || startErr == nil || wedgeStreak == nil {
+		return false
+	}
+	if !qmiErrorIndicatesCTLWedged(startErr.Error()) {
+		*wedgeStreak = 0
+		return false
+	}
+	*wedgeStreak++
+	if *wedgeStreak < qmiCTLWedgeUnstickAfter {
+		return false
+	}
+	if worker.qmiUSBUnstickOnCooldown() {
+		return false
+	}
+	if p.volteCtl != nil {
+		if p.volteCtl.ActiveCall(worker.ID) != nil {
+			return false
+		}
+		if remain := p.volteCtl.VoiceUSBQuietRemaining(worker.ID); remain > 0 {
+			return false
+		}
+	}
+	if usbResetWouldAffectOtherWorkers(worker.Config.USBPath, p.otherWorkerUSBPaths(worker.ID)) {
+		logger.Warn("QMI CTL 已卡死，但 USB 复位会影响到其他模组，跳过",
+			"device", worker.ID, "usb_path", worker.Config.USBPath)
+		return false
+	}
+	if !workerATModemAlive(worker) {
+		logger.Debug("QMI CTL 超时但 AT 未就绪，跳过 USB 复位",
+			"device", worker.ID)
+		return false
+	}
+	if err := p.resetWorkerUSBModem(worker); err != nil {
+		logger.Warn("QMI CTL 卡死，USB 复位失败",
+			"device", worker.ID, "err", err)
+		return false
+	}
+	*wedgeStreak = 0
+	return true
+}
+
+func workerATModemAlive(worker *Worker) bool {
+	if worker == nil {
+		return false
+	}
+	atPort := worker.ResolvedATPort()
+	if atPort == "" {
+		return false
+	}
+	imei, err := probeIMEICachedFn(atPort, 1500*time.Millisecond)
+	return err == nil && strings.TrimSpace(imei) != ""
+}
+
+func (p *Pool) resetWorkerUSBModem(worker *Worker) error {
+	if worker == nil {
+		return errors.New("worker_nil")
+	}
+	auth, err := usbModemAuthorizedPathFn(worker.Config.USBPath)
+	if err != nil {
+		return err
+	}
+	control := strings.TrimSpace(worker.Config.ControlDevice)
+	logger.Warn("QMI CTL 已卡死且 AT 仍可用，复位本模组 USB 控制面（非 CFUN）",
+		"device", worker.ID,
+		"usb_path", worker.Config.USBPath,
+		"control_device", control)
+	worker.markQMIUSBUnsticking(qmiUSBUnstickHold)
+	if err := usbDeviceAuthorizeFn(auth, "0"); err != nil {
+		return err
+	}
+	qmiUSBUnstickSleepFn(qmiUSBUnstickOffHold)
+	if err := usbDeviceAuthorizeFn(auth, "1"); err != nil {
+		return err
+	}
+	if control == "" {
+		return nil
+	}
+	deadline := qmiUSBUnstickNowFn().Add(qmiUSBUnstickHold)
+	for qmiUSBUnstickNowFn().Before(deadline) {
+		if _, err := qmiControlPathExistsFn(control); err == nil {
+			return nil
+		}
+		qmiUSBUnstickSleepFn(200 * time.Millisecond)
+	}
+	return fmt.Errorf("usb reset: control device %s did not reappear", control)
+}

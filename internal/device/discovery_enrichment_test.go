@@ -81,6 +81,37 @@ func TestIdentityQMIClientOptionsSkipsOpenHandshake(t *testing.T) {
 	}
 }
 
+func TestEnrichDiscoveredQMIDeviceATFirstSkipsQMIWhenATWorks(t *testing.T) {
+	origATProbe := probeIMEICachedFn
+	origQMIProbe := probeIMEIViaQMIFn
+	t.Cleanup(func() {
+		probeIMEICachedFn = origATProbe
+		probeIMEIViaQMIFn = origQMIProbe
+	})
+	qmiCalls := 0
+	probeIMEICachedFn = func(atPort string, timeout time.Duration) (string, error) {
+		return "860000000000099", nil
+	}
+	probeIMEIViaQMIFn = func(controlPath string, opts qmiq.ClientOptions) (string, error) {
+		qmiCalls++
+		return "should-not-probe-qmi", nil
+	}
+	dev, imei := enrichDiscoveredQMIDeviceATFirst(QMIDevice{
+		ControlPath: "/dev/cdc-wdm0",
+		ATPort:      "/dev/ttyUSB2",
+		ATPorts:     []string{"/dev/ttyUSB2"},
+	}, 50*time.Millisecond, true)
+	if qmiCalls != 0 {
+		t.Fatalf("qmiCalls=%d want 0 when AT IMEI is available", qmiCalls)
+	}
+	if imei != "860000000000099" {
+		t.Fatalf("imei=%q", imei)
+	}
+	if dev.ATPort != "/dev/ttyUSB2" {
+		t.Fatalf("ATPort=%q", dev.ATPort)
+	}
+}
+
 func TestResolveDiscoveredQMIDeviceFallsBackToATWhenQMIIMEIEmpty(t *testing.T) {
 	origATProbe := probeIMEICachedFn
 	origQMIProbe := probeIMEIViaQMIFn

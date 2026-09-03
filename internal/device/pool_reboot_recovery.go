@@ -391,7 +391,7 @@ func (p *Pool) qmiRecoveryLiveCandidates(cfg config.DeviceConfig) ([]qmiRecovery
 			}
 		}
 		if imei == "" {
-			dev, imei = resolveDiscoveredQMIDeviceFn(raw, 3*time.Second, true)
+			dev, imei = enrichDiscoveredQMIDeviceATFirst(raw, 3*time.Second, true)
 		}
 		logger.Debug("模组重启恢复：发现 QMI 候选",
 			"device", strings.TrimSpace(cfg.ID),
