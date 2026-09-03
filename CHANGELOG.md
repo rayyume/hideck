@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.1.6 - 2026-09-03
+
+### VoWiFi / IMS
+
+- port-s 不再发 CRLF。关掉后等 30s，对端不重连就补一次 REGISTER；这次 REGISTER 被拒（如 2degrees 503）就不再恢复。
+- outbound 跟进 REGISTER 如果把信令流拆掉，这次注册算失败，马上重来，不再空等保活超时。
+- 进程退出不再发 `Expires=0` / `Contact:*` 注销，避免把 IP-SM-GW 一起拆掉、重启后收不到短信。
+
 ## 2.1.5 - 2026-09-03
 
 ### VoWiFi / IMS
