@@ -65,7 +65,16 @@ func (p *Pool) EnableNativeVoLTE(deviceID string) error {
 	if err := p.waitQMICoreReady(deviceID, 30*time.Second); err != nil {
 		logger.Warn("VoLTE 等待 QMI 就绪失败，继续尝试 AT", "device", deviceID, "err", err)
 	}
-	return p.volteCtl.Enable(p.Context(), deviceID)
+	if err := p.volteCtl.Enable(p.Context(), deviceID); err != nil {
+		return err
+	}
+	// IMS PDN 起来后 qmi_wwan 可能把上网口拉起来。未开「网络」时主机不能走 3gnet。
+	if w := p.GetWorker(deviceID); w != nil && !w.Config.NetworkEnabled {
+		if err := p.applyNetworkPreference(w); err != nil {
+			logger.Warn("VoLTE 已启用，抑制上网数据失败", "device", deviceID, "err", err)
+		}
+	}
+	return nil
 }
 
 func (p *Pool) ScheduleNativeVoLTE(deviceID, reason string) {

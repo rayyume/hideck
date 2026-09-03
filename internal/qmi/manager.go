@@ -1732,6 +1732,12 @@ func (m *Manager) flushQMIInterfaceAfterExistingDataCleanup() {
 	}
 }
 
+// SuppressHostDataInterface keeps the modem camped but prevents the host
+// from using the LTE default internet PDN (usbnet/qmi_wwan) as a NIC.
+func (m *Manager) SuppressHostDataInterface() {
+	m.flushQMIInterfaceAfterExistingDataCleanup()
+}
+
 // Stop 停止 QMI 管理器
 func (m *Manager) Stop() error {
 	logger.Info(fmt.Sprintf("[%s] 停止 QMI 管理器", m.cfg.ID))

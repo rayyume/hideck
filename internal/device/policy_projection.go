@@ -13,6 +13,13 @@ import (
 
 // cellularDataAllowed reports whether the software IMS path may bring up data.
 // 驻网和流量分开：飞行关射频；网络只控制数据。
+var suppressHostInternetPath = func(worker *Worker) {
+	if worker == nil || worker.QMICore == nil {
+		return
+	}
+	worker.QMICore.SuppressHostDataInterface()
+}
+
 func cellularDataAllowed(phoneMode, dataStrategy string, networkEnabled bool) bool {
 	if strings.TrimSpace(phoneMode) != "cellular" {
 		return false

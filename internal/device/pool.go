@@ -1380,11 +1380,14 @@ func (p *Pool) applyNetworkPreference(worker *Worker) error {
 	} else {
 		worker.StartQMIRegistrationReconcile(p.ctx, "network_disabled_preference")
 	}
-	if !nc.IsConnected() {
-		worker.clearCachedIP()
-		return nil
+	if nc.IsConnected() {
+		if err := worker.StopNetwork(); err != nil {
+			logger.Warn("网络关闭时断开数据连接失败", "device", worker.ID, "err", err)
+		}
 	}
-	return worker.StopNetwork()
+	suppressHostInternetPath(worker)
+	worker.clearCachedIP()
+	return nil
 }
 
 type existingQMIDataConnectionResetter interface {
