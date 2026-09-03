@@ -523,6 +523,54 @@ func TestSupportedOutboundDoesNotRequireFollowUpRegister(t *testing.T) {
 	}
 }
 
+// Swallowing a failed outbound-binding REGISTER is only safe while the flow
+// it ran over survived. Measured on 2026-09-03: a 503 on that REGISTER
+// detached the flow, registration was still reported successful with an empty
+// transport, and nothing noticed until three keepalives had failed 90s later
+// and the runtime rebuilt from scratch.
+func TestFailedOutboundRefreshThatDetachesTheFlowFailsRegistration(t *testing.T) {
+	service := &Service{cfg: &IMSConfig{
+		IMPI: "user@ims.example", IMPU: "sip:user@ims.example", Domain: "ims.example",
+		LocalIP: net.ParseIP("192.0.2.10"), LocalPort: 5060, Transport: "tcp",
+	}}
+	client, server := net.Pipe()
+	t.Cleanup(func() {
+		_ = client.Close()
+		_ = server.Close()
+	})
+
+	service.mu.Lock()
+	service.registrationTransport = "tcp"
+	service.registrationTCP = client
+	service.mu.Unlock()
+	if !service.keepRegistrationAfterFailedOutboundRefresh() {
+		t.Fatal("an optional refresh that left the flow up must keep the registration")
+	}
+
+	// What detachDeadSignaling leaves behind.
+	service.mu.Lock()
+	service.registrationTransport = ""
+	service.registrationTCP = nil
+	service.registrationIO = nil
+	service.mu.Unlock()
+	if service.registrationFlowIntact() {
+		t.Fatal("a detached flow still reported itself intact")
+	}
+	if service.keepRegistrationAfterFailedOutboundRefresh() {
+		t.Fatal("registration was kept with no flow left to carry it")
+	}
+
+	// Require: outbound stays fatal regardless of what the flow did.
+	service.mu.Lock()
+	service.registrationTransport = "tcp"
+	service.registrationTCP = client
+	service.sipOutboundRequired = true
+	service.mu.Unlock()
+	if service.keepRegistrationAfterFailedOutboundRefresh() {
+		t.Fatal("Require: outbound must fail registration when the refresh fails")
+	}
+}
+
 func TestRequireOutboundRequiresFollowUpRegister(t *testing.T) {
 	service := &Service{cfg: &IMSConfig{
 		IMPI: "user@ims.example", IMPU: "sip:user@ims.example", Domain: "ims.example",

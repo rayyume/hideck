@@ -108,16 +108,20 @@ func (s *Service) registerLocked(ctx context.Context) error {
 	}
 	if err == nil && s.needsOutboundBindingRefresh() {
 		logging.Info("IMS REGISTER completing outbound flow", "device", s.DeviceID())
-		if again, againErr := s.runRegisterFlow(ctx); againErr != nil {
-			if s.outboundBindingRequired() {
-				err = againErr
-			} else {
-				logging.WarnRate("ims-outbound-refresh-"+s.DeviceID(), 30*time.Second,
-					"IMS outbound binding refresh failed; keep current registration",
-					"device", s.DeviceID(), "err", againErr)
-			}
-		} else {
+		again, againErr := s.runRegisterFlow(ctx)
+		switch {
+		case againErr == nil:
 			expires = again
+		case s.keepRegistrationAfterFailedOutboundRefresh():
+			logging.WarnRate("ims-outbound-refresh-"+s.DeviceID(), 30*time.Second,
+				"IMS outbound binding refresh failed; keep current registration",
+				"device", s.DeviceID(), "err", againErr)
+		default:
+			logging.WarnRate("ims-outbound-refresh-lost-"+s.DeviceID(), 30*time.Second,
+				"IMS outbound binding refresh failed; failing this registration",
+				"device", s.DeviceID(), "err", againErr,
+				"binding_required", s.outboundBindingRequired())
+			err = againErr
 		}
 	}
 	if err != nil {
@@ -749,6 +753,32 @@ func (s *Service) outboundBindingRequired() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.sipOutboundRequired
+}
+
+// keepRegistrationAfterFailedOutboundRefresh reports whether the registration
+// that preceded an optional outbound-binding REGISTER is still worth keeping
+// after that REGISTER failed. It only is while its flow survived: a failed
+// attempt can detach the signaling flow on its way out, and reporting success
+// over an empty transport left the service believing it was registered with
+// nothing attached, so a 503 went unnoticed until keepalives had failed three
+// times and the runtime rebuilt from scratch — three minutes for one 503.
+func (s *Service) keepRegistrationAfterFailedOutboundRefresh() bool {
+	return !s.outboundBindingRequired() && s.registrationFlowIntact()
+}
+
+// registrationFlowIntact reports whether a usable signaling flow is attached.
+// detachDeadSignaling clears the transport and closes both sockets, so an
+// empty transport means nothing is left to carry the registration.
+func (s *Service) registrationFlowIntact() bool {
+	if s == nil {
+		return false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if strings.TrimSpace(s.registrationTransport) == "" {
+		return false
+	}
+	return s.registrationIO != nil || s.registrationTCP != nil
 }
 
 func withOutboundContactParams(order []string) []string {
