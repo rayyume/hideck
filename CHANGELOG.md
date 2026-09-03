@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.1.7 - 2026-09-03
+
+### VoWiFi / IMS
+
+- 已注册后再发 REGISTER 被 503（2degrees）时，不再当成换传输、也不再拆掉还活着的 TCP。现有绑定保住，port-s 恢复停掉。
+
+### 打包
+
+- Docker 镜像改放未压缩二进制。2.1.6 把 UPX 包塞进 Alpine，容器会报 `Not a valid dynamic program` 一直重启。
+
 ## 2.1.6 - 2026-09-03
 
 ### VoWiFi / IMS

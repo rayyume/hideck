@@ -14,7 +14,11 @@ LABEL org.opencontainers.image.title="HiDeck" \
       org.opencontainers.image.revision=${REVISION}
 
 COPY dist/hideck_${VERSION}_linux_${TARGETARCH} /usr/local/bin/hideck
-RUN chmod 0755 /usr/local/bin/hideck
+RUN chmod 0755 /usr/local/bin/hideck \
+ && if grep -aq UPX! /usr/local/bin/hideck; then \
+      echo "error: hideck is UPX-packed; Alpine rejects it (Not a valid dynamic program)" >&2; \
+      exit 1; \
+    fi
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD wget -q -T 3 -O /dev/null http://127.0.0.1:7575/ping || exit 1
