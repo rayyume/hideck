@@ -100,6 +100,10 @@ type messagingRuntime struct {
 	mtSMSSeenMu sync.Mutex
 	mtSMSSeen   map[string]time.Time
 
+	// Messages the SMSC still holds because it rejected our report.
+	unackedMTMu sync.Mutex
+	unackedMT   map[string]unacknowledgedMT
+
 	// RP-SMMA has no MO message to correlate, so its Call-IDs live here
 	// instead of smsPending; the network still reports on it (24.341 5.3.2.5).
 	smmaSentMu sync.Mutex

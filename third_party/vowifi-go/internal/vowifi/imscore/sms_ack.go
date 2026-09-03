@@ -18,6 +18,7 @@ type rpReportRequest struct {
 	Body          []byte
 	RPMR          byte
 	Fingerprint   string
+	Identity      string
 	RemoteURI     string
 	ContentType   string
 	ServiceCenter string
@@ -139,7 +140,12 @@ func (s *Service) sendRPReportWithRetry(report rpReportRequest) {
 	attempts, err := s.sendRPReportWithRetryPolicy(
 		report, rpReportInitialDelay, rpReportRetryDelay,
 	)
+	if err == nil {
+		s.clearRejectedMTReport(report.Identity)
+		return
+	}
 	if err != nil {
+		s.rememberRejectedMTReport(report.Identity)
 		deviceID := ""
 		if s != nil && s.cfg != nil {
 			deviceID = s.cfg.DeviceID

@@ -235,6 +235,7 @@ func (s *Service) finalizeInboundSMSData(
 	if shouldDispatch {
 		s.publishInboundSMSWithFragment(message, message.fragmentSessionID, false)
 	}
+	s.reportMTQueueBlocked(mtSMSIdentity(message))
 	fingerprint := buildMTSMSFingerprint(message, raw)
 	return inboundSIPResult{
 		response: response,
@@ -381,6 +382,7 @@ func (s *Service) rpReportForInbound(raw string, message inboundSMS, rpdu []byte
 	report := rpReportRequest{
 		Inbound: raw, Body: rpdu, RPMR: message.rpMR,
 		ServiceCenter: message.serviceCenter,
+		Identity:      mtSMSIdentity(message),
 	}
 	if message.msisdnLess && strings.TrimSpace(message.deliveryReportTo) != "" {
 		if contentType, body, err := buildMSISDNLessSMSPayload(shortMessageInfo{To: message.deliveryReportTo}, rpdu); err == nil {
