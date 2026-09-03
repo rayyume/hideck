@@ -154,6 +154,85 @@ func TestRegisterTCPRetriesUDPAfter503BeforeAuthentication(t *testing.T) {
 	}
 }
 
+func TestAuthenticated503DoesNotRetryTheOtherTransport(t *testing.T) {
+	err := registrationResponseError(&sipResponse{StatusCode: 503, Reason: "Service Unavailable"}, true)
+	if shouldRetryNextRegisterTransport(registerAttemptResult{statusCode: 503}, err) {
+		t.Fatal("a 503 after Digest/sec-agree retried UDP/TCP")
+	}
+}
+
+func TestInitial503RetriesTheOtherTransport(t *testing.T) {
+	err := registrationResponseError(&sipResponse{StatusCode: 503, Reason: "Service Unavailable"}, false)
+	if !shouldRetryNextRegisterTransport(registerAttemptResult{statusCode: 503}, err) {
+		t.Fatal("a 503 before authentication did not retry the other transport")
+	}
+}
+
+func TestReplaceRegisterTransportPastEndLeavesCurrentOpen(t *testing.T) {
+	service := &Service{cfg: &IMSConfig{LocalIP: net.IPv4(127, 0, 0, 1), Transport: "tcp"}}
+	client, server := net.Pipe()
+	t.Cleanup(func() {
+		_ = client.Close()
+		_ = server.Close()
+	})
+	service.mu.Lock()
+	service.registrationTCP = client
+	service.registrationTransport = "tcp"
+	service.mu.Unlock()
+
+	_, err := service.replaceInitialRegistrationTransport(context.Background(), []string{"tcp"}, 1)
+	if err == nil {
+		t.Fatal("expected no further REGISTER transport")
+	}
+	if strings.Contains(err.Error(), "%!w") {
+		t.Fatalf("wrapped a nil transport error: %v", err)
+	}
+	service.mu.RLock()
+	still := service.registrationTCP
+	service.mu.RUnlock()
+	if still != client {
+		t.Fatal("closed the working REGISTER flow before a fallback existed")
+	}
+}
+
+func TestFailedPortSRecoveryKeepsRegistrationWhenFlowIntact(t *testing.T) {
+	service := newProtectedKeepaliveTestService(t)
+	client, server := net.Pipe()
+	t.Cleanup(func() {
+		_ = client.Close()
+		_ = server.Close()
+	})
+	service.mu.Lock()
+	service.registrationTransport = "tcp"
+	service.registrationTCP = client
+	service.regSession.expires = time.Hour
+	service.lastRegisterOKAt = time.Now().Add(-time.Minute)
+	service.nextRegister = time.Now()
+	service.mu.Unlock()
+	service.portSRecoveryPending.Store(true)
+
+	err := registrationResponseError(&sipResponse{StatusCode: 503, Reason: "Service Unavailable"}, true)
+	if !service.keepRegistrationAfterFailedRefresh(true, err) {
+		t.Fatal("a 503 refresh with the flow still up tore the binding down")
+	}
+	service.restoreRegistrationAfterFailedRefresh(err)
+	if service.RegState() != regRegistered {
+		t.Fatalf("registration state = %s", service.RegState())
+	}
+	if !service.portSRecoveryRejected.Load() {
+		t.Fatal("a rejected recovery left the fallback armed")
+	}
+	if service.reRegisterPending.Load() {
+		t.Fatal("keeping the binding still scheduled another REGISTER")
+	}
+	service.mu.RLock()
+	next := service.nextRegister
+	service.mu.RUnlock()
+	if !next.After(time.Now().Add(30 * time.Second)) {
+		t.Fatalf("next REGISTER = %s, want the original refresh", next)
+	}
+}
+
 func TestRegisterTCPDoesNotRetryUDPAfter403(t *testing.T) {
 	tcpRegistrar, udpRegistrar := listenRegisterTransports(t)
 	defer tcpRegistrar.Close()

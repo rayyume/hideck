@@ -45,7 +45,7 @@ func (s *Service) openInitialRegistrationTransport(
 		s.activateInitialRegistrationTransport(opened, serverListener, clientReservation)
 		return nil
 	}
-	return fmt.Errorf("imscore: open REGISTER transport: %w", errors.Join(failures...))
+	return wrapRegisterTransportFailures(failures)
 }
 
 func isAutoRegisterTransport(configured string) bool {
@@ -156,7 +156,12 @@ func (s *Service) replaceInitialRegistrationTransport(
 	candidates []string,
 	start int,
 ) (int, error) {
-	s.closeInitialRegistrationTransport()
+	if start < 0 {
+		start = 0
+	}
+	if start >= len(candidates) {
+		return -1, errors.New("imscore: no further REGISTER transport")
+	}
 	var failures []error
 	for index := start; index < len(candidates); index++ {
 		opened, err := s.openRegisterCandidate(ctx, candidates[index])
@@ -164,10 +169,18 @@ func (s *Service) replaceInitialRegistrationTransport(
 			failures = append(failures, err)
 			continue
 		}
+		s.closeInitialRegistrationTransport()
 		s.activateInitialRegistrationTransport(opened, nil, nil)
 		return index, nil
 	}
-	return -1, fmt.Errorf("imscore: open REGISTER transport: %w", errors.Join(failures...))
+	return -1, wrapRegisterTransportFailures(failures)
+}
+
+func wrapRegisterTransportFailures(failures []error) error {
+	if joined := errors.Join(failures...); joined != nil {
+		return fmt.Errorf("imscore: open REGISTER transport: %w", joined)
+	}
+	return errors.New("imscore: no further REGISTER transport")
 }
 
 func (s *Service) closeInitialRegistrationTransport() {

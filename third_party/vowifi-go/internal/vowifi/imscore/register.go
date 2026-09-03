@@ -81,6 +81,7 @@ func (s *Service) registerLocked(ctx context.Context) error {
 	default:
 	}
 	s.mu.Lock()
+	hadBinding := s.regState == regRegistered || (s.regSession != nil && s.regSession.expires > 0)
 	s.regState = regRegistering
 	s.lastRegisterTraceID = common.TraceID(ctx)
 	s.lastRegisterAttemptAt = time.Now()
@@ -125,6 +126,10 @@ func (s *Service) registerLocked(ctx context.Context) error {
 		}
 	}
 	if err != nil {
+		if !isRegisterOperationCanceled(err) && s.keepRegistrationAfterFailedRefresh(hadBinding, err) {
+			s.restoreRegistrationAfterFailedRefresh(err)
+			return nil
+		}
 		s.mu.Lock()
 		s.regState = regFailed
 		s.lastError = err.Error()
@@ -371,13 +376,17 @@ func (s *Service) commitRegisterSuccess(resp *sipResponse, session *registerSess
 	return expires, nil
 }
 
-func registerAttemptReachedAuthPhase(result registerAttemptResult) bool {
-	return result.challengeCount > 0 || result.secAgree || strings.TrimSpace(result.securityVerify) != "" ||
-		strings.TrimSpace(result.authRealm) != "" || strings.TrimSpace(result.authorization) != ""
+func registerAttemptReachedAuthPhase(result registerAttemptResult, err error) bool {
+	if result.challengeCount > 0 || result.secAgree || strings.TrimSpace(result.securityVerify) != "" ||
+		strings.TrimSpace(result.authRealm) != "" || strings.TrimSpace(result.authorization) != "" {
+		return true
+	}
+	var responseErr *registerResponseError
+	return errors.As(err, &responseErr) && responseErr.challenged
 }
 
 func shouldRetryNextRegisterTransport(result registerAttemptResult, err error) bool {
-	if isRegisterOperationCanceled(err) || registerAttemptReachedAuthPhase(result) {
+	if isRegisterOperationCanceled(err) || registerAttemptReachedAuthPhase(result, err) {
 		return false
 	}
 	return result.statusCode == 0 || result.statusCode == 408 ||
@@ -781,6 +790,49 @@ func (s *Service) registrationFlowIntact() bool {
 	return s.registrationIO != nil || s.registrationTCP != nil
 }
 
+// keepRegistrationAfterFailedRefresh reports whether a REGISTER that ran
+// against an already-bound registration can be dropped without tearing that
+// binding down. A 503 on a 2degrees refresh is this case: the registrar
+// refused the extra REGISTER, the existing Contact is still live, and
+// switching transports would only close the flow that is carrying it.
+func (s *Service) keepRegistrationAfterFailedRefresh(hadBinding bool, err error) bool {
+	if !hadBinding || s == nil || errors.Is(err, enginesim.ErrAPDUBusy) || !s.registrationFlowIntact() {
+		return false
+	}
+	var responseErr *registerResponseError
+	if !errors.As(err, &responseErr) {
+		return true
+	}
+	var registerPolicy policy.IMSRegisterPolicy
+	if s.cfg != nil {
+		registerPolicy = s.cfg.IMSRegisterTemplate.RegisterPolicy
+	}
+	return isTemporaryRegisterSIPResponse(registerPolicy, responseErr.statusCode)
+}
+
+func (s *Service) restoreRegistrationAfterFailedRefresh(err error) {
+	s.notePortSRecoveryOutcome(err)
+	now := time.Now()
+	next := now.Add(5 * time.Minute)
+	s.mu.Lock()
+	s.regState = regRegistered
+	s.lastRegisterErr = err.Error()
+	if s.regSession != nil && s.regSession.expires > 0 && !s.lastRegisterOKAt.IsZero() {
+		if at := s.lastRegisterOKAt.Add(registrationRefreshDelay(s.regSession.expires)); at.After(now.Add(time.Minute)) {
+			next = at
+		}
+	}
+	s.registrationRefreshAt = next
+	s.nextRegister = next
+	s.mu.Unlock()
+	s.reRegisterPending.Store(false)
+	s.transitionRegStatus(registrationRegistered)
+	s.notifySMSReadiness()
+	logging.WarnRate("ims-register-refresh-keep-"+s.DeviceID(), 30*time.Second,
+		"IMS REGISTER refresh failed; keep current registration",
+		"device", s.DeviceID(), "err", err)
+}
+
 func withOutboundContactParams(order []string) []string {
 	result := append([]string(nil), order...)
 	if !containsContactParamName(result, "sip_instance") {
@@ -1054,6 +1106,7 @@ type registerResponseError struct {
 	statusCode int
 	retryAfter time.Duration
 	minExpires uint32
+	challenged bool
 	message    string
 }
 
@@ -1073,10 +1126,10 @@ func registrationResponseError(response *sipResponse, challenged bool) error {
 		detail += "warning=" + warning
 	}
 	if detail == "" {
-		return &registerResponseError{statusCode: response.StatusCode, retryAfter: retryAfter, minExpires: minExpires, message: fmt.Sprintf(
+		return &registerResponseError{statusCode: response.StatusCode, retryAfter: retryAfter, minExpires: minExpires, challenged: challenged, message: fmt.Sprintf(
 			"imscore: registration failed during %s with status %d", phase, response.StatusCode)}
 	}
-	return &registerResponseError{statusCode: response.StatusCode, retryAfter: retryAfter, minExpires: minExpires, message: fmt.Sprintf(
+	return &registerResponseError{statusCode: response.StatusCode, retryAfter: retryAfter, minExpires: minExpires, challenged: challenged, message: fmt.Sprintf(
 		"imscore: registration failed during %s with status %d (%s)", phase, response.StatusCode, detail)}
 }
 
