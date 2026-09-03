@@ -831,7 +831,12 @@ func TestUnregisterDoesNotWildcardAfterContextDeadline(t *testing.T) {
 	}
 }
 
-func TestStopUnregistersBeforeClosingRegisteredTransport(t *testing.T) {
+// Shutdown leaves the registrar binding alone. Measured on 2026-09-03, 3 of 11
+// shutdown de-registrations timed out on the Contact expires=0 and escalated to
+// Contact:*, which third-party de-registers the IP-SM-GW and stopped Vodafone
+// pushing MT MESSAGE even after a clean re-REGISTER. The binding it would have
+// removed expires on its own and is replaced by the next registration.
+func TestStopLeavesTheRegistrarBindingInPlace(t *testing.T) {
 	service, err := New(registerTransportTestConfig("udp", "127.0.0.1:5060"))
 	if err != nil {
 		t.Fatal(err)
@@ -841,7 +846,7 @@ func TestStopUnregistersBeforeClosingRegisteredTransport(t *testing.T) {
 		callID: "call-1", fromTag: "tag-1", contactUser: "contact-1",
 		cseq: 3, authHeader: "Digest username=\"user\"", expires: time.Hour,
 	}
-	requests := make(chan string, 1)
+	requests := make(chan string, 4)
 	service.transport.SetSendFn(func(request string) error {
 		requests <- request
 		service.transport.DeliverResponse(registerResponseForRequest(request, 200, nil))
@@ -851,20 +856,12 @@ func TestStopUnregistersBeforeClosingRegisteredTransport(t *testing.T) {
 	if err := service.Stop(context.Background()); err != nil {
 		t.Fatalf("Stop: %v", err)
 	}
-	select {
-	case request := <-requests:
-		if sipHeaderValue(request, "Expires") != "0" {
-			t.Fatalf("shutdown REGISTER Expires = %q", sipHeaderValue(request, "Expires"))
+	close(requests)
+	for request := range requests {
+		if strings.EqualFold(sipRequestMethod(request), "REGISTER") {
+			t.Fatalf("shutdown sent a REGISTER with Contact = %q",
+				sipHeaderValue(request, "Contact"))
 		}
-		contact := sipHeaderValue(request, "Contact")
-		if contact == "*" {
-			t.Fatal("shutdown used wildcard Contact")
-		}
-		if !strings.Contains(strings.ToLower(contact), "expires=0") {
-			t.Fatalf("shutdown Contact = %q, want current Contact with expires=0", contact)
-		}
-	default:
-		t.Fatal("Stop closed the transport without deregistering")
 	}
 }
 

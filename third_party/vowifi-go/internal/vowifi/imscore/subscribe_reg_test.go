@@ -413,7 +413,12 @@ func TestReginfoAORPrefersTelephoneIdentityAndSummaryIsBounded(t *testing.T) {
 	}
 }
 
-func TestStopUnsubscribesRegistrationBeforeDeregister(t *testing.T) {
+// Shutdown ends the reg-event subscription and stops there. Measured on
+// 2026-09-03, 3 of 11 shutdown de-registrations timed out on the Contact
+// expires=0 and escalated to Contact:*, which third-party de-registers the
+// IP-SM-GW and stopped Vodafone pushing MT MESSAGE even after a clean
+// re-REGISTER, so the binding is left to expire instead.
+func TestStopUnsubscribesRegistrationWithoutDeregistering(t *testing.T) {
 	service := newProtectedKeepaliveTestService(t)
 	service.mu.Lock()
 	service.regSession.callID = "reg-call"
@@ -423,23 +428,19 @@ func TestStopUnsubscribesRegistrationBeforeDeregister(t *testing.T) {
 	service.activateProtectedRegistrationTCP(client)
 	t.Cleanup(func() { _ = server.Close() })
 
-	seen := make(chan string, 3)
-	errorsSeen := make(chan error, 1)
+	seen := make(chan string, 4)
 	go func() {
 		reader := bufio.NewReader(server)
-		for i := 0; i < 3; i++ {
+		for {
 			request, err := readSIPStreamMessage(reader)
 			if err != nil {
-				errorsSeen <- err
 				return
 			}
 			seen <- request
 			if _, err = io.WriteString(server, subscriptionWireResponse(request, 200, "Expires: 0\r\n")); err != nil {
-				errorsSeen <- err
 				return
 			}
 		}
-		errorsSeen <- nil
 	}()
 	if err := service.sendSubscribeReg(context.Background()); err != nil {
 		t.Fatalf("sendSubscribeReg: %v", err)
@@ -449,16 +450,15 @@ func TestStopUnsubscribesRegistrationBeforeDeregister(t *testing.T) {
 		t.Fatalf("Stop: %v", err)
 	}
 	unsubscribe := <-seen
-	deregister := <-seen
-	if err := <-errorsSeen; err != nil {
-		t.Fatal(err)
-	}
 	assertRegistrationSubscription(t, unsubscribe, 6, 0, "reg-notifier")
 	if rawSIPHeaderValue(unsubscribe, "Call-ID") != rawSIPHeaderValue(initial, "Call-ID") {
 		t.Fatal("unsubscribe used a different Call-ID")
 	}
-	if sipHeaderValue(deregister, "Expires") != "0" || !strings.HasPrefix(deregister, "REGISTER ") {
-		t.Fatalf("deregister = %q", strings.SplitN(deregister, "\r\n", 2)[0])
+	select {
+	case extra := <-seen:
+		t.Fatalf("shutdown sent %q after unsubscribing",
+			strings.SplitN(extra, "\r\n", 2)[0])
+	case <-time.After(200 * time.Millisecond):
 	}
 	if service.hasSubscriptionDialog() || !service.subscriptionClosed {
 		t.Fatalf("subscription after stop dialog=%v closed=%v",

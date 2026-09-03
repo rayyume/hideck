@@ -13,7 +13,6 @@ import (
 )
 
 const (
-	gracefulUnregisterTimeout  = 12 * time.Second
 	shutdownUnsubscribeTimeout = 2 * time.Second
 	stopCurrentReserve         = 500 * time.Millisecond
 )
@@ -41,25 +40,6 @@ func deregisterAttemptTimeout(ctx context.Context) time.Duration {
 	}
 	return timeout
 }
-
-func unregisterTimeoutFor(ctx context.Context) time.Duration {
-	if ctx == nil {
-		return gracefulUnregisterTimeout
-	}
-	deadline, ok := ctx.Deadline()
-	if !ok {
-		return gracefulUnregisterTimeout
-	}
-	remaining := time.Until(deadline)
-	if remaining <= 0 {
-		return time.Millisecond
-	}
-	if remaining > stopCurrentReserve+time.Second {
-		return remaining - stopCurrentReserve
-	}
-	return remaining
-}
-
 // Status restores the v1.5.5 map status API.
 func (s *Service) Status() map[string]interface{} {
 	return s.captureStatusSnapshot().ToMap()
@@ -262,14 +242,9 @@ func (s *Service) Stop(ctx context.Context) error {
 		s.StopCurrent()
 		return err
 	}
-	unregisterCtx, cancel := context.WithTimeout(ctx, unregisterTimeoutFor(ctx))
-	// Contact-specific Expires=0 first. Contact:* also third-party
-	// deregisters IP-SM-GW; Vodafone then stopped pushing MT MESSAGE
-	// even after a clean re-REGISTER.
-	unregisterErr := s.Unregister(unregisterCtx)
-	cancel()
+	s.releaseSubscriptionsForShutdown(ctx)
 	s.StopCurrent()
-	return unregisterErr
+	return nil
 }
 
 // TriggerRegisterImmediate schedules production maintenance to REGISTER now.

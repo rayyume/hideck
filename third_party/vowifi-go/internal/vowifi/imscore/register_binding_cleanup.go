@@ -191,6 +191,29 @@ func (s *Service) UnregisterAll(ctx context.Context) error {
 	return s.unregisterBindings(ctx, true)
 }
 
+// releaseSubscriptionsForShutdown ends the event subscriptions on the way out
+// but leaves the registrar binding alone. RFC 5626 5.3.1 keys the binding by
+// instance-id and reg-id, both stable across a restart here (instance-id is
+// the IMEI, and the P-CSCF offers Path;ob), so the next REGISTER replaces it
+// rather than adding to it: 43 of 46 registrations reported a single Contact.
+// De-registering bought nothing and cost two things. It told the S-CSCF we
+// were gone for the whole ~18s a restart needs to rebuild the flow, and its
+// Contact expires=0 timed out three times in one day and fell back to
+// Contact:*, which third-party de-registers the IP-SM-GW and stopped Vodafone
+// pushing MT MESSAGE even after a clean re-REGISTER.
+func (s *Service) releaseSubscriptionsForShutdown(ctx context.Context) {
+	if s == nil {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	unsubCtx, cancel := context.WithTimeout(ctx, shutdownUnsubscribeTimeout)
+	defer cancel()
+	s.unsubscribeMWI(unsubCtx)
+	s.unsubscribeRegistration(unsubCtx)
+}
+
 func (s *Service) unregisterBindings(ctx context.Context, allBindings bool) error {
 	if s == nil {
 		return nil

@@ -97,20 +97,3 @@ func TestRecoveredListenPacketHonorsCanceledContext(t *testing.T) {
 	}
 }
 
-func TestUnregisterTimeoutForHonorsParentDeadline(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-	defer cancel()
-	got := unregisterTimeoutFor(ctx)
-	if got < 7*time.Second || got > 8*time.Second {
-		t.Fatalf("timeout = %s", got)
-	}
-}
-
-func TestUnregisterTimeoutForDefaultsWithoutDeadline(t *testing.T) {
-	if got := unregisterTimeoutFor(context.Background()); got != gracefulUnregisterTimeout {
-		t.Fatalf("timeout = %s, want %s", got, gracefulUnregisterTimeout)
-	}
-	if gracefulUnregisterTimeout < 10*time.Second {
-		t.Fatalf("graceful unregister timeout %s is too short for IMS deregister", gracefulUnregisterTimeout)
-	}
-}
