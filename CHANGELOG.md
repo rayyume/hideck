@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.8 - 2026-09-03
+
+### 打包
+
+- Docker 镜像改回 UPX。UPX 5 的 stub 在 Alpine/gcompat 上会报 `Not a valid dynamic program`，发版底包改为 Debian bookworm（glibc），压缩包可以直接 exec。
+
 ## 2.1.7 - 2026-09-03
 
 ### VoWiFi / IMS
