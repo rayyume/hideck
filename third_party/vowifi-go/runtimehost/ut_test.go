@@ -6,6 +6,7 @@ import (
 
 	"github.com/iniwex5/vowifi-go/internal/vowifi/netstack"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/runtimecore"
+	"github.com/iniwex5/vowifi-go/xcap"
 )
 
 func TestUtAccessMissingSession(t *testing.T) {
@@ -49,5 +50,33 @@ func TestUtUsesPublicHostWhenXCAPPDNIsUp(t *testing.T) {
 func TestDomainFromXUI(t *testing.T) {
 	if got := domainFromXUI("sip:user@ims.example.com"); got != "ims.example.com" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+func TestUtDocumentMapsAndMutatesServices(t *testing.T) {
+	raw := xcap.Document{XUI: "sip:user@ims.example.com", ETag: "v1"}
+	raw.SetCFU(true, "tel:+441111")
+	raw.SetOIR(true, true)
+	raw.SetBarring(true, false)
+
+	doc := utDocumentFromXCAP(raw)
+	if doc.CommunicationDiversion != (UtToggle{Active: true, Target: "tel:+441111"}) {
+		t.Fatalf("communication diversion = %+v", doc.CommunicationDiversion)
+	}
+	if doc.IdentityRestriction != (UtIdentityRestriction{Active: true, Restricted: true}) {
+		t.Fatalf("identity restriction = %+v", doc.IdentityRestriction)
+	}
+	if !doc.IncomingBarring.Active || doc.OutgoingBarring.Active {
+		t.Fatalf("barring = incoming:%t outgoing:%t", doc.IncomingBarring.Active, doc.OutgoingBarring.Active)
+	}
+
+	doc.SetCommunicationDiversion(false, "tel:+442222")
+	doc.SetIdentityRestriction(false, false)
+	doc.SetBarring(false, true)
+	if doc.document.CDIV == nil || doc.document.CDIV.Active || doc.document.CFUTarget() != "tel:+442222" {
+		t.Fatalf("underlying diversion = %+v", doc.document.CDIV)
+	}
+	if doc.document.OIR == nil || doc.document.OIR.Active || doc.document.ICB.Active || !doc.document.OCB.Active {
+		t.Fatalf("underlying services were not updated")
 	}
 }

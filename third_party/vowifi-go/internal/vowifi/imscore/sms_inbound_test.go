@@ -120,20 +120,30 @@ func TestInboundRPAckDoesNotRotateURIAfter488(t *testing.T) {
 		"P-Asserted-Identity: <sip:smsc@ims.example>\r\n"+
 			"Contact: <sip:ipsmgw@ims.example>\r\n"+
 			"From: <sip:+447802002606@ims.example>;tag=remote\r\n", 1)
-	var targets []string
+	outbound := make(chan string, rpReportMaxAttempts)
 	service.transport.SetSendFn(func(request string) error {
-		targets = append(targets, strings.SplitN(request, "\r\n", 2)[0])
+		outbound <- strings.SplitN(request, "\r\n", 2)[0]
 		service.transport.DeliverResponse(registerResponseForRequest(request, 488, nil))
 		return nil
 	})
 	if err := service.dispatchInboundSIP(raw, func(string) error { return nil }); err != nil {
 		t.Fatal(err)
 	}
+	targets := []string{waitForOutboundSMSControl(t, outbound)}
 	deadline := time.Now().Add(time.Second)
-	for time.Now().Before(deadline) && len(targets) == 0 {
+	for time.Now().Before(deadline) && service.mtAckSendErr.Load() == 0 {
 		time.Sleep(5 * time.Millisecond)
 	}
-	if len(targets) == 0 || service.mtAckSendOK.Load() != 0 {
+	for {
+		select {
+		case target := <-outbound:
+			targets = append(targets, target)
+		default:
+			goto drained
+		}
+	}
+drained:
+	if service.mtAckSendErr.Load() == 0 || service.mtAckSendOK.Load() != 0 {
 		t.Fatalf("ok=%d err=%d targets=%v", service.mtAckSendOK.Load(), service.mtAckSendErr.Load(), targets)
 	}
 	if len(targets) == 0 || strings.Contains(targets[0], "sip:ipsmgw@ims.example") || !strings.Contains(targets[0], "sip:smsc@ims.example") {

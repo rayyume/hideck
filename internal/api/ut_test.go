@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/iniwex5/vowifi-go/xcap"
+	"github.com/iniwex5/vowifi-go/runtimehost"
 	"github.com/yibaiba/hideck/internal/config"
 )
 
@@ -65,11 +65,14 @@ func TestUtGetAndPutUseRealXCAPDocument(t *testing.T) {
 		}
 	}))
 	t.Cleanup(xcapServer.Close)
-	client := &xcap.Client{HTTP: xcapServer.Client(), Host: strings.TrimPrefix(xcapServer.URL, "http://")}
-	client.HTTP.Transport = utRewriteHTTPS(xcapServer)
+	httpClient := xcapServer.Client()
+	httpClient.Transport = utRewriteHTTPS(xcapServer)
+	client := runtimehost.NewUtClient(runtimehost.UtClientConfig{
+		HTTP: httpClient, Host: strings.TrimPrefix(xcapServer.URL, "http://"),
+	})
 	server := &Server{
 		auth: config.WebConfig{Username: "admin", Password: "secret"},
-		utClient: func(deviceID string) (*xcap.Client, utIdentity, error) {
+		utClient: func(deviceID string) (utDocumentClient, utIdentity, error) {
 			if deviceID != "dev-1" {
 				t.Fatalf("device = %s", deviceID)
 			}
@@ -128,7 +131,7 @@ func TestUtGetWithoutClientReportsMissingPDN(t *testing.T) {
 }
 
 func TestUtPublicMessageHidesXCAPURL(t *testing.T) {
-	err := fmt.Errorf("%w: timed out", xcap.ErrUnavailable)
+	err := fmt.Errorf("%w: timed out", runtimehost.ErrUtUnavailable)
 	got := utPublicMessage(err)
 	if strings.Contains(got, "sip:") || strings.Contains(got, "https://") || strings.Contains(got, "23415") {
 		t.Fatalf("message = %q", got)

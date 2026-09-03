@@ -77,8 +77,13 @@ func TestMWINotifyUpdatesSummaryWithoutTouchingRegDialog(t *testing.T) {
 	if !strings.HasPrefix(<-replied, "SIP/2.0 200 OK") {
 		t.Fatal("MWI NOTIFY was not acknowledged")
 	}
+	waitingSnapshot := func() bool {
+		service.mu.RLock()
+		defer service.mu.RUnlock()
+		return service.mwiMessagesWaiting
+	}
 	deadline := time.Now().Add(time.Second)
-	for time.Now().Before(deadline) && !service.mwiMessagesWaiting {
+	for time.Now().Before(deadline) && !waitingSnapshot() {
 		time.Sleep(time.Millisecond)
 	}
 	service.mu.RLock()

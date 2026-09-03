@@ -547,12 +547,13 @@ func TestNotifyLearnsSubscriptionDialogAndTerminatedClosesIt(t *testing.T) {
 	}
 	<-replied
 	deadline := time.Now().Add(time.Second)
-	for time.Now().Before(deadline) && !service.subscriptionClosed {
+	for time.Now().Before(deadline) && !registrationSubscriptionClosed(service) {
 		time.Sleep(time.Millisecond)
 	}
-	if service.hasSubscriptionDialog() || !service.subscriptionClosed {
+	closed := registrationSubscriptionClosed(service)
+	if service.hasSubscriptionDialog() || !closed {
 		t.Fatalf("terminated NOTIFY left dialog=%v closed=%v",
-			service.hasSubscriptionDialog(), service.subscriptionClosed)
+			service.hasSubscriptionDialog(), closed)
 	}
 }
 
@@ -606,6 +607,12 @@ func waitForSubscriptionDialog(t *testing.T, service *Service, ready bool) {
 		time.Sleep(time.Millisecond)
 	}
 	t.Fatalf("subscription dialog ready=%v, want %v", service.hasSubscriptionDialog(), ready)
+}
+
+func registrationSubscriptionClosed(service *Service) bool {
+	service.mu.RLock()
+	defer service.mu.RUnlock()
+	return service.subscriptionClosed
 }
 
 func waitForReginfoAOR(t *testing.T, service *Service, want string) {

@@ -1,12 +1,13 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/iniwex5/vowifi-go/xcap"
+	"github.com/iniwex5/vowifi-go/runtimehost"
 )
 
 var (
@@ -21,7 +22,12 @@ type utIdentity struct {
 	Fallback []string
 }
 
-type utClientFunc func(string) (*xcap.Client, utIdentity, error)
+type utDocumentClient interface {
+	Get(context.Context, string, []string) (runtimehost.UtDocument, error)
+	Put(context.Context, runtimehost.UtDocument) (runtimehost.UtDocument, error)
+}
+
+type utClientFunc func(string) (utDocumentClient, utIdentity, error)
 
 type utView struct {
 	XUI                    string         `json:"xui"`
@@ -90,7 +96,7 @@ func (s *Server) handleUtPut(c *gin.Context) {
 		return
 	}
 	if strings.TrimSpace(req.ETag) == "" || req.ETag != doc.ETag {
-		c.JSON(http.StatusPreconditionFailed, gin.H{"status": "error", "message": xcap.ErrPrecondition.Error()})
+		c.JSON(http.StatusPreconditionFailed, gin.H{"status": "error", "message": runtimehost.ErrUtPrecondition.Error()})
 		return
 	}
 	req.apply(&doc)
@@ -102,7 +108,7 @@ func (s *Server) handleUtPut(c *gin.Context) {
 	c.JSON(http.StatusOK, utViewFromDocument(saved))
 }
 
-func (s *Server) lookupUtClient(deviceID string) (*xcap.Client, utIdentity, error) {
+func (s *Server) lookupUtClient(deviceID string) (utDocumentClient, utIdentity, error) {
 	deviceID = strings.TrimSpace(deviceID)
 	if deviceID == "" {
 		return nil, utIdentity{}, errUtIdentity
@@ -144,21 +150,16 @@ func (req utPatchRequest) changeCount() int {
 	return n
 }
 
-func (req utPatchRequest) apply(doc *xcap.Document) {
+func (req utPatchRequest) apply(doc *runtimehost.UtDocument) {
 	if req.CommunicationDiversion != nil {
-		doc.SetCFU(req.CommunicationDiversion.Active, req.CommunicationDiversion.Target)
+		doc.SetCommunicationDiversion(req.CommunicationDiversion.Active, req.CommunicationDiversion.Target)
 	}
 	if req.IdentityRestriction != nil {
-		doc.SetOIR(req.IdentityRestriction.Active, req.IdentityRestriction.Restricted)
+		doc.SetIdentityRestriction(req.IdentityRestriction.Active, req.IdentityRestriction.Restricted)
 	}
 	if req.IncomingBarring != nil || req.OutgoingBarring != nil {
-		in, out := false, false
-		if doc.ICB != nil {
-			in = doc.ICB.Active
-		}
-		if doc.OCB != nil {
-			out = doc.OCB.Active
-		}
+		in := doc.IncomingBarring.Active
+		out := doc.OutgoingBarring.Active
 		if req.IncomingBarring != nil {
 			in = req.IncomingBarring.Active
 		}
@@ -169,20 +170,16 @@ func (req utPatchRequest) apply(doc *xcap.Document) {
 	}
 }
 
-func utViewFromDocument(doc xcap.Document) utView {
+func utViewFromDocument(doc runtimehost.UtDocument) utView {
 	view := utView{XUI: doc.XUI, ETag: doc.ETag}
-	if doc.CDIV != nil {
-		view.CommunicationDiversion = utToggle{Active: doc.CDIV.Active, Target: doc.CFUTarget()}
+	view.CommunicationDiversion = utToggle{
+		Active: doc.CommunicationDiversion.Active, Target: doc.CommunicationDiversion.Target,
 	}
-	if doc.OIR != nil {
-		view.IdentityRestriction = utIdentityView{Active: doc.OIR.Active, Restricted: doc.IdentityRestricted()}
+	view.IdentityRestriction = utIdentityView{
+		Active: doc.IdentityRestriction.Active, Restricted: doc.IdentityRestriction.Restricted,
 	}
-	if doc.ICB != nil {
-		view.IncomingBarring = utToggle{Active: doc.ICB.Active}
-	}
-	if doc.OCB != nil {
-		view.OutgoingBarring = utToggle{Active: doc.OCB.Active}
-	}
+	view.IncomingBarring = utToggle{Active: doc.IncomingBarring.Active}
+	view.OutgoingBarring = utToggle{Active: doc.OutgoingBarring.Active}
 	return view
 }
 
@@ -192,9 +189,9 @@ func writeUtError(c *gin.Context, err error) {
 
 func utPublicMessage(err error) string {
 	switch {
-	case errors.Is(err, xcap.ErrNotFound):
+	case errors.Is(err, runtimehost.ErrUtDocumentNotFound):
 		return "运营商没有这份补充业务文档"
-	case errors.Is(err, xcap.ErrPrecondition):
+	case errors.Is(err, runtimehost.ErrUtPrecondition):
 		return "补充业务已被其他请求更新，请刷新后重试"
 	case errors.Is(err, errUtManyChanges):
 		return errUtManyChanges.Error()
@@ -202,7 +199,7 @@ func utPublicMessage(err error) string {
 		return "IMS 未注册，无法读取补充业务"
 	case errors.Is(err, errUtXCAPPDN), errors.Is(err, errUtUnavailable):
 		return "XCAP 承载未建立"
-	case errors.Is(err, xcap.ErrUnavailable):
+	case errors.Is(err, runtimehost.ErrUtUnavailable):
 		if strings.Contains(err.Error(), "timed out") {
 			return "运营商 Ut/XCAP 超时：补充业务服务器在运营商内网，当前 IMS 隧道连不上。"
 		}
@@ -214,15 +211,15 @@ func utPublicMessage(err error) string {
 
 func utStatus(err error) int {
 	switch {
-	case errors.Is(err, xcap.ErrNotFound):
+	case errors.Is(err, runtimehost.ErrUtDocumentNotFound):
 		return http.StatusNotFound
-	case errors.Is(err, xcap.ErrPrecondition):
+	case errors.Is(err, runtimehost.ErrUtPrecondition):
 		return http.StatusPreconditionFailed
 	case errors.Is(err, errUtManyChanges):
 		return http.StatusBadRequest
 	case errors.Is(err, errUtIdentity), errors.Is(err, errUtXCAPPDN), errors.Is(err, errUtUnavailable):
 		return http.StatusConflict
-	case errors.Is(err, xcap.ErrUnavailable):
+	case errors.Is(err, runtimehost.ErrUtUnavailable):
 		return http.StatusBadGateway
 	default:
 		return http.StatusBadGateway
