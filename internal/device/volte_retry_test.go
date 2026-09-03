@@ -18,6 +18,9 @@ func TestIsTransientVoLTEStartError(t *testing.T) {
 	if !isTransientVoLTEStartError(errors.New("volte provision apply_ims: read before apply: query mbn list: timeout")) {
 		t.Fatal("AT timeout must retry")
 	}
+	if !isTransientVoLTEStartError(errors.New("allocate IMS: allocate client ID request failed after retries: write failed: write unix @->@qmi-proxy: write: broken pipe")) {
+		t.Fatal("qmi-proxy broken pipe must retry after the control plane returns")
+	}
 	if nativeVoLTERetryDelay(1) != 3*time.Second || nativeVoLTERetryDelay(2) != 6*time.Second {
 		t.Fatalf("retry delay %s %s", nativeVoLTERetryDelay(1), nativeVoLTERetryDelay(2))
 	}

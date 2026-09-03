@@ -380,16 +380,17 @@ func (w *Worker) getPhoneNumberWithContext(ctx context.Context) string {
 		return ""
 	}
 	if w.Backend != nil {
-		if v, err := w.Backend.GetMSISDN(ctx); err == nil && strings.TrimSpace(v) != "" {
-			return strings.TrimSpace(v)
-		}
-		if w.Backend.Mode() != backend.BackendAT {
-			return ""
+		if v, err := w.Backend.GetMSISDN(ctx); err == nil {
+			if phone := strings.TrimSpace(v); phone != "" {
+				return phone
+			}
 		}
 	}
 	if w.Modem != nil {
 		if v, err := w.Modem.QueryMSISDN(); err == nil {
-			return strings.TrimSpace(v)
+			if phone := strings.TrimSpace(v); phone != "" {
+				return phone
+			}
 		}
 	}
 	return ""

@@ -67,7 +67,12 @@ func qmiTransportDownOverridesSuppression(transportDown bool, reason string) boo
 	if !transportDown {
 		return false
 	}
-	return reason == "native_volte_call" || reason == "native_volte_usb_quiet"
+	switch reason {
+	case "native_volte_call", "native_volte_usb_quiet", "registration_reconcile_in_flight":
+		return true
+	default:
+		return false
+	}
 }
 
 func shouldFastStartMissingQMIWorker(cfg config.DeviceConfig, live QMIDevice, discoveryAvailable bool) bool {

@@ -93,7 +93,10 @@ func isTransientVoLTEStartError(err error) bool {
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "timeout") ||
 		strings.Contains(msg, "timed out") ||
-		strings.Contains(msg, "busy")
+		strings.Contains(msg, "busy") ||
+		strings.Contains(msg, "broken pipe") ||
+		strings.Contains(msg, "connection closed") ||
+		strings.Contains(msg, "qmi-proxy")
 }
 
 func (p *Pool) scheduleNativeVoLTE(deviceID, reason string) {

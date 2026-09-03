@@ -83,6 +83,36 @@ func TestRunHealthCheckTickSkipsObservationWindowOnTransportDownError(t *testing
 	}
 }
 
+func TestRunHealthCheckTickRebuildsWhenReconcileInFlightAndPipeBroken(t *testing.T) {
+	p := NewPool(&config.Config{})
+	defer p.cancel()
+
+	worker := &Worker{
+		ID: "dev1",
+		Config: config.DeviceConfig{
+			ID:            "dev1",
+			DeviceBackend: backend.BackendQMI,
+			ControlDevice: "/dev/cdc-wdm0",
+		},
+		Backend: &workerStatusBackendStub{
+			mode:      backend.BackendQMI,
+			opModeErr: errors.New("write failed: write unix @->@qmi-proxy: write: broken pipe"),
+		},
+		qmiRegistrationInFlight: true,
+	}
+	p.workers["dev1"] = worker
+
+	p.runHealthCheckTick()
+
+	snapshot := worker.HealthSnapshot()
+	if snapshot.State != HealthStateReprobing {
+		t.Fatalf("state=%s want %s", snapshot.State, HealthStateReprobing)
+	}
+	if snapshot.Reason != "qmi_transport_down" {
+		t.Fatalf("reason=%q want qmi_transport_down", snapshot.Reason)
+	}
+}
+
 // TestRunHealthCheckTickStillWaitsForThresholdOnTransientError 测试普通瞬时错误（非传输确认已断）
 // 仍然遵循原有的 3 次观察窗口，不应被这次改动误伤。
 func TestQMITransportDownOverridesNativeVoLTECallSuppression(t *testing.T) {
@@ -97,6 +127,9 @@ func TestQMITransportDownOverridesNativeVoLTECallSuppression(t *testing.T) {
 	}
 	if qmiTransportDownOverridesSuppression(true, "esim_switching") {
 		t.Fatal("esim switch must not be overridden")
+	}
+	if !qmiTransportDownOverridesSuppression(true, "registration_reconcile_in_flight") {
+		t.Fatal("broken pipe during NAS reconcile should rebuild; the reconcile cannot succeed on a dead socket")
 	}
 }
 

@@ -249,9 +249,9 @@ func (c *Controller) provisionConfig(ctx context.Context, deviceID string) error
 		c.setError(deviceID, err)
 	}
 	if err := c.host.EnsureIMSClients(ctx, deviceID); err != nil {
-		logger.Warn("QMI IMS/IMSA 客户端不可用", "device", deviceID, "err", err)
+		logger.Warn("QMI IMS/IMSA 客户端不可用，继续用 AT 结果", "device", deviceID, "err", err)
 		c.patch(deviceID, func(st *Status) { st.QMIIMSUnavailable = true })
-		return c.fail(deviceID, err)
+		c.setError(deviceID, err)
 	}
 	if err := c.host.SetNativeIMS(ctx, deviceID, true); err != nil {
 		logger.Warn("QMI 打开原生 IMS 失败，继续用 AT 结果", "device", deviceID, "err", err)
