@@ -43,6 +43,7 @@ type registerAttemptResult struct {
 	statusCode     int
 	challengeCount int
 	retryAfter     time.Duration
+	retryAfterSet  bool
 	minExpires     uint32
 	secAgree       bool
 	authRealm      string
@@ -127,8 +128,9 @@ func (s *Service) registerLocked(ctx context.Context) error {
 	}
 	if err != nil {
 		if !isRegisterOperationCanceled(err) && s.keepRegistrationAfterFailedRefresh(hadBinding, err) {
-			s.restoreRegistrationAfterFailedRefresh(err)
-			return nil
+			if s.restoreRegistrationAfterFailedRefresh(err) {
+				return nil
+			}
 		}
 		s.mu.Lock()
 		s.regState = regFailed
@@ -322,7 +324,7 @@ func (s *Service) finalizeInitialRegisterSecurity(session *registerSession, resp
 
 func updateRegisterAttemptResponse(result *registerAttemptResult, response *sipResponse) {
 	result.statusCode = response.StatusCode
-	result.retryAfter, result.minExpires = parseRegisterRetryHintsFromResponse(response)
+	result.retryAfter, result.retryAfterSet, result.minExpires = parseRegisterRetryHintsFromResponse(response)
 	if response.StatusCode == 305 {
 		result.useProxy = parseUseProxyContact(response.Header("Contact"))
 	}
@@ -386,7 +388,7 @@ func registerAttemptReachedAuthPhase(result registerAttemptResult, err error) bo
 }
 
 func shouldRetryNextRegisterTransport(result registerAttemptResult, err error) bool {
-	if isRegisterOperationCanceled(err) || registerAttemptReachedAuthPhase(result, err) {
+	if isRegisterOperationContextDone(err) || registerAttemptReachedAuthPhase(result, err) {
 		return false
 	}
 	return result.statusCode == 0 || result.statusCode == 408 ||
@@ -394,7 +396,11 @@ func shouldRetryNextRegisterTransport(result registerAttemptResult, err error) b
 }
 
 func isRegisterOperationCanceled(err error) bool {
-	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+	return errors.Is(err, context.Canceled)
+}
+
+func isRegisterOperationContextDone(err error) bool {
+	return isRegisterOperationCanceled(err) || errors.Is(err, context.DeadlineExceeded)
 }
 
 func indexOfRegisterTransport(candidates []string, current string) int {
@@ -438,10 +444,12 @@ func (s *Service) applyRegistrationFailureStatus(err error) {
 	if responseErr != nil {
 		result.statusCode = responseErr.statusCode
 		result.retryAfter = responseErr.retryAfter
+		result.retryAfterSet = responseErr.retryAfterSet
 		result.minExpires = responseErr.minExpires
 	} else if transportFailure {
 		result.statusCode = 0
 		result.retryAfter = 0
+		result.retryAfterSet = false
 		result.minExpires = 0
 	}
 	outcome := decideRegisterFailureOutcome(
@@ -784,6 +792,10 @@ func (s *Service) registrationFlowIntact() bool {
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	return s.registrationFlowIntactLocked()
+}
+
+func (s *Service) registrationFlowIntactLocked() bool {
 	if strings.TrimSpace(s.registrationTransport) == "" {
 		return false
 	}
@@ -810,11 +822,14 @@ func (s *Service) keepRegistrationAfterFailedRefresh(hadBinding bool, err error)
 	return isTemporaryRegisterSIPResponse(registerPolicy, responseErr.statusCode)
 }
 
-func (s *Service) restoreRegistrationAfterFailedRefresh(err error) {
-	s.completePortSRecovery(err, true)
+func (s *Service) restoreRegistrationAfterFailedRefresh(err error) bool {
 	now := time.Now()
 	next := now.Add(5 * time.Minute)
 	s.mu.Lock()
+	if !s.registrationFlowIntactLocked() {
+		s.mu.Unlock()
+		return false
+	}
 	s.regState = regRegistered
 	s.lastRegisterErr = err.Error()
 	if s.regSession != nil && s.regSession.expires > 0 && !s.lastRegisterOKAt.IsZero() {
@@ -825,12 +840,14 @@ func (s *Service) restoreRegistrationAfterFailedRefresh(err error) {
 	s.registrationRefreshAt = next
 	s.nextRegister = next
 	s.mu.Unlock()
+	s.completePortSRecovery(err, true)
 	s.reRegisterPending.Store(false)
 	s.transitionRegStatus(registrationRegistered)
 	s.notifySMSReadiness()
 	logging.WarnRate("ims-register-refresh-keep-"+s.DeviceID(), 30*time.Second,
 		"IMS REGISTER refresh failed; keep current registration",
 		"device", s.DeviceID(), "err", err)
+	return true
 }
 
 func withOutboundContactParams(order []string) []string {
@@ -1103,11 +1120,12 @@ func formatHeaderList(value string) string {
 }
 
 type registerResponseError struct {
-	statusCode int
-	retryAfter time.Duration
-	minExpires uint32
-	challenged bool
-	message    string
+	statusCode    int
+	retryAfter    time.Duration
+	retryAfterSet bool
+	minExpires    uint32
+	challenged    bool
+	message       string
 }
 
 func (e *registerResponseError) Error() string { return e.message }
@@ -1118,7 +1136,7 @@ func registrationResponseError(response *sipResponse, challenged bool) error {
 		phase = "authenticated REGISTER"
 	}
 	detail := strings.TrimSpace(response.Reason)
-	retryAfter, minExpires := parseRegisterRetryHintsFromResponse(response)
+	retryAfter, retryAfterSet, minExpires := parseRegisterRetryHintsFromResponse(response)
 	if warning := strings.TrimSpace(response.Header("Warning")); warning != "" {
 		if detail != "" {
 			detail += "; "
@@ -1126,10 +1144,10 @@ func registrationResponseError(response *sipResponse, challenged bool) error {
 		detail += "warning=" + warning
 	}
 	if detail == "" {
-		return &registerResponseError{statusCode: response.StatusCode, retryAfter: retryAfter, minExpires: minExpires, challenged: challenged, message: fmt.Sprintf(
+		return &registerResponseError{statusCode: response.StatusCode, retryAfter: retryAfter, retryAfterSet: retryAfterSet, minExpires: minExpires, challenged: challenged, message: fmt.Sprintf(
 			"imscore: registration failed during %s with status %d", phase, response.StatusCode)}
 	}
-	return &registerResponseError{statusCode: response.StatusCode, retryAfter: retryAfter, minExpires: minExpires, challenged: challenged, message: fmt.Sprintf(
+	return &registerResponseError{statusCode: response.StatusCode, retryAfter: retryAfter, retryAfterSet: retryAfterSet, minExpires: minExpires, challenged: challenged, message: fmt.Sprintf(
 		"imscore: registration failed during %s with status %d (%s)", phase, response.StatusCode, detail)}
 }
 

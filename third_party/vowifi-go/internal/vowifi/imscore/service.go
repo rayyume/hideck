@@ -68,6 +68,7 @@ func New(cfg *IMSConfig) (*Service, error) {
 		keepaliveInterval:     keepaliveInterval,
 		keepaliveTimeout:      keepaliveTimeout,
 		keepaliveFailureLimit: imsKeepaliveFailureLimit,
+		portSRecoveryJitter:   randomRFC5626RecoveryDelay,
 	}
 	transport.SetFatalHandler(s.handleFatalTransactionError)
 	return s, nil

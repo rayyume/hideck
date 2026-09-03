@@ -289,16 +289,19 @@ func (s *Service) handleProtectedServerPushClosed() {
 			"reason", "peer previously reopened port-s without a successful REGISTER")
 		return
 	}
-	if s.portSRecoveryDeferred.Load() {
-		logging.Info("IMS protected server push closed; keep current binding and wait for port-s reconnect",
+	now := time.Now()
+	if retryAt, waiting := s.portSRecoveryDeadline(now); waiting {
+		logging.Info("IMS protected server push closed during recovery backoff",
 			"device", s.DeviceID(), "since_last_read", s.portSSinceLastRead(),
-			"reason", "port-s recovery REGISTER already failed for this binding")
+			"retry_in", retryAt.Sub(now))
+		s.schedulePortSReconnectWatchAt(retryAt)
 		return
 	}
+	wakeAt := now.Add(s.portSReconnectWait())
 	logging.Info("IMS protected server push closed; wait for port-s reconnect",
 		"device", s.DeviceID(), "grace", s.portSReconnectWait(),
 		"since_last_read", s.portSSinceLastRead())
-	s.schedulePortSReconnectWatch()
+	s.schedulePortSReconnectWatchAt(wakeAt)
 }
 
 func (s *Service) portSReconnectWait() time.Duration {
@@ -308,18 +311,25 @@ func (s *Service) portSReconnectWait() time.Duration {
 	return defaultPortSReconnectGrace
 }
 
-func (s *Service) schedulePortSReconnectWatch() {
+func (s *Service) schedulePortSReconnectWatchAt(wakeAt time.Time) {
 	if s == nil || s.stopped() {
 		return
 	}
-	grace := s.portSReconnectWait()
+	delay := time.Until(wakeAt)
+	if delay < 0 {
+		delay = 0
+	}
+	registrar := s.currentPortSRecoveryRegistrar()
 	s.portSWatchMu.Lock()
 	defer s.portSWatchMu.Unlock()
-	if s.portSWatchTimer == nil {
-		s.portSWatchTimer = time.AfterFunc(grace, s.portSReconnectWatchFired)
-		return
+	s.portSWatchGeneration++
+	generation := s.portSWatchGeneration
+	if s.portSWatchTimer != nil {
+		s.portSWatchTimer.Stop()
 	}
-	s.portSWatchTimer.Reset(grace)
+	s.portSWatchTimer = time.AfterFunc(delay, func() {
+		s.portSReconnectWatchFired(generation, registrar)
+	})
 }
 
 func (s *Service) cancelPortSReconnectWatch() {
@@ -328,24 +338,49 @@ func (s *Service) cancelPortSReconnectWatch() {
 	}
 	s.portSWatchMu.Lock()
 	defer s.portSWatchMu.Unlock()
+	s.portSWatchGeneration++
 	if s.portSWatchTimer != nil {
 		s.portSWatchTimer.Stop()
+		s.portSWatchTimer = nil
 	}
 }
 
-func (s *Service) portSReconnectWatchFired() {
+func (s *Service) portSReconnectWatchFired(generation uint64, registrar string) {
+	if !s.consumePortSReconnectWatch(generation, registrar) {
+		return
+	}
 	if s == nil || s.stopped() || s.RegState() != regRegistered {
 		return
 	}
 	s.protectedConnMu.Lock()
 	remaining := len(s.protectedConns)
-	if remaining > 0 || s.portSOnDemandObserved.Load() || s.portSRecoveryDeferred.Load() {
+	if remaining > 0 || s.portSOnDemandObserved.Load() {
 		s.protectedConnMu.Unlock()
 		return
 	}
-	s.portSRecoveryPending.Store(true)
 	s.protectedConnMu.Unlock()
+	if retryAt, waiting := s.portSRecoveryDeadline(time.Now()); waiting {
+		s.schedulePortSReconnectWatchAt(retryAt)
+		return
+	}
+	if !s.portSRecoveryPending.CompareAndSwap(false, true) {
+		return
+	}
 	s.triggerRegisterImmediate("port-s flow failed")
+}
+
+func (s *Service) consumePortSReconnectWatch(generation uint64, registrar string) bool {
+	if s == nil {
+		return false
+	}
+	currentRegistrar := s.currentPortSRecoveryRegistrar()
+	s.portSWatchMu.Lock()
+	defer s.portSWatchMu.Unlock()
+	if generation != s.portSWatchGeneration || registrar != currentRegistrar {
+		return false
+	}
+	s.portSWatchTimer = nil
+	return true
 }
 
 func (s *Service) completePortSRecovery(err error, bindingPreserved bool) {
@@ -354,8 +389,11 @@ func (s *Service) completePortSRecovery(err error, bindingPreserved bool) {
 	}
 	pending := s.portSRecoveryPending.Swap(false)
 	if err == nil {
-		s.portSReconnectWaiting.Store(false)
-		s.portSRecoveryDeferred.Store(false)
+		wasWaiting := s.portSReconnectWaiting.Swap(false)
+		s.resetPortSRecoveryBackoff()
+		if wasWaiting && !s.portSPushReady.Load() {
+			s.schedulePortSReconnectWatchAt(time.Now().Add(s.portSReconnectWait()))
+		}
 		return
 	}
 	if !pending {
@@ -366,18 +404,22 @@ func (s *Service) completePortSRecovery(err error, bindingPreserved bool) {
 	}
 	if !bindingPreserved {
 		s.portSReconnectWaiting.Store(false)
-		s.portSRecoveryDeferred.Store(false)
+		s.resetPortSRecoveryBackoff()
 		return
 	}
-	s.portSRecoveryDeferred.Store(true)
+	backoff := s.recordPortSRecoveryFailure(err, time.Now())
 	if s.portSPushReady.Load() {
 		// The failed REGISTER itself may have prompted this connection.
 		// It does not prove that the peer reconnects on demand.
 		s.portSReconnectWaiting.Store(false)
+	} else {
+		s.schedulePortSReconnectWatchAt(backoff.retryAt)
 	}
-	logging.WarnRate("ims-ports-recovery-rejected-"+s.DeviceID(), time.Hour,
-		"IMS port-s REGISTER recovery failed; keep current binding and wait for the P-CSCF",
-		"device", s.DeviceID(), "err", err)
+	logging.WarnRate("ims-ports-recovery-backoff-"+s.DeviceID(), 30*time.Second,
+		"IMS port-s REGISTER recovery failed; keep current binding and back off",
+		"device", s.DeviceID(), "err", err,
+		"failures", backoff.failures, "retry_in", backoff.delay,
+		"retry_after", backoff.retryAfter, "retry_after_present", backoff.retryAfterSet)
 }
 
 func (s *Service) recordOnDemandPortSReconnect() {
@@ -387,7 +429,7 @@ func (s *Service) recordOnDemandPortSReconnect() {
 	if !s.portSReconnectWaiting.CompareAndSwap(true, false) || s.portSOnDemandObserved.Swap(true) {
 		return
 	}
-	s.portSRecoveryDeferred.Store(false)
+	s.resetPortSRecoveryBackoff()
 	logging.Info("IMS on-demand port-s reconnect observed",
 		"device", s.DeviceID(),
 		"reason", "peer reopened port-s without a successful REGISTER")
@@ -403,10 +445,9 @@ func (s *Service) resetPortSRecoveryKnowledge() {
 	if s == nil {
 		return
 	}
-	s.cancelPortSReconnectWatch()
+	s.resetPortSRecoveryBackoff()
 	s.portSReconnectWaiting.Store(false)
 	s.portSRecoveryPending.Store(false)
-	s.portSRecoveryDeferred.Store(false)
 	s.portSOnDemandObserved.Store(false)
 }
 

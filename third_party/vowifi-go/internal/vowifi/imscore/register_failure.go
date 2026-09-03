@@ -28,7 +28,7 @@ func decideRegisterFailureOutcome(
 		reason: "network", kind: registrationRejectedTemporary,
 		nextRegister: now.Add(delay), retryDelay: delay,
 	}
-	if result.retryAfter > 0 {
+	if result.retryAfterSet {
 		outcome.reason = "retry_after"
 		outcome.retryDelay = result.retryAfter
 		outcome.nextRegister = now.Add(result.retryAfter)

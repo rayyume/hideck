@@ -187,10 +187,12 @@ type Service struct {
 	portSPushReady            atomic.Bool
 	portSReconnectWaiting     atomic.Bool
 	portSRecoveryPending      atomic.Bool
-	portSRecoveryDeferred     atomic.Bool
 	portSOnDemandObserved     atomic.Bool
 	portSWatchMu              sync.Mutex
 	portSWatchTimer           *time.Timer
+	portSWatchGeneration      uint64
+	portSBackoff              portSRecoveryBackoff
+	portSRecoveryJitter       func(time.Duration) time.Duration
 	sipWriteMu                sync.Mutex
 	receiverMu                sync.Mutex
 	activeReceivers           int

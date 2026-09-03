@@ -137,12 +137,28 @@ func TestParseRecoveredRegisterResponseFields(t *testing.T) {
 	if got := parseRegisterExpiresFromResponse(response, 10); got != 3600 {
 		t.Fatalf("parseRegisterExpiresFromResponse = %d", got)
 	}
-	retryAfter, minExpires := parseRegisterRetryHintsFromResponse(response)
-	if retryAfter != 9*time.Second || minExpires != 600 {
-		t.Fatalf("retry hints = %s, %d", retryAfter, minExpires)
+	retryAfter, retryAfterSet, minExpires := parseRegisterRetryHintsFromResponse(response)
+	if retryAfter != 9*time.Second || !retryAfterSet || minExpires != 600 {
+		t.Fatalf("retry hints = %s, %t, %d", retryAfter, retryAfterSet, minExpires)
 	}
 	if got := parseRemoteIPFromPath("<sip:user@[2001:db8::10]:5060;lr>"); got != "2001:db8::10" {
 		t.Fatalf("parseRemoteIPFromPath = %q", got)
+	}
+}
+
+func TestRegisterRetryAfterZeroRemainsExplicit(t *testing.T) {
+	retryAfter, retryAfterSet, _ := parseRegisterRetryHintsFromResponse(&sipResponse{
+		Headers: map[string]string{"Retry-After": "0 (ready)"},
+	})
+	if retryAfter != 0 || !retryAfterSet {
+		t.Fatalf("Retry-After zero = %s, present %t", retryAfter, retryAfterSet)
+	}
+	now := time.Unix(100, 0)
+	outcome := decideRegisterFailureOutcome(now, registerAttemptResult{
+		statusCode: 503, retryAfterSet: true,
+	}, policy.DefaultIMSRegisterPolicy(), false)
+	if outcome.reason != "retry_after" || outcome.nextRegister != now {
+		t.Fatalf("Retry-After zero outcome = %+v", outcome)
 	}
 }
 
@@ -241,7 +257,7 @@ func TestDecideRegisterFailureOutcome(t *testing.T) {
 		t.Fatalf("forbidden outcome = %+v", forbidden)
 	}
 	retryAfter := decideRegisterFailureOutcome(now, registerAttemptResult{
-		statusCode: 503, retryAfter: 17 * time.Second,
+		statusCode: 503, retryAfter: 17 * time.Second, retryAfterSet: true,
 	}, registerPolicy, false)
 	if retryAfter.reason != "retry_after" || retryAfter.nextRegister != now.Add(17*time.Second) {
 		t.Fatalf("retry-after outcome = %+v", retryAfter)

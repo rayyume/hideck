@@ -247,16 +247,17 @@ func resolveHostIP(host string, preferIPv6 bool) (net.IP, error) {
 	return nil, errors.New("无法选择 IP")
 }
 
-func parseRegisterRetryHintsFromResponse(response *sipResponse) (time.Duration, uint32) {
+func parseRegisterRetryHintsFromResponse(response *sipResponse) (time.Duration, bool, uint32) {
 	if response == nil {
-		return 0, 0
+		return 0, false, 0
 	}
-	retrySeconds, _ := strconv.Atoi(strings.TrimSpace(response.Header("Retry-After")))
+	retryAfter, retryAfterSet, retryAfterErr := parseSIPRetryAfter(response.HeaderValues("Retry-After"))
+	if retryAfterErr != nil {
+		retryAfter = 0
+		retryAfterSet = false
+	}
 	minExpires, _ := strconv.ParseUint(strings.TrimSpace(response.Header("Min-Expires")), 10, 32)
-	if retrySeconds < 1 {
-		retrySeconds = 0
-	}
-	return time.Duration(retrySeconds) * time.Second, uint32(minExpires)
+	return retryAfter, retryAfterSet, uint32(minExpires)
 }
 
 func isTemporaryRegisterSIPResponse(registerPolicy policy.IMSRegisterPolicy, statusCode int) bool {

@@ -6,11 +6,13 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"net"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/emiago/sipgo/sip"
 	enginesim "github.com/iniwex5/vowifi-go/engine/sim"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/imsheaders"
 )
@@ -167,6 +169,18 @@ func TestInitial503RetriesTheOtherTransport(t *testing.T) {
 	}
 }
 
+func TestRegisterDeadlineIsRecoverableWithoutRetryingExpiredContext(t *testing.T) {
+	if isRegisterOperationCanceled(context.DeadlineExceeded) {
+		t.Fatal("REGISTER deadline was treated as caller cancellation")
+	}
+	if !isRegisterOperationCanceled(context.Canceled) {
+		t.Fatal("caller cancellation was not recognized")
+	}
+	if shouldRetryNextRegisterTransport(registerAttemptResult{}, context.DeadlineExceeded) {
+		t.Fatal("REGISTER retried another transport with an expired context")
+	}
+}
+
 func TestReplaceRegisterTransportPastEndLeavesCurrentOpen(t *testing.T) {
 	service := &Service{cfg: &IMSConfig{LocalIP: net.IPv4(127, 0, 0, 1), Transport: "tcp"}}
 	client, server := net.Pipe()
@@ -215,7 +229,9 @@ func TestFailedPortSRecoveryKeepsRegistrationWhenFlowIntact(t *testing.T) {
 	if !service.keepRegistrationAfterFailedRefresh(true, err) {
 		t.Fatal("a 503 refresh with the flow still up tore the binding down")
 	}
-	service.restoreRegistrationAfterFailedRefresh(err)
+	if !service.restoreRegistrationAfterFailedRefresh(err) {
+		t.Fatal("working registration flow was not preserved")
+	}
 	if service.RegState() != regRegistered {
 		t.Fatalf("registration state = %s", service.RegState())
 	}
@@ -225,8 +241,8 @@ func TestFailedPortSRecoveryKeepsRegistrationWhenFlowIntact(t *testing.T) {
 	if !service.portSReconnectWaiting.Load() {
 		t.Fatal("a rejected recovery stopped waiting for the peer")
 	}
-	if !service.portSRecoveryDeferred.Load() {
-		t.Fatal("a rejected recovery left repeated recovery armed for this binding")
+	if _, waiting := service.portSRecoveryDeadline(time.Now()); !waiting {
+		t.Fatal("a rejected recovery did not enter RFC 5626 backoff")
 	}
 	if service.reRegisterPending.Load() {
 		t.Fatal("keeping the binding still scheduled another REGISTER")
@@ -236,6 +252,56 @@ func TestFailedPortSRecoveryKeepsRegistrationWhenFlowIntact(t *testing.T) {
 	service.mu.RUnlock()
 	if !next.After(time.Now().Add(30 * time.Second)) {
 		t.Fatalf("next REGISTER = %s, want the original refresh", next)
+	}
+}
+
+func TestFailedRefreshCannotRestoreAClosedRegistrationFlow(t *testing.T) {
+	service := newProtectedKeepaliveTestService(t)
+	client, server := net.Pipe()
+	t.Cleanup(func() {
+		_ = client.Close()
+		_ = server.Close()
+	})
+	service.mu.Lock()
+	service.registrationTransport = "tcp"
+	service.registrationTCP = client
+	service.mu.Unlock()
+	err := registrationResponseError(&sipResponse{StatusCode: 503}, true)
+	if !service.keepRegistrationAfterFailedRefresh(true, err) {
+		t.Fatal("test setup did not start with a preservable flow")
+	}
+
+	service.mu.Lock()
+	service.registrationTransport = ""
+	service.registrationTCP = nil
+	service.mu.Unlock()
+	if service.restoreRegistrationAfterFailedRefresh(err) {
+		t.Fatal("closed registration flow was restored as registered")
+	}
+}
+
+func TestRegisterDeadlineCanPreserveAnIntactRegistrationFlow(t *testing.T) {
+	service := newProtectedKeepaliveTestService(t)
+	client, server := net.Pipe()
+	t.Cleanup(func() {
+		_ = client.Close()
+		_ = server.Close()
+	})
+	service.mu.Lock()
+	service.registrationTransport = "tcp"
+	service.registrationTCP = client
+	service.mu.Unlock()
+	service.portSReconnectWaiting.Store(true)
+	service.portSRecoveryPending.Store(true)
+
+	if !service.keepRegistrationAfterFailedRefresh(true, context.DeadlineExceeded) {
+		t.Fatal("REGISTER deadline tore down an intact registration flow")
+	}
+	if !service.restoreRegistrationAfterFailedRefresh(context.DeadlineExceeded) {
+		t.Fatal("REGISTER deadline did not preserve the intact registration flow")
+	}
+	if _, waiting := service.portSRecoveryDeadline(time.Now()); !waiting {
+		t.Fatal("REGISTER deadline did not enter RFC 5626 flow-recovery backoff")
 	}
 }
 
@@ -811,8 +877,8 @@ func TestPeerReconnectAfterRejectedRecoveryEnablesOnDemandMode(t *testing.T) {
 	if service.portSOnDemandObserved.Load() {
 		t.Fatal("503 alone enabled on-demand mode")
 	}
-	if !service.portSRecoveryDeferred.Load() {
-		t.Fatal("503 did not defer repeated recovery for this binding")
+	if _, waiting := service.portSRecoveryDeadline(time.Now()); !waiting {
+		t.Fatal("503 did not back off repeated recovery for this binding")
 	}
 
 	client, server := net.Pipe()
@@ -826,8 +892,8 @@ func TestPeerReconnectAfterRejectedRecoveryEnablesOnDemandMode(t *testing.T) {
 	if !service.portSOnDemandObserved.Load() {
 		t.Fatal("peer reconnect after failed REGISTER did not enable on-demand mode")
 	}
-	if service.portSRecoveryDeferred.Load() {
-		t.Fatal("observed on-demand reconnect kept recovery deferred")
+	if _, waiting := service.portSRecoveryDeadline(time.Now()); waiting {
+		t.Fatal("observed on-demand reconnect kept recovery backoff")
 	}
 	service.untrackProtectedConnection(client)
 	service.handleProtectedServerPushClosed()
@@ -841,10 +907,10 @@ func TestSuccessfulRecoveryDoesNotEnableOnDemandMode(t *testing.T) {
 	service := newProtectedKeepaliveTestService(t)
 	service.portSReconnectWaiting.Store(true)
 	service.portSRecoveryPending.Store(true)
-	service.portSRecoveryDeferred.Store(true)
+	service.recordPortSRecoveryFailure(context.DeadlineExceeded, time.Now())
 	service.completePortSRecovery(nil, true)
-	if service.portSRecoveryDeferred.Load() {
-		t.Fatal("successful REGISTER kept recovery deferred")
+	if _, waiting := service.portSRecoveryDeadline(time.Now()); waiting {
+		t.Fatal("successful REGISTER kept recovery backoff")
 	}
 
 	client, server := net.Pipe()
@@ -864,12 +930,16 @@ func TestAbortedRecoveryClearsPendingState(t *testing.T) {
 	service := newProtectedKeepaliveTestService(t)
 	service.portSReconnectWaiting.Store(true)
 	service.portSRecoveryPending.Store(true)
+	service.recordPortSRecoveryFailure(context.DeadlineExceeded, time.Now())
 
-	service.completePortSRecovery(context.DeadlineExceeded, false)
+	service.completePortSRecovery(context.Canceled, false)
 
 	if service.portSReconnectWaiting.Load() || service.portSRecoveryPending.Load() ||
 		service.portSOnDemandObserved.Load() {
 		t.Fatal("aborted recovery kept stale port-s state")
+	}
+	if _, waiting := service.portSRecoveryDeadline(time.Now()); waiting {
+		t.Fatal("aborted recovery kept stale port-s backoff")
 	}
 }
 
@@ -896,8 +966,8 @@ func TestConnectionDuringFailedRecoveryDoesNotEnableOnDemandMode(t *testing.T) {
 	if service.portSReconnectWaiting.Load() {
 		t.Fatal("completed recovery kept a stale reconnect wait")
 	}
-	if !service.portSRecoveryDeferred.Load() {
-		t.Fatal("failed recovery did not defer another REGISTER for this binding")
+	if _, waiting := service.portSRecoveryDeadline(time.Now()); !waiting {
+		t.Fatal("failed recovery did not back off another REGISTER for this binding")
 	}
 
 	service.untrackProtectedConnection(client)
@@ -905,6 +975,35 @@ func TestConnectionDuringFailedRecoveryDoesNotEnableOnDemandMode(t *testing.T) {
 	time.Sleep(20 * time.Millisecond)
 	if service.reRegisterPending.Load() {
 		t.Fatal("another port-s closure repeated a rejected REGISTER recovery")
+	}
+}
+
+func TestPortSRecoveryBacksOffAllRecoverableFailures(t *testing.T) {
+	for name, recoveryErr := range map[string]error{
+		"transaction timeout":       sip.ErrTransactionTimeout,
+		"REGISTER context deadline": context.DeadlineExceeded,
+		"TCP EOF":                   io.EOF,
+		"SIP 502": registrationResponseError(
+			&sipResponse{StatusCode: 502, Reason: "Bad Gateway"}, true,
+		),
+	} {
+		t.Run(name, func(t *testing.T) {
+			service := newProtectedKeepaliveTestService(t)
+			service.portSReconnectGrace = time.Millisecond
+			service.portSReconnectWaiting.Store(true)
+			service.portSRecoveryPending.Store(true)
+
+			service.completePortSRecovery(recoveryErr, true)
+			if _, waiting := service.portSRecoveryDeadline(time.Now()); !waiting {
+				t.Fatal("recoverable failure did not enter RFC 5626 backoff")
+			}
+
+			service.handleProtectedServerPushClosed()
+			time.Sleep(20 * time.Millisecond)
+			if service.reRegisterPending.Load() {
+				t.Fatal("port-s closure bypassed the active recovery backoff")
+			}
+		})
 	}
 }
 
@@ -932,15 +1031,17 @@ func TestPCSCFFailoverClearsOnDemandPortSKnowledge(t *testing.T) {
 	service := newProtectedKeepaliveTestService(t)
 	service.portSReconnectWaiting.Store(true)
 	service.portSRecoveryPending.Store(true)
-	service.portSRecoveryDeferred.Store(true)
+	service.recordPortSRecoveryFailure(context.DeadlineExceeded, time.Now())
 	service.portSOnDemandObserved.Store(true)
 
 	service.resetRegistrationTransportForRegistrarRetry()
 
 	if service.portSReconnectWaiting.Load() || service.portSRecoveryPending.Load() ||
-		service.portSRecoveryDeferred.Load() ||
 		service.portSOnDemandObserved.Load() {
 		t.Fatal("P-CSCF failover kept port-s recovery knowledge")
+	}
+	if _, waiting := service.portSRecoveryDeadline(time.Now()); waiting {
+		t.Fatal("P-CSCF failover kept port-s recovery backoff")
 	}
 }
 
