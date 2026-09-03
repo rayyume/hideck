@@ -22,9 +22,10 @@ const (
 	imsIPv4LinkMTU   = imsTCPMSS + header.IPv4MinimumSize + header.TCPMinimumSize
 	imsIPv6LinkMTU   = header.IPv6MinimumMTU
 	tcpListenBacklog = 4096
-	// Port-s has no SIP CRLF; keep both IMS TCP 5-tuples at 30s idle.
+	// Port-s has no SIP CRLF. Probe after 30s of silence, then retry quickly
+	// enough to expose a dead reverse flow before the SMSC attempts delivery.
 	imsTCPKeepaliveIdle     = 30 * time.Second
-	imsTCPKeepaliveInterval = 30 * time.Second
+	imsTCPKeepaliveInterval = 5 * time.Second
 	imsTCPKeepaliveProbes   = 3
 )
 

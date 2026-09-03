@@ -236,6 +236,14 @@ func TestConfigureIMSTCPKeepalive(t *testing.T) {
 	}
 }
 
+func TestIMSKeepaliveDeadFlowDetectionFitsSMSRecoveryWindow(t *testing.T) {
+	detectionWindow := imsTCPKeepaliveIdle +
+		imsTCPKeepaliveInterval*time.Duration(imsTCPKeepaliveProbes)
+	if detectionWindow > time.Minute {
+		t.Fatalf("dead-flow detection window = %s, want at most 1m", detectionWindow)
+	}
+}
+
 func assertIPv4UDPPacket(t *testing.T, packet []byte, destination net.IP, payload []byte) {
 	t.Helper()
 	if len(packet) < 28 || packet[0]>>4 != 4 {

@@ -2,10 +2,70 @@ package imscore
 
 import (
 	"errors"
+	"net"
 	"testing"
 
 	"github.com/iniwex5/vowifi-go/internal/vowifi/smsdelivery"
 )
+
+func TestProtectedSMSReadinessRequiresPortSFlow(t *testing.T) {
+	service := newProtectedKeepaliveTestService(t)
+	registration, registrationPeer := net.Pipe()
+	push, pushPeer := net.Pipe()
+	t.Cleanup(func() {
+		_ = registrationPeer.Close()
+		_ = pushPeer.Close()
+	})
+	service.mu.Lock()
+	service.registrationTCP = registration
+	service.registrationTCPProtected = true
+	service.mu.Unlock()
+
+	if got := service.SMSReadiness(); got.ReceiverReady || got.Ready {
+		t.Fatalf("readiness without port-s = %+v", got)
+	}
+	if !service.trackProtectedConnection(push) {
+		t.Fatal("track port-s")
+	}
+	if got := service.SMSReadiness(); !got.ReceiverReady || !got.Ready {
+		t.Fatalf("readiness with port-s = %+v", got)
+	}
+	service.untrackProtectedConnection(push)
+	if got := service.SMSReadiness(); got.ReceiverReady || got.Ready {
+		t.Fatalf("readiness after port-s closed = %+v", got)
+	}
+	service.portSRecoveryRejected.Store(true)
+	if got := service.SMSReadiness(); !got.ReceiverReady || !got.Ready {
+		t.Fatalf("on-demand port-s listener readiness = %+v", got)
+	}
+}
+
+func TestProtectedSMSReadyCallbackWaitsForPortSFlow(t *testing.T) {
+	service := newProtectedKeepaliveTestService(t)
+	service.regStatus.Store(registrationRegistered)
+	registration, registrationPeer := net.Pipe()
+	push, pushPeer := net.Pipe()
+	t.Cleanup(func() {
+		_ = registrationPeer.Close()
+		_ = pushPeer.Close()
+	})
+	service.mu.Lock()
+	service.registrationTCP = registration
+	service.registrationTCPProtected = true
+	service.mu.Unlock()
+
+	called := 0
+	service.SetOnSMSReady(func() { called++ })
+	if called != 0 {
+		t.Fatalf("callback before port-s = %d", called)
+	}
+	if !service.trackProtectedConnection(push) {
+		t.Fatal("track port-s")
+	}
+	if called != 1 {
+		t.Fatalf("callback after port-s = %d, want 1", called)
+	}
+}
 
 func TestEvaluateSMSReadinessRequiresEveryPrerequisite(t *testing.T) {
 	tests := []struct {

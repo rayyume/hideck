@@ -184,6 +184,7 @@ type Service struct {
 	protectedConns            map[net.Conn]struct{}
 	portSReconnectGrace       time.Duration
 	portSLastReadAt           atomic.Int64
+	portSPushReady            atomic.Bool
 	portSRecoveryPending      atomic.Bool
 	portSRecoveryRejected     atomic.Bool
 	portSWatchMu              sync.Mutex

@@ -367,8 +367,12 @@ func (s *Service) trackProtectedConnection(conn net.Conn) bool {
 		return false
 	default:
 		s.protectedConns[conn] = struct{}{}
+		changed := !s.portSPushReady.Swap(true)
 		s.protectedConnMu.Unlock()
 		s.cancelPortSReconnectWatch()
+		if changed {
+			s.notifySMSReadiness()
+		}
 		return true
 	}
 }
@@ -376,7 +380,12 @@ func (s *Service) trackProtectedConnection(conn net.Conn) bool {
 func (s *Service) untrackProtectedConnection(conn net.Conn) {
 	s.protectedConnMu.Lock()
 	delete(s.protectedConns, conn)
+	empty := len(s.protectedConns) == 0
+	changed := empty && s.portSPushReady.Swap(false)
 	s.protectedConnMu.Unlock()
+	if changed {
+		s.notifySMSReadiness()
+	}
 }
 
 func (s *Service) readRegistrationStream(conn net.Conn) {

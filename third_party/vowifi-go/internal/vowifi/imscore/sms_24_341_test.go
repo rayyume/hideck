@@ -144,6 +144,28 @@ func TestNotifySMSMemoryAvailableRetriesRejectedFinalResponses(t *testing.T) {
 	}
 }
 
+func TestRejectedRPReportDoesNotSendMemoryAvailable(t *testing.T) {
+	service, _, _ := newInboundSMSTestService(t)
+	var kinds []smscodec.RPDUKind
+	service.transport.SetSendFn(func(request string) error {
+		body, err := rawSIPBody(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		kinds = append(kinds, smscodec.ClassifyRPDU(body).Kind)
+		service.transport.DeliverResponse(registerResponseForRequest(request, 488, nil))
+		return nil
+	})
+	raw := inboundSMSRequest(t, imsSMSContentType,
+		inboundRPData(t, 0x41, "+447700900123", "rejected report"))
+	service.sendRPReportWithRetry(rpReportRequest{
+		Inbound: raw, Body: smscodec.BuildRPAck(0x41), RPMR: 0x41,
+	})
+	if len(kinds) != 1 || kinds[0] != smscodec.RPDUKindAck {
+		t.Fatalf("outbound RPDU kinds = %v, want only RP-ACK", kinds)
+	}
+}
+
 func TestNotifySMSMemoryAvailableAbortOnStop(t *testing.T) {
 	service, _, _ := newInboundSMSTestService(t)
 	service.rememberSMSMemoryDenied(

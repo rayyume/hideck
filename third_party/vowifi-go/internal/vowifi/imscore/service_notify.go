@@ -16,7 +16,9 @@ func (s *Service) maybeNotifySMSReady(reason string) {
 		return
 	}
 	s.mu.Lock()
+	pushReady := !s.protectedSMSPushRequiredLocked() || s.portSPushReady.Load()
 	ready := !s.smsReadyNotified && s.smsReceiverReady &&
+		pushReady &&
 		strings.TrimSpace(s.cfg.SMSC) != "" &&
 		s.regStatus.Load() == registrationRegistered
 	if !ready {

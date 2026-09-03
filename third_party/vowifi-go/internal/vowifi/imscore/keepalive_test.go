@@ -16,8 +16,8 @@ func TestProtectedSIPStreamClosureInvalidatesRegistration(t *testing.T) {
 	client, server := net.Pipe()
 	defer server.Close()
 	service.activateProtectedRegistrationTCP(client)
-	if readiness := service.SMSReadiness(); !readiness.Ready {
-		t.Fatalf("initial readiness = %+v", readiness)
+	if readiness := service.SMSReadiness(); !readiness.TransportReady {
+		t.Fatalf("initial transport readiness = %+v", readiness)
 	}
 	if err := server.Close(); err != nil {
 		t.Fatal(err)

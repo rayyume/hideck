@@ -23,12 +23,22 @@ func (s *Service) SMSReadiness() SMSReadiness {
 		strings.TrimSpace(s.regSession.contactUser) != ""
 	transportReady := registered && s.registeredSIPTransportReadyLocked()
 	receiverReady := s.smsReceiverReady
+	if s.protectedSMSPushRequiredLocked() {
+		receiverReady = receiverReady && s.portSPushReady.Load()
+	}
 	smsc := ""
 	if s.cfg != nil {
 		smsc = s.cfg.SMSC
 	}
 	s.mu.RUnlock()
 	return evaluateSMSReadiness(registered, profileReady, transportReady, receiverReady, smsc)
+}
+
+func (s *Service) protectedSMSPushRequiredLocked() bool {
+	return !s.externalTransport && !s.portSRecoveryRejected.Load() &&
+		s.regSession != nil &&
+		s.regSession.security != nil &&
+		strings.TrimSpace(s.regSession.security.verifyHeader) != ""
 }
 
 // SetOnSMSReadinessChanged installs the readiness observer and immediately
