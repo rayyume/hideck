@@ -482,6 +482,18 @@ func TestModemRebootRecoveryKeepsControlReadyWorkerOnTransientIdentityFailure(t 
 	}
 }
 
+func TestModemRebootRecoveryKeepsQMICoreStartingWorkerWhenIdentityEmpty(t *testing.T) {
+	w := &Worker{ID: "dev-1"}
+	w.markQMICoreStarting()
+	err := errors.New("refresh_identity: live_identity_empty")
+	opts := defaultModemRebootRecoveryOptions("dev-1", "qmi_health_threshold")
+	opts.removeBeforeScan = true
+
+	if modemRebootRecoveryShouldRebuildAfterReadinessFailureForWorker(opts, w, err) {
+		t.Fatal("QMI core starting worker must not be torn down for empty identity")
+	}
+}
+
 func TestModemRebootRecoveryKeepsControlReadyWorkerWhenIdentityEmpty(t *testing.T) {
 	p := NewPool(&config.Config{})
 	defer p.cancel()

@@ -131,6 +131,12 @@ func TestQMITransportDownOverridesNativeVoLTECallSuppression(t *testing.T) {
 	if !qmiTransportDownOverridesSuppression(true, "registration_reconcile_in_flight") {
 		t.Fatal("broken pipe during NAS reconcile should rebuild; the reconcile cannot succeed on a dead socket")
 	}
+	if !qmiTransportDownOverridesSuppression(true, "qmi_core_starting") {
+		t.Fatal("broken pipe while QMI core is starting should rebuild")
+	}
+	if qmiTransportDownOverridesSuppression(false, "qmi_core_starting") {
+		t.Fatal("QMI core starting without transport-down must stay suppressed")
+	}
 }
 
 func TestRunHealthCheckTickStillWaitsForThresholdOnTransientError(t *testing.T) {

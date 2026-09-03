@@ -445,6 +445,9 @@ func modemRebootRecoveryShouldRebuildAfterReadinessFailureForWorker(opts modemRe
 	if err == nil {
 		return false
 	}
+	if worker != nil && worker.isQMICoreStarting() {
+		return false
+	}
 	if qmiWorkerControlReady(worker) {
 		message := strings.ToLower(err.Error())
 		for _, fragment := range []string{
@@ -696,6 +699,14 @@ func (p *Pool) runModemRebootRecovery(opts modemRebootRecoveryOptions) {
 							"round", round+1,
 							"err", removeErr)
 					}
+				} else if worker.isQMICoreStarting() {
+					logger.Info("模组重启恢复：QMI Core 仍在启动，SIM 身份转入后台收敛",
+						"device", opts.deviceID,
+						"round", round+1,
+						"reason", opts.reason,
+						"err", err)
+					p.startQMIIdentityConvergence(worker, opts.reason)
+					return
 				} else if modemRebootRecoveryShouldRebuildAfterReadinessFailureForWorker(opts, worker, err) {
 					logger.Warn("模组重启恢复检测到半就绪 Worker，移除后等待下一轮重新接管",
 						"device", opts.deviceID,
@@ -718,6 +729,13 @@ func (p *Pool) runModemRebootRecovery(opts modemRebootRecoveryOptions) {
 					return
 				}
 				continue
+			}
+			if worker.isQMICoreStarting() && !qmiWorkerControlReady(worker) {
+				logger.Info("模组重启恢复：SIM 身份已就绪，等待 QMI Core 完成后台启动",
+					"device", opts.deviceID,
+					"round", round+1,
+					"reason", opts.reason)
+				return
 			}
 			logger.Info("模组重启恢复成功", "device", opts.deviceID, "round", round+1)
 			p.markQMIControlRecovered(worker, opts.reason)

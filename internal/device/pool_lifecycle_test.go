@@ -52,6 +52,30 @@ func TestSuppressQMIUnhealthyEvictionAfterLifecycleDeadline(t *testing.T) {
 	}
 }
 
+func TestSuppressQMIUnhealthyEvictionWhileQMICoreStarting(t *testing.T) {
+	pool := NewPool(&config.Config{})
+	worker := &Worker{
+		ID: "dev1",
+		Config: config.DeviceConfig{
+			ID:            "dev1",
+			DeviceBackend: backend.BackendQMI,
+			ControlDevice: "/dev/cdc-wdm0",
+		},
+		Backend: &workerStatusBackendStub{mode: backend.BackendQMI, opModeErr: errBackendUnavailable{}},
+	}
+	worker.markQMICoreStarting()
+	now := time.Now().Add(-2 * qmiLifecycleRecoveryTTL)
+	pool.lifecycle.BeginRecoveryAt("dev1", LifecyclePhaseQMIStarting, "qmi_start_core", now, time.Second)
+
+	suppressed, reason := pool.suppressQMIUnhealthyEviction(worker)
+	if !suppressed {
+		t.Fatal("expected qmi core starting to suppress eviction after lifecycle deadline")
+	}
+	if reason != "qmi_core_starting" {
+		t.Fatalf("reason=%q want qmi_core_starting", reason)
+	}
+}
+
 type errBackendUnavailable struct{}
 
 func (errBackendUnavailable) Error() string { return "backend unavailable" }

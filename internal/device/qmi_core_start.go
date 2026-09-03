@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/yibaiba/hideck/pkg/logger"
@@ -57,9 +58,8 @@ func (p *Pool) startQMICoreWithStartupBudget(worker *Worker, reason string) erro
 	if worker == nil || worker.QMICore == nil {
 		return nil
 	}
-	if p.lifecycle != nil {
-		p.lifecycle.BeginRecovery(worker.ID, LifecyclePhaseQMIStarting, reason, qmiLifecycleRecoveryTTL)
-	}
+	worker.markQMICoreStarting()
+	p.markQMILifecycleStarting(worker, reason)
 
 	result := runQMIStartCoreAttempt(p.ctx, worker.QMICore.StartCoreContext, qmiCoreStartupInlineBudget)
 	if result.err == nil {
@@ -67,11 +67,13 @@ func (p *Pool) startQMICoreWithStartupBudget(worker *Worker, reason string) erro
 		if _, resetErr := p.resetExistingQMIDataConnectionBeforePreference(worker, reason); resetErr != nil {
 			logger.Warn(fmt.Sprintf("[%s] QMI Core 启动后清理已有数据连接失败，继续启动", worker.ID), "err", resetErr)
 		}
+		worker.clearQMICoreStarting()
 		p.markQMIControlRecovered(worker, reason)
 		logger.Debug(fmt.Sprintf("[%s] QMI Core 已启动，网络偏好将异步应用", worker.ID))
 		return nil
 	}
 	if result.abort {
+		worker.clearQMICoreStarting()
 		return result.err
 	}
 
@@ -82,11 +84,22 @@ func (p *Pool) startQMICoreWithStartupBudget(worker *Worker, reason string) erro
 	return nil
 }
 
+func (p *Pool) markQMILifecycleStarting(worker *Worker, reason string) {
+	if p == nil || worker == nil || p.lifecycle == nil {
+		return
+	}
+	if reason = strings.TrimSpace(reason); reason == "" {
+		reason = "qmi_start_core"
+	}
+	p.lifecycle.BeginRecovery(worker.ID, LifecyclePhaseQMIStarting, reason, qmiLifecycleRecoveryTTL)
+}
+
 func (p *Pool) startQMICoreRetryLoop(worker *Worker) {
 	if worker == nil || worker.QMICore == nil {
 		return
 	}
 	go func() {
+		defer worker.clearQMICoreStarting()
 		delay := 2 * time.Second
 		for {
 			select {
@@ -105,6 +118,7 @@ func (p *Pool) startQMICoreRetryLoop(worker *Worker) {
 			default:
 			}
 
+			p.markQMILifecycleStarting(worker, "qmi_start_core")
 			if err := runQMIStartCoreRetryAttempt(p.ctx, worker.QMICore.StartCoreContext, qmiCoreRetryAttemptBudget); err == nil {
 				logger.Info(fmt.Sprintf("[%s] QMI Core 已恢复启动", worker.ID))
 				cleanupWorkerStartupSIMAuthLogicalChannels(worker)
@@ -113,6 +127,7 @@ func (p *Pool) startQMICoreRetryLoop(worker *Worker) {
 				} else {
 					p.applyAfterQMIControlReady(worker, "qmi_core_recovered")
 				}
+				worker.clearQMICoreStarting()
 				p.markQMIControlRecovered(worker, "qmi_core_recovered")
 				return
 			} else {

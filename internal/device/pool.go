@@ -143,6 +143,7 @@ type Worker struct {
 	qmiRegistrationMu       sync.Mutex
 	qmiRegistrationInFlight bool
 	qmiRegistrationRun      *registrationReconcileRun
+	qmiCoreStarting         atomic.Bool
 	cellularRadioSuppressed atomic.Bool
 
 	operatorScanMu      sync.Mutex
@@ -661,6 +662,38 @@ func (w *Worker) refreshIdentityLive(ctx context.Context, reason string) (liveSI
 			logger.Debug("读取 SIM 归属 MCC/MNC 失败", "device", w.ID, "reason", reason, "err", err)
 		}
 	}
+	imei := ""
+	if iccid == "" && imsi == "" {
+		if ident, atErr := probeWorkerATIdentity(ctx, w); atErr == nil {
+			iccid = strings.TrimSpace(ident.ICCID)
+			imsi = strings.TrimSpace(ident.IMSI)
+			imei = strings.TrimSpace(ident.IMEI)
+			if iccid != "" || imsi != "" {
+				logger.Info("QMI 身份未就绪，已用 AT 口回退读取 SIM",
+					"device", w.ID, "reason", reason, "at", w.ResolvedATPort())
+			}
+		} else if atErr != nil && !errors.Is(atErr, errATIdentityUnavailable) {
+			logger.Debug("AT 身份回退失败", "device", w.ID, "reason", reason, "err", atErr)
+		}
+	}
+	if imei == "" {
+		imei = strings.TrimSpace(w.Config.ModemIMEI)
+	}
+	if (simMetadata == nil || strings.TrimSpace(simMetadata.NativeMCC) == "" ||
+		strings.TrimSpace(simMetadata.NativeMNC) == "") && imsi != "" {
+		if mcc, mnc, _, _, err := modem.HomeMCCMNCFromIMSIAndEFAD(imsi, nil); err == nil {
+			if simMetadata == nil {
+				simMetadata = &backend.SIMMetadata{}
+			}
+			if strings.TrimSpace(simMetadata.NativeMCC) == "" {
+				simMetadata.NativeMCC = mcc
+			}
+			if strings.TrimSpace(simMetadata.NativeMNC) == "" {
+				simMetadata.NativeMNC = mnc
+			}
+			metadataReadOK = true
+		}
+	}
 	result := liveSIMIdentityRefreshResult{ICCID: iccid, IMSI: imsi}
 	if iccid == "" && imsi == "" && nativeSPN == "" && !hasSIMMetadata(simMetadata) {
 		return result, fmt.Errorf("live_identity_empty")
@@ -687,6 +720,9 @@ func (w *Worker) refreshIdentityLive(ctx context.Context, reason string) (liveSI
 	}
 	if imsi != "" {
 		w.state.Identity.IMSI = imsi
+	}
+	if imei != "" {
+		w.state.Identity.IMEI = imei
 	}
 	if nativeSPN != "" {
 		w.state.Identity.NativeSPN = nativeSPN

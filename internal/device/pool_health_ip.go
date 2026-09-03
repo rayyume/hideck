@@ -30,6 +30,9 @@ func (p *Pool) suppressQMIUnhealthyEviction(worker *Worker) (bool, string) {
 	if registrationInFlight {
 		return true, "registration_reconcile_in_flight"
 	}
+	if worker.isQMICoreStarting() {
+		return true, "qmi_core_starting"
+	}
 	if p != nil && p.lifecycle != nil {
 		if canEvict, reason := p.lifecycle.CanEvict(worker.ID, time.Now()); !canEvict {
 			return true, reason
@@ -68,7 +71,7 @@ func qmiTransportDownOverridesSuppression(transportDown bool, reason string) boo
 		return false
 	}
 	switch reason {
-	case "native_volte_call", "native_volte_usb_quiet", "registration_reconcile_in_flight":
+	case "native_volte_call", "native_volte_usb_quiet", "registration_reconcile_in_flight", "qmi_core_starting":
 		return true
 	default:
 		return false
