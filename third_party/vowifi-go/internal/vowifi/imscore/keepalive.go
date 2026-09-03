@@ -37,6 +37,12 @@ const (
 	imsKeepaliveFailureLimit       = 3
 	imsMaintenancePollInterval     = 5 * time.Second
 	imsMaintenanceMinimumDelay     = 100 * time.Millisecond
+	// Wait this long for the P-CSCF to reopen port-s before RFC 5626 flow
+	// recovery. Long enough for a network that reopens the flow on demand to
+	// do so untouched; on Vodafone UK it never has, measured once over 4m
+	// with an MT SMS queued and once over 12m35s, so the wait is the whole
+	// window in which MT SMS is undeliverable and must not grow further.
+	defaultPortSReconnectGrace     = 30 * time.Second
 	imsLongRegistrationThreshold   = 1200 * time.Second
 	imsLongRegistrationRefreshLead = 600 * time.Second
 	imsSubscriptionRefreshAdvance  = 60 * time.Second
@@ -290,72 +296,34 @@ func registrationRefreshDelay(expires time.Duration) time.Duration {
 	return time.Second
 }
 
+// sendIMSKeepalive pings only the flow this UA opened. RFC 5626 4.4.1 gives
+// keepalives to the client that registered the flow, so port-s — which the
+// P-CSCF dials to us — is the peer's to maintain. Pinging it anyway got no
+// pong across 582 writes over 39m and did not stop the flow from dying, so
+// the writes only cost a wakeup and reset our own keepalive idle timer.
 func (s *Service) sendIMSKeepalive() error {
 	if conn := s.liveRegistrationTCP(); conn != nil {
-		err := s.sendTCPCRLFKeepalive(conn)
-		s.sendProtectedFlowCRLFKeepalives(conn)
-		return err
+		return s.sendTCPCRLFKeepalive(conn)
 	}
-	s.sendProtectedFlowCRLFKeepalives(nil)
 	return s.sendSTUNKeepalive()
 }
 
-func (s *Service) sendProtectedFlowCRLFKeepalives(skip net.Conn) {
-	for _, conn := range s.snapshotProtectedConns() {
-		if conn == nil || conn == skip {
-			continue
-		}
-		if err := s.writeTCPCRLF(conn); err != nil {
-			s.portSWriteErr.Add(1)
-			// The push flow carries MT SMS, so a write that stops landing is
-			// the first sign the network can no longer reach us.
-			logging.WarnRate("ims-ports-crlf-"+s.DeviceID(), 30*time.Second,
-				"IMS port-s CRLF keepalive write failed",
-				"device", s.DeviceID(), "err", err,
-				"ok_writes", s.portSWriteOK.Load(),
-				"failed_writes", s.portSWriteErr.Load())
-			continue
-		}
-		s.portSWriteOK.Add(1)
-		s.portSLastWriteOKAt.Store(time.Now().UnixNano())
-	}
-}
-
-// resetPortSFlowStats starts the counters over for a freshly accepted flow.
-// The read clock starts at the accept so silence is measured from the moment
-// the flow existed rather than from the first byte the peer happens to send.
-func (s *Service) resetPortSFlowStats() {
+// resetPortSReadClock starts the read clock over for a freshly accepted flow,
+// measuring silence from the moment the flow existed rather than from the
+// first byte the peer happens to send.
+func (s *Service) resetPortSReadClock() {
 	if s == nil {
 		return
 	}
-	s.portSWriteOK.Store(0)
-	s.portSWriteErr.Store(0)
-	s.portSLastWriteOKAt.Store(0)
 	s.portSLastReadAt.Store(time.Now().UnixNano())
 }
 
-// portSLastWriteOKAge reports how long ago a CRLF keepalive last left for the
-// push flow. A reset that arrives while writes are still landing means the
-// peer answered at the TCP level and tore the flow down deliberately. Zero
-// means no write has landed yet, which the ok_writes count logged alongside
-// it distinguishes from a write that just went out.
-func (s *Service) portSLastWriteOKAge() time.Duration {
-	if s == nil {
-		return 0
-	}
-	at := s.portSLastWriteOKAt.Load()
-	if at == 0 {
-		return 0
-	}
-	return time.Since(time.Unix(0, at)).Round(time.Microsecond)
-}
-
 // portSSinceLastRead reports how long the push flow has received nothing.
-// Zero means no flow is being tracked yet. This is diagnostics only: the
-// P-CSCF runs no CRLF ping/pong on port-s, so a healthy flow measured over
-// 234 idle windows stayed silent for a median of 60s and up to 48m. Silence
-// therefore cannot tell a dead flow from an idle one, and the flow instead
-// ends with a peer RST while our writes are still landing.
+// Zero means no flow is being tracked yet. This is diagnostics only: nothing
+// pings port-s in either direction, so a healthy flow measured over 234 idle
+// windows stayed silent for a median of 60s and up to 48m. Silence therefore
+// cannot tell a dead flow from an idle one; the flow instead ends with a peer
+// RST, drawn by our TCP keepalive probe once the peer has dropped its state.
 func (s *Service) portSSinceLastRead() time.Duration {
 	if s == nil {
 		return 0

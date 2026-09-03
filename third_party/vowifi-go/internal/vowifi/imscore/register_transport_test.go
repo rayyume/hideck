@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -669,8 +670,24 @@ func sipHeaderValue(message, name string) string {
 	return ""
 }
 
-func TestProtectedServerPushClosureDoesNotReRegister(t *testing.T) {
+func waitForPortSCondition(t *testing.T, condition func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for !condition() {
+		if time.Now().After(deadline) {
+			t.Fatal("timed out waiting for the port-s flow condition")
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+// port-s carries every MT SMS and nothing else reports it gone, so a closure
+// the P-CSCF does not replace within the grace has to fall back to RFC 5626
+// flow recovery. Measured on Vodafone UK: 4m with an MT SMS queued and 12m35s
+// idle both passed without the peer reopening the flow on its own.
+func TestProtectedServerPushClosureRecoversTheFlow(t *testing.T) {
 	service := newProtectedKeepaliveTestService(t)
+	service.portSReconnectGrace = time.Millisecond
 	service.mu.Lock()
 	service.registrationRefreshAt = time.Now().Add(time.Hour)
 	service.mu.Unlock()
@@ -685,68 +702,47 @@ func TestProtectedServerPushClosureDoesNotReRegister(t *testing.T) {
 	}
 	service.untrackProtectedConnection(client)
 	service.handleProtectedServerPushClosed()
-	time.Sleep(20 * time.Millisecond)
-	if service.reRegisterPending.Load() {
-		t.Fatal("port-s close scheduled re-REGISTER")
+	waitForPortSCondition(t, func() bool { return service.reRegisterPending.Load() })
+	if !service.portSRecoveryPending.Load() {
+		t.Fatal("recovery REGISTER was not marked for outcome tracking")
 	}
 	if service.RegState() != regRegistered {
 		t.Fatalf("outbound registration dropped: %s", service.RegState())
 	}
 }
 
-// A reset that arrives while CRLF keepalives are still landing tells us the
-// peer was reachable and tore the flow down, so the counters have to survive
-// until the closure is logged and only then start over.
-func TestPortSWriteStatsRecordKeepaliveLiveness(t *testing.T) {
+// A network that answers flow recovery with a failure gets it retired: the
+// flow was already gone, so the refresh cost a working registration for
+// nothing and would do so again on every closure (2degrees 503, hideck#9).
+func TestRejectedPortSRecoveryRetiresTheFallback(t *testing.T) {
 	service := newProtectedKeepaliveTestService(t)
-	service.portSReconnectGrace = time.Hour
+	service.portSReconnectGrace = time.Millisecond
+
+	service.portSRecoveryPending.Store(true)
+	service.notePortSRecoveryOutcome(nil)
+	if service.portSRecoveryRejected.Load() {
+		t.Fatal("a successful recovery retired the fallback")
+	}
+
+	service.portSRecoveryPending.Store(true)
+	service.notePortSRecoveryOutcome(errors.New("imscore: REGISTER rejected with SIP status 503"))
+	if !service.portSRecoveryRejected.Load() {
+		t.Fatal("a rejected recovery left the fallback armed")
+	}
 
 	client, server := net.Pipe()
 	t.Cleanup(func() {
 		_ = client.Close()
 		_ = server.Close()
 	})
-	go func() {
-		buf := make([]byte, 8)
-		for {
-			if _, err := server.Read(buf); err != nil {
-				return
-			}
-		}
-	}()
 	if !service.trackProtectedConnection(client) {
 		t.Fatal("trackProtectedConnection")
 	}
-
-	service.sendProtectedFlowCRLFKeepalives(nil)
-	if ok := service.portSWriteOK.Load(); ok != 1 {
-		t.Fatalf("ok_writes = %d, want 1", ok)
-	}
-	if failed := service.portSWriteErr.Load(); failed != 0 {
-		t.Fatalf("failed_writes = %d, want 0", failed)
-	}
-	if service.portSLastWriteOKAt.Load() == 0 {
-		t.Fatal("a landed write left no timestamp to age from")
-	}
-	if age := service.portSLastWriteOKAge(); age > time.Minute {
-		t.Fatalf("since_last_write_ok = %s, want a fresh timestamp", age)
-	}
-
-	_ = client.Close()
-	service.sendProtectedFlowCRLFKeepalives(nil)
-	if failed := service.portSWriteErr.Load(); failed != 1 {
-		t.Fatalf("failed_writes after close = %d, want 1", failed)
-	}
-
-	service.resetPortSFlowStats()
-	if service.portSWriteOK.Load() != 0 || service.portSWriteErr.Load() != 0 {
-		t.Fatal("a new flow reused the previous flow's counters")
-	}
-	if age := service.portSLastWriteOKAge(); age != 0 {
-		t.Fatalf("since_last_write_ok = %s, want zero for an unwritten flow", age)
-	}
-	if service.portSLastReadAt.Load() == 0 {
-		t.Fatal("a fresh flow left no read clock to measure silence from")
+	service.untrackProtectedConnection(client)
+	service.handleProtectedServerPushClosed()
+	time.Sleep(20 * time.Millisecond)
+	if service.reRegisterPending.Load() {
+		t.Fatal("a retired fallback still scheduled re-REGISTER")
 	}
 }
 
@@ -755,7 +751,7 @@ func TestPortSWriteStatsRecordKeepaliveLiveness(t *testing.T) {
 func TestPortSReadClockTracksOnlyThePushFlow(t *testing.T) {
 	service := newProtectedKeepaliveTestService(t)
 
-	service.resetPortSFlowStats()
+	service.resetPortSReadClock()
 	if silence := service.portSSinceLastRead(); silence > time.Minute {
 		t.Fatalf("since_last_read = %s, want a fresh clock", silence)
 	}
@@ -801,8 +797,9 @@ func TestProtectedServerPushClosureKeepsOtherInboundFlows(t *testing.T) {
 	}
 }
 
-func TestServeProtectedSIPConnectionDoesNotReRegisterOnReset(t *testing.T) {
+func TestServeProtectedSIPConnectionRecoversTheFlowOnReset(t *testing.T) {
 	service := newProtectedKeepaliveTestService(t)
+	service.portSReconnectGrace = time.Millisecond
 	service.mu.Lock()
 	service.registrationRefreshAt = time.Now().Add(time.Hour)
 	service.mu.Unlock()
@@ -826,17 +823,15 @@ func TestServeProtectedSIPConnectionDoesNotReRegisterOnReset(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("serveProtectedSIPConnection did not return after reset")
 	}
-	time.Sleep(20 * time.Millisecond)
+	waitForPortSCondition(t, func() bool { return service.reRegisterPending.Load() })
 	if service.RegState() != regRegistered {
 		t.Fatalf("outbound registration dropped: %s", service.RegState())
-	}
-	if service.reRegisterPending.Load() {
-		t.Fatal("closed port-s flow scheduled re-REGISTER")
 	}
 }
 
 func TestProtectedServerPushClosureSkipsReRegisterWhenReplaced(t *testing.T) {
 	service := newProtectedKeepaliveTestService(t)
+	service.portSReconnectGrace = time.Hour
 	service.mu.Lock()
 	service.registrationRefreshAt = time.Now().Add(time.Hour)
 	service.mu.Unlock()

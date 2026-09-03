@@ -161,7 +161,10 @@ func TestProtectedTCPKeepaliveSendsRFC5626CRLF(t *testing.T) {
 	}
 }
 
-func TestPortSFlowGetsRFC5626CRLFKeepalive(t *testing.T) {
+// RFC 5626 4.4.1 keepalives belong to the client that opened the flow, and
+// port-s is dialed to us by the P-CSCF. Pinging it drew no pong across 582
+// writes over 39m and never kept the flow alive, so nothing may go out on it.
+func TestPortSFlowGetsNoCRLFKeepalive(t *testing.T) {
 	service := newProtectedKeepaliveTestService(t)
 	regClient, regServer := net.Pipe()
 	defer regServer.Close()
@@ -171,18 +174,12 @@ func TestPortSFlowGetsRFC5626CRLFKeepalive(t *testing.T) {
 	if !service.trackProtectedConnection(pushClient) {
 		t.Fatal("trackProtectedConnection")
 	}
-	done := make(chan error, 1)
+	pushed := make(chan []byte, 1)
 	go func() {
 		buf := make([]byte, 4)
-		if _, err := io.ReadFull(pushServer, buf); err != nil {
-			done <- err
-			return
+		if n, err := pushServer.Read(buf); err == nil {
+			pushed <- buf[:n]
 		}
-		if string(buf) != "\r\n\r\n" {
-			done <- fmt.Errorf("port-s CRLF = %q", buf)
-			return
-		}
-		done <- nil
 	}()
 	go func() {
 		buf := make([]byte, 4)
@@ -192,12 +189,9 @@ func TestPortSFlowGetsRFC5626CRLFKeepalive(t *testing.T) {
 		t.Fatalf("sendIMSKeepalive: %v", err)
 	}
 	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatal(err)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("port-s did not receive RFC 5626 CRLF")
+	case got := <-pushed:
+		t.Fatalf("port-s received %q, want nothing", got)
+	case <-time.After(200 * time.Millisecond):
 	}
 }
 

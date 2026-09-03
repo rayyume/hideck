@@ -92,13 +92,6 @@ func (s *Service) logInboundStatsSnapshot(stats inboundStatsSnapshot) {
 		"sip_parsed_messages", stats.SIPParsedMessages,
 		"sip_parsed_requests", stats.SIPParsedRequests,
 		"sip_parsed_responses", stats.SIPParsedResponses,
-		// Outbound side of the same push flow: without it a silently dead
-		// port-s looks the same as an idle healthy one. Writes alone are not
-		// enough though, since they keep landing on a dead flow, so the read
-		// clock below is what actually distinguishes the two.
-		"ports_write_ok", s.portSWriteOK.Load(),
-		"ports_write_failed", s.portSWriteErr.Load(),
-		"ports_since_last_write_ok", s.portSLastWriteOKAge(),
 		"ports_since_last_read", s.portSSinceLastRead())
 }
 

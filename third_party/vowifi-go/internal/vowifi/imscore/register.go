@@ -137,10 +137,12 @@ func (s *Service) registerLocked(ctx context.Context) error {
 		s.mu.Unlock()
 		if !isRegisterOperationCanceled(err) {
 			s.applyRegistrationFailureStatus(err)
+			s.notePortSRecoveryOutcome(err)
 		}
 		s.notifySMSReadiness()
 		return err
 	}
+	s.portSRecoveryPending.Store(false)
 	s.mu.Lock()
 	s.regState = regRegistered
 	s.lastError = ""

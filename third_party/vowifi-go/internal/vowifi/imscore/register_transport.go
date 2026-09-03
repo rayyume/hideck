@@ -249,7 +249,7 @@ func (s *Service) acceptProtectedSIP(listener net.Listener) {
 			_ = conn.Close()
 			return
 		}
-		s.resetPortSFlowStats()
+		s.resetPortSReadClock()
 		s.networkDone.Add(1)
 		go s.serveProtectedSIPConnection(conn)
 	}
@@ -267,11 +267,14 @@ func (s *Service) serveProtectedSIPConnection(conn net.Conn) {
 	}
 }
 
-// handleProtectedServerPushClosed keeps the protected registration alive when
-// the last P-CSCF-initiated portS connection ends. portS is a reverse,
-// on-demand flow: it can be reopened when the P-CSCF has downlink SIP traffic.
-// Re-registering here is harmful on networks that reject a refresh over the
-// still-open portC flow (2degrees 503, hideck#9).
+// handleProtectedServerPushClosed waits for the P-CSCF to reopen port-s and
+// falls back to RFC 5626 flow recovery if it does not. port-s is a reverse
+// flow the P-CSCF dials to us and the only path MT SMS and INVITE can take,
+// while the outbound REGISTER flow keeps looking healthy, so nothing else
+// reports it gone. Some networks reopen it on demand and a refresh only
+// disrupts them (2degrees 503, hideck#9); those are handled by giving the
+// peer the full grace first and then disabling recovery for good the moment
+// its REGISTER is rejected, rather than by never recovering anywhere.
 func (s *Service) handleProtectedServerPushClosed() {
 	if s == nil || s.stopped() {
 		return
@@ -282,11 +285,37 @@ func (s *Service) handleProtectedServerPushClosed() {
 	if remaining > 0 {
 		return
 	}
-	logging.Info("IMS protected server push closed; keep REGISTER for port-s reconnect",
-		"device", s.DeviceID(),
-		"ok_writes", s.portSWriteOK.Load(), "failed_writes", s.portSWriteErr.Load(),
-		"since_last_write_ok", s.portSLastWriteOKAge(),
+	if s.portSRecoveryRejected.Load() {
+		logging.Info("IMS protected server push closed; keep REGISTER for port-s reconnect",
+			"device", s.DeviceID(), "since_last_read", s.portSSinceLastRead(),
+			"reason", "this network rejected port-s flow recovery")
+		return
+	}
+	logging.Info("IMS protected server push closed; wait for port-s reconnect",
+		"device", s.DeviceID(), "grace", s.portSReconnectWait(),
 		"since_last_read", s.portSSinceLastRead())
+	s.schedulePortSReconnectWatch()
+}
+
+func (s *Service) portSReconnectWait() time.Duration {
+	if s != nil && s.portSReconnectGrace > 0 {
+		return s.portSReconnectGrace
+	}
+	return defaultPortSReconnectGrace
+}
+
+func (s *Service) schedulePortSReconnectWatch() {
+	if s == nil || s.stopped() {
+		return
+	}
+	grace := s.portSReconnectWait()
+	s.portSWatchMu.Lock()
+	defer s.portSWatchMu.Unlock()
+	if s.portSWatchTimer == nil {
+		s.portSWatchTimer = time.AfterFunc(grace, s.portSReconnectWatchFired)
+		return
+	}
+	s.portSWatchTimer.Reset(grace)
 }
 
 func (s *Service) cancelPortSReconnectWatch() {
@@ -298,6 +327,36 @@ func (s *Service) cancelPortSReconnectWatch() {
 	if s.portSWatchTimer != nil {
 		s.portSWatchTimer.Stop()
 	}
+}
+
+func (s *Service) portSReconnectWatchFired() {
+	if s == nil || s.stopped() || s.RegState() != regRegistered {
+		return
+	}
+	s.protectedConnMu.Lock()
+	remaining := len(s.protectedConns)
+	s.protectedConnMu.Unlock()
+	if remaining > 0 {
+		return
+	}
+	s.portSRecoveryPending.Store(true)
+	s.triggerRegisterImmediate("port-s flow failed")
+}
+
+// notePortSRecoveryOutcome retires flow recovery on a network that answers it
+// with a failure. One rejected refresh is all the evidence needed: the flow
+// was already gone, so the REGISTER cost a working registration for nothing
+// and would do so again on every closure.
+func (s *Service) notePortSRecoveryOutcome(err error) {
+	if s == nil || !s.portSRecoveryPending.Swap(false) || err == nil {
+		return
+	}
+	if s.portSRecoveryRejected.Swap(true) {
+		return
+	}
+	logging.WarnRate("ims-ports-recovery-rejected-"+s.DeviceID(), time.Hour,
+		"IMS port-s flow recovery rejected; leaving the flow to the P-CSCF",
+		"device", s.DeviceID(), "err", err)
 }
 
 func (s *Service) trackProtectedConnection(conn net.Conn) bool {
