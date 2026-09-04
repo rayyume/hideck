@@ -1,6 +1,6 @@
 # 发版镜像：把 dist/ 里已经 UPX 打好的二进制放进 Debian 底包。
 # Alpine + gcompat 跑不了 UPX 5 的 stub（Not a valid dynamic program）；glibc 可以。
-# 需要先有 hideck_<VERSION>_linux_amd64 和 linux_arm64，例如 hideck_v2.1.8_linux_amd64。
+# 需要先有 hideck_<VERSION>_linux_amd64 和 linux_arm64，例如 hideck_v2.1.9_linux_amd64。
 FROM debian:bookworm-slim
 ARG VERSION=unknown
 ARG BUILDTIME=unknown
