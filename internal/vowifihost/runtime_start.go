@@ -25,6 +25,7 @@ type RuntimeStartRequest struct {
 	DeviceID      string
 	TraceID       string
 	Epoch         uint64
+	StartedAt     time.Time
 	Prepared      PreparedStart
 	Modem         runtimehost.Modem
 	Dataplane     runtimehost.DataplanePolicy
@@ -54,10 +55,11 @@ func (m *Manager) runtimeStarter() runtimeStartFunc {
 	return runtimehost.Start
 }
 
-func (m *Manager) runtimeStateObserver(deviceID string) runtimehost.Observer {
+func (m *Manager) runtimeStateObserver(deviceID string, readiness *runtimeReadinessTracker) runtimehost.Observer {
 	return runtimehost.ObserverFunc(func(_ context.Context, ev runtimehost.Event) {
 		inst := ev.Session
 		if inst != nil && m.IsCurrentInstance(deviceID, inst) {
+			readiness.Observe(ev)
 			m.BroadcastState(deviceID)
 			if isTerminalRuntimeFailure(ev.State) {
 				go m.releaseFailedRuntime(deviceID, inst, ev.State)
@@ -98,6 +100,9 @@ func (m *Manager) StartRuntime(ctx context.Context, req RuntimeStartRequest) (Ru
 	if mode == "" {
 		mode = runtimehost.StartModeMain
 	}
+	readiness := newRuntimeReadinessTracker(m, runtimeReadinessConfig{
+		DeviceID: deviceID, TraceID: req.TraceID, StartedAt: req.StartedAt,
+	})
 	inst, err := m.runtimeStarter()(ctx, runtimehost.StartRequest{
 		Mode:          mode,
 		DeviceID:      deviceID,
@@ -117,7 +122,7 @@ func (m *Manager) StartRuntime(ctx context.Context, req RuntimeStartRequest) (Ru
 		ShouldRun: func() bool {
 			return ctx.Err() == nil && m.ShouldRun(deviceID, req.Epoch)
 		},
-		Observer: m.runtimeStateObserver(deviceID),
+		Observer: m.runtimeStateObserver(deviceID, readiness),
 	})
 	if err != nil {
 		return RuntimeStartResult{}, err
@@ -130,6 +135,9 @@ func (m *Manager) StartRuntime(ctx context.Context, req RuntimeStartRequest) (Ru
 		m.ClearStartupStateAndBroadcast(deviceID)
 		return RuntimeStartResult{Instance: inst, Stale: true}, nil
 	}
+	readiness.Observe(runtimehost.Event{
+		Session: inst, TraceID: req.TraceID, State: inst.State(),
+	})
 	m.BroadcastState(deviceID)
 
 	return RuntimeStartResult{Instance: inst}, nil

@@ -145,11 +145,7 @@ func sessionConfigFromRequest(
 		TUNName: req.Dataplane.TUNName,
 		Proxy:   req.Proxy, DNSServer: req.DNSServer, DeliveryStore: req.DeliveryStore,
 		Dispatch: req.Dispatch, OnIMSRegistered: notifier.OnIMSRegistered,
-		OnSMSReady: func() {
-			if req.Hooks.OnSMSReady != nil {
-				req.Hooks.OnSMSReady(ctx)
-			}
-		},
+		OnSMSReady: notifier.OnSMSReady,
 		OnProgress: req.OnProgress, OmitInitialContact: req.omitInitialContact,
 	}
 	req.fastReauth.Apply(&config)

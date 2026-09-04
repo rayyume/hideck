@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yibaiba/hideck/pkg/logger"
 	"github.com/iniwex5/vowifi-go/engine/swu"
 	"github.com/iniwex5/vowifi-go/runtimehost"
+	"github.com/yibaiba/hideck/pkg/logger"
 )
 
 const lifecycleReadyTimeout = 3 * time.Second
@@ -109,6 +109,7 @@ func (m *Manager) enableRuntime(ctx context.Context, req runtimeEnableRequest) (
 		DeviceID:      deviceID,
 		TraceID:       traceID,
 		Epoch:         startupEpoch,
+		StartedAt:     startedAt,
 		Prepared:      preparedStart,
 		Modem:         modemIface,
 		VoiceGateway:  m.voiceGateway,
@@ -144,20 +145,12 @@ func (m *Manager) enableRuntime(ctx context.Context, req runtimeEnableRequest) (
 		return nil
 	}
 
-	activeCount := 0
-	if m.Active(deviceID) {
-		activeCount = 1
-	}
 	startFinalized = true
 	m.ClearStartupStateAndBroadcast(deviceID)
-	adapter.MarkRuntimeStarted(RuntimeStartedRequest{
-		TraceID:     traceID,
-		DeviceID:    deviceID,
-		ActiveCount: activeCount,
-		Elapsed:     time.Since(startedAt),
-	})
-	logger.Info("VoWiFi 已启用、短信模式已切换为 VoWiFi", "trace_id", traceID, "device", deviceID, "active_count", activeCount)
-	logger.Debug("EnableVoWiFi 结束（成功）", "trace_id", traceID, "device", deviceID, "cost_ms", time.Since(startedAt).Milliseconds())
+	logger.Info("VoWiFi SWu 隧道已建立，正在等待 IMS 注册",
+		"trace_id", traceID, "device", deviceID, "cost_ms", time.Since(startedAt).Milliseconds())
+	logger.Debug("EnableVoWiFi 已进入后台 IMS 注册阶段",
+		"trace_id", traceID, "device", deviceID, "cost_ms", time.Since(startedAt).Milliseconds())
 	return nil
 }
 

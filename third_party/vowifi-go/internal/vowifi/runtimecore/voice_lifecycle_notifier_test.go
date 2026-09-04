@@ -2,13 +2,16 @@ package runtimecore
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/iniwex5/vowifi-go/internal/vowifi/imscore"
+	"github.com/iniwex5/vowifi-go/internal/vowifi/profile"
 )
 
 type notifierObserver struct {
 	events []RuntimeEvent[*SessionResult]
+	order  *[]string
 }
 
 func (o *notifierObserver) OnRuntimeEvent(
@@ -16,6 +19,9 @@ func (o *notifierObserver) OnRuntimeEvent(
 	event RuntimeEvent[*SessionResult],
 ) {
 	o.events = append(o.events, event)
+	if o.order != nil {
+		*o.order = append(*o.order, event.Kind)
+	}
 }
 
 func TestIMSRegisteredNotifierWaitsForSessionService(t *testing.T) {
@@ -56,5 +62,50 @@ func TestIMSRegisteredNotifierPublishesImmediatelyWithSession(t *testing.T) {
 
 	if len(observer.events) != 1 || observer.events[0].Service != service {
 		t.Fatalf("registration events = %+v", observer.events)
+	}
+}
+
+func TestSessionConfigFlushesSMSAfterPendingRegistration(t *testing.T) {
+	order := make([]string, 0, 2)
+	observer := &notifierObserver{order: &order}
+	ctx := context.Background()
+	request := &RuntimeStartRequest{
+		Observer: observer,
+		Hooks: RuntimeHostHooks{OnSMSReady: func(context.Context) {
+			order = append(order, "sms_ready")
+		}},
+	}
+	notifier := newIMSRegisteredNotifier(ctx, request, profile.IMSIdentityResult{})
+	config := sessionConfigFromRequest(ctx, request, profile.PreparedSession{}, notifier)
+
+	config.OnIMSRegistered()
+	config.OnSMSReady()
+	if len(order) != 0 {
+		t.Fatalf("events published before session: %v", order)
+	}
+	notifier.SetSession(&SessionResult{IMSService: &imscore.Service{}})
+	if got, want := strings.Join(order, ","), "ims_registered,sms_ready"; got != want {
+		t.Fatalf("event order = %q, want %q", got, want)
+	}
+}
+
+func TestIMSRegisteredNotifierHoldsSMSUntilRegistrationEvent(t *testing.T) {
+	order := make([]string, 0, 2)
+	observer := &notifierObserver{order: &order}
+	notifier := &imsRegisteredNotifier{
+		ctx: context.Background(), events: observer,
+		hooks: RuntimeHostHooks{OnSMSReady: func(context.Context) {
+			order = append(order, "sms_ready")
+		}},
+	}
+	notifier.SetSession(&SessionResult{IMSService: &imscore.Service{}})
+
+	notifier.OnSMSReady()
+	if len(order) != 0 {
+		t.Fatalf("SMS ready published before registration: %v", order)
+	}
+	notifier.OnIMSRegistered()
+	if got, want := strings.Join(order, ","), "ims_registered,sms_ready"; got != want {
+		t.Fatalf("event order = %q, want %q", got, want)
 	}
 }

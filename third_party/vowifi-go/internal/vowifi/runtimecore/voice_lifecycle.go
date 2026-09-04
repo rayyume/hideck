@@ -105,16 +105,19 @@ func (binding *voiceLifecycleBinding) Stop() {
 }
 
 type imsRegisteredNotifier struct {
-	ctx      context.Context
-	events   RuntimeObserver
-	hooks    RuntimeHostHooks
-	voice    *voiceLifecycleBinding
-	device   string
-	traceID  string
-	identity profile.IMSIdentityResult
-	mu       sync.Mutex
-	session  *SessionResult
-	pending  bool
+	ctx                 context.Context
+	events              RuntimeObserver
+	hooks               RuntimeHostHooks
+	voice               *voiceLifecycleBinding
+	device              string
+	traceID             string
+	identity            profile.IMSIdentityResult
+	mu                  sync.Mutex
+	emitMu              sync.Mutex
+	session             *SessionResult
+	pendingRegistration bool
+	pendingSMSReady     bool
+	registrationEmitted bool
 }
 
 func newIMSRegisteredNotifier(
@@ -132,16 +135,28 @@ func (notifier *imsRegisteredNotifier) SetSession(session *SessionResult) {
 	if notifier == nil {
 		return
 	}
+	notifier.emitMu.Lock()
+	defer notifier.emitMu.Unlock()
 	notifier.mu.Lock()
 	notifier.session = session
-	pending := notifier.pending
-	notifier.pending = false
+	pendingRegistration := notifier.pendingRegistration
+	notifier.pendingRegistration = false
+	if pendingRegistration && session != nil {
+		notifier.registrationEmitted = true
+	}
+	pendingSMSReady := session != nil && notifier.pendingSMSReady && notifier.registrationEmitted
+	if pendingSMSReady {
+		notifier.pendingSMSReady = false
+	}
 	notifier.mu.Unlock()
-	if pending && session != nil && session.IMSService != nil && notifier.voice != nil {
+	if pendingRegistration && session != nil && session.IMSService != nil && notifier.voice != nil {
 		notifier.voice.AttachIfReady(session.IMSService)
 	}
-	if pending && session != nil {
+	if pendingRegistration && session != nil {
 		notifier.emitRegistered(session)
+	}
+	if pendingSMSReady {
+		notifier.emitSMSReady()
 	}
 }
 
@@ -149,18 +164,42 @@ func (notifier *imsRegisteredNotifier) OnIMSRegistered() {
 	if notifier == nil {
 		return
 	}
+	notifier.emitMu.Lock()
+	defer notifier.emitMu.Unlock()
 	notifier.mu.Lock()
 	session := notifier.session
 	if session == nil {
-		notifier.pending = true
+		notifier.pendingRegistration = true
 		notifier.mu.Unlock()
 		return
 	}
+	notifier.registrationEmitted = true
+	pendingSMSReady := notifier.pendingSMSReady
+	notifier.pendingSMSReady = false
 	notifier.mu.Unlock()
 	if session != nil && session.IMSService != nil && notifier.voice != nil {
 		notifier.voice.AttachIfReady(session.IMSService)
 	}
 	notifier.emitRegistered(session)
+	if pendingSMSReady {
+		notifier.emitSMSReady()
+	}
+}
+
+func (notifier *imsRegisteredNotifier) OnSMSReady() {
+	if notifier == nil {
+		return
+	}
+	notifier.emitMu.Lock()
+	defer notifier.emitMu.Unlock()
+	notifier.mu.Lock()
+	if notifier.session == nil || !notifier.registrationEmitted {
+		notifier.pendingSMSReady = true
+		notifier.mu.Unlock()
+		return
+	}
+	notifier.mu.Unlock()
+	notifier.emitSMSReady()
 }
 
 func (notifier *imsRegisteredNotifier) emitRegistered(session *SessionResult) {
@@ -180,5 +219,11 @@ func (notifier *imsRegisteredNotifier) emitRegistered(session *SessionResult) {
 	}
 	if notifier.hooks.OnIMSRegistered != nil {
 		notifier.hooks.OnIMSRegistered(notifier.ctx)
+	}
+}
+
+func (notifier *imsRegisteredNotifier) emitSMSReady() {
+	if notifier.hooks.OnSMSReady != nil {
+		notifier.hooks.OnSMSReady(notifier.ctx)
 	}
 }
