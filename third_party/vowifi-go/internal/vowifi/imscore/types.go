@@ -185,6 +185,7 @@ type Service struct {
 	portSSessionMu            sync.Mutex
 	portSSession              portSSessionState
 	portSReconnectGrace       time.Duration
+	portSFailoverVerifyWait   time.Duration
 	portSLastReadAt           atomic.Int64
 	portSPushReady            atomic.Bool
 	portSReconnectWaiting     atomic.Bool
@@ -203,6 +204,7 @@ type Service struct {
 	inboundStatsMu            sync.Mutex
 	inboundStatsCancel        context.CancelFunc
 	inboundStatsDone          chan struct{}
+	downlinkValidationWake    chan struct{}
 	networkDone               sync.WaitGroup
 	registerErrors            chan error
 	keepaliveOnce             sync.Once

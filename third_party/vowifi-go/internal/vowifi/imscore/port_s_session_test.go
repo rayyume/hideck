@@ -96,6 +96,30 @@ func TestVodafoneUKPeerResetPolicyIsCarrierAndErrorScoped(t *testing.T) {
 	}
 }
 
+func TestVodafoneUKPeerResetUsesShortReconnectGrace(t *testing.T) {
+	tests := []struct {
+		name   string
+		preset string
+		kind   string
+		want   time.Duration
+	}{
+		{name: "Vodafone UK peer reset", preset: vodafoneUKCarrierPresetID, kind: portSClosePeerReset, want: 5 * time.Second},
+		{name: "Vodafone UK EOF", preset: vodafoneUKCarrierPresetID, kind: portSCloseEOF, want: defaultPortSReconnectGrace},
+		{name: "other carrier reset", preset: "2degrees_nz", kind: portSClosePeerReset, want: defaultPortSReconnectGrace},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			service := newPortSSessionTestService(t, test.preset)
+			service.portSSessionMu.Lock()
+			service.portSSession.lastCloseKind = test.kind
+			service.portSSessionMu.Unlock()
+			if got := service.portSReconnectWait(); got != test.want {
+				t.Fatalf("reconnect grace = %s, want %s", got, test.want)
+			}
+		})
+	}
+}
+
 func TestVodafoneUKEstablishedPeerResetArmsFailoverAfterRecovery(t *testing.T) {
 	service := newPortSSessionTestService(t, vodafoneUKCarrierPresetID)
 	client, server := net.Pipe()
@@ -259,6 +283,56 @@ func TestVodafoneUKPortSResetWithoutAlternateRequestsFreshRuntime(t *testing.T) 
 	}
 	if service.RegState() == regRegistered {
 		t.Fatal("single failed P-CSCF remained registered")
+	}
+}
+
+func TestVodafoneUKFailoverValidationRequiresProvenDownlink(t *testing.T) {
+	service := newPortSSessionTestService(t, vodafoneUKCarrierPresetID)
+	service.portSFailoverVerifyWait = 5 * time.Millisecond
+	service.mu.Lock()
+	service.regSession = &registerSession{security: &securityAgreement{verifyHeader: "ipsec-3gpp"}}
+	service.mu.Unlock()
+
+	if validatedBy, ok := service.waitForPortSFailoverValidation(0); ok || validatedBy != "" {
+		t.Fatalf("unproven downlink validation = (%q, %t)", validatedBy, ok)
+	}
+
+	service.portSPushReady.Store(true)
+	if validatedBy, ok := service.waitForPortSFailoverValidation(0); !ok || validatedBy != "port-s" {
+		t.Fatalf("port-s validation = (%q, %t)", validatedBy, ok)
+	}
+	service.portSPushReady.Store(false)
+	service.inboundSIPHandledRequest.Add(1)
+	if validatedBy, ok := service.waitForPortSFailoverValidation(0); !ok || validatedBy != "inbound_sip_request" {
+		t.Fatalf("inbound request validation = (%q, %t)", validatedBy, ok)
+	}
+}
+
+func TestVodafoneUKUnverifiedFailoverPreservesCandidatePenalties(t *testing.T) {
+	service := newPortSSessionTestService(t, vodafoneUKCarrierPresetID)
+	service.mu.Lock()
+	service.registrar = "pcscf-b.example:5060"
+	service.registrarIndex = 1
+	service.regState = regRegistered
+	service.mu.Unlock()
+	firstUntil := time.Now().Add(vodafoneUKPCSCFDeprioritizedPeriod)
+	service.registrarPenalties.mark("pcscf-a.example:5060", firstUntil)
+
+	service.rejectUnverifiedPortSRegistrar("pcscf-b.example:5060", time.Now(), "downlink validation timed out")
+	status := service.StatusCurrent()
+	if len(status.DeprioritizedPCSCF) != 2 {
+		t.Fatalf("deprioritized P-CSCFs = %v, want one complete candidate round", status.DeprioritizedPCSCF)
+	}
+	if status.DeprioritizedPCSCF["pcscf-a.example:5060"].Before(firstUntil) {
+		t.Fatal("existing P-CSCF penalty was shortened")
+	}
+	select {
+	case err := <-service.RegistrationErrors():
+		if err == nil || !strings.Contains(err.Error(), "fresh runtime required") {
+			t.Fatalf("runtime recovery error = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("missing runtime recovery request")
 	}
 }
 

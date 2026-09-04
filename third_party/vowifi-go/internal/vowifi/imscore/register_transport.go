@@ -310,6 +310,9 @@ func (s *Service) portSReconnectWait() time.Duration {
 	if s != nil && s.portSReconnectGrace > 0 {
 		return s.portSReconnectGrace
 	}
+	if s.usesVodafoneUKPeerResetGrace() {
+		return vodafoneUKPortSResetReconnectGrace
+	}
 	return defaultPortSReconnectGrace
 }
 
@@ -491,6 +494,7 @@ func (s *Service) trackProtectedConnection(conn net.Conn) bool {
 		s.protectedConns[conn] = struct{}{}
 		changed := !s.portSPushReady.Swap(true)
 		s.protectedConnMu.Unlock()
+		s.signalDownlinkValidation()
 		s.cancelPortSReconnectWatch()
 		s.recordOnDemandPortSReconnect()
 		if changed {

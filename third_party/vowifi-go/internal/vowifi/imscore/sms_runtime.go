@@ -117,40 +117,41 @@ type messagingRuntime struct {
 }
 
 type observability struct {
-	mtSMSDedupHit           atomic.Int64
-	lastMTAckTraceID        string
-	lastMTAckTarget         string
-	lastMTAckDestination    string
-	lastMTAckTransport      string
-	lastMTAckCallID         string
-	lastMTAckRPMR           int
-	lastMTAckFingerprint    string
-	lastMTAckErr            string
-	lastMTAckAt             time.Time
-	outboundDispatchSeq     atomic.Uint64
-	mtAckSendOK             atomic.Int64
-	mtAckSendErr            atomic.Int64
-	moRPErrorCause28        atomic.Int64
-	moRPErrorCause30        atomic.Int64
-	moRPErrorCause38        atomic.Int64
-	lastMORPErrorCause30At  atomic.Int64
-	outboundQueueReject     atomic.Int64
-	bypassSuppressedSMS     atomic.Int64
-	inboundUDPSocketRead    atomic.Uint64
-	inboundUDPSocketBytes   atomic.Uint64
-	inboundTCPAccept        atomic.Uint64
-	inboundTCPSocketRead    atomic.Uint64
-	inboundTCPSocketBytes   atomic.Uint64
-	inboundSIPParsedMessage atomic.Uint64
-	inboundSIPParsedRequest atomic.Uint64
-	inboundSIPParsedResp    atomic.Uint64
-	lastRegisterTraceID     string
-	lastRegisterAttemptAt   time.Time
-	lastRegisterOKAt        time.Time
-	lastRegisterErr         string
-	lastSMSSendTraceID      string
-	lastSMSSendAt           time.Time
-	lastSMSSendErr          string
+	mtSMSDedupHit            atomic.Int64
+	lastMTAckTraceID         string
+	lastMTAckTarget          string
+	lastMTAckDestination     string
+	lastMTAckTransport       string
+	lastMTAckCallID          string
+	lastMTAckRPMR            int
+	lastMTAckFingerprint     string
+	lastMTAckErr             string
+	lastMTAckAt              time.Time
+	outboundDispatchSeq      atomic.Uint64
+	mtAckSendOK              atomic.Int64
+	mtAckSendErr             atomic.Int64
+	moRPErrorCause28         atomic.Int64
+	moRPErrorCause30         atomic.Int64
+	moRPErrorCause38         atomic.Int64
+	lastMORPErrorCause30At   atomic.Int64
+	outboundQueueReject      atomic.Int64
+	bypassSuppressedSMS      atomic.Int64
+	inboundUDPSocketRead     atomic.Uint64
+	inboundUDPSocketBytes    atomic.Uint64
+	inboundTCPAccept         atomic.Uint64
+	inboundTCPSocketRead     atomic.Uint64
+	inboundTCPSocketBytes    atomic.Uint64
+	inboundSIPParsedMessage  atomic.Uint64
+	inboundSIPParsedRequest  atomic.Uint64
+	inboundSIPHandledRequest atomic.Uint64
+	inboundSIPParsedResp     atomic.Uint64
+	lastRegisterTraceID      string
+	lastRegisterAttemptAt    time.Time
+	lastRegisterOKAt         time.Time
+	lastRegisterErr          string
+	lastSMSSendTraceID       string
+	lastSMSSendAt            time.Time
+	lastSMSSendErr           string
 }
 
 type smsFragment struct {

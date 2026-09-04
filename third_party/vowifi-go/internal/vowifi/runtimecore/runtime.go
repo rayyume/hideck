@@ -28,6 +28,9 @@ func (Runtime) Start(
 	if req.registrarPenalties == nil {
 		req.registrarPenalties = imscore.NewRegistrarPenaltyStore()
 	}
+	if req.fastReauth == nil {
+		req.fastReauth = &FastReauthStore{}
+	}
 	if req.Options.Voice != nil && req.voiceBinding == nil {
 		req.voiceBinding = &voiceLifecycleBinding{deviceID: req.DeviceID, voice: req.Options.Voice}
 	}

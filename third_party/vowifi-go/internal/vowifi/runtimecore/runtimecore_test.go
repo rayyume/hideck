@@ -451,8 +451,9 @@ func baseRuntimeRequest(recorder *eventRecorder) RuntimeStartRequest {
 		Prepared: &profile.PreparedSession{
 			Profile: profile.Profile{IMSI: "234102356143376"}, EPDGAddr: "epdg.example.com",
 		},
-		SIM:      testSIMAdapter{aka: &recordingAKAProvider{}},
-		Observer: recorder,
+		SIM:        testSIMAdapter{aka: &recordingAKAProvider{}},
+		Observer:   recorder,
+		fastReauth: &FastReauthStore{},
 	}
 }
 

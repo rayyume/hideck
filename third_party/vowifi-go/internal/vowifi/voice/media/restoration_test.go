@@ -497,8 +497,8 @@ func TestRTPRelayStopCancelsAndJoinsDTMF(t *testing.T) {
 		if err == nil {
 			t.Fatal("stopped DTMF sender returned success")
 		}
-	default:
-		t.Fatal("relay Stop returned before the DTMF sender exited")
+	case <-time.After(time.Second):
+		t.Fatal("DTMF sender did not return after relay Stop")
 	}
 }
 

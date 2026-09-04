@@ -179,7 +179,7 @@ type RuntimeStartRequest struct {
 	voiceBinding        *voiceLifecycleBinding
 	redirectHops        int
 	redirectSeen        []string
-	fastReauth          FastReauthStore
+	fastReauth          *FastReauthStore
 	omitInitialContact  bool
 	registrarPenalties  *imscore.RegistrarPenaltyStore
 }

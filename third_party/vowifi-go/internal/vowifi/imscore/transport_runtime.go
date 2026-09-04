@@ -184,7 +184,12 @@ func (s *Service) dispatchInboundSIPMessageWithPeer(
 		return nil
 	case *sip.Request:
 		s.inboundSIPParsedRequest.Add(1)
-		return s.dispatchInboundSIPRequest(parsed, raw, reply, peer)
+		err := s.dispatchInboundSIPRequest(parsed, raw, reply, peer)
+		if err == nil {
+			s.inboundSIPHandledRequest.Add(1)
+			s.signalDownlinkValidation()
+		}
+		return err
 	default:
 		return errors.New("imscore: unsupported inbound SIP message")
 	}
