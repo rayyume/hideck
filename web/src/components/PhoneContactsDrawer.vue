@@ -13,8 +13,14 @@ import {
   Search24Regular
 } from '@vicons/fluent'
 import { usePhoneIdentity } from '../composables/usePhoneIdentity'
+import { useContactImport } from '../composables/useContactImport'
 import { phoneContactsService, type PhoneIdentity } from '../services/phone-contacts'
-import { contactImportFilesFromDataTransfer, dataTransferHasFiles } from '../utils/contactImportFile'
+import {
+  isPhoneContactNumberValid,
+  normalizePhoneContactNumber,
+  phoneContactNumberError,
+  validPhoneContactNumbers
+} from '../utils/phoneContactDraft'
 
 const props = defineProps<{
   modelValue: boolean
@@ -39,9 +45,6 @@ const adding = ref(false)
 const selecting = ref(false)
 const expanded = ref('')
 const selected = ref<string[]>([])
-const importing = ref(false)
-const dropActive = ref(false)
-let dropDepth = 0
 const searchInput = ref<{ focus?: () => void } | null>(null)
 const nameInput = ref<HTMLInputElement | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
@@ -49,38 +52,33 @@ const draftName = ref('')
 const draftNumber = ref('')
 const extraNumbers = ref<string[]>([])
 const saving = ref(false)
+const exporting = ref(false)
 
-const NUMBER_PATTERN = /^\+?[0-9]{1,32}$/
 const selectLabel = computed(() => props.kind === 'sms' ? '填入短信' : '填入拨号')
 const overlayDialog = {
   zIndex: 5000,
   appendTo: typeof document === 'undefined' ? undefined : document.body
 }
 
-function normalizeDraftNumber(raw: string) {
-  const value = String(raw || '').trim()
-  if (!value) return ''
-  const plus = value.startsWith('+')
-  const digits = value.replace(/\D/g, '')
-  return plus ? `+${digits}` : digits
-}
-
-const normalizedNumber = computed(() => normalizeDraftNumber(draftNumber.value))
-
-const draftNumbers = computed(() => {
-  const seen = new Set<string>()
-  const out: string[] = []
-  for (const raw of [draftNumber.value, ...extraNumbers.value]) {
-    const number = normalizeDraftNumber(raw)
-    if (!NUMBER_PATTERN.test(number) || seen.has(number)) continue
-    seen.add(number)
-    out.push(number)
-  }
-  return out
-})
+const draftNumbers = computed(() => validPhoneContactNumbers(draftNumber.value, extraNumbers.value))
+const draftNumberError = computed(() => phoneContactNumberError([draftNumber.value, ...extraNumbers.value]))
 
 const canSave = computed(() => {
-  return !!draftName.value.trim() && draftNumbers.value.length > 0 && !saving.value
+  return !!draftName.value.trim() && draftNumbers.value.length > 0 && !draftNumberError.value && !saving.value
+})
+
+const {
+  importing,
+  dropActive,
+  resetDropState,
+  onDragEnter,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  onImportFile
+} = useContactImport({
+  deviceId: () => props.deviceId,
+  reloadContacts: identities.reloadContacts
 })
 
 const peopleCount = computed(() => {
@@ -115,7 +113,7 @@ const selectedCount = computed(() => selected.value.length)
 
 watch(() => props.modelValue, (open) => {
   if (!open) {
-    adding.value = false
+    closeAddForm()
     selecting.value = false
     expanded.value = ''
     selected.value = []
@@ -198,11 +196,23 @@ function toggleSelectAll() {
 }
 
 function toggleAdd() {
-  adding.value = !adding.value
   if (adding.value) {
-    extraNumbers.value = []
-    void nextTick(() => nameInput.value?.focus())
+    closeAddForm()
+    return
   }
+  adding.value = true
+  void nextTick(() => nameInput.value?.focus())
+}
+
+function resetDraft() {
+  draftName.value = ''
+  draftNumber.value = ''
+  extraNumbers.value = []
+}
+
+function closeAddForm() {
+  adding.value = false
+  resetDraft()
 }
 
 function addExtraNumberField() {
@@ -218,10 +228,7 @@ async function saveManual() {
     for (const number of numbers) {
       identities.upsertLocal(await phoneContactsService.save(number, name, props.deviceId), number, props.deviceId)
     }
-    draftName.value = ''
-    draftNumber.value = ''
-    extraNumbers.value = []
-    adding.value = false
+    closeAddForm()
     ElMessage.success({
       message: numbers.length > 1 ? `已保存联系人，共 ${numbers.length} 个号码` : '已保存联系人',
       zIndex: 5100
@@ -240,9 +247,9 @@ async function addNumberToGroup(group: ContactGroup) {
       confirmButtonText: '添加',
       cancelButtonText: '取消',
       inputPlaceholder: '+86138… 或 10086',
-      inputValidator: (v) => NUMBER_PATTERN.test(normalizeDraftNumber(v)) || '号码只能是数字，可带开头的 +'
+      inputValidator: (v) => isPhoneContactNumberValid(v) || '号码只能是数字，可带开头的 +'
     })
-    const number = normalizeDraftNumber(String(value))
+    const number = normalizePhoneContactNumber(value)
     identities.upsertLocal(await phoneContactsService.save(number, group.name, props.deviceId), number, props.deviceId)
     expanded.value = group.key
     ElMessage.success({ message: '已添加号码', zIndex: 5100 })
@@ -318,89 +325,14 @@ async function deleteSelected() {
 }
 
 async function exportContacts() {
+  if (exporting.value) return
+  exporting.value = true
   try {
     await phoneContactsService.exportFile('vcf')
   } catch (error) {
     ElMessage.error({ message: error instanceof Error ? error.message : '导出失败', zIndex: 5100 })
-  }
-}
-
-function resetDropState() {
-  dropDepth = 0
-  dropActive.value = false
-}
-
-function onDragEnter(event: DragEvent) {
-  if (!dataTransferHasFiles(event.dataTransfer) || importing.value) return
-  event.preventDefault()
-  dropDepth += 1
-  dropActive.value = true
-}
-
-function onDragOver(event: DragEvent) {
-  if (!dataTransferHasFiles(event.dataTransfer) || importing.value) return
-  event.preventDefault()
-  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
-}
-
-function onDragLeave(event: DragEvent) {
-  if (!dataTransferHasFiles(event.dataTransfer)) return
-  event.preventDefault()
-  dropDepth = Math.max(0, dropDepth - 1)
-  if (dropDepth === 0) dropActive.value = false
-}
-
-async function onDrop(event: DragEvent) {
-  event.preventDefault()
-  resetDropState()
-  const files = contactImportFilesFromDataTransfer(event.dataTransfer)
-  if (!files.length) {
-    ElMessage.error({ message: '请拖入 vcf 或 csv（iOS、Google、三星、小米、华为、OPPO、vivo 通讯录导出）', zIndex: 5100 })
-    return
-  }
-  await importFiles(files)
-}
-
-async function onImportFile(event: Event) {
-  const input = event.target as HTMLInputElement
-  const files = Array.from(input.files || [])
-  input.value = ''
-  if (!files.length) return
-  await importFiles(files)
-}
-
-async function importFiles(files: File[]) {
-  if (!files.length || importing.value) return
-  importing.value = true
-  let imported = 0
-  let skipped = 0
-  let failed = 0
-  let lastError = ''
-  try {
-    for (const file of files) {
-      try {
-        const result = await phoneContactsService.importFile(file, props.deviceId)
-        imported += result.imported
-        skipped += result.skipped
-      } catch (error) {
-        failed += 1
-        lastError = (error as { response?: { data?: { message?: string } } })?.response?.data?.message
-          || (error instanceof Error ? error.message : '导入失败')
-      }
-    }
-    await identities.reloadContacts()
-    if (imported || skipped) {
-      ElMessage.success({
-        message: `已导入 ${imported} 个号码`
-          + (skipped ? `，跳过 ${skipped} 条` : '')
-          + (failed ? `，${failed} 个文件失败` : ''),
-        zIndex: 5100
-      })
-      return
-    }
-    ElMessage.error({ message: lastError || '文件里没有识别到联系人。请导出 vcf 或 csv', zIndex: 5100 })
   } finally {
-    importing.value = false
+    exporting.value = false
   }
 }
 
@@ -421,7 +353,6 @@ async function reload() {
     direction="rtl"
     size="min(420px, 100vw)"
     append-to-body
-    :lock-scroll="false"
     :z-index="4200"
     :show-close="false"
     @update:model-value="handleOpenChange"
@@ -467,8 +398,8 @@ async function reload() {
       <button type="button" class="picker-chip" :disabled="importing" @click="fileInput?.click()">
         <el-icon><ArrowUpload24Regular /></el-icon>{{ importing ? '导入中…' : '导入' }}
       </button>
-      <button type="button" class="picker-chip" @click="exportContacts">
-        <el-icon><ArrowDownload24Regular /></el-icon>导出
+      <button type="button" class="picker-chip" :disabled="exporting" @click="exportContacts">
+        <el-icon><ArrowDownload24Regular /></el-icon>{{ exporting ? '导出中…' : '导出' }}
       </button>
       <template v-if="selecting">
         <button type="button" class="picker-chip" @click="toggleSelectAll">全选</button>
@@ -491,24 +422,42 @@ async function reload() {
       </label>
       <label>
         号码
-        <input v-model="draftNumber" type="tel" inputmode="tel" name="drawer-contact-number" autocomplete="tel" maxlength="32" placeholder="+86138… 或 10086" />
+        <input
+          v-model="draftNumber"
+          type="tel"
+          inputmode="tel"
+          name="drawer-contact-number"
+          autocomplete="tel"
+          maxlength="33"
+          placeholder="+86138… 或 10086"
+          :aria-invalid="!!draftNumber.trim() && !isPhoneContactNumberValid(draftNumber)"
+          :aria-describedby="draftNumberError ? 'drawer-contact-number-error' : undefined"
+        />
       </label>
       <label v-for="(_, index) in extraNumbers" :key="index">
         号码 {{ index + 2 }}
-        <input v-model="extraNumbers[index]" type="tel" inputmode="tel" maxlength="32" :placeholder="`再填一个号码`" />
+        <input
+          v-model="extraNumbers[index]"
+          type="tel"
+          inputmode="tel"
+          maxlength="33"
+          placeholder="再填一个号码"
+          :aria-invalid="!!extraNumbers[index].trim() && !isPhoneContactNumberValid(extraNumbers[index])"
+          :aria-describedby="draftNumberError ? 'drawer-contact-number-error' : undefined"
+        />
       </label>
       <button type="button" class="picker-add-more" @click="addExtraNumberField">再加一个号码</button>
       <button type="submit" :disabled="!canSave">{{ saving ? '保存中…' : '保存' }}</button>
-      <small v-if="draftNumber.trim() && !NUMBER_PATTERN.test(normalizedNumber)">号码只能是数字，可带开头的 +</small>
+      <small v-if="draftNumberError" id="drawer-contact-number-error" role="alert">{{ draftNumberError }}</small>
     </form>
 
-    <div v-if="identities.contactsError" class="picker-state is-error" role="alert">
+    <div v-if="identities.contactsError" class="picker-error" role="alert">
       <span>{{ identities.contactsError }}</span>
       <button type="button" class="icon-button" aria-label="重新加载联系人" @click="reload">
         <el-icon><ArrowClockwise24Regular /></el-icon>
       </button>
     </div>
-    <div v-else-if="identities.contactsLoading && !identities.contacts.length" class="picker-state">正在加载联系人</div>
+    <div v-if="identities.contactsLoading && !identities.contacts.length" class="picker-state">正在加载联系人</div>
     <div v-else-if="groupedContacts.length" class="picker-list" role="list">
       <article v-for="group in groupedContacts" :key="group.key" class="picker-item" :class="{ 'is-open': expanded === group.key }" role="listitem">
         <label v-if="selecting" class="picker-check" @click.stop>
@@ -558,7 +507,7 @@ async function reload() {
       </article>
     </div>
     <div v-else-if="identities.contacts.length" class="picker-state">没有匹配「{{ query.trim() }}」的联系人</div>
-    <div v-else class="picker-state">还没有联系人。可以添加，或把手机导出的 vcf / csv 拖进来。同一个人有多个号码会合并成一条。</div>
+    <div v-else-if="!identities.contactsError" class="picker-state">还没有联系人。可以添加，或把手机导出的 vcf / csv 拖进来。同一个人有多个号码会合并成一条。</div>
     <div v-show="dropActive" class="picker-drop-overlay">放开即可导入通讯录</div>
     </div>
   </el-drawer>
@@ -616,13 +565,13 @@ async function reload() {
 }
 .picker-header { width: 100%; min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; }
 .picker-icon { width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--ui-primary) 42%, var(--ui-border)); border-radius: var(--ui-radius-md); background: color-mix(in srgb, var(--ui-primary) 9%, transparent); color: var(--ui-primary); }
-.picker-header div > span { color: var(--ui-primary); font: var(--ui-font-caption)/1.2 "v-mono", monospace; letter-spacing: .14em; }
+.picker-header div > span { color: var(--ui-primary); font: var(--ui-font-caption)/1.2 "v-mono", monospace; letter-spacing: 0; }
 .picker-header h2 { margin: 4px 0 0; color: var(--ui-text); font-size: 18px; }
 .picker-header :deep(.el-button) { width: 44px; height: 44px; }
 .picker-toolbar { padding: 14px 18px 8px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
 .picker-actions { padding: 0 18px 12px; display: flex; flex-wrap: wrap; gap: 8px; }
 .picker-chip {
-  min-height: 36px;
+  min-height: 44px;
   padding: 0 10px;
   display: inline-flex;
   align-items: center;
@@ -638,7 +587,7 @@ async function reload() {
 .picker-chip:disabled { opacity: .45; cursor: not-allowed; }
 .picker-chip.is-danger { color: var(--ui-danger); border-color: color-mix(in srgb, var(--ui-danger) 35%, var(--ui-border)); }
 .picker-add-toggle {
-  min-height: 40px;
+  min-height: 44px;
   padding: 0 12px;
   display: inline-flex;
   align-items: center;
@@ -659,7 +608,7 @@ async function reload() {
 .picker-form label { min-width: 0; display: grid; gap: 6px; color: var(--ui-text-muted); font-size: 12px; font-weight: 600; }
 .picker-form input { width: 100%; min-width: 0; min-height: 44px; box-sizing: border-box; padding: 0 12px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); background: var(--ui-surface); color: var(--ui-text); font-size: 14px; }
 .picker-form button[type="submit"] { width: 100%; min-height: 44px; border: 1px solid var(--ui-primary); border-radius: var(--ui-radius-pill); background: var(--ui-primary-solid); color: #fff; cursor: pointer; font-size: 14px; font-weight: 650; }
-.picker-add-more { width: 100%; min-height: 40px; border: 1px dashed var(--ui-border); border-radius: var(--ui-radius-pill); background: transparent; color: var(--ui-text-muted); cursor: pointer; font-size: 13px; }
+.picker-add-more { width: 100%; min-height: 44px; border: 1px dashed var(--ui-border); border-radius: var(--ui-radius-pill); background: transparent; color: var(--ui-text-muted); cursor: pointer; font-size: 13px; }
 .picker-form button:disabled { cursor: not-allowed; opacity: .45; }
 .picker-number.is-check { grid-template-columns: auto minmax(0, 1fr); align-items: center; }
 .picker-number.is-check input { width: 18px; height: 18px; }
@@ -667,7 +616,7 @@ async function reload() {
 .picker-form small { color: var(--ui-danger); font-size: 12px; }
 .picker-list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .picker-item { min-height: 64px; padding: 8px 8px 8px 18px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; border-bottom: 1px solid var(--ui-border-muted); transition: background-color 120ms ease; }
-.picker-check { width: 40px; height: 40px; display: grid; place-items: center; }
+.picker-check { width: 44px; height: 44px; display: grid; place-items: center; }
 .picker-check input { width: 18px; height: 18px; }
 .picker-numbers { flex: 1 1 100%; display: grid; gap: 6px; padding: 4px 40px 8px 0; }
 .picker-number { min-height: 44px; padding: 8px 12px; display: grid; gap: 2px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); background: var(--ui-surface); color: inherit; text-align: left; cursor: pointer; }
@@ -678,7 +627,7 @@ async function reload() {
 .picker-main strong { display: block; overflow: hidden; color: var(--ui-text); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
 .picker-main span { display: block; margin-top: 2px; overflow: hidden; color: var(--ui-text-muted); font-family: "v-mono", monospace; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .picker-main small { display: block; margin-top: 2px; overflow: hidden; color: var(--ui-primary); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.icon-button { width: 40px; height: 40px; flex: 0 0 40px; display: grid; place-items: center; border: 0; background: transparent; color: var(--ui-text-muted); cursor: pointer; transition: color 120ms ease, transform 140ms var(--ui-ease-out); }
+.icon-button { width: 44px; height: 44px; flex: 0 0 44px; display: grid; place-items: center; border: 0; background: transparent; color: var(--ui-text-muted); cursor: pointer; transition: color 120ms ease, transform 140ms var(--ui-ease-out); }
 .icon-button:active { transform: scale(0.94); }
 .icon-button.is-danger:active { color: var(--ui-danger); }
 @media (hover: hover) and (pointer: fine) {
@@ -687,7 +636,8 @@ async function reload() {
   .picker-item:hover { background: color-mix(in srgb, var(--ui-primary) 6%, var(--ui-surface)); }
 }
 .picker-state { min-height: 120px; padding: 24px 18px; display: flex; align-items: center; justify-content: center; gap: 12px; color: var(--ui-text-muted); font-size: 13px; text-align: center; }
-.picker-state.is-error { color: var(--ui-danger); justify-content: space-between; }
+.picker-error { min-height: 52px; margin: 0 18px 8px; padding: 4px 0 4px 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid color-mix(in srgb, var(--ui-danger) 32%, var(--ui-border)); border-radius: var(--ui-radius-md); background: color-mix(in srgb, var(--ui-danger) 7%, transparent); color: var(--ui-danger); font-size: 13px; }
+.picker-error span { min-width: 0; overflow-wrap: anywhere; }
 @media (max-width: 640px) {
   :global(.phone-contacts-drawer) { border-radius: 0; }
   :global(.phone-contacts-drawer .el-drawer__body) { padding-bottom: env(safe-area-inset-bottom); }

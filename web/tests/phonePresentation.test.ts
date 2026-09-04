@@ -9,6 +9,7 @@ const dialPad = await readFile(new URL('../src/components/PhoneDialPad.vue', imp
 const callBar = await readFile(new URL('../src/components/PhoneCallBar.vue', import.meta.url), 'utf8')
 const contactsPanel = await readFile(new URL('../src/components/PhoneContactsPanel.vue', import.meta.url), 'utf8')
 const contactsDrawer = await readFile(new URL('../src/components/PhoneContactsDrawer.vue', import.meta.url), 'utf8')
+const contactImporter = await readFile(new URL('../src/composables/useContactImport.ts', import.meta.url), 'utf8')
 const contactService = await readFile(new URL('../src/services/phone-contacts.ts', import.meta.url), 'utf8')
 const phoneIdentity = await readFile(new URL('../src/composables/usePhoneIdentity.ts', import.meta.url), 'utf8')
 const shell = await readFile(new URL('../src/layouts/AuthenticatedShell.vue', import.meta.url), 'utf8')
@@ -110,7 +111,7 @@ test('phone identities stay scoped to the device region and invalidate every cac
   assert.match(phoneView, /identities\.resolve\(record\.peer, record\.device_id\)/)
   assert.match(phoneView, /<PhoneContactsPanel :device-id="selectedDevice"/)
   assert.match(phoneIdentity, /if \(value\.number === ident\.number\) cache\.set\(key, ident\)/)
-  assert.match(phoneIdentity, /if \(value\.number === target\) cache\.set\(alias, withoutContactName\(value\)\)/)
+  assert.match(phoneIdentity, /if \(drop\.has\(value\.number\)\) cache\.set\(alias, withoutContactName\(value\)\)/)
   assert.match(phoneIdentity, /revision === cacheRevision/)
 })
 
@@ -118,7 +119,27 @@ test('contact loading failures remain visible and retryable', () => {
   assert.match(phoneIdentity, /contactsState\.error = errorMessage\(error\)/)
   assert.match(contactsDrawer, /v-if="identities\.contactsError"/)
   assert.match(contactsDrawer, /aria-label="重新加载联系人"/)
-  assert.match(contactsDrawer, /v-else-if="identities\.contactsLoading/)
+  assert.match(contactsDrawer, /v-if="identities\.contactsLoading/)
+  assert.match(contactsDrawer, /v-else-if="groupedContacts\.length"/)
+})
+
+test('contact drawer resets drafts, locks background scrolling, and keeps touch targets usable', () => {
+  assert.match(contactsDrawer, /function resetDraft\(\)[\s\S]*draftName\.value = ''[\s\S]*draftNumber\.value = ''/)
+  assert.match(contactsDrawer, /if \(!open\) \{[\s\S]*closeAddForm\(\)/)
+  assert.match(contactsDrawer, /if \(adding\.value\) \{[\s\S]*closeAddForm\(\)/)
+  assert.doesNotMatch(contactsDrawer, /:lock-scroll="false"/)
+  assert.match(contactsDrawer, /\.picker-add-toggle \{[\s\S]*min-height: 44px/)
+  assert.match(contactsDrawer, /\.icon-button \{ width: 44px; height: 44px; flex: 0 0 44px;/)
+  assert.match(contactsDrawer, /\.picker-chip \{[\s\S]*min-height: 44px/)
+})
+
+test('contact import behavior is shared and exposes list refresh failures', () => {
+  assert.match(contactsPanel, /useContactImport\(/)
+  assert.match(contactsDrawer, /useContactImport\(/)
+  assert.match(contactImporter, /但列表刷新失败/)
+  assert.match(contactImporter, /input\.value = ''/)
+  assert.match(contactsDrawer, /:disabled="exporting"/)
+  assert.match(contactsDrawer, /exporting\.value = false/)
 })
 
 test('wifi calling keeps a dedicated start switch under the mode control', () => {
