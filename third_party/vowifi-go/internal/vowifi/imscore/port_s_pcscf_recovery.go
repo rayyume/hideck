@@ -15,6 +15,7 @@ const (
 	vodafoneUKPortSResetReconnectGrace  = 5 * time.Second
 	vodafoneUKMaturePortSResetThreshold = 2 * time.Minute
 	vodafoneUKPCSCFDeprioritizedPeriod  = 30 * time.Minute
+	initialRegisterPenaltyExtension     = 5 * time.Minute
 )
 
 type portSResetRecoveryState struct {
@@ -177,8 +178,7 @@ func (s *Service) recoverPortSResetOnAlternate(
 	err := s.registerLocked(ctx)
 	cancel()
 	if err != nil {
-		s.rejectUnverifiedPortSRegistrar(next, observedAt,
-			fmt.Sprintf("initial registration failed: %v", err))
+		s.rejectFailedPortSRegistrar(next, observedAt, err)
 		return
 	}
 	logging.Info("IMS port-s reset recovery registered; awaiting downlink validation",
@@ -247,6 +247,22 @@ func (s *Service) rejectUnverifiedPortSRegistrar(registrar string, observedAt ti
 	unavailableUntil := time.Now().Add(vodafoneUKPCSCFDeprioritizedPeriod)
 	s.registrarPenalties.mark(registrar, unavailableUntil)
 	s.requestFreshRuntimeAfterPortSReset(registrar, observedAt, unavailableUntil, reason)
+}
+
+func (s *Service) rejectFailedPortSRegistrar(registrar string, observedAt time.Time, err error) {
+	now := time.Now()
+	unavailableUntil := s.failedRegisterUnavailableUntil(err, now)
+	s.registrarPenalties.mark(registrar, unavailableUntil)
+	reason := fmt.Sprintf("initial registration failed: %v", err)
+	s.requestFreshRuntimeAfterPortSReset(registrar, observedAt, unavailableUntil, reason)
+}
+
+func (s *Service) failedRegisterUnavailableUntil(err error, now time.Time) time.Time {
+	if retryAfter, present := registerRetryAfterFromError(err); present {
+		return now.Add(retryAfter)
+	}
+	retryDelay := s.jitterPortSRecoveryDelay(rfc5626RecoveryUpperBound(1, true))
+	return now.Add(retryDelay + initialRegisterPenaltyExtension)
 }
 
 func (s *Service) requestFreshRuntimeAfterPortSReset(

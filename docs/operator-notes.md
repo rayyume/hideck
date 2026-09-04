@@ -24,7 +24,7 @@
 - 原版 vohive / 当时的预设清单里 **没有** `vodafone_uk`，只有荷兰 `vodafone_nl_20404`。
 - 现已加入预设 `vodafone_uk_23415`：标准 ePDG `epdg.epc.mnc015.mcc234.pub.3gppnetwork.org`，`device_model=rmx3366`，IKE/ESP 先用英国已通提案加宽列表，REGISTER 带 `smsip`。
 - `23415` 的 port-s 恢复策略按 Vodafone UK IMS 网络生效，同时覆盖 Vodafone 和 VOXI：连接被对端明确 RST 后只等待 5 秒；运行超过 2 分钟的连接未恢复时先刷新当前 P-CSCF，REGISTER 成功后再切换一次 P-CSCF。普通 EOF、超时和其他运营商仍走通用 RFC 5626 恢复。
-- 切换后的 REGISTER 200 只代表注册成功；新 port-s 建立或收到有效下行 SIP 请求后才算恢复完成。验证超时的 P-CSCF 会降权 30 分钟并触发 runtime 重建；共享降权状态确保每轮只尝试一次候选，重建 IMS/ePDG 后也不会提前解除。
+- 切换后的 REGISTER 200 只代表注册成功；新 port-s 建立或收到有效下行 SIP 请求后才算恢复完成。下行验证超时的 P-CSCF 会降权 30 分钟；REGISTER 失败则遵循 Retry-After 或 RFC 5626/3GPP 退避。共享降权状态确保每轮只尝试一次候选；新 IMS/ePDG 若仍只得到已降权节点，会等待最早恢复时间，不会持续重建。
 - 国家代理仍按 MCC `234` 走 GB 规则。VOXI 官方写明漫游不支持 WiFi calling，人在国内需走代理。
 - 真卡验收前：IKE/ESP 仍可能要按日志改。余额查询未做自动短码（走 App）。
 

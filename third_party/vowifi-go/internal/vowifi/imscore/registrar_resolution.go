@@ -3,6 +3,7 @@ package imscore
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"strconv"
 	"strings"
@@ -11,6 +12,24 @@ import (
 	"github.com/iniwex5/vowifi-go/internal/vowifi/policy"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/sipkit"
 )
+
+type allRegistrarCandidatesUnavailableError struct {
+	retryAt time.Time
+}
+
+func (err *allRegistrarCandidatesUnavailableError) Error() string {
+	if err == nil || err.retryAt.IsZero() {
+		return "all resolved P-CSCF candidates are temporarily unavailable"
+	}
+	return fmt.Sprintf("all resolved P-CSCF candidates are temporarily unavailable until %s", err.retryAt.Format(time.RFC3339))
+}
+
+func (err *allRegistrarCandidatesUnavailableError) RetryAt() time.Time {
+	if err == nil {
+		return time.Time{}
+	}
+	return err.retryAt
+}
 
 func splitRegistrarCandidates(spec string) []string {
 	spec = strings.TrimSpace(spec)
@@ -151,9 +170,12 @@ func (s *Service) selectRegistrarCandidate(ctx context.Context, transport string
 	if err != nil {
 		return "", err
 	}
-	index, ok := s.firstAvailableRegistrarIndex(candidates, index, time.Now())
+	now := time.Now()
+	index, ok := s.firstAvailableRegistrarIndex(candidates, index, now)
 	if !ok {
-		return "", errors.New("all resolved P-CSCF candidates are temporarily unavailable")
+		return "", &allRegistrarCandidatesUnavailableError{
+			retryAt: earliestRegistrarAvailability(candidates, s.registrarPenalties.snapshot(now)),
+		}
 	}
 	selected = strings.TrimSpace(candidates[index])
 	s.mu.Lock()
@@ -163,6 +185,20 @@ func (s *Service) selectRegistrarCandidate(ctx context.Context, transport string
 	s.registrarSource = source
 	s.mu.Unlock()
 	return selected, nil
+}
+
+func earliestRegistrarAvailability(candidates []string, penalties map[string]time.Time) time.Time {
+	var earliest time.Time
+	for _, candidate := range candidates {
+		until, exists := penalties[strings.TrimSpace(candidate)]
+		if !exists || until.IsZero() {
+			continue
+		}
+		if earliest.IsZero() || until.Before(earliest) {
+			earliest = until
+		}
+	}
+	return earliest
 }
 
 func (s *Service) firstAvailableRegistrarIndex(candidates []string, start int, now time.Time) (int, bool) {

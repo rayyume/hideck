@@ -392,6 +392,24 @@ func TestRetryDecisionResetsRedirectAndFreshRuntime(t *testing.T) {
 	}
 }
 
+type scheduledRetryTestError struct {
+	retryAt time.Time
+}
+
+func (err scheduledRetryTestError) Error() string      { return "scheduled retry" }
+func (err scheduledRetryTestError) RetryAt() time.Time { return err.retryAt }
+
+func TestRetryDelayUntilUsesWrappedRegistrarDeadline(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	scheduled := scheduledRetryTestError{retryAt: now.Add(12 * time.Minute)}
+	err := errors.Join(errors.New("IMS startup failed"), scheduled)
+
+	delay, ok := retryDelayUntil(err, now)
+	if !ok || time.Duration(delay) != 12*time.Minute {
+		t.Fatalf("scheduled retry delay = %s, found=%t", time.Duration(delay), ok)
+	}
+}
+
 func TestInterruptionCallbacksCarryRecoveredKindsAndDelay(t *testing.T) {
 	session := swu.NewSession(&swu.Config{})
 	outcomes := make(chan InterruptOutcome, 3)

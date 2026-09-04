@@ -65,10 +65,33 @@ func retryDecision(err error, attempt int, delayFn func(int) int64) (int64, int)
 	if ok {
 		return redirect.Delay, 0
 	}
+	if delay, scheduled := retryDelayUntil(err, time.Now()); scheduled {
+		return delay, 0
+	}
 	if delayFn == nil {
 		return 0, attempt + 1
 	}
 	return delayFn(attempt), attempt + 1
+}
+
+type retryAtError interface {
+	RetryAt() time.Time
+}
+
+func retryDelayUntil(err error, now time.Time) (int64, bool) {
+	var scheduled retryAtError
+	if !errors.As(err, &scheduled) {
+		return 0, false
+	}
+	retryAt := scheduled.RetryAt()
+	if retryAt.IsZero() {
+		return 0, false
+	}
+	delay := retryAt.Sub(now)
+	if delay < 0 {
+		delay = 0
+	}
+	return int64(delay), true
 }
 
 func waitRetry(ctx context.Context, delay time.Duration) error {

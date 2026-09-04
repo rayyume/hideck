@@ -93,9 +93,10 @@ func TestPCSCFPenaltySurvivesServiceReplacement(t *testing.T) {
 
 func TestPCSCFSelectionRejectsAllPenalizedCandidates(t *testing.T) {
 	store := NewRegistrarPenaltyStore()
-	until := time.Now().Add(30 * time.Minute)
-	store.mark("pcscf-a.example:5060", until)
-	store.mark("pcscf-b.example:5060", until)
+	now := time.Now()
+	firstUntil := now.Add(20 * time.Minute)
+	store.mark("pcscf-a.example:5060", firstUntil)
+	store.mark("pcscf-b.example:5060", now.Add(30*time.Minute))
 	service, err := New(&IMSConfig{
 		Registrar: "pcscf-a.example:5060;pcscf-b.example:5060",
 		LocalAddr: "192.0.2.10", RegistrarPenalties: store,
@@ -103,9 +104,14 @@ func TestPCSCFSelectionRejectsAllPenalizedCandidates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.selectRegistrarCandidate(context.Background(), "udp"); err == nil ||
+	_, err = service.selectRegistrarCandidate(context.Background(), "udp")
+	var unavailable *allRegistrarCandidatesUnavailableError
+	if err == nil || !errors.As(err, &unavailable) ||
 		!strings.Contains(err.Error(), "temporarily unavailable") {
 		t.Fatalf("selection error = %v", err)
+	}
+	if !unavailable.RetryAt().Equal(firstUntil) {
+		t.Fatalf("next P-CSCF retry = %s, want %s", unavailable.RetryAt(), firstUntil)
 	}
 }
 

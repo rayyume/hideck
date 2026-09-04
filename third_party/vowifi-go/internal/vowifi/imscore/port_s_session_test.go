@@ -120,6 +120,33 @@ func TestVodafoneUKPeerResetUsesShortReconnectGrace(t *testing.T) {
 	}
 }
 
+func TestVodafoneUKPeerResetKeepsWatchdogAfterOnDemandReconnect(t *testing.T) {
+	service := newPortSSessionTestService(t, vodafoneUKCarrierPresetID)
+	service.portSOnDemandObserved.Store(true)
+	service.mu.Lock()
+	service.regState = regRegistered
+	service.mu.Unlock()
+	service.portSSessionMu.Lock()
+	service.portSSession.lastCloseKind = portSClosePeerReset
+	service.portSSessionMu.Unlock()
+
+	service.handleProtectedServerPushClosed()
+	if !service.portSReconnectWaiting.Load() {
+		t.Fatal("Vodafone UK peer reset did not enter reconnect grace")
+	}
+	service.portSWatchMu.Lock()
+	timer := service.portSWatchTimer
+	generation := service.portSWatchGeneration
+	service.portSWatchMu.Unlock()
+	if timer == nil {
+		t.Fatal("prior on-demand reconnect suppressed Vodafone UK peer-reset watchdog")
+	}
+	service.portSReconnectWatchFired(generation, service.currentPortSRecoveryRegistrar())
+	if !service.reRegisterPending.Load() || !service.portSRecoveryPending.Load() {
+		t.Fatal("expired Vodafone UK peer-reset watchdog did not schedule REGISTER recovery")
+	}
+}
+
 func TestVodafoneUKEstablishedPeerResetArmsFailoverAfterRecovery(t *testing.T) {
 	service := newPortSSessionTestService(t, vodafoneUKCarrierPresetID)
 	client, server := net.Pipe()
@@ -333,6 +360,28 @@ func TestVodafoneUKUnverifiedFailoverPreservesCandidatePenalties(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("missing runtime recovery request")
+	}
+}
+
+func TestVodafoneUKFailedAlternateRegisterHonorsRetryAfter(t *testing.T) {
+	service := newPortSSessionTestService(t, vodafoneUKCarrierPresetID)
+	now := time.Unix(1_700_000_000, 0)
+	err := registerResponseErrorWithRetryAfter(t, "3600")
+
+	if got := service.failedRegisterUnavailableUntil(err, now); !got.Equal(now.Add(time.Hour)) {
+		t.Fatalf("Retry-After penalty = %s, want %s", got, now.Add(time.Hour))
+	}
+}
+
+func TestVodafoneUKFailedAlternateRegisterUsesRFC5626Penalty(t *testing.T) {
+	service := newPortSSessionTestService(t, vodafoneUKCarrierPresetID)
+	service.portSRecoveryJitter = func(upper time.Duration) time.Duration { return upper / 2 }
+	now := time.Unix(1_700_000_000, 0)
+	err := &registerResponseError{statusCode: 503, message: "Service Unavailable"}
+
+	want := now.Add(5*time.Minute + 30*time.Second)
+	if got := service.failedRegisterUnavailableUntil(err, now); !got.Equal(want) {
+		t.Fatalf("RFC 5626 penalty = %s, want %s", got, want)
 	}
 }
 

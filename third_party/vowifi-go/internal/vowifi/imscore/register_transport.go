@@ -285,7 +285,7 @@ func (s *Service) handleProtectedServerPushClosed() {
 	}
 	s.portSReconnectWaiting.Store(true)
 	s.protectedConnMu.Unlock()
-	if s.portSOnDemandObserved.Load() {
+	if s.suppressesPortSReconnectWatch() {
 		logging.Info("IMS protected server push closed; wait for proven on-demand port-s reconnect",
 			"device", s.DeviceID(), "since_last_read", s.portSSinceLastRead(),
 			"reason", "peer previously reopened port-s without a successful REGISTER")
@@ -359,7 +359,7 @@ func (s *Service) portSReconnectWatchFired(generation uint64, registrar string) 
 	}
 	s.protectedConnMu.Lock()
 	remaining := len(s.protectedConns)
-	if remaining > 0 || s.portSOnDemandObserved.Load() {
+	if remaining > 0 || s.suppressesPortSReconnectWatch() {
 		s.protectedConnMu.Unlock()
 		return
 	}
@@ -377,6 +377,10 @@ func (s *Service) portSReconnectWatchFired(generation uint64, registrar string) 
 	}
 	s.markPortSResetRecoveryAttempt(registrar)
 	s.triggerRegisterImmediate("port-s flow failed")
+}
+
+func (s *Service) suppressesPortSReconnectWatch() bool {
+	return s != nil && s.portSOnDemandObserved.Load() && !s.usesVodafoneUKPeerResetGrace()
 }
 
 func (s *Service) consumePortSReconnectWatch(generation uint64, registrar string) bool {
