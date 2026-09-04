@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"testing"
 
@@ -87,5 +88,37 @@ func TestPhoneContactRejectsInvalidContactID(t *testing.T) {
 	})
 	if err != ErrInvalidPhoneContact {
 		t.Fatalf("invalid contact ID error = %v", err)
+	}
+}
+
+func TestPhoneContactStrictBatchIsAtomicAndSharesGroupID(t *testing.T) {
+	database, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "strict-batch.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := database.AutoMigrate(&PhoneContact{}); err != nil {
+		t.Fatal(err)
+	}
+	previous := DB
+	DB = database
+	t.Cleanup(func() { DB = previous })
+
+	rows, err := UpsertPhoneContactBatchWithRegion(t.Context(), []PhoneContactInput{
+		{Number: "10000", Name: "客服", GroupKey: "manual"},
+		{Number: "10001", Name: "客服", GroupKey: "manual"},
+	}, "")
+	if err != nil || len(rows) != 2 || rows[0].ContactID == "" || rows[0].ContactID != rows[1].ContactID {
+		t.Fatalf("strict batch rows=%+v err=%v", rows, err)
+	}
+
+	_, err = UpsertPhoneContactBatchWithRegion(t.Context(), []PhoneContactInput{
+		{Number: "10002", Name: "有效"},
+		{Number: "invalid", Name: "无效"},
+	}, "")
+	if !errors.Is(err, ErrInvalidPhoneContact) {
+		t.Fatalf("strict batch error = %v", err)
+	}
+	if _, err := GetPhoneContact(t.Context(), "10002"); !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("rolled-back contact lookup error = %v", err)
 	}
 }

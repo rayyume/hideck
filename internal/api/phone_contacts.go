@@ -60,10 +60,7 @@ func (s *Server) handlePhoneContactsList(c *gin.Context) {
 	if rows == nil {
 		rows = []db.PhoneContact{}
 	}
-	out := make([]any, 0, len(rows))
-	for _, row := range rows {
-		out = append(out, db.LookupPhoneIdentity(c.Request.Context(), row.Number))
-	}
+	out := phoneContactIdentities(rows)
 	c.JSON(http.StatusOK, gin.H{
 		"contacts":    out,
 		"total":       total,
@@ -107,6 +104,7 @@ type phoneContactRequest struct {
 	Name      string `json:"name"`
 	DeviceID  string `json:"device_id"`
 	ContactID string `json:"contact_id"`
+	GroupKey  string `json:"group_key"`
 }
 
 func (s *Server) handlePhoneContactsUpsert(c *gin.Context) {
@@ -181,15 +179,38 @@ func (s *Server) handlePhoneContactsBatch(c *gin.Context) {
 	inputs := make([]db.PhoneContactInput, 0, len(req.Contacts))
 	for _, item := range req.Contacts {
 		inputs = append(inputs, db.PhoneContactInput{
-			Number: item.Number, Name: item.Name, Region: region, ContactID: item.ContactID,
+			Number: item.Number, Name: item.Name, Region: region,
+			ContactID: item.ContactID, GroupKey: item.GroupKey,
 		})
 	}
-	imported, skipped, err := db.UpsertPhoneContactsWithRegion(c.Request.Context(), inputs, region)
+	rows, err := db.UpsertPhoneContactBatchWithRegion(c.Request.Context(), inputs, region)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "code": "contact_batch_failed", "message": "批量保存失败"})
+		c.JSON(phoneContactBatchStatus(err), gin.H{
+			"status": "error", "code": "contact_batch_failed", "message": "批量保存失败",
+		})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"imported": imported, "skipped": skipped})
+	c.JSON(http.StatusOK, gin.H{
+		"imported": len(rows), "skipped": 0, "contacts": phoneContactIdentities(rows),
+	})
+}
+
+func phoneContactBatchStatus(err error) int {
+	if errors.Is(err, db.ErrInvalidPhoneContact) {
+		return http.StatusBadRequest
+	}
+	if errors.Is(err, gorm.ErrInvalidDB) {
+		return http.StatusServiceUnavailable
+	}
+	return http.StatusInternalServerError
+}
+
+func phoneContactIdentities(rows []db.PhoneContact) []any {
+	out := make([]any, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, db.PhoneContactIdentity(row))
+	}
+	return out
 }
 
 func (s *Server) handlePhoneContactsBatchDelete(c *gin.Context) {

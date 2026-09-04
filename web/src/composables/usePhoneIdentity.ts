@@ -138,8 +138,11 @@ async function loadCurrentContactPage(offset: number) {
 
 function replaceContactRows(page: PhoneContactsPage) {
   cacheRevision++
-  for (const [key, value] of cache) {
-    if (value.name) cache.set(key, withoutContactName(value))
+  if (!page.hasMore) {
+    const currentNumbers = new Set(page.contacts.map((row) => row.number))
+    for (const [key, value] of cache) {
+      if (value.name && !currentNumbers.has(value.number)) cache.set(key, withoutContactName(value))
+    }
   }
   contacts.splice(0, contacts.length, ...page.contacts)
   for (const row of page.contacts) rememberWithoutList(row)

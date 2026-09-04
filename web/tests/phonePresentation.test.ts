@@ -151,6 +151,7 @@ test('contacts load on scroll and keep drag import discoverable', () => {
   assert.match(contactsDrawer, /继续向下滚动加载更多/)
   assert.match(contactsDrawer, /支持将 vcf \/ csv 拖到此处导入/)
   assert.match(contactsPanel, /identities\.contactsTotal/)
+  assert.match(phoneIdentity, /if \(!page\.hasMore\) \{[\s\S]*!currentNumbers\.has\(value\.number\)/)
 })
 
 test('contact import behavior is shared and exposes list refresh failures', () => {
@@ -168,6 +169,9 @@ test('contacts are grouped by persistent identity instead of display name', () =
   assert.match(contactService, /contact_id\?: string/)
   assert.match(contactsDrawer, /return item\.contact_id \|\| `number:\$\{item\.number\}`/)
   assert.match(contactsDrawer, /contactId: group\.contactId/)
+  assert.match(contactService, /async saveMany\([\s\S]*\/phone\/contacts\/batch/)
+  assert.match(contactsDrawer, /saveMany\(numbers\.map/)
+  assert.match(contactsDrawer, /saveMany\(group\.items\.map/)
   assert.doesNotMatch(contactsDrawer, /index\.get\(name\)/)
 })
 

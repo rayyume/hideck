@@ -30,6 +30,7 @@ export type PhoneContactSave = Readonly<{
   name: string
   deviceId?: string
   contactId?: string
+  groupKey?: string
 }>
 
 function normalizeIdentity(row: PhoneIdentity): PhoneIdentity {
@@ -94,6 +95,21 @@ export const phoneContactsService = {
       contact_id: contact.contactId || undefined
     })
     return normalizeIdentity(res.data as PhoneIdentity)
+  },
+  async saveMany(contacts: readonly PhoneContactSave[], deviceId = ''): Promise<PhoneIdentity[]> {
+    const res = await api.post('/phone/contacts/batch', {
+      device_id: deviceId || undefined,
+      contacts: contacts.map((contact) => ({
+        number: contact.number,
+        name: contact.name,
+        contact_id: contact.contactId || undefined,
+        group_key: contact.groupKey || undefined
+      }))
+    })
+    if (!Array.isArray(res.data?.contacts) || res.data.contacts.length !== contacts.length) {
+      throw new Error('批量保存联系人响应不完整')
+    }
+    return (res.data.contacts as PhoneIdentity[]).map(normalizeIdentity)
   },
   async remove(number: string, deviceId = ''): Promise<void> {
     await api.delete('/phone/contacts', {

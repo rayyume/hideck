@@ -236,3 +236,18 @@ func TestImportRejectsNonPhoneFieldsInsteadOfStrippingCharacters(t *testing.T) {
 		t.Fatalf("strict imported contacts = %+v", got)
 	}
 }
+
+func TestImportRejectsHeaderedCSVWithoutPhoneColumn(t *testing.T) {
+	raw := "Name,Birthday,Postal Code\nAlice,1990-01-01,10001\n"
+	if got := Parse([]byte(raw), "contacts.csv"); len(got) != 0 {
+		t.Fatalf("non-phone columns imported as contacts: %+v", got)
+	}
+}
+
+func TestImportRecognizesGenericNumberHeader(t *testing.T) {
+	raw := "Name,Number\nAlice,+44 7911 123456\n"
+	got := Parse([]byte(raw), "contacts.csv")
+	if len(got) != 1 || got[0].Name != "Alice" || got[0].Number != "+447911123456" {
+		t.Fatalf("generic number CSV = %+v", got)
+	}
+}

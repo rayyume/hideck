@@ -44,6 +44,7 @@ type ContactGroup = {
 
 const CONTACT_SCROLL_THRESHOLD = 160
 const CONTACT_SEARCH_DELAY_MS = 250
+const MANUAL_CONTACT_GROUP_KEY = 'manual-contact'
 
 const identities = usePhoneIdentity()
 const query = ref('')
@@ -275,15 +276,11 @@ async function saveManual() {
   saving.value = true
   const name = draftName.value.trim()
   const numbers = draftNumbers.value
-  let contactId = ''
   try {
-    for (const number of numbers) {
-      const ident = await phoneContactsService.save({
-        number, name, deviceId: props.deviceId, contactId
-      })
-      contactId ||= ident.contact_id || ''
-      identities.upsertLocal(ident, number, props.deviceId)
-    }
+    const saved = await phoneContactsService.saveMany(numbers.map((number) => ({
+      number, name, groupKey: MANUAL_CONTACT_GROUP_KEY
+    })), props.deviceId)
+    saved.forEach((ident, index) => identities.upsertLocal(ident, numbers[index], props.deviceId))
     closeAddForm()
     ElMessage.success({
       message: numbers.length > 1 ? `已保存联系人，共 ${numbers.length} 个号码` : '已保存联系人',
@@ -329,12 +326,12 @@ async function editGroup(group: ContactGroup) {
       inputValidator: (v) => !!String(v || '').trim() || '请填写名字'
     })
     const name = String(value).trim()
-    for (const item of group.items) {
-      const ident = await phoneContactsService.save({
-        number: item.number, name, deviceId: props.deviceId, contactId: group.contactId
-      })
-      identities.upsertLocal(ident, item.number, props.deviceId)
-    }
+    const saved = await phoneContactsService.saveMany(group.items.map((item) => ({
+      number: item.number, name, contactId: group.contactId
+    })), props.deviceId)
+    saved.forEach((ident, index) => {
+      identities.upsertLocal(ident, group.items[index].number, props.deviceId)
+    })
     ElMessage.success({ message: '已更新联系人', zIndex: 5100 })
   } catch (error) {
     if (error === 'cancel' || error === 'close') return

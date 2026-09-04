@@ -19,22 +19,30 @@ type pcscf503RecoveryDecision struct {
 	headerInvalid    bool
 }
 
-func decidePCSCF503Recovery(
-	response *sipResponse,
-	timerB time.Duration,
-	now time.Time,
-) pcscf503RecoveryDecision {
-	if response == nil || response.StatusCode != 503 {
+type pcscf503RecoveryInput struct {
+	response       *sipResponse
+	timerB         time.Duration
+	now            time.Time
+	defaultPenalty time.Duration
+}
+
+func decidePCSCF503Recovery(input pcscf503RecoveryInput) pcscf503RecoveryDecision {
+	if input.response == nil || input.response.StatusCode != 503 {
 		return pcscf503RecoveryDecision{}
 	}
-	retryAfter, present, err := parseSIPRetryAfter(response.HeaderValues("Retry-After"))
+	retryAfter, present, err := parseSIPRetryAfter(input.response.HeaderValues("Retry-After"))
 	if err != nil || !present {
-		return pcscf503RecoveryDecision{recover: true, headerInvalid: err != nil}
+		if input.defaultPenalty <= 0 {
+			input.defaultPenalty = rfc5626RecoveryBaseAllFailed
+		}
+		return pcscf503RecoveryDecision{
+			recover: true, unavailableUntil: input.now.Add(input.defaultPenalty), headerInvalid: err != nil,
+		}
 	}
-	if timerB <= 0 {
-		timerB = defaultSIPTransactionTimers().bf
+	if input.timerB <= 0 {
+		input.timerB = defaultSIPTransactionTimers().bf
 	}
-	if retryAfter <= timerB {
+	if retryAfter <= input.timerB {
 		return pcscf503RecoveryDecision{retryAfter: retryAfter}
 	}
 	// IR.92 2.2.1 only requires a new initial registration when 503 has no
@@ -42,7 +50,7 @@ func decidePCSCF503Recovery(
 	// this host still fails over and remembers the P-CSCF as unavailable
 	// until Retry-After elapses.
 	return pcscf503RecoveryDecision{
-		recover: true, retryAfter: retryAfter, unavailableUntil: now.Add(retryAfter),
+		recover: true, retryAfter: retryAfter, unavailableUntil: input.now.Add(retryAfter),
 	}
 }
 
@@ -62,7 +70,10 @@ func parseSIPRetryAfter(values []string) (time.Duration, bool, error) {
 }
 
 func (s *Service) observeInitialInvite503(response *sipResponse) {
-	decision := decidePCSCF503Recovery(response, s.inviteTimerB(), time.Now())
+	penalty := s.jitterPortSRecoveryDelay(rfc5626RecoveryUpperBound(0, true))
+	decision := decidePCSCF503Recovery(pcscf503RecoveryInput{
+		response: response, timerB: s.inviteTimerB(), now: time.Now(), defaultPenalty: penalty,
+	})
 	if !decision.recover {
 		return
 	}

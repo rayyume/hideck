@@ -28,9 +28,13 @@ func parseCSV(text string) []Contact {
 	cols := csvColumns{nameIdx: 0, givenIdx: -1, familyIdx: -1, phoneIdxs: []int{1}}
 	start := 0
 	scanAll := false
-	if looksLikeHeader(rows[0]) {
+	hasHeader := looksLikeHeader(rows[0])
+	if hasHeader {
 		cols = headerColumns(rows[0])
 		start = 1
+		if len(cols.phoneIdxs) == 0 {
+			return nil
+		}
 	} else {
 		scanAll = true
 		cols.phoneIdxs = nil
@@ -39,7 +43,7 @@ func parseCSV(text string) []Contact {
 	for rowIndex, row := range rows[start:] {
 		name := rowName(row, cols)
 		var numbers []string
-		if scanAll || len(cols.phoneIdxs) == 0 {
+		if scanAll {
 			skip := map[int]struct{}{cols.nameIdx: {}, cols.givenIdx: {}, cols.familyIdx: {}}
 			for i, cell := range row {
 				if _, ok := skip[i]; ok {
@@ -69,7 +73,7 @@ func parseCSV(text string) []Contact {
 			})
 		}
 	}
-	if len(out) == 0 {
+	if len(out) == 0 && !hasHeader {
 		return parseLooseLines(text)
 	}
 	return uniqueContacts(out)
@@ -113,14 +117,6 @@ func headerColumns(row []string) csvColumns {
 			cols.nameIdx = -1
 		} else {
 			cols.nameIdx = 0
-		}
-	}
-	if len(cols.phoneIdxs) == 0 {
-		for i := range row {
-			if i == cols.nameIdx || i == cols.givenIdx || i == cols.familyIdx {
-				continue
-			}
-			cols.phoneIdxs = append(cols.phoneIdxs, i)
 		}
 	}
 	return cols
@@ -184,7 +180,7 @@ func isPhoneHeader(key string) bool {
 		strings.Contains(key, "휴대폰") || strings.Contains(key, "휴대전화") || strings.Contains(key, "집전화") ||
 		strings.Contains(key, "회사전화") ||
 		key == "住宅" || key == "办公" || key == "家庭" || key == "其他" || key == "工作" ||
-		key == "home" || key == "work" || key == "other" || key == "office" || key == "main"
+		key == "number" || key == "home" || key == "work" || key == "other" || key == "office" || key == "main"
 }
 
 func splitPhones(s string) []string {

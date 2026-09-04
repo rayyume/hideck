@@ -19,7 +19,7 @@ func NewRegistrarPenaltyStore() *RegistrarPenaltyStore {
 
 func (store *RegistrarPenaltyStore) mark(registrar string, until time.Time) {
 	registrar = strings.TrimSpace(registrar)
-	if store == nil || registrar == "" {
+	if store == nil || registrar == "" || until.IsZero() {
 		return
 	}
 	store.mu.Lock()
@@ -45,7 +45,7 @@ func (store *RegistrarPenaltyStore) unavailable(registrar string, now time.Time)
 	if !exists {
 		return false
 	}
-	if until.IsZero() || now.Before(until) {
+	if !until.IsZero() && now.Before(until) {
 		return true
 	}
 	delete(store.entries, registrar)
@@ -60,7 +60,7 @@ func (store *RegistrarPenaltyStore) snapshot(now time.Time) map[string]time.Time
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	for registrar, until := range store.entries {
-		if !until.IsZero() && !now.Before(until) {
+		if until.IsZero() || !now.Before(until) {
 			delete(store.entries, registrar)
 			continue
 		}

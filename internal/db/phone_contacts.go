@@ -138,33 +138,19 @@ func DeletePhoneContactWithRegion(ctx context.Context, number, region string) er
 }
 
 func UpsertPhoneContactsWithRegion(ctx context.Context, inputs []PhoneContactInput, region string) (imported, skipped int, err error) {
-	if DB == nil {
-		return 0, 0, gorm.ErrInvalidDB
-	}
-	err = DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		groupIDs := make(map[string]string)
-		for _, input := range inputs {
-			if strings.TrimSpace(input.Region) == "" {
-				input.Region = region
-			}
-			if err := assignImportContactID(&input, groupIDs); err != nil {
-				return err
-			}
-			if _, upsertErr := upsertPhoneContactWithDB(ctx, tx, input); upsertErr != nil {
-				if errors.Is(upsertErr, ErrInvalidPhoneContact) {
-					skipped++
-					continue
-				}
-				return upsertErr
-			}
-			imported++
-		}
-		return nil
+	rows, skipped, err := upsertPhoneContactBatch(ctx, inputs, phoneContactBatchOptions{
+		Region: region, SkipInvalid: true,
 	})
-	if err != nil {
-		return 0, 0, err
-	}
-	return imported, skipped, nil
+	return len(rows), skipped, err
+}
+
+func UpsertPhoneContactBatchWithRegion(
+	ctx context.Context,
+	inputs []PhoneContactInput,
+	region string,
+) ([]PhoneContact, error) {
+	rows, _, err := upsertPhoneContactBatch(ctx, inputs, phoneContactBatchOptions{Region: region})
+	return rows, err
 }
 
 func DeletePhoneContactsWithRegion(ctx context.Context, numbers []string, region string) (deleted int, err error) {
@@ -206,6 +192,10 @@ func LookupPhoneIdentityWithRegion(ctx context.Context, raw, region string) phon
 		return result
 	}
 	return result.WithContact(row.ContactID, row.Name)
+}
+
+func PhoneContactIdentity(row PhoneContact) phonelookup.Result {
+	return phonelookup.Lookup(row.Number).WithContact(row.ContactID, row.Name)
 }
 
 func resolvePhoneContactID(ctx context.Context, request phoneContactIDRequest) (string, error) {

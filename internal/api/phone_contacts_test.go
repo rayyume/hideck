@@ -189,6 +189,46 @@ func TestPhoneContactsPagination(t *testing.T) {
 	}
 }
 
+func TestPhoneContactsBatchReturnsOneAtomicGroup(t *testing.T) {
+	if err := db.Init(filepath.Join(t.TempDir(), "phone_contacts_batch.db")); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.DB = nil })
+
+	gin.SetMode(gin.TestMode)
+	server := &Server{auth: config.WebConfig{Username: "admin", Password: "secret"}}
+	router := gin.New()
+	api := router.Group("/api")
+	api.Use(server.authMiddleware())
+	server.registerPhoneContactRoutes(api)
+	token := testSessionToken(t, "secret", time.Now().Add(time.Hour))
+
+	body, _ := json.Marshal(map[string]any{"contacts": []map[string]string{
+		{"number": "10000", "name": "客服", "group_key": "manual"},
+		{"number": "10001", "name": "客服", "group_key": "manual"},
+	}})
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/phone/contacts/batch", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("batch status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	var result struct {
+		Imported int              `json:"imported"`
+		Contacts []map[string]any `json:"contacts"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Imported != 2 || len(result.Contacts) != 2 ||
+		result.Contacts[0]["contact_id"] == "" ||
+		result.Contacts[0]["contact_id"] != result.Contacts[1]["contact_id"] {
+		t.Fatalf("batch result = %+v", result)
+	}
+}
+
 type contactsPageResponse struct {
 	Contacts   []map[string]any `json:"contacts"`
 	Total      int              `json:"total"`

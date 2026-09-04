@@ -14,20 +14,21 @@ import (
 func TestDecidePCSCF503RecoveryFollowsTimerB(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	timerB := 32 * time.Second
+	defaultPenalty := 20 * time.Second
 	tests := []struct {
 		name       string
 		retryAfter string
 		want       bool
 		wantUntil  time.Time
 	}{
-		{name: "absent", want: true},
+		{name: "absent", want: true, wantUntil: now.Add(defaultPenalty)},
 		{name: "short", retryAfter: "10", want: false},
 		{name: "equal", retryAfter: "32", want: false},
 		{name: "long", retryAfter: "60 (maintenance)", want: true, wantUntil: now.Add(time.Minute)},
 		// Long Retry-After still failovers because waiting past Timer B would
 		// strand the originating INVITE. IR.92 2.2.1 only mandates this when
 		// Retry-After is absent; this extra branch is documented tolerance.
-		{name: "invalid", retryAfter: "later", want: true},
+		{name: "invalid", retryAfter: "later", want: true, wantUntil: now.Add(defaultPenalty)},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -35,7 +36,9 @@ func TestDecidePCSCF503RecoveryFollowsTimerB(t *testing.T) {
 			if test.retryAfter != "" {
 				response.Headers = map[string]string{"Retry-After": test.retryAfter}
 			}
-			decision := decidePCSCF503Recovery(response, timerB, now)
+			decision := decidePCSCF503Recovery(pcscf503RecoveryInput{
+				response: response, timerB: timerB, now: now, defaultPenalty: defaultPenalty,
+			})
 			if decision.recover != test.want || !decision.unavailableUntil.Equal(test.wantUntil) {
 				t.Fatalf("decision = %+v, want recover=%t until=%s", decision, test.want, test.wantUntil)
 			}
@@ -53,7 +56,9 @@ func TestPCSCFUnavailableCandidatesAreSkipped(t *testing.T) {
 	service.registrarPenalties.mark("pcscf-b.example:5060", time.Now().Add(time.Minute))
 	service.mu.Unlock()
 
-	next, current := service.markRegistrarUnavailableAndAdvance("pcscf-a.example:5060", time.Time{})
+	next, current := service.markRegistrarUnavailableAndAdvance(
+		"pcscf-a.example:5060", time.Now().Add(time.Minute),
+	)
 	if !current || next != "pcscf-c.example:5060" {
 		t.Fatalf("advance = %q current=%t", next, current)
 	}
@@ -112,6 +117,14 @@ func TestPCSCFShorterPenaltyDoesNotReplaceLongerPenalty(t *testing.T) {
 	store.mark("pcscf-a.example:5060", now.Add(30*time.Minute))
 	if got := store.snapshot(now)["pcscf-a.example:5060"]; !got.Equal(longer) {
 		t.Fatalf("penalty deadline = %s, want %s", got, longer)
+	}
+}
+
+func TestPCSCFZeroPenaltyDoesNotPermanentlyExcludeRegistrar(t *testing.T) {
+	store := NewRegistrarPenaltyStore()
+	store.mark("pcscf-a.example:5060", time.Time{})
+	if store.unavailable("pcscf-a.example:5060", time.Now()) {
+		t.Fatal("zero penalty permanently excluded the P-CSCF")
 	}
 }
 
