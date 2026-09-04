@@ -180,6 +180,9 @@ func Init(dbPath string) error {
 	); err != nil {
 		return err
 	}
+	if err := MigratePhoneContactIDs(DB); err != nil {
+		return err
+	}
 	if err := ensureSMSDeliveryPartUniqueIndex(DB); err != nil {
 		return err
 	}

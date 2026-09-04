@@ -39,6 +39,18 @@ func TestParseVCardMultipleNumbers(t *testing.T) {
 	if got[0].Name != "张三" || got[1].Name != "张三" {
 		t.Fatalf("%+v", got)
 	}
+	if got[0].ContactID == "" || got[0].ContactID != got[1].ContactID {
+		t.Fatalf("multi-number vCard lost its contact identity: %+v", got)
+	}
+}
+
+func TestParseVCardKeepsSameNameCardsSeparate(t *testing.T) {
+	raw := "BEGIN:VCARD\nVERSION:3.0\nFN:张伟\nTEL:13800138000\nEND:VCARD\n" +
+		"BEGIN:VCARD\nVERSION:3.0\nFN:张伟\nTEL:18600001111\nEND:VCARD\n"
+	got := Parse([]byte(raw), "same-name.vcf")
+	if len(got) != 2 || got[0].ContactID == "" || got[0].ContactID == got[1].ContactID {
+		t.Fatalf("same-name vCards were merged: %+v", got)
+	}
 }
 
 func TestParseXiaomiVCardMultipleTEL(t *testing.T) {
@@ -64,8 +76,8 @@ func TestExportVCardRoundTrip(t *testing.T) {
 
 func TestExportVCardGroupsMultipleNumbers(t *testing.T) {
 	in := []Contact{
-		{Name: "张三", Number: "13800138000"},
-		{Name: "张三", Number: "18600001111"},
+		{ContactID: "person-1", Name: "张三", Number: "13800138000"},
+		{ContactID: "person-1", Name: "张三", Number: "18600001111"},
 	}
 	raw := string(ExportVCard(in))
 	if strings.Count(raw, "BEGIN:VCARD") != 1 || strings.Count(raw, "TEL;TYPE=CELL;TYPE=VOICE:") != 2 {
@@ -179,8 +191,8 @@ func TestParseUTF16LECSV(t *testing.T) {
 
 func TestExportCSVRoundTrip(t *testing.T) {
 	in := []Contact{
-		{Name: "张三", Number: "13800138000"},
-		{Name: "张三", Number: "18600001111"},
+		{ContactID: "person-1", Name: "张三", Number: "13800138000"},
+		{ContactID: "person-1", Name: "张三", Number: "18600001111"},
 	}
 	got := Parse(ExportCSV(in), "export.csv")
 	if len(got) != 2 {
@@ -190,5 +202,37 @@ func TestExportCSVRoundTrip(t *testing.T) {
 		if item.Name != "张三" {
 			t.Fatalf("%+v", got)
 		}
+	}
+}
+
+func TestExportsKeepSameNameContactsSeparate(t *testing.T) {
+	contacts := []Contact{
+		{ContactID: "person-1", Name: "张伟", Number: "13800138000"},
+		{ContactID: "person-2", Name: "张伟", Number: "18600001111"},
+	}
+	if raw := string(ExportVCard(contacts)); strings.Count(raw, "BEGIN:VCARD") != 2 {
+		t.Fatalf("vCard merged same-name contacts:\n%s", raw)
+	}
+	if got := Parse(ExportCSV(contacts), "contacts.csv"); len(got) != 2 || got[0].ContactID == got[1].ContactID {
+		t.Fatalf("CSV merged same-name contacts: %+v", got)
+	}
+}
+
+func TestExportCSVPreservesEveryNumber(t *testing.T) {
+	contacts := make([]Contact, 0, 5)
+	for _, number := range []string{"10000", "10001", "10002", "10003", "10004"} {
+		contacts = append(contacts, Contact{ContactID: "person-1", Name: "客服", Number: number})
+	}
+	got := Parse(ExportCSV(contacts), "contacts.csv")
+	if len(got) != len(contacts) {
+		t.Fatalf("CSV round trip numbers = %d, want %d: %+v", len(got), len(contacts), got)
+	}
+}
+
+func TestImportRejectsNonPhoneFieldsInsteadOfStrippingCharacters(t *testing.T) {
+	raw := "Name,Phone,Email\nInvalid,138abc,user138@example.com\nEmail Only,,user138@example.com\nValid,+86 138-0013-8000,valid@example.com\n"
+	got := Parse([]byte(raw), "contacts.csv")
+	if len(got) != 1 || got[0].Name != "Valid" || got[0].Number != "+8613800138000" {
+		t.Fatalf("strict imported contacts = %+v", got)
 	}
 }

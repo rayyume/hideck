@@ -362,12 +362,15 @@ func healthState(state runtimehost.State) string {
 }
 
 func wifiCallingReady(state runtimehost.State) bool {
-	return state.IMSReady && state.SMSReady
+	return state.SMSHealthReady || (state.IMSReady && state.SMSReady)
 }
 
 func healthReason(state runtimehost.State) string {
+	if state.SMSHealthReady && !state.SMSReady {
+		return ""
+	}
 	values := []string{state.LastError, state.LastReason}
-	if state.IMSReady {
+	if state.IMSReady || state.SMSHealthReady {
 		values = []string{state.SMSReadyReason, state.LastError, state.LastReason}
 	}
 	values = append(values, state.Phase)

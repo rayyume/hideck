@@ -37,7 +37,12 @@ async function saveContact(record: PhoneRecord) {
       inputValue: current?.name || '',
       inputValidator: (v) => !!String(v || '').trim() || '请填写名字'
     })
-    const ident = await phoneContactsService.save(peer, String(value).trim(), record.device_id)
+    const ident = await phoneContactsService.save({
+      number: peer,
+      name: String(value).trim(),
+      deviceId: record.device_id,
+      contactId: current?.contact_id
+    })
     identities.upsertLocal(ident, peer, record.device_id)
     ElMessage.success('已保存联系人')
   } catch (error) {

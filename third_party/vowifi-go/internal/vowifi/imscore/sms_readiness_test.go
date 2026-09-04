@@ -2,8 +2,10 @@ package imscore
 
 import (
 	"errors"
+	"io"
 	"net"
 	"testing"
+	"time"
 
 	"github.com/iniwex5/vowifi-go/internal/vowifi/smsdelivery"
 )
@@ -37,6 +39,44 @@ func TestProtectedSMSReadinessRequiresPortSFlow(t *testing.T) {
 	service.portSOnDemandObserved.Store(true)
 	if got := service.SMSReadiness(); !got.ReceiverReady || !got.Ready {
 		t.Fatalf("on-demand port-s listener readiness = %+v", got)
+	}
+}
+
+func TestProtectedSMSHealthTreatsOnlyCleanEOFAsOnDemand(t *testing.T) {
+	tests := []struct {
+		name       string
+		closeError error
+		wantReady  bool
+	}{
+		{name: "clean EOF", closeError: io.EOF, wantReady: true},
+		{name: "peer reset", closeError: errors.New("read tcp: connection reset by peer")},
+		{name: "timeout", closeError: errors.New("read tcp: operation timed out")},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			service := newProtectedKeepaliveTestService(t)
+			registration, registrationPeer := net.Pipe()
+			push, pushPeer := net.Pipe()
+			t.Cleanup(func() {
+				_ = registrationPeer.Close()
+				_ = pushPeer.Close()
+			})
+			service.mu.Lock()
+			service.registrationTCP = registration
+			service.registrationTCPProtected = true
+			service.mu.Unlock()
+			now := time.Now()
+			service.recordPortSOpened(push, now)
+			if !service.trackProtectedConnection(push) {
+				t.Fatal("track port-s")
+			}
+			service.recordPortSClosed(push, test.closeError, now)
+			service.untrackProtectedConnection(push)
+			got := service.SMSReadiness()
+			if got.Ready || got.HealthReady != test.wantReady {
+				t.Fatalf("readiness = %+v, want health ready %t", got, test.wantReady)
+			}
+		})
 	}
 }
 

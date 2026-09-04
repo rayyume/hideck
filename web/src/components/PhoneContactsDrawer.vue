@@ -37,6 +37,7 @@ const emit = defineEmits<{
 
 type ContactGroup = {
   key: string
+  contactId?: string
   name: string
   items: PhoneIdentity[]
 }
@@ -89,11 +90,11 @@ const {
 })
 
 const peopleCount = computed(() => {
-  const names = new Set<string>()
+  const groups = new Set<string>()
   for (const item of identities.contacts) {
-    names.add(String(item.name || item.title || item.number).trim())
+    groups.add(contactGroupKey(item))
   }
-  return names.size
+  return groups.size
 })
 
 const groupedContacts = computed(() => {
@@ -105,10 +106,11 @@ const groupedContacts = computed(() => {
   const index = new Map<string, ContactGroup>()
   for (const item of rows) {
     const name = String(item.name || item.title || item.number).trim()
-    let group = index.get(name)
+    const key = contactGroupKey(item)
+    let group = index.get(key)
     if (!group) {
-      group = { key: name, name, items: [] }
-      index.set(name, group)
+      group = { key, contactId: item.contact_id, name, items: [] }
+      index.set(key, group)
       groups.push(group)
     }
     group.items.push(item)
@@ -158,6 +160,10 @@ function contactHaystack(item: PhoneIdentity) {
     item.region,
     item.country
   ].filter(Boolean).join(' ').toLowerCase()
+}
+
+function contactGroupKey(item: PhoneIdentity) {
+  return item.contact_id || `number:${item.number}`
 }
 
 function handleOpenChange(open: boolean) {
@@ -269,9 +275,14 @@ async function saveManual() {
   saving.value = true
   const name = draftName.value.trim()
   const numbers = draftNumbers.value
+  let contactId = ''
   try {
     for (const number of numbers) {
-      identities.upsertLocal(await phoneContactsService.save(number, name, props.deviceId), number, props.deviceId)
+      const ident = await phoneContactsService.save({
+        number, name, deviceId: props.deviceId, contactId
+      })
+      contactId ||= ident.contact_id || ''
+      identities.upsertLocal(ident, number, props.deviceId)
     }
     closeAddForm()
     ElMessage.success({
@@ -295,7 +306,10 @@ async function addNumberToGroup(group: ContactGroup) {
       inputValidator: (v) => isPhoneContactNumberValid(v) || '号码只能是数字，可带开头的 +'
     })
     const number = normalizePhoneContactNumber(value)
-    identities.upsertLocal(await phoneContactsService.save(number, group.name, props.deviceId), number, props.deviceId)
+    const ident = await phoneContactsService.save({
+      number, name: group.name, deviceId: props.deviceId, contactId: group.contactId
+    })
+    identities.upsertLocal(ident, number, props.deviceId)
     expanded.value = group.key
     ElMessage.success({ message: '已添加号码', zIndex: 5100 })
   } catch (error) {
@@ -316,7 +330,10 @@ async function editGroup(group: ContactGroup) {
     })
     const name = String(value).trim()
     for (const item of group.items) {
-      identities.upsertLocal(await phoneContactsService.save(item.number, name, props.deviceId), item.number, props.deviceId)
+      const ident = await phoneContactsService.save({
+        number: item.number, name, deviceId: props.deviceId, contactId: group.contactId
+      })
+      identities.upsertLocal(ident, item.number, props.deviceId)
     }
     ElMessage.success({ message: '已更新联系人', zIndex: 5100 })
   } catch (error) {

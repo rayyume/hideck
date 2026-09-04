@@ -2,6 +2,7 @@ package phonebook
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"strings"
 	"unicode"
@@ -13,8 +14,9 @@ import (
 )
 
 type Contact struct {
-	Name   string
-	Number string
+	ContactID string
+	Name      string
+	Number    string
 }
 
 func Parse(data []byte, filename string) []Contact {
@@ -84,7 +86,25 @@ func normalizeImportedNumber(s string) string {
 	if len(s) >= 4 && strings.EqualFold(s[:4], "tel:") {
 		s = strings.TrimSpace(s[4:])
 	}
-	return strings.TrimSpace(s)
+	var normalized strings.Builder
+	digits := 0
+	for _, r := range strings.TrimSpace(s) {
+		switch {
+		case r >= '0' && r <= '9':
+			normalized.WriteRune(r)
+			digits++
+		case r == '+' && normalized.Len() == 0:
+			normalized.WriteRune(r)
+		case r == ' ' || r == '\t' || r == '-' || r == '(' || r == ')' || r == '.':
+			continue
+		default:
+			return ""
+		}
+	}
+	if digits < 3 || digits > 32 {
+		return ""
+	}
+	return normalized.String()
 }
 
 func joinPersonName(family, given string) string {
@@ -115,7 +135,7 @@ func uniqueContacts(in []Contact) []Contact {
 	seen := map[string]int{}
 	out := make([]Contact, 0, len(in))
 	for _, item := range in {
-		number := strings.TrimSpace(item.Number)
+		number := normalizeImportedNumber(item.Number)
 		name := strings.TrimSpace(item.Name)
 		if number == "" || name == "" {
 			continue
@@ -127,17 +147,44 @@ func uniqueContacts(in []Contact) []Contact {
 			continue
 		}
 		seen[number] = len(out)
-		out = append(out, Contact{Name: name, Number: number})
+		out = append(out, Contact{ContactID: item.ContactID, Name: name, Number: number})
 	}
 	return out
 }
 
 func looksLikePhone(s string) bool {
-	digits := 0
-	for _, r := range s {
-		if unicode.IsDigit(r) {
-			digits++
+	return normalizeImportedNumber(s) != ""
+}
+
+type contactGroup struct {
+	ID      string
+	Name    string
+	Numbers []string
+}
+
+func groupContacts(contacts []Contact) []contactGroup {
+	groups := make([]contactGroup, 0, len(contacts))
+	indexes := make(map[string]int)
+	for _, item := range contacts {
+		name := strings.TrimSpace(item.Name)
+		number := normalizeImportedNumber(item.Number)
+		if name == "" || number == "" {
+			continue
 		}
+		key := strings.TrimSpace(item.ContactID)
+		if key == "" {
+			key = "number:" + number
+		}
+		if index, ok := indexes[key]; ok {
+			groups[index].Numbers = append(groups[index].Numbers, number)
+			continue
+		}
+		indexes[key] = len(groups)
+		groups = append(groups, contactGroup{ID: key, Name: name, Numbers: []string{number}})
 	}
-	return digits >= 3 && digits <= 32
+	return groups
+}
+
+func sourceContactID(kind string, index int) string {
+	return fmt.Sprintf("%s:%d", kind, index)
 }

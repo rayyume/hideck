@@ -3,6 +3,7 @@ import { api } from '../stores/auth'
 export type PhoneIdentity = {
   number: string
   display_number: string
+  contact_id?: string
   name?: string
   title: string
   subtitle: string
@@ -24,10 +25,18 @@ type PhoneContactsPageParams = Readonly<{
   offset: number
 }>
 
+export type PhoneContactSave = Readonly<{
+  number: string
+  name: string
+  deviceId?: string
+  contactId?: string
+}>
+
 function normalizeIdentity(row: PhoneIdentity): PhoneIdentity {
   return {
     number: row.number,
     display_number: row.display_number || row.number,
+    contact_id: row.contact_id,
     name: row.name,
     title: row.title || row.name || row.display_number || row.number,
     subtitle: row.subtitle || '',
@@ -77,13 +86,14 @@ export const phoneContactsService = {
       hasMore: res.data.has_more
     }
   },
-  async save(number: string, name: string, deviceId = ''): Promise<PhoneIdentity> {
+  async save(contact: PhoneContactSave): Promise<PhoneIdentity> {
     const res = await api.put('/phone/contacts', {
-      number,
-      name,
-      device_id: deviceId || undefined
+      number: contact.number,
+      name: contact.name,
+      device_id: contact.deviceId || undefined,
+      contact_id: contact.contactId || undefined
     })
-    return res.data as PhoneIdentity
+    return normalizeIdentity(res.data as PhoneIdentity)
   },
   async remove(number: string, deviceId = ''): Promise<void> {
     await api.delete('/phone/contacts', {

@@ -2,6 +2,7 @@ package phonebook
 
 import (
 	"encoding/csv"
+	"fmt"
 	"strings"
 	"unicode"
 )
@@ -35,7 +36,7 @@ func parseCSV(text string) []Contact {
 		cols.phoneIdxs = nil
 	}
 	var out []Contact
-	for _, row := range rows[start:] {
+	for rowIndex, row := range rows[start:] {
 		name := rowName(row, cols)
 		var numbers []string
 		if scanAll || len(cols.phoneIdxs) == 0 {
@@ -63,7 +64,9 @@ func parseCSV(text string) []Contact {
 			if name == "" || !looksLikePhone(number) {
 				continue
 			}
-			out = append(out, Contact{Name: name, Number: number})
+			out = append(out, Contact{
+				ContactID: sourceContactID("csv", rowIndex), Name: name, Number: number,
+			})
 		}
 	}
 	if len(out) == 0 {
@@ -205,7 +208,7 @@ func splitPhones(s string) []string {
 
 func parseLooseLines(text string) []Contact {
 	var out []Contact
-	for _, line := range strings.Split(text, "\n") {
+	for lineIndex, line := range strings.Split(text, "\n") {
 		line = strings.TrimSpace(strings.TrimSuffix(line, "\r"))
 		if line == "" {
 			continue
@@ -216,48 +219,51 @@ func parseLooseLines(text string) []Contact {
 		if len(fields) < 2 {
 			continue
 		}
-		name, number := strings.TrimSpace(fields[0]), strings.TrimSpace(fields[1])
-		if looksLikePhone(name) && !looksLikePhone(number) {
-			name, number = number, name
+		name := strings.TrimSpace(fields[0])
+		number := normalizeImportedNumber(fields[1])
+		if candidate := normalizeImportedNumber(name); candidate != "" && number == "" {
+			name, number = strings.TrimSpace(fields[1]), candidate
 		}
-		if name == "" || !looksLikePhone(number) {
+		if name == "" || number == "" {
 			continue
 		}
-		out = append(out, Contact{Name: name, Number: number})
+		out = append(out, Contact{
+			ContactID: sourceContactID("line", lineIndex), Name: name, Number: number,
+		})
 	}
 	return uniqueContacts(out)
 }
 
 func ExportCSV(contacts []Contact) []byte {
-	groups := map[string][]string{}
-	order := make([]string, 0, len(contacts))
-	for _, item := range contacts {
-		name := strings.TrimSpace(item.Name)
-		number := strings.TrimSpace(item.Number)
-		if name == "" || number == "" {
-			continue
+	groups := groupContacts(contacts)
+	maxNumbers := 0
+	for _, group := range groups {
+		if len(group.Numbers) > maxNumbers {
+			maxNumbers = len(group.Numbers)
 		}
-		if _, ok := groups[name]; !ok {
-			order = append(order, name)
-		}
-		groups[name] = append(groups[name], number)
 	}
 	var b strings.Builder
 	b.WriteString("\ufeff")
 	w := csv.NewWriter(&b)
-	_ = w.Write([]string{"姓名", "号码", "Name", "Mobile Phone", "Home Phone", "Work Phone"})
-	for _, name := range order {
-		numbers := groups[name]
-		row := []string{name, firstNumber(numbers, 0), name, firstNumber(numbers, 0), firstNumber(numbers, 1), firstNumber(numbers, 2)}
+	_ = w.Write(csvExportHeader(maxNumbers))
+	for _, group := range groups {
+		row := []string{group.Name}
+		for _, number := range group.Numbers {
+			row = append(row, "Mobile", number)
+		}
 		_ = w.Write(row)
 	}
 	w.Flush()
 	return []byte(b.String())
 }
 
-func firstNumber(numbers []string, i int) string {
-	if i < 0 || i >= len(numbers) {
-		return ""
+func csvExportHeader(numberCount int) []string {
+	header := []string{"Name"}
+	for index := 1; index <= numberCount; index++ {
+		header = append(header,
+			fmt.Sprintf("Phone %d - Type", index),
+			fmt.Sprintf("Phone %d - Value", index),
+		)
 	}
-	return numbers[i]
+	return header
 }

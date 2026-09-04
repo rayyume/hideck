@@ -103,9 +103,10 @@ func loadPhoneContacts(c *gin.Context, page contactPageRequest) ([]db.PhoneConta
 }
 
 type phoneContactRequest struct {
-	Number   string `json:"number"`
-	Name     string `json:"name"`
-	DeviceID string `json:"device_id"`
+	Number    string `json:"number"`
+	Name      string `json:"name"`
+	DeviceID  string `json:"device_id"`
+	ContactID string `json:"contact_id"`
 }
 
 func (s *Server) handlePhoneContactsUpsert(c *gin.Context) {
@@ -116,7 +117,7 @@ func (s *Server) handlePhoneContactsUpsert(c *gin.Context) {
 	}
 	region := s.phoneNumberRegion(req.DeviceID)
 	row, err := db.UpsertPhoneContactWithRegion(c.Request.Context(), db.PhoneContactInput{
-		Number: req.Number, Name: req.Name, Region: region,
+		Number: req.Number, Name: req.Name, Region: region, ContactID: req.ContactID,
 	})
 	if err != nil {
 		status := http.StatusBadRequest
@@ -179,7 +180,9 @@ func (s *Server) handlePhoneContactsBatch(c *gin.Context) {
 	region := s.phoneNumberRegion(req.DeviceID)
 	inputs := make([]db.PhoneContactInput, 0, len(req.Contacts))
 	for _, item := range req.Contacts {
-		inputs = append(inputs, db.PhoneContactInput{Number: item.Number, Name: item.Name, Region: region})
+		inputs = append(inputs, db.PhoneContactInput{
+			Number: item.Number, Name: item.Name, Region: region, ContactID: item.ContactID,
+		})
 	}
 	imported, skipped, err := db.UpsertPhoneContactsWithRegion(c.Request.Context(), inputs, region)
 	if err != nil {
@@ -215,7 +218,7 @@ func (s *Server) handlePhoneContactsExport(c *gin.Context) {
 	}
 	contacts := make([]phonebook.Contact, 0, len(rows))
 	for _, row := range rows {
-		contacts = append(contacts, phonebook.Contact{Name: row.Name, Number: row.Number})
+		contacts = append(contacts, phonebook.Contact{ContactID: row.ContactID, Name: row.Name, Number: row.Number})
 	}
 	format := strings.ToLower(strings.TrimSpace(c.Query("format")))
 	stamp := time.Now().Format("20060102")
@@ -255,12 +258,17 @@ func (s *Server) handlePhoneContactsImport(c *gin.Context) {
 		return
 	}
 	if len(parsed) > maxContactBatch {
-		parsed = parsed[:maxContactBatch]
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status": "error", "code": "batch_too_large", "message": "一次最多导入 5000 条，请拆分文件后重试",
+		})
+		return
 	}
 	region := s.phoneNumberRegion(c.PostForm("device_id"))
 	inputs := make([]db.PhoneContactInput, 0, len(parsed))
 	for _, item := range parsed {
-		inputs = append(inputs, db.PhoneContactInput{Number: item.Number, Name: item.Name, Region: region})
+		inputs = append(inputs, db.PhoneContactInput{
+			Number: item.Number, Name: item.Name, Region: region, GroupKey: item.ContactID,
+		})
 	}
 	imported, skipped, err := db.UpsertPhoneContactsWithRegion(c.Request.Context(), inputs, region)
 	if err != nil {

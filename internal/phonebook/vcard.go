@@ -14,13 +14,15 @@ import (
 
 func parseVCard(text string) []Contact {
 	var out []Contact
-	for _, card := range splitVCards(unfoldVCard(text)) {
+	for index, card := range splitVCards(unfoldVCard(text)) {
 		name := vcardName(card)
 		for _, number := range vcardNumbers(card) {
 			if name == "" {
 				name = number
 			}
-			out = append(out, Contact{Name: name, Number: number})
+			out = append(out, Contact{
+				ContactID: sourceContactID("vcard", index), Name: name, Number: number,
+			})
 		}
 	}
 	return uniqueContacts(out)
@@ -241,25 +243,12 @@ func vcardUnescape(s string) string {
 }
 
 func ExportVCard(contacts []Contact) []byte {
-	groups := map[string][]string{}
-	order := make([]string, 0, len(contacts))
-	for _, item := range contacts {
-		name := strings.TrimSpace(item.Name)
-		number := strings.TrimSpace(item.Number)
-		if name == "" || number == "" {
-			continue
-		}
-		if _, ok := groups[name]; !ok {
-			order = append(order, name)
-		}
-		groups[name] = append(groups[name], number)
-	}
 	var b strings.Builder
-	for _, name := range order {
+	for _, group := range groupContacts(contacts) {
 		b.WriteString("BEGIN:VCARD\r\nVERSION:3.0\r\n")
-		b.WriteString("FN:" + vcardEscape(name) + "\r\n")
-		b.WriteString("N:" + vcardEscape(name) + ";;;;\r\n")
-		for _, number := range groups[name] {
+		b.WriteString("FN:" + vcardEscape(group.Name) + "\r\n")
+		b.WriteString("N:" + vcardEscape(group.Name) + ";;;;\r\n")
+		for _, number := range group.Numbers {
 			b.WriteString("TEL;TYPE=CELL;TYPE=VOICE:" + vcardEscape(number) + "\r\n")
 		}
 		b.WriteString("END:VCARD\r\n")

@@ -158,8 +158,17 @@ test('contact import behavior is shared and exposes list refresh failures', () =
   assert.match(contactsDrawer, /useContactImport\(/)
   assert.match(contactImporter, /但列表刷新失败/)
   assert.match(contactImporter, /input\.value = ''/)
+  assert.match(contactImporter, /reloadContacts\(\{ fresh: true \}\)/)
+  assert.match(phoneIdentity, /if \(contactsLoadPromise && !options\.fresh\) return contactsLoadPromise/)
   assert.match(contactsDrawer, /:disabled="exporting"/)
   assert.match(contactsDrawer, /exporting\.value = false/)
+})
+
+test('contacts are grouped by persistent identity instead of display name', () => {
+  assert.match(contactService, /contact_id\?: string/)
+  assert.match(contactsDrawer, /return item\.contact_id \|\| `number:\$\{item\.number\}`/)
+  assert.match(contactsDrawer, /contactId: group\.contactId/)
+  assert.doesNotMatch(contactsDrawer, /index\.get\(name\)/)
 })
 
 test('wifi calling keeps a dedicated start switch under the mode control', () => {

@@ -349,6 +349,7 @@ type SMSReadiness struct {
 	SMSCPresent    bool
 	Ready          bool
 	MOReady        bool
+	HealthReady    bool
 	Reason         string
 }
 

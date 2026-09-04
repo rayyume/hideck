@@ -120,6 +120,34 @@ func TestWiFiCallingHealthStartsWhenSMSReceiverIsReady(t *testing.T) {
 	}
 }
 
+func TestWiFiCallingHealthStartsFromEarlyRuntimeHealthReadiness(t *testing.T) {
+	store := newWiFiCallingHealthStore()
+	started := time.Date(2026, 9, 4, 10, 45, 0, 0, time.UTC)
+	store.Begin("wwan0", started)
+	store.Observe("wwan0", runtimehost.State{
+		DeviceID: "wwan0", SMSHealthReady: true, Phase: "ipsec_up",
+		SMSReadyReason: "IMS SMS receiver ready", UpdatedAt: started.Add(time.Second),
+	})
+	snapshot, _ := store.Snapshot("wwan0", started.Add(2*time.Second))
+	if !snapshot.Measured || snapshot.SessionStartedAt != started.Add(time.Second) {
+		t.Fatalf("early health readiness did not start measurement: %+v", snapshot)
+	}
+}
+
+func TestWiFiCallingHealthIgnoresOnDemandPortSCleanEOF(t *testing.T) {
+	store := newWiFiCallingHealthStore()
+	started := time.Date(2026, 9, 4, 10, 50, 0, 0, time.UTC)
+	observeHealth(store, started, true, "sms_ready", "")
+	store.Observe("wwan0", runtimehost.State{
+		DeviceID: "wwan0", IMSReady: true, SMSHealthReady: true, Phase: "ims_ready",
+		SMSReadyReason: "IMS SMS receiver is not ready", UpdatedAt: started.Add(time.Minute),
+	})
+	snapshot, _ := store.Snapshot("wwan0", started.Add(2*time.Minute))
+	if snapshot.State != "healthy" || snapshot.InterruptionCount != 0 || snapshot.InterruptedSeconds != 0 || snapshot.LastReason != "" {
+		t.Fatalf("clean port-s EOF counted as outage: %+v", snapshot)
+	}
+}
+
 func TestWiFiCallingHealthRecordsFailureBeforeFirstRegistration(t *testing.T) {
 	store := newWiFiCallingHealthStore()
 	started := time.Date(2026, 9, 4, 11, 0, 0, 0, time.UTC)

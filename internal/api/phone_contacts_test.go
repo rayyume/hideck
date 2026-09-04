@@ -108,6 +108,15 @@ func TestPhoneLookupAndContacts(t *testing.T) {
 	if len(payload.Contacts) != 3 {
 		t.Fatalf("want 3 contacts after multi-number import, got %v", payload)
 	}
+	var importedIDs []string
+	for _, contact := range payload.Contacts {
+		if contact["name"] == "张三" {
+			importedIDs = append(importedIDs, contact["contact_id"].(string))
+		}
+	}
+	if len(importedIDs) != 2 || importedIDs[0] == "" || importedIDs[0] != importedIDs[1] {
+		t.Fatalf("multi-number import contact IDs = %v", importedIDs)
+	}
 
 	exported := httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodGet, "/api/phone/contacts/export", nil)

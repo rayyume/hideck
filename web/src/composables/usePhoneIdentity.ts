@@ -7,6 +7,8 @@ import {
 
 const CONTACT_PAGE_SIZE = 100
 
+type ContactReloadOptions = Readonly<{ fresh?: boolean }>
+
 const cache = reactive(new Map<string, PhoneIdentity>())
 const inflight = new Map<string, Promise<PhoneIdentity>>()
 const contacts = reactive<PhoneIdentity[]>([])
@@ -36,6 +38,7 @@ function cacheKey(number?: string, deviceId?: string) {
 
 function withoutContactName(ident: PhoneIdentity): PhoneIdentity {
   const result = { ...ident }
+  delete result.contact_id
   delete result.name
   result.title = ident.display_number || ident.number
   return result
@@ -102,21 +105,24 @@ function rememberWithoutList(ident: PhoneIdentity, sourceNumber = '', deviceId =
   if (display) cache.set(display, ident)
 }
 
-function reloadContacts() {
-  if (contactsLoadPromise) return contactsLoadPromise
+function reloadContacts(options: ContactReloadOptions = {}) {
+  if (contactsLoadPromise && !options.fresh) return contactsLoadPromise
   const generation = ++contactsGeneration
   contactsState.loading = true
   contactsState.error = ''
-  const request = loadCurrentContactPage(0).then((page) => {
+  let request: Promise<PhoneIdentity[]>
+  request = loadCurrentContactPage(0).then((page) => {
     if (generation !== contactsGeneration) return contacts
     replaceContactRows(page)
     return contacts
   }).catch((error: unknown) => {
-    contactsState.error = errorMessage(error)
+    if (generation === contactsGeneration) contactsState.error = errorMessage(error)
     throw error
   }).finally(() => {
-    contactsState.loading = false
-    contactsLoadPromise = undefined
+    if (contactsLoadPromise === request) {
+      contactsState.loading = false
+      contactsLoadPromise = undefined
+    }
   })
   contactsLoadPromise = request
   return request
@@ -161,15 +167,18 @@ function loadMoreContacts() {
   const generation = contactsGeneration
   contactsState.loadingMore = true
   contactsState.error = ''
-  const request = loadCurrentContactPage(contactsState.nextOffset).then((page) => {
+  let request: Promise<PhoneIdentity[]>
+  request = loadCurrentContactPage(contactsState.nextOffset).then((page) => {
     if (generation === contactsGeneration) appendContactRows(page)
     return contacts
   }).catch((error: unknown) => {
     if (generation === contactsGeneration) contactsState.error = errorMessage(error)
     throw error
   }).finally(() => {
-    contactsState.loadingMore = false
-    contactsMorePromise = undefined
+    if (contactsMorePromise === request) {
+      contactsState.loadingMore = false
+      contactsMorePromise = undefined
+    }
   })
   contactsMorePromise = request
   return request

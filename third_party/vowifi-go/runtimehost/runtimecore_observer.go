@@ -81,12 +81,14 @@ func (observer *instanceObserver) applyEvent(
 	case "sms_ready":
 		state.Phase = "sms_ready"
 		state.SMSReady = true
+		state.SMSHealthReady = true
 		clearRuntimeError(state)
 	case "interrupted":
 		state.Phase = "interrupted"
 		state.TunnelReady = false
 		state.IMSReady = false
 		state.SMSReady = false
+		state.SMSHealthReady = false
 		state.DataPlaneUp = false
 		state.LastReason = strings.TrimSpace(event.Reason)
 		state.LastRedirectEPDG = strings.TrimSpace(event.RedirectEPDG)
@@ -96,6 +98,9 @@ func (observer *instanceObserver) applyEvent(
 	case "terminal_error":
 		state.Phase = "error"
 		state.SessionState = "error"
+		state.IMSReady = false
+		state.SMSReady = false
+		state.SMSHealthReady = false
 		state.LastErrorClass = "runtime"
 		state.LastError = firstNonEmptyString(event.Message, event.Reason)
 		state.Error = state.LastError
@@ -107,6 +112,7 @@ func (observer *instanceObserver) applyEvent(
 		state.TunnelReady = false
 		state.IMSReady = false
 		state.SMSReady = false
+		state.SMSHealthReady = false
 		state.DataPlaneUp = false
 	}
 }

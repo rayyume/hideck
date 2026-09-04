@@ -5,6 +5,7 @@ import "strings"
 type Result struct {
 	Number        string `json:"number"`
 	DisplayNumber string `json:"display_number"`
+	ContactID     string `json:"contact_id,omitempty"`
 	Name          string `json:"name,omitempty"`
 	Title         string `json:"title"`
 	Subtitle      string `json:"subtitle"`
@@ -120,6 +121,12 @@ func (r Result) WithName(name string) Result {
 	}
 	r.Name = name
 	r.Title = name
+	return r
+}
+
+func (r Result) WithContact(id, name string) Result {
+	r = r.WithName(name)
+	r.ContactID = strings.TrimSpace(id)
 	return r
 }
 

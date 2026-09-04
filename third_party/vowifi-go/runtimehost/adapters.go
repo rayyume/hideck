@@ -86,7 +86,8 @@ func adaptSMSReadiness(readiness imscore.SMSReadiness) SMSReadiness {
 	return SMSReadiness{
 		Registered: readiness.Registered, ProfileReady: readiness.ProfileReady,
 		TransportReady: readiness.TransportReady, ReceiverReady: readiness.ReceiverReady,
-		SMSCPresent: readiness.SMSCPresent, Ready: readiness.Ready, Reason: readiness.Reason,
+		SMSCPresent: readiness.SMSCPresent, Ready: readiness.Ready,
+		HealthReady: readiness.HealthReady, Reason: readiness.Reason,
 	}
 }
 
@@ -259,7 +260,7 @@ func (a serviceAdapter) StatusCurrent() Status {
 	}
 	return Status{State: State{
 		Phase: "ready", DeviceID: status.DeviceID,
-		IMSReady: status.IsRegistered(), SMSReady: sms.Ready,
+		IMSReady: status.IsRegistered(), SMSReady: sms.Ready, SMSHealthReady: sms.HealthReady,
 		RegStatus: boolStatus(status.IsRegistered()), RegStatusText: status.RegStatus,
 		SessionState: "established", IMSState: status.RegState, SMSReadyReason: sms.Reason,
 	}}

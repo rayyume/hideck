@@ -64,6 +64,26 @@ func TestCoreSMSReadinessUpdatesRuntimeState(t *testing.T) {
 	}
 }
 
+func TestCoreSMSHealthReadinessIsRecordedBeforeSessionPublication(t *testing.T) {
+	instance := &Instance{}
+	instance.setState(State{DeviceID: "wwan0", Phase: "ipsec_up"})
+	observer := &instanceObserver{inst: instance, deviceID: "wwan0"}
+	request := runtimecore.RuntimeStartRequest{}
+	chainSMSReadinessHook(&request, observer)
+
+	request.Hooks.OnSMSReadinessChanged(context.Background(), imscore.SMSReadiness{
+		Registered: true, ProfileReady: true, TransportReady: true, ReceiverReady: true,
+		SMSCPresent: true, Ready: true, HealthReady: true, Reason: "IMS SMS receiver ready",
+	})
+	state := instance.State()
+	if state.IMSReady || state.SMSReady || !state.SMSHealthReady {
+		t.Fatalf("pre-session readiness state = %+v", state)
+	}
+	if state.SMSReadyReason != "IMS SMS receiver ready" || state.UpdatedAt.IsZero() {
+		t.Fatalf("pre-session health metadata = %+v", state)
+	}
+}
+
 func TestMainStartWaitsForRecoveredIPSecReadyEvent(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

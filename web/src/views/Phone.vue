@@ -260,7 +260,12 @@ async function savePeerContact(number?: string) {
       inputValue: current?.name || '',
       inputValidator: (v) => !!String(v || '').trim() || '请填写名字'
     })
-    const ident = await phoneContactsService.save(peer, String(value).trim(), deviceId)
+    const ident = await phoneContactsService.save({
+      number: peer,
+      name: String(value).trim(),
+      deviceId,
+      contactId: current?.contact_id
+    })
     identities.upsertLocal(ident, peer, deviceId)
     ElMessage.success('已保存联系人')
   } catch (error) {

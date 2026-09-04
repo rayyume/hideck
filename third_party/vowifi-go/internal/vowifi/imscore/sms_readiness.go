@@ -11,6 +11,13 @@ const (
 	smsReadyReasonSMSCNotConfigured = "IMS SMSC is not configured"
 )
 
+type smsHealthInput struct {
+	readiness             SMSReadiness
+	baseReceiverReady     bool
+	protectedPushRequired bool
+	portS                 portSSessionSnapshot
+}
+
 // SMSReadiness returns a consistent snapshot of the SMS prerequisites.
 func (s *Service) SMSReadiness() SMSReadiness {
 	if s == nil {
@@ -22,8 +29,10 @@ func (s *Service) SMSReadiness() SMSReadiness {
 		strings.TrimSpace(s.regSession.publicID) != "" &&
 		strings.TrimSpace(s.regSession.contactUser) != ""
 	transportReady := registered && s.registeredSIPTransportReadyLocked()
-	receiverReady := s.smsReceiverReady
-	if s.protectedSMSPushRequiredLocked() {
+	baseReceiverReady := s.smsReceiverReady
+	receiverReady := baseReceiverReady
+	protectedPushRequired := s.protectedSMSPushRequiredLocked()
+	if protectedPushRequired {
 		receiverReady = receiverReady && s.portSPushReady.Load()
 	}
 	smsc := ""
@@ -31,7 +40,20 @@ func (s *Service) SMSReadiness() SMSReadiness {
 		smsc = s.cfg.SMSC
 	}
 	s.mu.RUnlock()
-	return evaluateSMSReadiness(registered, profileReady, transportReady, receiverReady, smsc)
+	readiness := evaluateSMSReadiness(registered, profileReady, transportReady, receiverReady, smsc)
+	readiness.HealthReady = readiness.Ready || smsReceiverHealthReady(smsHealthInput{
+		readiness: readiness, baseReceiverReady: baseReceiverReady,
+		protectedPushRequired: protectedPushRequired, portS: s.capturePortSSession(),
+	})
+	return readiness
+}
+
+func smsReceiverHealthReady(input smsHealthInput) bool {
+	return input.readiness.Registered && input.readiness.ProfileReady &&
+		input.readiness.TransportReady && input.baseReceiverReady &&
+		input.protectedPushRequired && !input.portS.connected &&
+		input.portS.lastCloseKind == portSCloseEOF &&
+		!input.portS.closedAt.Before(input.portS.openedAt)
 }
 
 func (s *Service) protectedSMSPushRequiredLocked() bool {
@@ -115,6 +137,7 @@ func evaluateSMSReadiness(registered, profileReady, transportReady, receiverRead
 		readiness.Reason = smsReadyReasonReceiverNotReady
 	default:
 		readiness.Ready = true
+		readiness.HealthReady = true
 		if !readiness.SMSCPresent {
 			readiness.Reason = smsReadyReasonSMSCNotConfigured
 			break

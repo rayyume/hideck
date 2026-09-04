@@ -5,7 +5,7 @@ import { contactImportFilesFromDataTransfer, dataTransferHasFiles } from '../uti
 
 type ContactImportOptions = Readonly<{
   deviceId: () => string | undefined
-  reloadContacts: () => Promise<unknown>
+  reloadContacts: (options?: Readonly<{ fresh?: boolean }>) => Promise<unknown>
   onComplete?: () => void
 }>
 
@@ -92,7 +92,7 @@ export function useContactImport(options: ContactImportOptions) {
     }
     options.onComplete?.()
     try {
-      await options.reloadContacts()
+      await options.reloadContacts({ fresh: true })
     } catch (error) {
       ElMessage.error({
         message: `${successMessage(totals)}，但列表刷新失败：${errorMessage(error, '请重新加载联系人')}`,
