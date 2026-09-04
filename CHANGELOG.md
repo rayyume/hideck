@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.1.9 - 2026-09-04
+
+### QMI / 原生 VoLTE
+
+- 换卡后 QMI CTL 超时不再拆掉 worker；身份改从 AT 口读。CTL 连续超时且 AT 还活着时，只复位这一块模组 USB，不用 CFUN。
+- `网络` 关闭时主机不上 LTE 默认上网 PDN。VoLTE 的 IMS PDN 起来后也会把 usbnet 刷掉。
+
+### VoWiFi / IMS
+
+- port-s 恢复按 RFC 5626 退避；短信与 IMS 就绪顺序对齐；REGISTER/短信入向恢复更稳。
+
 ## 2.1.8 - 2026-09-03
 
 ### 打包
