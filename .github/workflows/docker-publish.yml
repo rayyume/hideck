@@ -1,77 +1,132 @@
 name: Build and Push Docker Image
 
+# Do not start on the tag push. Binary release creates the GitHub Release
+# only after amd64/arm64/armv7 finish, so a parallel Docker job times out
+# with "release not found". Run after that workflow succeeds, or by hand.
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_run:
+    workflows:
+      - Build Release Binaries
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag, e.g. v2.1.10'
+        required: true
+
+permissions:
+  contents: read
 
 env:
   DOCKER_IMAGE: yibaiba/hideck
 
 jobs:
   build:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Download release binaries
+      - name: Resolve release tag
+        id: tag
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          tag="${GITHUB_REF_NAME}"
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+            SHA=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG#refs/tags/}" --jq '.object.sha')
+            OBJ_TYPE=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG#refs/tags/}" --jq '.object.type')
+            if [ "$OBJ_TYPE" = "tag" ]; then
+              SHA=$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${SHA}" --jq '.object.sha')
+            fi
+          else
+            SHA="${{ github.event.workflow_run.head_sha }}"
+            TAG="${{ github.event.workflow_run.head_branch }}"
+          fi
+          TAG="${TAG#refs/tags/}"
+          if [[ "$TAG" != v[0-9]* ]]; then
+            echo "skip: not a version tag (${TAG:-empty})"
+            echo "skip=true" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          echo "skip=false" >> "${GITHUB_OUTPUT}"
+          echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
+          echo "version=${TAG#v}" >> "${GITHUB_OUTPUT}"
+          echo "minor=$(printf '%s\n' "${TAG#v}" | cut -d. -f1,2)" >> "${GITHUB_OUTPUT}"
+          echo "sha=${SHA}" >> "${GITHUB_OUTPUT}"
+          echo "resolved tag=${TAG} sha=${SHA}"
+
+      - name: Checkout tagged commit
+        if: steps.tag.outputs.skip != 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.tag.outputs.sha }}
+
+      - name: Download release binaries
+        if: steps.tag.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ steps.tag.outputs.tag }}"
           mkdir -p dist
-          for i in 1 2 3 4 5 6 7 8; do
-            if gh release download "${tag}" -p 'hideck_*_linux_amd64' -p 'hideck_*_linux_arm64' --dir dist --clobber; then
+          for i in $(seq 1 30); do
+            if gh release view "${tag}" >/dev/null 2>&1 \
+              && gh release download "${tag}" -p 'hideck_*_linux_amd64' -p 'hideck_*_linux_arm64' --dir dist --clobber; then
               rm -f dist/*.sha256
-              test -f dist/hideck_${tag}_linux_amd64
-              test -f dist/hideck_${tag}_linux_arm64
+              test -f "dist/hideck_${tag}_linux_amd64"
+              test -f "dist/hideck_${tag}_linux_arm64"
               ls -lh dist/hideck_*
               exit 0
             fi
-            echo "release binaries not ready, retry ${i}"
+            echo "release binaries not ready for ${tag}, retry ${i}/30"
             sleep 20
           done
-          echo "timed out waiting for GitHub Release binaries" >&2
+          echo "timed out waiting for GitHub Release binaries for ${tag}" >&2
+          gh release view "${tag}" >&2 || true
           exit 1
 
       - name: Set up Docker Buildx
+        if: steps.tag.outputs.skip != 'true'
         uses: docker/setup-buildx-action@v3
 
       - name: Login to DockerHub
-        if: github.event_name != 'pull_request'
+        if: steps.tag.outputs.skip != 'true'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Extract metadata (tags, labels)
+        if: steps.tag.outputs.skip != 'true'
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.DOCKER_IMAGE }}
           tags: |
-            # 语义化精确版本标签 (例如 v1.0.0 会被转换为 1.0.0)
-            type=semver,pattern={{version}},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
-            type=semver,pattern={{major}}.{{minor}},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=raw,value=${{ steps.tag.outputs.version }}
+            type=raw,value=${{ steps.tag.outputs.minor }}
+            type=raw,value=latest
 
       - name: Prepare build args
+        if: steps.tag.outputs.skip != 'true'
         id: vars
         shell: bash
         run: |
-          echo "version=${GITHUB_REF_NAME}" >> "${GITHUB_OUTPUT}"
+          echo "version=${{ steps.tag.outputs.tag }}" >> "${GITHUB_OUTPUT}"
           echo "buildtime=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "${GITHUB_OUTPUT}"
-          echo "revision=${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
+          echo "revision=${{ steps.tag.outputs.sha }}" >> "${GITHUB_OUTPUT}"
 
       - name: Build and push
+        if: steps.tag.outputs.skip != 'true'
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./Dockerfile.release
           platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           provenance: false
