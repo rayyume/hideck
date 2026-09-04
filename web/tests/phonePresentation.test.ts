@@ -130,7 +130,15 @@ test('contact drawer resets drafts, locks background scrolling, and keeps touch 
   assert.doesNotMatch(contactsDrawer, /:lock-scroll="false"/)
   assert.match(contactsDrawer, /\.picker-add-toggle \{[\s\S]*min-height: 44px/)
   assert.match(contactsDrawer, /\.icon-button \{ width: 44px; height: 44px; flex: 0 0 44px;/)
-  assert.match(contactsDrawer, /\.picker-chip \{[\s\S]*min-height: 44px/)
+  assert.match(contactsDrawer, /\.picker-action \{[\s\S]*min-height: 44px/)
+})
+
+test('contact management stays compact and message boxes render above the drawer', () => {
+  assert.match(contactsDrawer, /grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/)
+  assert.match(contactsDrawer, /modalClass: 'phone-contact-message-overlay'/)
+  assert.match(contactsDrawer, /phone-contact-message-overlay\.el-overlay\) \{ z-index: 5200 !important;/)
+  assert.doesNotMatch(contactsDrawer, /class="picker-drop"/)
+  assert.match(contactsDrawer, /v-show="dropActive" class="picker-drop-overlay"/)
 })
 
 test('contact import behavior is shared and exposes list refresh failures', () => {

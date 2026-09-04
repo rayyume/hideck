@@ -6,11 +6,13 @@ import {
   ArrowClockwise24Regular,
   ArrowDownload24Regular,
   ArrowUpload24Regular,
+  CheckboxChecked24Regular,
   Delete24Regular,
   Dismiss24Regular,
   Person24Regular,
   PersonEdit24Regular,
-  Search24Regular
+  Search24Regular,
+  SelectAllOn24Regular
 } from '@vicons/fluent'
 import { usePhoneIdentity } from '../composables/usePhoneIdentity'
 import { useContactImport } from '../composables/useContactImport'
@@ -56,8 +58,9 @@ const exporting = ref(false)
 
 const selectLabel = computed(() => props.kind === 'sms' ? '填入短信' : '填入拨号')
 const overlayDialog = {
-  zIndex: 5000,
-  appendTo: typeof document === 'undefined' ? undefined : document.body
+  appendTo: typeof document === 'undefined' ? undefined : document.body,
+  customClass: 'phone-contact-message-box',
+  modalClass: 'phone-contact-message-overlay'
 }
 
 const draftNumbers = computed(() => validPhoneContactNumbers(draftNumber.value, extraNumbers.value))
@@ -193,6 +196,11 @@ function toggleSelectAll() {
     return
   }
   selected.value = numbers
+}
+
+function cancelSelection() {
+  selecting.value = false
+  selected.value = []
 }
 
 function toggleAdd() {
@@ -372,7 +380,6 @@ async function reload() {
 
     <div
       class="picker-shell"
-      :class="{ 'is-drop': dropActive, 'is-busy': importing }"
       @dragenter="onDragEnter"
       @dragover="onDragOver"
       @dragleave="onDragLeave"
@@ -393,27 +400,37 @@ async function reload() {
         {{ adding ? '取消' : '添加' }}
       </button>
     </div>
-    <div class="picker-actions">
+    <div class="picker-actions" role="toolbar" aria-label="联系人管理">
       <input ref="fileInput" type="file" accept=".vcf,.vcard,.csv,.txt,text/vcard,text/x-vcard,text/csv" hidden multiple @change="onImportFile">
-      <button type="button" class="picker-chip" :disabled="importing" @click="fileInput?.click()">
-        <el-icon><ArrowUpload24Regular /></el-icon>{{ importing ? '导入中…' : '导入' }}
-      </button>
-      <button type="button" class="picker-chip" :disabled="exporting" @click="exportContacts">
-        <el-icon><ArrowDownload24Regular /></el-icon>{{ exporting ? '导出中…' : '导出' }}
-      </button>
       <template v-if="selecting">
-        <button type="button" class="picker-chip" @click="toggleSelectAll">全选</button>
-        <button type="button" class="picker-chip is-danger" :disabled="!selectedCount" @click="deleteSelected">
-          删除 {{ selectedCount || '' }}
+        <button type="button" class="picker-action" @click="toggleSelectAll">
+          <el-icon><SelectAllOn24Regular /></el-icon>
+          全选
         </button>
-        <button type="button" class="picker-chip" @click="selecting = false; selected = []">取消</button>
+        <button type="button" class="picker-action is-danger" :disabled="!selectedCount" @click="deleteSelected">
+          <el-icon><Delete24Regular /></el-icon>
+          {{ selectedCount ? `删除 ${selectedCount}` : '删除' }}
+        </button>
+        <button type="button" class="picker-action" @click="cancelSelection">
+          <el-icon><Dismiss24Regular /></el-icon>
+          取消
+        </button>
       </template>
-      <button v-else type="button" class="picker-chip" @click="selecting = true">选择</button>
+      <template v-else>
+        <button type="button" class="picker-action" :disabled="importing" aria-label="从 vcf 或 csv 文件导入联系人" @click="fileInput?.click()">
+          <el-icon><ArrowUpload24Regular /></el-icon>
+          {{ importing ? '导入中…' : '导入' }}
+        </button>
+        <button type="button" class="picker-action" :disabled="exporting" @click="exportContacts">
+          <el-icon><ArrowDownload24Regular /></el-icon>
+          {{ exporting ? '导出中…' : '导出' }}
+        </button>
+        <button type="button" class="picker-action" :aria-pressed="selecting" @click="selecting = true">
+          <el-icon><CheckboxChecked24Regular /></el-icon>
+          选择
+        </button>
+      </template>
     </div>
-    <button type="button" class="picker-drop" :disabled="importing" @click="fileInput?.click()">
-      <el-icon><ArrowUpload24Regular /></el-icon>
-      <span>{{ importing ? '导入中…' : (dropActive ? '放开即可导入通讯录' : '把 vcf / csv 拖到这里（iOS / Google / 三星 / 小米 / 华为 / OPPO / vivo）') }}</span>
-    </button>
 
     <form v-if="adding" class="picker-form" @submit.prevent="saveManual">
       <label>
@@ -525,30 +542,15 @@ async function reload() {
 }
 :global(.phone-contacts-drawer .el-drawer__header) { min-height: 70px; margin: 0; padding: 12px 18px; border-bottom: 1px solid var(--ui-border); color: var(--ui-text); }
 :global(.phone-contacts-drawer .el-drawer__body) { min-height: 0; padding: 0; display: flex; flex-direction: column; overflow: hidden; }
+:global(.phone-contact-message-overlay.el-overlay) { z-index: 5200 !important; }
+:global(.phone-contact-message-overlay .el-overlay-message-box) { padding: 16px; }
+:global(.phone-contact-message-box) { max-width: min(420px, calc(100vw - 32px)); border-radius: var(--ui-radius-md); }
+:global(.phone-contact-message-box .el-message-box__header) { padding: 4px 36px 10px 4px; }
+:global(.phone-contact-message-box .el-message-box__content) { padding: 0 4px; }
+:global(.phone-contact-message-box .el-message-box__input .el-input__wrapper) { min-height: 44px; }
+:global(.phone-contact-message-box .el-message-box__btns) { gap: 8px; padding: 14px 4px 4px; }
+:global(.phone-contact-message-box .el-message-box__btns .el-button) { min-width: 76px; min-height: 44px; }
 .picker-shell { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.picker-drop {
-  margin: 0 18px 12px;
-  min-height: 44px;
-  padding: 8px 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border: 1px dashed var(--ui-border);
-  border-radius: var(--ui-radius-md);
-  background: color-mix(in srgb, var(--ui-surface-muted) 65%, transparent);
-  color: var(--ui-text-muted);
-  cursor: pointer;
-  font-size: 12px;
-  text-align: center;
-}
-.picker-drop:disabled { opacity: .45; cursor: not-allowed; }
-.picker-shell.is-drop .picker-drop,
-.picker-drop:hover {
-  border-color: color-mix(in srgb, var(--ui-primary) 55%, var(--ui-border));
-  color: var(--ui-primary);
-  background: color-mix(in srgb, var(--ui-primary) 8%, transparent);
-}
 .picker-drop-overlay {
   position: absolute;
   inset: 0;
@@ -569,23 +571,35 @@ async function reload() {
 .picker-header h2 { margin: 4px 0 0; color: var(--ui-text); font-size: 18px; }
 .picker-header :deep(.el-button) { width: 44px; height: 44px; }
 .picker-toolbar { padding: 14px 18px 8px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
-.picker-actions { padding: 0 18px 12px; display: flex; flex-wrap: wrap; gap: 8px; }
-.picker-chip {
-  min-height: 44px;
-  padding: 0 10px;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  border: 1px solid var(--ui-border);
-  border-radius: var(--ui-radius-pill);
-  background: var(--ui-surface);
-  color: var(--ui-text);
-  cursor: pointer;
-  font-size: 12px;
-  white-space: nowrap;
+.picker-actions {
+  padding: 0 18px 12px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  border-bottom: 1px solid var(--ui-border-muted);
 }
-.picker-chip:disabled { opacity: .45; cursor: not-allowed; }
-.picker-chip.is-danger { color: var(--ui-danger); border-color: color-mix(in srgb, var(--ui-danger) 35%, var(--ui-border)); }
+.picker-action {
+  min-height: 44px;
+  min-width: 0;
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ui-text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  white-space: nowrap;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+.picker-action .el-icon { flex: 0 0 auto; font-size: 17px; }
+.picker-action:active,
+.picker-action[aria-pressed="true"] { background: var(--ui-surface-muted); color: var(--ui-text); }
+.picker-action:disabled { opacity: .45; cursor: not-allowed; }
+.picker-action.is-danger { color: var(--ui-danger); }
 .picker-add-toggle {
   min-height: 44px;
   padding: 0 12px;
@@ -633,6 +647,8 @@ async function reload() {
 @media (hover: hover) and (pointer: fine) {
   .icon-button:hover { color: var(--ui-text); }
   .icon-button.is-danger:hover { color: var(--ui-danger); }
+  .picker-action:not(:disabled):hover { background: var(--ui-surface-muted); color: var(--ui-text); }
+  .picker-action.is-danger:not(:disabled):hover { color: var(--ui-danger); }
   .picker-item:hover { background: color-mix(in srgb, var(--ui-primary) 6%, var(--ui-surface)); }
 }
 .picker-state { min-height: 120px; padding: 24px 18px; display: flex; align-items: center; justify-content: center; gap: 12px; color: var(--ui-text-muted); font-size: 13px; text-align: center; }
