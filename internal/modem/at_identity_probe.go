@@ -34,6 +34,10 @@ func (id ATIdentity) hasSIM() bool {
 	return strings.TrimSpace(id.IMSI) != "" || strings.TrimSpace(id.ICCID) != ""
 }
 
+func (id ATIdentity) hasCompleteSIM() bool {
+	return strings.TrimSpace(id.IMSI) != "" && strings.TrimSpace(id.ICCID) != ""
+}
+
 // ProbeATIdentity opens the AT port briefly and reads IMEI/IMSI/ICCID without
 // starting the long-lived AT manager. Used when QMI DMS/UIM is not up yet.
 func ProbeATIdentity(atPort string, timeout time.Duration) (ATIdentity, error) {
@@ -91,7 +95,7 @@ func ProbeATIdentityContext(ctx context.Context, atPort string, timeout time.Dur
 		if n > 0 {
 			acc.Write(buf[:n])
 			ident := parseATIdentity(acc.String())
-			if ident.hasSIM() {
+			if ident.hasCompleteSIM() {
 				return ident, nil
 			}
 		}
@@ -106,8 +110,11 @@ func ProbeATIdentityContext(ctx context.Context, atPort string, timeout time.Dur
 	}
 
 	ident := parseATIdentity(acc.String())
-	if ident.hasSIM() {
+	if ident.hasCompleteSIM() {
 		return ident, nil
+	}
+	if ident.hasSIM() {
+		return ident, errors.New("at identity probe incomplete")
 	}
 	if err := probeCtx.Err(); err != nil && !errors.Is(err, context.DeadlineExceeded) {
 		return ATIdentity{}, err

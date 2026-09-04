@@ -16,6 +16,8 @@ const (
 	qmiUSBUnstickCooldown   = 10 * time.Minute
 	qmiUSBUnstickHold       = 8 * time.Second
 	qmiUSBUnstickOffHold    = 400 * time.Millisecond
+	qmiUSBReauthorizeDelay  = 200 * time.Millisecond
+	qmiUSBReauthorizeTries  = 3
 )
 
 var (
@@ -59,7 +61,12 @@ func (w *Worker) markQMIUSBUnsticking(hold time.Duration) {
 	}
 	until := qmiUSBUnstickNowFn().Add(hold).UnixNano()
 	w.qmiUSBUnstickUntil.Store(until)
-	w.qmiLastUSBUnstick.Store(qmiUSBUnstickNowFn().UnixNano())
+}
+
+func (w *Worker) markQMIUSBUnstickCompleted() {
+	if w != nil {
+		w.qmiLastUSBUnstick.Store(qmiUSBUnstickNowFn().UnixNano())
+	}
 }
 
 func (w *Worker) isQMIUSBUnsticking() bool {
@@ -141,6 +148,15 @@ func (p *Pool) maybeUnstickWedgedQMI(worker *Worker, startErr error, wedgeStreak
 	if p == nil || worker == nil || startErr == nil || wedgeStreak == nil {
 		return false
 	}
+	if worker.qmiUSBNeedsReauthorize.Load() {
+		if err := p.reauthorizeWorkerUSBModem(worker); err != nil {
+			logger.Warn("QMI USB 仍处于未授权状态，重新授权失败",
+				"device", worker.ID, "err", err)
+			return false
+		}
+		*wedgeStreak = 0
+		return true
+	}
 	if !qmiErrorIndicatesCTLWedged(startErr.Error()) {
 		*wedgeStreak = 0
 		return false
@@ -204,12 +220,13 @@ func (p *Pool) resetWorkerUSBModem(worker *Worker) error {
 		"device", worker.ID,
 		"usb_path", worker.Config.USBPath,
 		"control_device", control)
-	worker.markQMIUSBUnsticking(qmiUSBUnstickHold)
 	if err := usbDeviceAuthorizeFn(auth, "0"); err != nil {
 		return err
 	}
+	worker.qmiUSBNeedsReauthorize.Store(true)
+	worker.markQMIUSBUnsticking(qmiUSBUnstickHold)
 	qmiUSBUnstickSleepFn(qmiUSBUnstickOffHold)
-	if err := usbDeviceAuthorizeFn(auth, "1"); err != nil {
+	if err := p.reauthorizeWorkerUSBModemAt(worker, auth); err != nil {
 		return err
 	}
 	if control == "" {
@@ -223,4 +240,36 @@ func (p *Pool) resetWorkerUSBModem(worker *Worker) error {
 		qmiUSBUnstickSleepFn(200 * time.Millisecond)
 	}
 	return fmt.Errorf("usb reset: control device %s did not reappear", control)
+}
+
+func (p *Pool) reauthorizeWorkerUSBModem(worker *Worker) error {
+	if worker == nil {
+		return errors.New("worker_nil")
+	}
+	auth, err := usbModemAuthorizedPathFn(worker.Config.USBPath)
+	if err != nil {
+		return err
+	}
+	return p.reauthorizeWorkerUSBModemAt(worker, auth)
+}
+
+func (p *Pool) reauthorizeWorkerUSBModemAt(worker *Worker, auth string) error {
+	if worker == nil {
+		return errors.New("worker_nil")
+	}
+	worker.markQMIUSBUnsticking(qmiUSBUnstickHold)
+	var lastErr error
+	for attempt := 0; attempt < qmiUSBReauthorizeTries; attempt++ {
+		if err := usbDeviceAuthorizeFn(auth, "1"); err == nil {
+			worker.qmiUSBNeedsReauthorize.Store(false)
+			worker.markQMIUSBUnstickCompleted()
+			return nil
+		} else {
+			lastErr = err
+		}
+		if attempt+1 < qmiUSBReauthorizeTries {
+			qmiUSBUnstickSleepFn(qmiUSBReauthorizeDelay)
+		}
+	}
+	return fmt.Errorf("usb reset: reauthorize device: %w", lastErr)
 }

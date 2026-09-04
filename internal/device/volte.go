@@ -105,7 +105,9 @@ func isTransientVoLTEStartError(err error) bool {
 		strings.Contains(msg, "busy") ||
 		strings.Contains(msg, "broken pipe") ||
 		strings.Contains(msg, "connection closed") ||
-		strings.Contains(msg, "qmi-proxy")
+		strings.Contains(msg, "qmi-proxy") ||
+		strings.Contains(msg, "service not ready") ||
+		strings.Contains(msg, "服务未就绪")
 }
 
 func (p *Pool) scheduleNativeVoLTE(deviceID, reason string) {

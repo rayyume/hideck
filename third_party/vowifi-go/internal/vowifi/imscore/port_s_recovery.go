@@ -5,6 +5,8 @@ import (
 	"math/rand/v2"
 	"strings"
 	"time"
+
+	"github.com/iniwex5/vowifi-go/internal/vowifi/logging"
 )
 
 const (
@@ -12,6 +14,8 @@ const (
 	rfc5626RecoveryBaseFlowAlive = 90 * time.Second
 	rfc5626RecoveryMaxDelay      = 30 * time.Minute
 )
+
+var errPortSNotReopenedAfterRegister = errors.New("imscore: port-s did not reopen after successful REGISTER")
 
 type portSRecoveryBackoff struct {
 	registrar string
@@ -78,6 +82,23 @@ func (s *Service) resetPortSRecoveryBackoff() {
 		s.portSWatchTimer = nil
 	}
 	s.portSBackoff = portSRecoveryBackoff{}
+}
+
+func (s *Service) clearPortSRecoveryDeadline() {
+	if s == nil {
+		return
+	}
+	s.portSWatchMu.Lock()
+	s.portSBackoff.retryAt = time.Time{}
+	s.portSWatchMu.Unlock()
+}
+
+func (s *Service) backoffMissingPortSAfterRegister() {
+	backoff := s.recordPortSRecoveryFailure(errPortSNotReopenedAfterRegister, time.Now())
+	s.schedulePortSReconnectWatchAt(backoff.retryAt)
+	logging.WarnRate("ims-ports-recovery-no-flow-"+s.DeviceID(), 30*time.Second,
+		"IMS port-s did not reopen after REGISTER; keep current binding and back off",
+		"device", s.DeviceID(), "failures", backoff.failures, "retry_in", backoff.delay)
 }
 
 func (s *Service) currentPortSRecoveryRegistrar() string {

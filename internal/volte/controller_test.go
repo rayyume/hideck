@@ -9,19 +9,19 @@ import (
 	"github.com/iniwex5/quectel-qmi-go/pkg/qmi"
 )
 
-func TestControllerContinuesWhenEnsureIMSClientsFails(t *testing.T) {
+func TestControllerReturnsRetryableErrorAfterATProvisionWhenIMSClientsFail(t *testing.T) {
 	host := newFakeModem()
 	host.EnsureErr = errors.New("allocate IMS: allocate client ID request failed after retries: write failed: write unix @->@qmi-proxy: write: broken pipe")
 	ctl := NewControllerWithBackup(host, t.TempDir())
-	if err := ctl.Enable(context.Background(), "wwan1"); err != nil {
-		t.Fatal(err)
+	if err := ctl.Enable(context.Background(), "wwan1"); err == nil {
+		t.Fatal("QMI IMS allocation failure must reach the retry scheduler")
 	}
 	st := ctl.Status("wwan1")
 	if !st.QMIIMSUnavailable {
 		t.Fatal("QMI IMS allocate failure must be visible")
 	}
-	if !st.IMSEnabled || st.Phase == PhaseFailed {
-		t.Fatalf("AT VoLTE must continue: %+v", st)
+	if !st.IMSEnabled || st.Phase != PhaseFailed {
+		t.Fatalf("AT provisioning must remain visible without claiming success: %+v", st)
 	}
 }
 

@@ -187,6 +187,7 @@ type Service struct {
 	portSPushReady            atomic.Bool
 	portSReconnectWaiting     atomic.Bool
 	portSRecoveryPending      atomic.Bool
+	portSRecoveryAwaitingFlow atomic.Bool
 	portSOnDemandObserved     atomic.Bool
 	portSWatchMu              sync.Mutex
 	portSWatchTimer           *time.Timer

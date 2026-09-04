@@ -124,6 +124,77 @@ func TestMaybeUnstickWedgedQMISkipsBrokenPipe(t *testing.T) {
 	}
 }
 
+func TestResetWorkerUSBModemRetriesReauthorization(t *testing.T) {
+	origAuth := usbModemAuthorizedPathFn
+	origWrite := usbDeviceAuthorizeFn
+	origExists := qmiControlPathExistsFn
+	origSleep := qmiUSBUnstickSleepFn
+	t.Cleanup(func() {
+		usbModemAuthorizedPathFn = origAuth
+		usbDeviceAuthorizeFn = origWrite
+		qmiControlPathExistsFn = origExists
+		qmiUSBUnstickSleepFn = origSleep
+	})
+	usbModemAuthorizedPathFn = func(string) (string, error) { return "/tmp/authorized-test", nil }
+	qmiControlPathExistsFn = func(string) (os.FileInfo, error) { return nil, nil }
+	qmiUSBUnstickSleepFn = func(time.Duration) {}
+	writes := make([]string, 0, 3)
+	usbDeviceAuthorizeFn = func(_ string, value string) error {
+		writes = append(writes, value)
+		if value == "1" && len(writes) == 2 {
+			return errors.New("temporary sysfs failure")
+		}
+		return nil
+	}
+
+	worker := &Worker{Config: config.DeviceConfig{USBPath: "/sys/bus/usb/devices/1-2.1", ControlDevice: "/dev/cdc-wdm0"}}
+	if err := (&Pool{}).resetWorkerUSBModem(worker); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(writes, ","); got != "0,1,1" {
+		t.Fatalf("authorization writes=%s want 0,1,1", got)
+	}
+	if worker.qmiUSBNeedsReauthorize.Load() || !worker.qmiUSBUnstickOnCooldown() {
+		t.Fatal("successful reauthorization must clear pending state and start cooldown")
+	}
+}
+
+func TestFailedUSBReauthorizationRemainsRepairable(t *testing.T) {
+	origAuth := usbModemAuthorizedPathFn
+	origWrite := usbDeviceAuthorizeFn
+	origSleep := qmiUSBUnstickSleepFn
+	t.Cleanup(func() {
+		usbModemAuthorizedPathFn = origAuth
+		usbDeviceAuthorizeFn = origWrite
+		qmiUSBUnstickSleepFn = origSleep
+	})
+	usbModemAuthorizedPathFn = func(string) (string, error) { return "/tmp/authorized-test", nil }
+	qmiUSBUnstickSleepFn = func(time.Duration) {}
+	allow := false
+	usbDeviceAuthorizeFn = func(_ string, value string) error {
+		if value == "1" && !allow {
+			return errors.New("sysfs unavailable")
+		}
+		return nil
+	}
+
+	worker := &Worker{Config: config.DeviceConfig{USBPath: "/sys/bus/usb/devices/1-2.1"}}
+	if err := (&Pool{}).resetWorkerUSBModem(worker); err == nil {
+		t.Fatal("expected reauthorization failure")
+	}
+	if !worker.qmiUSBNeedsReauthorize.Load() || worker.qmiUSBUnstickOnCooldown() {
+		t.Fatal("failed reauthorization must remain pending without cooldown")
+	}
+	allow = true
+	streak := 2
+	if !(&Pool{}).maybeUnstickWedgedQMI(worker, errors.New("broken pipe"), &streak) {
+		t.Fatal("pending reauthorization was not repaired before AT/QMI checks")
+	}
+	if worker.qmiUSBNeedsReauthorize.Load() || !worker.qmiUSBUnstickOnCooldown() {
+		t.Fatal("repaired authorization did not complete recovery state")
+	}
+}
+
 func TestQMITransportDownDoesNotOverrideUSBUnstick(t *testing.T) {
 	if qmiTransportDownOverridesSuppression(true, "qmi_usb_unstick") {
 		t.Fatal("USB unstick must not be overridden by broken pipe; the reset itself drops the fd")

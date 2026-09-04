@@ -41,6 +41,18 @@ func (m *memPCM) Close() error {
 	return nil
 }
 
+func (m *memPCM) writtenCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.written)
+}
+
+func (m *memPCM) isClosed() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.closed
+}
+
 func errorsNew(s string) error { return errStr(s) }
 
 type errStr string
@@ -64,12 +76,12 @@ func TestPCMBridgeBidirectionalPCMU(t *testing.T) {
 	for time.Now().Before(deadline) {
 		toPCM, _, _, _, _ := down.Stats()
 		_, upFrom, _, _, _ := up.Stats()
-		if toPCM > 0 && upFrom > 0 && len(pcmDown.written) > 0 {
+		if toPCM > 0 && upFrom > 0 && pcmDown.writtenCount() > 0 {
 			return
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	t.Fatalf("down stats %+v written=%d", mustStats(down), len(pcmDown.written))
+	t.Fatalf("down stats %+v written=%d", mustStats(down), pcmDown.writtenCount())
 }
 
 func TestPCMBridgeListenOnlyWritesSilence(t *testing.T) {
@@ -99,7 +111,7 @@ func TestPCMBridgeCloseReleases(t *testing.T) {
 	if err := bridge.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if !pcm.closed {
+	if !pcm.isClosed() {
 		t.Fatal("pcm not closed")
 	}
 }

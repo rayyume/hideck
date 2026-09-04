@@ -816,13 +816,23 @@ func (s *Service) keepRegistrationAfterFailedRefresh(hadBinding bool, err error)
 	}
 	var responseErr *registerResponseError
 	if !errors.As(err, &responseErr) {
-		return true
+		return s.registrationFlowConfirmedDuringLastAttempt()
 	}
 	var registerPolicy policy.IMSRegisterPolicy
 	if s.cfg != nil {
 		registerPolicy = s.cfg.IMSRegisterTemplate.RegisterPolicy
 	}
 	return isTemporaryRegisterSIPResponse(registerPolicy, responseErr.statusCode)
+}
+
+func (s *Service) registrationFlowConfirmedDuringLastAttempt() bool {
+	if s == nil || !s.lastPingOK.Load() {
+		return false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.registrationFlowIntactLocked() && !s.lastRegisterAttemptAt.IsZero() &&
+		!s.lastPingAt.Before(s.lastRegisterAttemptAt)
 }
 
 func (s *Service) restoreRegistrationAfterFailedRefresh(err error) bool {

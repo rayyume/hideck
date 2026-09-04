@@ -19,11 +19,22 @@ func TestParseATIdentityExtractsIMEIIMSIAndICCID(t *testing.T) {
 	if !got.hasSIM() {
 		t.Fatal("hasSIM()=false, want true")
 	}
+	if !got.hasCompleteSIM() {
+		t.Fatal("hasCompleteSIM()=false, want true")
+	}
 }
 
 func TestParseATIdentityEmptyHasNoSIM(t *testing.T) {
 	got := parseATIdentity("\r\nOK\r\n")
 	if got.hasSIM() {
 		t.Fatalf("hasSIM()=true for empty identity %+v", got)
+	}
+}
+
+func TestPartialATIdentityIsNotComplete(t *testing.T) {
+	got := parseATIdentity("AT+CGSN\r\r\n860000000000001\r\n\r\nOK\r\n" +
+		"AT+CIMI\r\r\n460010123456789\r\n\r\nOK\r\n")
+	if !got.hasSIM() || got.hasCompleteSIM() {
+		t.Fatalf("partial identity completeness is wrong: %+v", got)
 	}
 }

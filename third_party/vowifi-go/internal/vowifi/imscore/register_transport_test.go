@@ -280,7 +280,7 @@ func TestFailedRefreshCannotRestoreAClosedRegistrationFlow(t *testing.T) {
 	}
 }
 
-func TestRegisterDeadlineCanPreserveAnIntactRegistrationFlow(t *testing.T) {
+func TestRegisterDeadlineRequiresFlowConfirmationDuringAttempt(t *testing.T) {
 	service := newProtectedKeepaliveTestService(t)
 	client, server := net.Pipe()
 	t.Cleanup(func() {
@@ -290,12 +290,20 @@ func TestRegisterDeadlineCanPreserveAnIntactRegistrationFlow(t *testing.T) {
 	service.mu.Lock()
 	service.registrationTransport = "tcp"
 	service.registrationTCP = client
+	service.lastRegisterAttemptAt = time.Now()
 	service.mu.Unlock()
 	service.portSReconnectWaiting.Store(true)
 	service.portSRecoveryPending.Store(true)
 
+	if service.keepRegistrationAfterFailedRefresh(true, context.DeadlineExceeded) {
+		t.Fatal("connection pointer alone preserved a timed-out REGISTER flow")
+	}
+	service.mu.Lock()
+	service.lastPingAt = service.lastRegisterAttemptAt.Add(time.Millisecond)
+	service.mu.Unlock()
+	service.lastPingOK.Store(true)
 	if !service.keepRegistrationAfterFailedRefresh(true, context.DeadlineExceeded) {
-		t.Fatal("REGISTER deadline tore down an intact registration flow")
+		t.Fatal("keepalive-confirmed registration flow was not preserved")
 	}
 	if !service.restoreRegistrationAfterFailedRefresh(context.DeadlineExceeded) {
 		t.Fatal("REGISTER deadline did not preserve the intact registration flow")
@@ -905,6 +913,7 @@ func TestPeerReconnectAfterRejectedRecoveryEnablesOnDemandMode(t *testing.T) {
 
 func TestSuccessfulRecoveryDoesNotEnableOnDemandMode(t *testing.T) {
 	service := newProtectedKeepaliveTestService(t)
+	service.portSReconnectGrace = time.Hour
 	service.portSReconnectWaiting.Store(true)
 	service.portSRecoveryPending.Store(true)
 	service.recordPortSRecoveryFailure(context.DeadlineExceeded, time.Now())
@@ -924,6 +933,9 @@ func TestSuccessfulRecoveryDoesNotEnableOnDemandMode(t *testing.T) {
 	if service.portSOnDemandObserved.Load() {
 		t.Fatal("port-s opened after successful REGISTER enabled on-demand mode")
 	}
+	if service.portSRecoveryAwaitingFlow.Load() || service.portSReconnectWaiting.Load() {
+		t.Fatal("reopened port-s kept successful recovery pending")
+	}
 }
 
 func TestAbortedRecoveryClearsPendingState(t *testing.T) {
@@ -935,7 +947,7 @@ func TestAbortedRecoveryClearsPendingState(t *testing.T) {
 	service.completePortSRecovery(context.Canceled, false)
 
 	if service.portSReconnectWaiting.Load() || service.portSRecoveryPending.Load() ||
-		service.portSOnDemandObserved.Load() {
+		service.portSRecoveryAwaitingFlow.Load() || service.portSOnDemandObserved.Load() {
 		t.Fatal("aborted recovery kept stale port-s state")
 	}
 	if _, waiting := service.portSRecoveryDeadline(time.Now()); waiting {
@@ -1037,7 +1049,7 @@ func TestPCSCFFailoverClearsOnDemandPortSKnowledge(t *testing.T) {
 	service.resetRegistrationTransportForRegistrarRetry()
 
 	if service.portSReconnectWaiting.Load() || service.portSRecoveryPending.Load() ||
-		service.portSOnDemandObserved.Load() {
+		service.portSRecoveryAwaitingFlow.Load() || service.portSOnDemandObserved.Load() {
 		t.Fatal("P-CSCF failover kept port-s recovery knowledge")
 	}
 	if _, waiting := service.portSRecoveryDeadline(time.Now()); waiting {

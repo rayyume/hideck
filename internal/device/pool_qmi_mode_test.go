@@ -783,7 +783,8 @@ func TestBuildVoWiFiStartProfileUsesLiveIMSIOnly(t *testing.T) {
 
 type vowifiLiveIdentityBackendStub struct {
 	workerSMSCBackendStub
-	liveIMSI string
+	liveIMSI  string
+	liveICCID string
 }
 
 func (s *vowifiLiveIdentityBackendStub) GetIMSILive(ctx context.Context) (string, error) {
@@ -791,7 +792,7 @@ func (s *vowifiLiveIdentityBackendStub) GetIMSILive(ctx context.Context) (string
 }
 
 func (s *vowifiLiveIdentityBackendStub) GetICCIDLive(ctx context.Context) (string, error) {
-	return "", nil
+	return s.liveICCID, nil
 }
 
 func TestBuildVoWiFiStartProfileUsesLiveIMSIAndBackendHomeMCCMNC(t *testing.T) {
@@ -890,7 +891,8 @@ func TestRefreshIdentityLiveCachesHomeMCCMNCThroughSIMMetadata(t *testing.T) {
 				},
 			},
 		},
-		liveIMSI: "234336575868434",
+		liveIMSI:  "234336575868434",
+		liveICCID: "8944100000000000001",
 	}
 	w := &Worker{ID: "dev1", Backend: b}
 	w.cacheMu.Lock()

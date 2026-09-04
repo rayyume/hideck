@@ -359,6 +359,10 @@ func (s *Service) portSReconnectWatchFired(generation uint64, registrar string) 
 		return
 	}
 	s.protectedConnMu.Unlock()
+	if s.portSRecoveryAwaitingFlow.Swap(false) {
+		s.backoffMissingPortSAfterRegister()
+		return
+	}
 	if retryAt, waiting := s.portSRecoveryDeadline(time.Now()); waiting {
 		s.schedulePortSReconnectWatchAt(retryAt)
 		return
@@ -389,9 +393,16 @@ func (s *Service) completePortSRecovery(err error, bindingPreserved bool) {
 	}
 	pending := s.portSRecoveryPending.Swap(false)
 	if err == nil {
-		wasWaiting := s.portSReconnectWaiting.Swap(false)
-		s.resetPortSRecoveryBackoff()
-		if wasWaiting && !s.portSPushReady.Load() {
+		if s.portSPushReady.Load() {
+			s.portSRecoveryAwaitingFlow.Store(false)
+			s.portSReconnectWaiting.Store(false)
+			s.resetPortSRecoveryBackoff()
+			return
+		}
+		if pending || s.portSReconnectWaiting.Load() {
+			s.clearPortSRecoveryDeadline()
+			s.portSRecoveryAwaitingFlow.Store(true)
+			s.portSReconnectWaiting.Store(true)
 			s.schedulePortSReconnectWatchAt(time.Now().Add(s.portSReconnectWait()))
 		}
 		return
@@ -403,6 +414,7 @@ func (s *Service) completePortSRecovery(err error, bindingPreserved bool) {
 		return
 	}
 	if !bindingPreserved {
+		s.portSRecoveryAwaitingFlow.Store(false)
 		s.portSReconnectWaiting.Store(false)
 		s.resetPortSRecoveryBackoff()
 		return
@@ -423,7 +435,16 @@ func (s *Service) completePortSRecovery(err error, bindingPreserved bool) {
 }
 
 func (s *Service) recordOnDemandPortSReconnect() {
-	if s == nil || s.portSRecoveryPending.Load() || s.registrationInProgress() {
+	if s == nil {
+		return
+	}
+	if s.portSRecoveryAwaitingFlow.Swap(false) {
+		s.portSReconnectWaiting.Store(false)
+		s.resetPortSRecoveryBackoff()
+		logging.Info("IMS port-s reopened after successful REGISTER", "device", s.DeviceID())
+		return
+	}
+	if s.portSRecoveryPending.Load() || s.registrationInProgress() {
 		return
 	}
 	if !s.portSReconnectWaiting.CompareAndSwap(true, false) || s.portSOnDemandObserved.Swap(true) {
@@ -448,6 +469,7 @@ func (s *Service) resetPortSRecoveryKnowledge() {
 	s.resetPortSRecoveryBackoff()
 	s.portSReconnectWaiting.Store(false)
 	s.portSRecoveryPending.Store(false)
+	s.portSRecoveryAwaitingFlow.Store(false)
 	s.portSOnDemandObserved.Store(false)
 }
 

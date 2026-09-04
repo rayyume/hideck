@@ -21,6 +21,9 @@ func TestIsTransientVoLTEStartError(t *testing.T) {
 	if !isTransientVoLTEStartError(errors.New("allocate IMS: allocate client ID request failed after retries: write failed: write unix @->@qmi-proxy: write: broken pipe")) {
 		t.Fatal("qmi-proxy broken pipe must retry after the control plane returns")
 	}
+	if !isTransientVoLTEStartError(errors.New("QMI 服务未就绪: IMSA")) {
+		t.Fatal("temporarily unavailable IMSA service must retry")
+	}
 	if nativeVoLTERetryDelay(1) != 3*time.Second || nativeVoLTERetryDelay(2) != 6*time.Second {
 		t.Fatalf("retry delay %s %s", nativeVoLTERetryDelay(1), nativeVoLTERetryDelay(2))
 	}

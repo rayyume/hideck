@@ -93,11 +93,12 @@ func ioctl(f *os.File, req uint, arg unsafe.Pointer) error {
 }
 
 func (p *alsaPCM) ReadFrame() ([]int16, error) {
-	if p == nil || p.capt.f == nil {
+	capt := p.captureFile()
+	if capt == nil {
 		return nil, fmt.Errorf("volte: capture closed")
 	}
 	buf := make([]byte, pcmuFrameSamples*2)
-	if _, err := p.capt.f.Read(buf); err != nil {
+	if _, err := capt.Read(buf); err != nil {
 		return nil, err
 	}
 	out := make([]int16, pcmuFrameSamples)
@@ -108,7 +109,8 @@ func (p *alsaPCM) ReadFrame() ([]int16, error) {
 }
 
 func (p *alsaPCM) WriteFrame(samples []int16) error {
-	if p == nil || p.play.f == nil {
+	play := p.playbackFile()
+	if play == nil {
 		return nil
 	}
 	buf := make([]byte, pcmuFrameSamples*2)
@@ -121,8 +123,26 @@ func (p *alsaPCM) WriteFrame(samples []int16) error {
 		buf[i*2] = byte(v)
 		buf[i*2+1] = byte(v >> 8)
 	}
-	_, err := p.play.f.Write(buf)
+	_, err := play.Write(buf)
 	return err
+}
+
+func (p *alsaPCM) captureFile() *os.File {
+	if p == nil {
+		return nil
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.capt.f
+}
+
+func (p *alsaPCM) playbackFile() *os.File {
+	if p == nil {
+		return nil
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.play.f
 }
 
 func (p *alsaPCM) Close() error {

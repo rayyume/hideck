@@ -32,6 +32,7 @@ type PCMBridge struct {
 	listenOnly bool
 	closed     chan struct{}
 	closeOnce  sync.Once
+	workers    sync.WaitGroup
 	seq        uint16
 	ts         uint32
 	toPCM      atomic.Uint64
@@ -43,6 +44,7 @@ type PCMBridge struct {
 
 func NewPCMBridge(conn net.PacketConn, remote net.Addr, pcm PCMPort, listenOnly bool) *PCMBridge {
 	b := &PCMBridge{conn: conn, remote: remote, pcm: pcm, listenOnly: listenOnly, closed: make(chan struct{})}
+	b.workers.Add(2)
 	go b.downlink()
 	go b.uplink()
 	return b
@@ -82,11 +84,13 @@ func (b *PCMBridge) Close() error {
 		if b.pcm != nil {
 			_ = b.pcm.Close()
 		}
+		b.workers.Wait()
 	})
 	return err
 }
 
 func (b *PCMBridge) downlink() {
+	defer b.workers.Done()
 	buf := make([]byte, 2048)
 	for {
 		select {
@@ -126,6 +130,7 @@ func (b *PCMBridge) downlink() {
 }
 
 func (b *PCMBridge) uplink() {
+	defer b.workers.Done()
 	ticker := time.NewTicker(pcmuFrameDuration)
 	defer ticker.Stop()
 	for {

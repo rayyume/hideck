@@ -146,6 +146,7 @@ type Worker struct {
 	qmiCoreStarting         atomic.Bool
 	qmiUSBUnstickUntil      atomic.Int64
 	qmiLastUSBUnstick       atomic.Int64
+	qmiUSBNeedsReauthorize  atomic.Bool
 	cellularRadioSuppressed atomic.Bool
 
 	operatorScanMu      sync.Mutex
@@ -665,13 +666,17 @@ func (w *Worker) refreshIdentityLive(ctx context.Context, reason string) (liveSI
 		}
 	}
 	imei := ""
-	if iccid == "" && imsi == "" {
+	if iccid == "" || imsi == "" {
 		if ident, atErr := probeWorkerATIdentity(ctx, w); atErr == nil {
-			iccid = strings.TrimSpace(ident.ICCID)
-			imsi = strings.TrimSpace(ident.IMSI)
+			if iccid == "" {
+				iccid = strings.TrimSpace(ident.ICCID)
+			}
+			if imsi == "" {
+				imsi = strings.TrimSpace(ident.IMSI)
+			}
 			imei = strings.TrimSpace(ident.IMEI)
-			if iccid != "" || imsi != "" {
-				logger.Info("QMI 身份未就绪，已用 AT 口回退读取 SIM",
+			if iccid != "" && imsi != "" {
+				logger.Info("QMI 身份不完整，已用 AT 口补齐 SIM",
 					"device", w.ID, "reason", reason, "at", w.ResolvedATPort())
 			}
 		} else if atErr != nil && !errors.Is(atErr, errATIdentityUnavailable) {
@@ -703,6 +708,18 @@ func (w *Worker) refreshIdentityLive(ctx context.Context, reason string) (liveSI
 
 	now := time.Now()
 	w.cacheMu.Lock()
+	identityIncomplete := (iccid == "") != (imsi == "")
+	hasCachedIdentity := strings.TrimSpace(w.state.Identity.ICCID) != "" ||
+		strings.TrimSpace(w.state.Identity.IMSI) != ""
+	if identityIncomplete && hasCachedIdentity {
+		err := fmt.Errorf("live_identity_incomplete")
+		w.state.Identity.LastReason = strings.TrimSpace(reason)
+		w.state.Identity.LastError = err.Error()
+		w.state.Meta.IdentityUpdatedAt = now
+		w.state.Meta.UpdatedAt = now
+		w.cacheMu.Unlock()
+		return result, err
+	}
 	phase := w.state.Identity.Phase
 	targetICCID := normalizeSIMIdentityForCompare(w.state.Identity.TargetICCID)
 	if targetICCID != "" && (phase == simIdentityPhaseTransitioning || phase == simIdentityPhaseDegraded) &&

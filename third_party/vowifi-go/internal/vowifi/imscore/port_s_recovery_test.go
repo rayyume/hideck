@@ -76,15 +76,26 @@ func TestPortSRecoveryRetriesWhenBackoffExpires(t *testing.T) {
 	}
 }
 
-func TestSuccessfulRegisterKeepsWatchingMissingPortS(t *testing.T) {
+func TestSuccessfulRegisterBacksOffWhenPortSStaysMissing(t *testing.T) {
 	service := newProtectedKeepaliveTestService(t)
 	service.portSReconnectGrace = time.Millisecond
+	service.portSRecoveryJitter = func(upper time.Duration) time.Duration { return upper / 2 }
 	service.portSReconnectWaiting.Store(true)
+	service.portSRecoveryPending.Store(true)
 
 	service.completePortSRecovery(nil, true)
-	waitForPortSCondition(t, func() bool { return service.reRegisterPending.Load() })
-	if !service.portSRecoveryPending.Load() {
-		t.Fatal("successful REGISTER stopped monitoring the missing port-s flow")
+	waitForPortSCondition(t, func() bool {
+		_, waiting := service.portSRecoveryDeadline(time.Now())
+		return waiting
+	})
+	if service.reRegisterPending.Load() || service.portSRecoveryPending.Load() {
+		t.Fatal("missing port-s after successful REGISTER scheduled an immediate retry")
+	}
+	service.portSWatchMu.Lock()
+	failures := service.portSBackoff.failures
+	service.portSWatchMu.Unlock()
+	if failures != 1 {
+		t.Fatalf("backoff failures=%d want 1", failures)
 	}
 }
 
