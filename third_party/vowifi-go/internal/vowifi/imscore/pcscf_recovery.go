@@ -100,7 +100,10 @@ func (s *Service) recoverPCSCFAfter503(
 		return
 	}
 	s.markPCSCFRegistrationUnbound(failedRegistrar)
-	s.resetRegistrationTransportForRegistrarRetry()
+	if err := s.resetRegistrationForPCSCFSwitch(); err != nil {
+		s.reportRegistrationRuntimeError(err)
+		return
+	}
 	if next == "" {
 		s.reportRegistrationRuntimeError(fmt.Errorf(
 			"imscore: P-CSCF %s returned 503 and no alternate is available", failedRegistrar,
@@ -121,15 +124,66 @@ func (s *Service) recoverPCSCFAfter503(
 
 func (s *Service) markPCSCFRegistrationUnbound(registrar string) {
 	reason := fmt.Sprintf("P-CSCF %s returned 503 Service Unavailable", registrar)
+	s.markPCSCFRegistrationUnboundWithReason(reason, 503, "503 Service Unavailable")
+}
+
+func (s *Service) markPCSCFRegistrationUnboundForPortSReset(registrar string) {
+	reason := fmt.Sprintf("P-CSCF %s reset a newly established port-s flow", registrar)
+	s.markPCSCFRegistrationUnboundWithReason(reason, 0, "port-s connection reset by peer")
+}
+
+func (s *Service) markPCSCFRegistrationUnboundWithReason(reason string, sipCode int32, sipText string) {
 	s.mu.Lock()
 	s.regState = regFailed
 	s.signalingReady = false
 	s.signalingFailureReason = reason
 	s.registrationRefreshAt = time.Time{}
-	s.lastSIPText = "503 Service Unavailable"
+	s.lastSIPText = sipText
 	s.mu.Unlock()
-	s.lastSIPCode.Store(503)
+	s.lastSIPCode.Store(sipCode)
 	s.reRegisterPending.Store(true)
 	s.transitionRegStatus(registrationRejectedTemporary)
 	s.notifySMSReadiness()
+}
+
+func (s *Service) resetRegistrationForPCSCFSwitch() error {
+	s.resetRegistrationTransportForRegistrarRetry()
+	for _, conn := range s.detachProtectedConnections() {
+		s.markPortSLocalClose(conn)
+		_ = conn.Close()
+	}
+	if err := s.removeInstalledIPSec3GPP(); err != nil {
+		return fmt.Errorf("imscore: remove old P-CSCF IPsec policy: %w", err)
+	}
+	s.mu.Lock()
+	s.regSession = nil
+	s.serviceRoute = ""
+	s.path = ""
+	s.pubGRUU = ""
+	s.tempGRUU = ""
+	s.learnedAOR = ""
+	s.reginfoAOR = ""
+	s.securityVerify = ""
+	s.subscriptionRefreshAt = time.Time{}
+	s.subscriptionLastAttemptAt = time.Time{}
+	s.subscriptionLastOKAt = time.Time{}
+	s.subscriptionLastErr = ""
+	s.subscriptionClosed = false
+	s.subscriptionDialog = registrationSubscriptionDialog{}
+	s.mwiSubscriptionRefreshAt = time.Time{}
+	s.mwiSubscriptionLastAttemptAt = time.Time{}
+	s.mwiSubscriptionLastOKAt = time.Time{}
+	s.mwiSubscriptionLastErr = ""
+	s.mwiSubscriptionClosed = false
+	s.mwiSubscriptionDialog = registrationSubscriptionDialog{}
+	s.sipOutboundKeepalive = false
+	s.sipOutbound = false
+	s.sipOutboundRequired = false
+	s.outboundContactOffered = false
+	s.outboundContactRegistered = false
+	s.flowTimer = 0
+	s.stunMappedAddr = nil
+	s.mu.Unlock()
+	s.lastRegisterContactCount.Store(0)
+	return nil
 }

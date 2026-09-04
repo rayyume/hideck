@@ -114,7 +114,12 @@ func (p *Pool) scheduleNativeVoLTE(deviceID, reason string) {
 	if p == nil || strings.TrimSpace(deviceID) == "" {
 		return
 	}
+	deviceID = strings.TrimSpace(deviceID)
+	if !p.beginNativeVoLTESchedule(deviceID) {
+		return
+	}
 	go func() {
+		defer p.endNativeVoLTESchedule(deviceID)
 		var err error
 		for attempt := 1; attempt <= nativeVoLTEStartAttempts; attempt++ {
 			if !p.IsNativeVoLTE(deviceID) {
@@ -138,6 +143,25 @@ func (p *Pool) scheduleNativeVoLTE(deviceID, reason string) {
 			}
 		}
 	}()
+}
+
+func (p *Pool) beginNativeVoLTESchedule(deviceID string) bool {
+	p.nativeVoLTEScheduleMu.Lock()
+	defer p.nativeVoLTEScheduleMu.Unlock()
+	if p.nativeVoLTEScheduled == nil {
+		p.nativeVoLTEScheduled = make(map[string]struct{})
+	}
+	if _, exists := p.nativeVoLTEScheduled[deviceID]; exists {
+		return false
+	}
+	p.nativeVoLTEScheduled[deviceID] = struct{}{}
+	return true
+}
+
+func (p *Pool) endNativeVoLTESchedule(deviceID string) {
+	p.nativeVoLTEScheduleMu.Lock()
+	delete(p.nativeVoLTEScheduled, deviceID)
+	p.nativeVoLTEScheduleMu.Unlock()
 }
 
 func (p *Pool) stopNativeVoLTE(deviceID, reason string) {

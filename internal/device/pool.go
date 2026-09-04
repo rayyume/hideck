@@ -201,10 +201,12 @@ type Pool struct {
 	inboundSMSHandlers        []InboundSMSHandler
 	rescanAndReconnectForTest func() error
 
-	voiceGateway *voicehost.Gateway
-	volteCtl     *volte.Controller
-	atPortMu     sync.Mutex
-	atPortLocks  map[string]*sync.Mutex
+	voiceGateway          *voicehost.Gateway
+	volteCtl              *volte.Controller
+	nativeVoLTEScheduleMu sync.Mutex
+	nativeVoLTEScheduled  map[string]struct{}
+	atPortMu              sync.Mutex
+	atPortLocks           map[string]*sync.Mutex
 
 	// VoWiFi host 侧整合（多实例）
 	vowifiHost         *vowifihost.Manager

@@ -249,6 +249,7 @@ func (s *Service) acceptProtectedSIP(listener net.Listener) {
 			_ = conn.Close()
 			return
 		}
+		s.recordPortSOpened(conn, time.Now())
 		s.resetPortSReadClock()
 		s.networkDone.Add(1)
 		go s.serveProtectedSIPConnection(conn)
@@ -259,6 +260,7 @@ func (s *Service) serveProtectedSIPConnection(conn net.Conn) {
 	defer s.networkDone.Done()
 	defer conn.Close()
 	err := s.readRegistrationStreamSync(conn)
+	s.recordPortSClosed(conn, err, time.Now())
 	s.untrackProtectedConnection(conn)
 	if err != nil && !s.stopped() {
 		logging.WarnRate("ims-protected-server-stream-"+s.DeviceID(),
@@ -272,7 +274,7 @@ func (s *Service) serveProtectedSIPConnection(conn net.Conn) {
 // evidence of an on-demand flow: only a later peer connection without a
 // successful refresh proves that behavior for the active P-CSCF.
 func (s *Service) handleProtectedServerPushClosed() {
-	if s == nil || s.stopped() {
+	if s == nil || s.stopped() || s.pcscfRecoveryPending.Load() {
 		return
 	}
 	s.protectedConnMu.Lock()
@@ -370,6 +372,7 @@ func (s *Service) portSReconnectWatchFired(generation uint64, registrar string) 
 	if !s.portSRecoveryPending.CompareAndSwap(false, true) {
 		return
 	}
+	s.markPortSResetRecoveryAttempt(registrar)
 	s.triggerRegisterImmediate("port-s flow failed")
 }
 
@@ -393,6 +396,9 @@ func (s *Service) completePortSRecovery(err error, bindingPreserved bool) {
 	}
 	pending := s.portSRecoveryPending.Swap(false)
 	if err == nil {
+		if pending {
+			s.markPortSResetRecoverySucceeded(s.currentPortSRecoveryRegistrar())
+		}
 		if s.portSPushReady.Load() {
 			s.portSRecoveryAwaitingFlow.Store(false)
 			s.portSReconnectWaiting.Store(false)
@@ -450,6 +456,7 @@ func (s *Service) recordOnDemandPortSReconnect() {
 	if !s.portSReconnectWaiting.CompareAndSwap(true, false) || s.portSOnDemandObserved.Swap(true) {
 		return
 	}
+	s.clearPortSResetRecovery(s.currentPortSRecoveryRegistrar())
 	s.resetPortSRecoveryBackoff()
 	logging.Info("IMS on-demand port-s reconnect observed",
 		"device", s.DeviceID(),
@@ -471,6 +478,7 @@ func (s *Service) resetPortSRecoveryKnowledge() {
 	s.portSRecoveryPending.Store(false)
 	s.portSRecoveryAwaitingFlow.Store(false)
 	s.portSOnDemandObserved.Store(false)
+	s.clearPortSResetRecovery("")
 }
 
 func (s *Service) trackProtectedConnection(conn net.Conn) bool {
@@ -501,6 +509,24 @@ func (s *Service) untrackProtectedConnection(conn net.Conn) {
 	if changed {
 		s.notifySMSReadiness()
 	}
+}
+
+func (s *Service) detachProtectedConnections() []net.Conn {
+	if s == nil {
+		return nil
+	}
+	s.protectedConnMu.Lock()
+	connections := make([]net.Conn, 0, len(s.protectedConns))
+	for conn := range s.protectedConns {
+		connections = append(connections, conn)
+	}
+	s.protectedConns = make(map[net.Conn]struct{})
+	changed := s.portSPushReady.Swap(false)
+	s.protectedConnMu.Unlock()
+	if changed {
+		s.notifySMSReadiness()
+	}
+	return connections
 }
 
 func (s *Service) readRegistrationStream(conn net.Conn) {

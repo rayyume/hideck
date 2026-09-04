@@ -114,6 +114,7 @@ func (s *Service) captureStatusSnapshot() ServiceStatus {
 	}
 	lastSMSTrace, lastSMSAt, lastSMSErr := s.smsSendStatus()
 	inboundStats := s.captureInboundStats()
+	portS := s.capturePortSSession()
 	eventBusStatus := s.getIMSEventBus().statusSnapshot()
 	s.receiverMu.Lock()
 	rxRunning := s.activeReceivers > 0
@@ -127,11 +128,19 @@ func (s *Service) captureStatusSnapshot() ServiceStatus {
 		RegStatus:  registrationStatusText(s.regStatus.Load()),
 		Registrar:  s.registrar, RegistrarCandidates: append([]string(nil), s.registrarCandidates...),
 		RegistrarIndex: s.registrarIndex, RegistrarSource: s.registrarSource,
-		LastSIPCode: int(s.lastSIPCode.Load()), LastSIPText: s.lastSIPText,
+		RegistrationGeneration: s.registrationGeneration.Load(),
+		RegistrationRegID:      registeredFlowRegIDLocked(s),
+		LastSIPCode:            int(s.lastSIPCode.Load()), LastSIPText: s.lastSIPText,
 		Domain: s.cfg.Domain, IMPI: s.cfg.IMPI, IMPU: s.cfg.IMPU,
 		Transport: s.registrationTransport, SMSReceiverTransport: s.cfg.SMSReceiverTransport(),
 		LocalAddr: s.cfg.LocalAddr, LocalPort: s.cfg.LocalPort,
-		IPSecInstalled: len(s.spiPairs) > 0, RXRunning: rxRunning,
+		PortSConnected: portS.connected, PortSGeneration: portS.generation,
+		PortSOpenedAt: portS.openedAt, PortSClosedAt: portS.closedAt,
+		PortSLastInboundAt: portS.lastInboundAt,
+		PortSLastCloseKind: portS.lastCloseKind, PortSLastCloseReason: portS.lastCloseReason,
+		PortSPeerResetCount: portS.peerResetCount,
+		DeprioritizedPCSCF:  activeRegistrarPenaltiesLocked(s.registrarUnavailable, time.Now()),
+		IPSecInstalled:      len(s.spiPairs) > 0, RXRunning: rxRunning,
 		TCPSignalingRunning:    s.registrationTCP != nil,
 		TCPSignalingConnected:  s.registrationTCP != nil,
 		EffectiveSecurityMode:  s.effectiveSecurityModeLocked(),

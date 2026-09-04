@@ -274,7 +274,9 @@ func (s *Service) handlePortSTraffic() {
 	if s == nil {
 		return
 	}
-	s.portSLastReadAt.Store(time.Now().UnixNano())
+	now := time.Now()
+	s.portSLastReadAt.Store(now.UnixNano())
+	s.recordPortSInbound(now)
 	s.resetPortSRecoveryBackoff()
 	s.handleTCPTraffic()
 }

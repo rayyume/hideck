@@ -3,6 +3,7 @@ package imscore
 import (
 	"context"
 	"errors"
+	"net"
 	"strings"
 	"testing"
 	"time"
@@ -60,6 +61,51 @@ func TestPCSCFUnavailableCandidatesAreSkipped(t *testing.T) {
 	}
 	if service.advanceRegistrarForNextRetry("network") {
 		t.Fatal("retry selected a P-CSCF that is still unavailable")
+	}
+}
+
+func TestPCSCFSwitchDropsOldSecurityAgreement(t *testing.T) {
+	network := &removableCaptureNetwork{
+		captureIPSecNetwork: &captureIPSecNetwork{SystemIMSNetwork: NewSystemIMSNetwork(testLocalIP)},
+	}
+	service := newSecurityAgreementTestService(t, network)
+	service.mu.Lock()
+	service.spiPairs = [][2]uint32{{1, 2}}
+	service.regSession = &registerSession{
+		expires:  time.Hour,
+		security: &securityAgreement{server: &securityMechanism{Name: "ipsec-3gpp"}},
+	}
+	service.serviceRoute = "<sip:old-route.example;lr>"
+	service.path = "<sip:old-path.example;lr>"
+	service.securityVerify = "ipsec-3gpp;spi-c=1;spi-s=2"
+	service.outboundContactRegistered = true
+	service.mu.Unlock()
+	client, server := net.Pipe()
+	defer server.Close()
+	if !service.trackProtectedConnection(client) {
+		t.Fatal("track protected connection")
+	}
+
+	if err := service.resetRegistrationForPCSCFSwitch(); err != nil {
+		t.Fatal(err)
+	}
+	service.mu.RLock()
+	regSession := service.regSession
+	serviceRoute := service.serviceRoute
+	path := service.path
+	securityVerify := service.securityVerify
+	outboundRegistered := service.outboundContactRegistered
+	service.mu.RUnlock()
+	if network.removals != 1 || regSession != nil || serviceRoute != "" ||
+		path != "" || securityVerify != "" || outboundRegistered {
+		t.Fatalf("old P-CSCF state survived reset: removals=%d session=%+v route=%q path=%q verify=%q outbound=%t",
+			network.removals, regSession, serviceRoute, path, securityVerify, outboundRegistered)
+	}
+	service.protectedConnMu.Lock()
+	protectedConnectionCount := len(service.protectedConns)
+	service.protectedConnMu.Unlock()
+	if service.portSPushReady.Load() || protectedConnectionCount != 0 {
+		t.Fatal("old port-s connection remained reachable during P-CSCF switch")
 	}
 }
 

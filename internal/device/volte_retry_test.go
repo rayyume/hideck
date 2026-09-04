@@ -28,3 +28,21 @@ func TestIsTransientVoLTEStartError(t *testing.T) {
 		t.Fatalf("retry delay %s %s", nativeVoLTERetryDelay(1), nativeVoLTERetryDelay(2))
 	}
 }
+
+func TestNativeVoLTEScheduleCoalescesPerDevice(t *testing.T) {
+	pool := NewPool(nil)
+	defer pool.cancel()
+	if !pool.beginNativeVoLTESchedule("wwan0") {
+		t.Fatal("first VoLTE schedule was rejected")
+	}
+	if pool.beginNativeVoLTESchedule("wwan0") {
+		t.Fatal("duplicate VoLTE schedule was accepted")
+	}
+	if !pool.beginNativeVoLTESchedule("wwan1") {
+		t.Fatal("another device was blocked by wwan0")
+	}
+	pool.endNativeVoLTESchedule("wwan0")
+	if !pool.beginNativeVoLTESchedule("wwan0") {
+		t.Fatal("completed VoLTE schedule could not be started again")
+	}
+}

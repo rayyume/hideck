@@ -168,8 +168,13 @@ func (s *Service) registerLocked(ctx context.Context) error {
 		secAgree = s.regSession.security != nil && strings.TrimSpace(s.regSession.security.verifyHeader) != ""
 	}
 	s.mu.Unlock()
+	s.recordIMSRegistrationSucceeded()
 	logging.Info("IMS REGISTER succeeded",
 		"device", s.DeviceID(),
+		"registration_generation", s.registrationGeneration.Load(),
+		"pcscf", s.currentPortSRecoveryRegistrar(),
+		"inner_ip", s.cfg.LocalAddr,
+		"reg_id", s.registeredFlowRegID(),
 		"expires_seconds", int(expires/time.Second),
 		"transport", transport,
 		"protected_tcp", protectedTCP,
@@ -188,6 +193,7 @@ func (s *Service) registerLocked(ctx context.Context) error {
 	s.startMWISubscription()
 	s.startIMSKeepalive()
 	s.schedulePeerCapabilityDiscovery()
+	s.startPendingPortSResetFailover()
 	return nil
 }
 
@@ -494,6 +500,7 @@ func (s *Service) applyRegisterMinExpires(seconds uint32) {
 func (s *Service) exchangeRegister(ctx context.Context, session *registerSession, authorization string) (*sipResponse, error) {
 	s.recordRegisterSession(session)
 	request := s.buildRegister(session, authorization)
+	s.logIMSRegistrationAttempt(session, request)
 	logging.Debug("IMS REGISTER outbound", "device", s.DeviceID(), "cseq", session.cseq,
 		"authenticated", strings.TrimSpace(authorization) != "",
 		"security_client_mechanisms", securityClientMechanismCount(rawSIPHeaderValue(request, "Security-Client")),

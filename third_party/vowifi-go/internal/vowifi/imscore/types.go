@@ -182,6 +182,8 @@ type Service struct {
 	externalTransport         bool
 	protectedConnMu           sync.Mutex
 	protectedConns            map[net.Conn]struct{}
+	portSSessionMu            sync.Mutex
+	portSSession              portSSessionState
 	portSReconnectGrace       time.Duration
 	portSLastReadAt           atomic.Int64
 	portSPushReady            atomic.Bool
@@ -194,6 +196,7 @@ type Service struct {
 	portSWatchGeneration      uint64
 	portSBackoff              portSRecoveryBackoff
 	portSRecoveryJitter       func(time.Duration) time.Duration
+	registrationGeneration    atomic.Uint64
 	sipWriteMu                sync.Mutex
 	receiverMu                sync.Mutex
 	activeReceivers           int
@@ -359,6 +362,8 @@ type ServiceStatus struct {
 	RegistrarCandidates    []string
 	RegistrarIndex         int
 	RegistrarSource        string
+	RegistrationGeneration uint64
+	RegistrationRegID      int
 	LastSIPCode            int
 	LastSIPText            string
 	Domain                 string
@@ -368,6 +373,15 @@ type ServiceStatus struct {
 	SMSReceiverTransport   string
 	LocalAddr              string
 	LocalPort              int
+	PortSConnected         bool
+	PortSGeneration        uint64
+	PortSOpenedAt          time.Time
+	PortSClosedAt          time.Time
+	PortSLastInboundAt     time.Time
+	PortSLastCloseKind     string
+	PortSLastCloseReason   string
+	PortSPeerResetCount    uint64
+	DeprioritizedPCSCF     map[string]time.Time
 	IPSecInstalled         bool
 	RXRunning              bool
 	RXPort                 int
