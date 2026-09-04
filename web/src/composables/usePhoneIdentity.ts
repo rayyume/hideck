@@ -111,7 +111,7 @@ function reloadContacts(options: ContactReloadOptions = {}) {
   contactsState.loading = true
   contactsState.error = ''
   let request: Promise<PhoneIdentity[]>
-  request = loadCurrentContactPage(0).then((page) => {
+  request = loadCurrentContactPage(0, generation).then((page) => {
     if (generation !== contactsGeneration) return contacts
     replaceContactRows(page)
     return contacts
@@ -128,11 +128,11 @@ function reloadContacts(options: ContactReloadOptions = {}) {
   return request
 }
 
-async function loadCurrentContactPage(offset: number) {
+async function loadCurrentContactPage(offset: number, generation: number) {
   for (;;) {
     const revision = cacheRevision
     const page = await phoneContactsService.listPage({ limit: CONTACT_PAGE_SIZE, offset })
-    if (revision === cacheRevision) return page
+    if (generation !== contactsGeneration || revision === cacheRevision) return page
   }
 }
 
@@ -177,7 +177,7 @@ function loadMoreContacts() {
   contactsState.loadingMore = true
   contactsState.error = ''
   let request: Promise<PhoneIdentity[]>
-  request = loadCurrentContactPage(contactsState.nextOffset).then((page) => {
+  request = loadCurrentContactPage(contactsState.nextOffset, generation).then((page) => {
     if (generation === contactsGeneration) appendContactRows(page)
     return contacts
   }).catch((error: unknown) => {
@@ -240,6 +240,7 @@ async function removeContactGroup(contactId: string) {
 }
 
 function removeLocalContacts(numbers: readonly string[], deleted: number) {
+  contactsGeneration++
   cacheRevision++
   const drop = new Set(numbers)
   const loadedDeleted = contacts.filter((item) => drop.has(item.number)).length

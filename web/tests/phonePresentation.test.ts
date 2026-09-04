@@ -144,6 +144,7 @@ test('contact management stays compact and message boxes render above the drawer
 test('contacts load on scroll and keep drag import discoverable', () => {
   assert.match(contactService, /listPage\(params: PhoneContactsPageParams\)/)
   assert.match(phoneIdentity, /listPage\(\{ limit: CONTACT_PAGE_SIZE, offset \}\)/)
+  assert.match(phoneIdentity, /generation !== contactsGeneration \|\| revision === cacheRevision/)
   assert.match(phoneIdentity, /function loadMoreContacts\(\)/)
   assert.match(phoneIdentity, /while \(contactsState\.hasMore\) await loadMoreContacts\(\)/)
   assert.match(contactsDrawer, /@scroll\.passive="onContactScroll"/)
@@ -153,6 +154,7 @@ test('contacts load on scroll and keep drag import discoverable', () => {
   assert.match(contactsPanel, /identities\.contactsTotal/)
   assert.match(phoneIdentity, /if \(!page\.hasMore\) reconcileContactNameCache\(page\.contacts\)/)
   assert.match(phoneIdentity, /appendContactRows\([\s\S]*reconcileContactNameCache\(contacts\)/)
+  assert.match(phoneIdentity, /function removeLocalContacts\([\s\S]*contactsGeneration\+\+[\s\S]*cacheRevision\+\+/)
 })
 
 test('contact import behavior is shared and exposes list refresh failures', () => {
