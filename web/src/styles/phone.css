@@ -81,7 +81,13 @@
 .call-identity { width: 100%; text-align: center; }
 .call-identity > span { color: var(--ui-primary); font-family: "v-mono", monospace; font-size: 9px; font-weight: 700; letter-spacing: .16em; }
 .call-identity strong { margin-top: 8px; display: block; overflow-wrap: anywhere; color: var(--ui-text); font-family: "v-mono", monospace; font-size: clamp(26px, 4vw, 36px); }
+.call-identity strong.is-named { font-family: inherit; }
 .call-identity p { margin: 5px 0 0; color: var(--ui-text-muted); font-variant-numeric: tabular-nums; }
+.call-identity .call-number { font-family: "v-mono", monospace; font-size: 14px; }
+.call-identity .call-attribution { color: var(--ui-primary); font-size: 13px; font-weight: 650; }
+.contact-save { margin-top: 12px; min-height: 36px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-pill); background: var(--ui-surface); color: var(--ui-text); cursor: pointer; font-size: 12px; }
+.contact-save:disabled { opacity: .45; cursor: default; }
+.callee-hint { color: var(--ui-text-muted) !important; }
 .call-waiting-hint { margin: 8px 0 0; color: var(--ui-warning); font-size: 12px; }
 .call-meta { width: 100%; margin: 0; display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-xl); overflow: hidden; }
 .call-meta div { min-width: 0; padding: 10px; border-right: 1px solid var(--ui-border); text-align: center; }

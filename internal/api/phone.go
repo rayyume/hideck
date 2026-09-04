@@ -53,6 +53,7 @@ func (s *Server) registerPhoneRoutes(api *gin.RouterGroup) {
 	api.GET("/phone/events", s.handlePhoneEvents)
 	api.GET("/phone/history", s.handlePhoneHistory)
 	api.GET("/phone/recordings/:recording", s.handleCommandRecording)
+	s.registerPhoneContactRoutes(api)
 }
 
 func (s *Server) handlePhoneDevices(c *gin.Context) {

@@ -11,6 +11,7 @@ import {
   Mic24Regular,
   MicOff24Regular,
   Pause24Regular,
+  PersonAdd24Regular,
   Play24Regular,
   Speaker224Regular
 } from '@vicons/fluent'
@@ -20,11 +21,14 @@ import PhoneDialPad from '../components/PhoneDialPad.vue'
 import type { PhoneCall, PhoneDevice } from '../services/phone'
 import { devicesService } from '../services/devices'
 import { usePhoneStore } from '../stores/phone'
+import { usePhoneIdentity } from '../composables/usePhoneIdentity'
+import { phoneContactsService } from '../services/phone-contacts'
 import { formatCallDuration, phoneCallStatusLabel, phoneErrorMessage } from '../utils/phone'
 
 const CALLEE_PATTERN = /^\+?[0-9]{1,32}$/
 
 const phone = usePhoneStore()
+const identities = usePhoneIdentity()
 const selectedDevice = ref('')
 const callee = ref('')
 const action = ref('')
@@ -47,6 +51,16 @@ const canPlaceCall = computed(() => CALLEE_PATTERN.test(callee.value)
 watch(() => phone.devices, (devices) => selectFirstAvailableDevice(devices), { immediate: true })
 watch(call, (current) => {
   if (!current || current.status !== 'connected') keypadVisible.value = false
+  if (current?.peer) void identities.resolve(current.peer)
+  if (waitingCall.value?.peer) void identities.resolve(waitingCall.value.peer)
+})
+watch(() => phone.history.map((item) => item.peer).join('|'), () => {
+  for (const record of phone.history) {
+    if (record.peer) void identities.resolve(record.peer)
+  }
+}, { immediate: true })
+watch(callee, (value) => {
+  if (CALLEE_PATTERN.test(value)) void identities.resolve(value)
 })
 
 onMounted(async () => {
@@ -229,6 +243,27 @@ async function runAction(name: string, task: () => Promise<unknown>, success?: s
     phone.error = phoneErrorMessage(error, `${name}失败`)
   } finally {
     action.value = ''
+  }
+}
+
+async function savePeerContact(number?: string) {
+  const peer = String(number || '').trim()
+  if (!peer) return
+  const current = identities.identityFor(peer)
+  try {
+    const { value } = await ElMessageBox.prompt('保存后，来电会显示这个名字', '加到联系人', {
+      confirmButtonText: '保存',
+      cancelButtonText: '取消',
+      inputPlaceholder: '联系人名字',
+      inputValue: current?.name || '',
+      inputValidator: (v) => !!String(v || '').trim() || '请填写名字'
+    })
+    const ident = await phoneContactsService.save(peer, String(value).trim())
+    identities.remember(ident)
+    ElMessage.success('已保存联系人')
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return
+    ElMessage.error(error instanceof Error ? error.message : '保存联系人失败')
   }
 }
 
@@ -438,9 +473,14 @@ async function sendDTMF(digit: string) {
         <div v-else-if="call" class="active-call">
           <div class="call-identity">
             <span>{{ call.direction === 'inbound' ? 'INCOMING' : 'OUTGOING' }}</span>
-            <strong>{{ call.peer || '未知号码' }}</strong>
+            <strong :class="{ 'is-named': !!identities.identityFor(call.peer)?.name }">{{ identities.titleFor(call.peer) }}</strong>
+            <p v-if="identities.identityFor(call.peer)?.name" class="call-number">{{ identities.identityFor(call.peer)?.display_number }}</p>
+            <p v-if="identities.subtitleFor(call.peer)" class="call-attribution">{{ identities.subtitleFor(call.peer) }}</p>
             <p>{{ phoneCallStatusLabel(call, callEnding) }} · {{ formatCallDuration(call, phone.now) }}</p>
-            <p v-if="waitingCall" class="call-waiting-hint">第二路来电 {{ waitingCall.peer || '未知号码' }}（呼叫等待）</p>
+            <p v-if="waitingCall" class="call-waiting-hint">第二路来电 {{ identities.titleFor(waitingCall.peer) }}（呼叫等待）</p>
+            <button type="button" class="contact-save" :disabled="!call.peer" @click="savePeerContact(call.peer)">
+              <el-icon><PersonAdd24Regular /></el-icon>{{ identities.identityFor(call.peer)?.name ? '改联系人' : '加到联系人' }}
+            </button>
           </div>
 
           <dl class="call-meta">
@@ -592,6 +632,7 @@ async function sendDTMF(digit: string) {
               </button>
             </div>
             <small v-if="callee && !CALLEE_PATTERN.test(callee)">号码只能包含可选的前导 + 和 1–32 位数字</small>
+            <small v-else-if="identities.subtitleFor(callee)" class="callee-hint">{{ identities.titleFor(callee) }}{{ identities.subtitleFor(callee) ? ` · ${identities.subtitleFor(callee)}` : '' }}</small>
           </div>
 
           <PhoneDialPad @digit="appendDigit" />

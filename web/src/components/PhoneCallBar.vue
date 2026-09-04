@@ -12,11 +12,13 @@ import {
   Speaker224Regular
 } from '@vicons/fluent'
 import { usePhoneStore } from '../stores/phone'
+import { usePhoneIdentity } from '../composables/usePhoneIdentity'
 import { formatCallDuration, phoneCallStatusLabel, phoneErrorMessage } from '../utils/phone'
 import PhoneDialPad from './PhoneDialPad.vue'
 
 const router = useRouter()
 const phone = usePhoneStore()
+const identities = usePhoneIdentity()
 const ending = ref(false)
 const keypadOpen = ref(false)
 const lastDTMF = ref('')
@@ -35,6 +37,9 @@ watch(connected, (isConnected) => {
     lastDTMF.value = ''
   }
 })
+watch(() => call.value?.peer, (peer) => {
+  if (peer) void identities.resolve(peer)
+}, { immediate: true })
 
 async function hangup() {
   if (!call.value || ending.value) return
@@ -79,8 +84,8 @@ async function sendDigit(digit: string) {
       <button type="button" class="call-summary" @click="router.push('/phone')">
         <span class="call-pulse" aria-hidden="true" />
         <span class="call-copy">
-          <strong>{{ call.peer || '未知号码' }}</strong>
-          <small>{{ phone.mediaMode === 'listen-only' ? '仅听 · ' : '' }}{{ phoneCallStatusLabel(call, callEnding) }} · {{ formatCallDuration(call, phone.now) }}{{ waitingCall ? ` · 第二路 ${waitingCall.peer || '未知号码'}` : '' }}</small>
+          <strong>{{ identities.titleFor(call.peer) }}</strong>
+          <small>{{ identities.subtitleFor(call.peer) ? identities.subtitleFor(call.peer) + ' · ' : '' }}{{ phone.mediaMode === 'listen-only' ? '仅听 · ' : '' }}{{ phoneCallStatusLabel(call, callEnding) }} · {{ formatCallDuration(call, phone.now) }}{{ waitingCall ? ` · 第二路 ${identities.titleFor(waitingCall.peer)}` : '' }}</small>
         </span>
         <span v-if="call.read_only" class="read-only-tag">只读</span>
       </button>

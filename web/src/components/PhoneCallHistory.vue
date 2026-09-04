@@ -1,19 +1,49 @@
 <script setup lang="ts">
-import { onUnmounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { onUnmounted, ref, watch } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   CallInbound24Regular,
   CallMissed24Regular,
   CallOutbound24Regular,
+  PersonAdd24Regular,
   Play24Regular
 } from '@vicons/fluent'
 import type { PhoneRecord } from '../services/phone'
 import { usePhoneStore } from '../stores/phone'
+import { usePhoneIdentity } from '../composables/usePhoneIdentity'
+import { phoneContactsService } from '../services/phone-contacts'
 import { formatCallTime, formatRecordDuration, phoneRecordStatusLabel } from '../utils/phone'
 
-defineProps<{ records: PhoneRecord[] }>()
+const props = defineProps<{ records: PhoneRecord[] }>()
+const identities = usePhoneIdentity()
 
 const phone = usePhoneStore()
+
+watch(() => props.records.map((item) => item.peer).join('|'), () => {
+  for (const record of props.records) {
+    if (record.peer) void identities.resolve(record.peer)
+  }
+}, { immediate: true })
+
+async function saveContact(record: PhoneRecord) {
+  const peer = String(record.peer || '').trim()
+  if (!peer) return
+  const current = identities.identityFor(peer)
+  try {
+    const { value } = await ElMessageBox.prompt('保存后，来电和通话记录会显示这个名字', '加到联系人', {
+      confirmButtonText: '保存',
+      cancelButtonText: '取消',
+      inputPlaceholder: '联系人名字',
+      inputValue: current?.name || '',
+      inputValidator: (v) => !!String(v || '').trim() || '请填写名字'
+    })
+    identities.remember(await phoneContactsService.save(peer, String(value).trim()))
+    ElMessage.success('已保存联系人')
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return
+    ElMessage.error(error instanceof Error ? error.message : '保存联系人失败')
+  }
+}
 const playingId = ref<number | null>(null)
 const audioURLs = new Map<number, string>()
 let playback: HTMLAudioElement | null = null
@@ -82,7 +112,7 @@ onUnmounted(() => {
         </div>
         <div class="history-copy">
           <div class="history-primary">
-            <strong>{{ record.peer || '未知号码' }}</strong>
+            <strong>{{ identities.titleFor(record.peer) }}</strong>
             <time>{{ formatCallTime(record.started_at) }}</time>
           </div>
           <div class="history-secondary">
@@ -90,8 +120,14 @@ onUnmounted(() => {
             <span>{{ formatRecordDuration(record) }}</span>
             <span>{{ record.device_id }}</span>
           </div>
+          <p v-if="identities.subtitleFor(record.peer)" class="history-attribution">{{ identities.subtitleFor(record.peer) }}</p>
           <p v-if="record.recording_error" class="recording-error">录音失败：{{ record.recording_error }}</p>
         </div>
+        <el-tooltip content="加到联系人" placement="left">
+          <button type="button" class="play-button" :aria-label="`把 ${record.peer || '号码'} 加到联系人`" @click="saveContact(record)">
+            <el-icon><PersonAdd24Regular /></el-icon>
+          </button>
+        </el-tooltip>
         <el-tooltip v-if="record.recording_name" content="播放录音" placement="left">
           <button
             type="button"
@@ -118,6 +154,7 @@ onUnmounted(() => {
 .history-item { min-height: 76px; padding: 12px 14px; display: flex; align-items: flex-start; gap: 11px; border-bottom: 1px solid var(--ui-border-muted); }
 .history-icon { width: 34px; height: 34px; flex: 0 0 34px; display: grid; place-items: center; border-radius: 50%; background: color-mix(in srgb, var(--ui-primary) 10%, var(--ui-surface)); color: var(--ui-primary); }
 .history-icon.is-missed, .history-icon.is-rejected, .history-icon.is-failed { color: var(--ui-danger); background: color-mix(in srgb, var(--ui-danger) 10%, var(--ui-surface)); }
+.history-attribution { margin: 4px 0 0; color: var(--ui-text-muted); font-size: 12px; }
 .history-icon.is-busy { color: var(--ui-warning); }
 .history-copy { min-width: 0; flex: 1; }
 .history-primary { display: flex; justify-content: space-between; gap: 8px; }
