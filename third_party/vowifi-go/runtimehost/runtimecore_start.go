@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/iniwex5/vowifi-go/internal/vowifi/imscore"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/imsendpoint"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/profile"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/runtimecore"
@@ -105,6 +106,7 @@ func launchRuntimeCore(
 	request.Observer = observer
 	request.Reconnect = true
 	request.ReconnectDelay = options.delay
+	chainSMSReadinessHook(&request, observer)
 	chainSMSReadyHook(&request, observer)
 	runner := options.runner
 	if runner == nil {
@@ -123,6 +125,19 @@ func coreInitialState(request runtimecore.RuntimeStartRequest) State {
 		Phase: "starting", DeviceID: request.DeviceID,
 		DataplaneMode: request.Dataplane.Mode, SIMReady: request.SIM != nil,
 		LastEvent: "starting", SessionState: "starting",
+	}
+}
+
+func chainSMSReadinessHook(
+	request *runtimecore.RuntimeStartRequest,
+	observer *instanceObserver,
+) {
+	previous := request.Hooks.OnSMSReadinessChanged
+	request.Hooks.OnSMSReadinessChanged = func(ctx context.Context, readiness imscore.SMSReadiness) {
+		if previous != nil {
+			previous(ctx, readiness)
+		}
+		observer.inst.updateSMSReadiness(adaptSMSReadiness(readiness))
 	}
 }
 

@@ -257,6 +257,13 @@ func TestStartSMSReadyTracksReportedPrerequisites(t *testing.T) {
 	if state := inst.State(); !state.SMSReady || state.SMSReadyReason != "IMS SMS receiver ready" {
 		t.Fatalf("updated SMS state = %+v", state)
 	}
+	ims.setSMSReadiness(SMSReadiness{
+		Registered: true, ProfileReady: true, TransportReady: true, SMSCPresent: true,
+		Reason: "IMS SMS receiver is not ready",
+	})
+	if state := inst.State(); state.SMSReady || state.Phase != "ims_ready" || state.LastEvent != "sms_unavailable" {
+		t.Fatalf("unavailable SMS state = %+v", state)
+	}
 }
 
 func TestPreferredInnerAddressUsesIPv6WhenUsable(t *testing.T) {

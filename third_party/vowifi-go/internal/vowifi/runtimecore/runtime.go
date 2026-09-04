@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 
 	"github.com/iniwex5/vowifi-go/engine/swu"
+	"github.com/iniwex5/vowifi-go/internal/vowifi/imscore"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/profile"
 )
 
@@ -146,6 +147,11 @@ func sessionConfigFromRequest(
 		Proxy:   req.Proxy, DNSServer: req.DNSServer, DeliveryStore: req.DeliveryStore,
 		Dispatch: req.Dispatch, OnIMSRegistered: notifier.OnIMSRegistered,
 		OnSMSReady: notifier.OnSMSReady,
+		OnSMSReadinessChanged: func(readiness imscore.SMSReadiness) {
+			if req.Hooks.OnSMSReadinessChanged != nil {
+				req.Hooks.OnSMSReadinessChanged(ctx, readiness)
+			}
+		},
 		OnProgress: req.OnProgress, OmitInitialContact: req.omitInitialContact,
 	}
 	req.fastReauth.Apply(&config)

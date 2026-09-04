@@ -89,6 +89,27 @@ func TestSessionConfigFlushesSMSAfterPendingRegistration(t *testing.T) {
 	}
 }
 
+func TestSessionConfigForwardsEverySMSReadinessChange(t *testing.T) {
+	ctx := context.Background()
+	readinessEvents := make([]imscore.SMSReadiness, 0, 2)
+	request := &RuntimeStartRequest{Hooks: RuntimeHostHooks{
+		OnSMSReadinessChanged: func(_ context.Context, readiness imscore.SMSReadiness) {
+			readinessEvents = append(readinessEvents, readiness)
+		},
+	}}
+	notifier := newIMSRegisteredNotifier(ctx, request, profile.IMSIdentityResult{})
+	config := sessionConfigFromRequest(ctx, request, profile.PreparedSession{}, notifier)
+	config.OnSMSReadinessChanged(imscore.SMSReadiness{Ready: true, Reason: "ready"})
+	config.OnSMSReadinessChanged(imscore.SMSReadiness{Ready: false, Reason: "port-s closed"})
+
+	if len(readinessEvents) != 2 || !readinessEvents[0].Ready || readinessEvents[1].Ready {
+		t.Fatalf("SMS readiness events = %+v", readinessEvents)
+	}
+	if readinessEvents[1].Reason != "port-s closed" {
+		t.Fatalf("SMS unavailable reason = %q", readinessEvents[1].Reason)
+	}
+}
+
 func TestIMSRegisteredNotifierHoldsSMSUntilRegistrationEvent(t *testing.T) {
 	order := make([]string, 0, 2)
 	observer := &notifierObserver{order: &order}

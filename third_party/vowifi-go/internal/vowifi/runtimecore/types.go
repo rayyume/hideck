@@ -75,20 +75,21 @@ type RuntimeObserver interface {
 }
 
 type RuntimeHostHooks struct {
-	Events           RuntimeEventSink[*SessionResult]
-	OnPrepared       func(context.Context, profile.PreparedSession)
-	OnConnecting     func(context.Context)
-	OnEstablished    func(context.Context, RuntimeStartResult)
-	OnInterruptReady func(context.Context)
-	OnSessionDown    func(context.Context)
-	OnReauthNeeded   func(context.Context)
-	OnRedirect       func(context.Context, string)
-	OnInterrupted    func(context.Context, error)
-	OnRetryDelay     func(context.Context, int, int64)
-	OnIMSRegistered  func(context.Context)
-	OnSMSReady       func(context.Context)
-	OnError          func(context.Context, error)
-	OnStopped        func(context.Context)
+	Events                RuntimeEventSink[*SessionResult]
+	OnPrepared            func(context.Context, profile.PreparedSession)
+	OnConnecting          func(context.Context)
+	OnEstablished         func(context.Context, RuntimeStartResult)
+	OnInterruptReady      func(context.Context)
+	OnSessionDown         func(context.Context)
+	OnReauthNeeded        func(context.Context)
+	OnRedirect            func(context.Context, string)
+	OnInterrupted         func(context.Context, error)
+	OnRetryDelay          func(context.Context, int, int64)
+	OnIMSRegistered       func(context.Context)
+	OnSMSReady            func(context.Context)
+	OnSMSReadinessChanged func(context.Context, imscore.SMSReadiness)
+	OnError               func(context.Context, error)
+	OnStopped             func(context.Context)
 }
 
 type RuntimeOptions struct {
@@ -101,30 +102,31 @@ type RuntimeStartResult struct {
 }
 
 type SessionConfig struct {
-	Ctx                context.Context
-	DeviceID           string
-	TraceID            string
-	Prepared           profile.PreparedSession
-	SIM                access.SIMAdapter
-	DataplaneMode      string
-	TUNName            string
-	Proxy              *ProxyConfig
-	DNSServer          string
-	DeliveryStore      smsdelivery.Store
-	Dispatch           events.EventDispatcher
-	OnIMSRegistered    func()
-	OnSMSReady         func()
-	ResumeTicket       []byte
-	ResumeOldSKd       []byte
-	OnTicketUpdate     func([]byte, []byte)
-	FastReauthID       string
-	FastReauthMK       []byte
-	FastReauthKAut     []byte
-	FastReauthKEncr    []byte
-	OnFastReauthUpdate func(string, []byte, []byte, []byte)
-	OnProgress         func(string)
-	OnTunnelReady      func(*SessionResult)
-	OmitInitialContact bool
+	Ctx                   context.Context
+	DeviceID              string
+	TraceID               string
+	Prepared              profile.PreparedSession
+	SIM                   access.SIMAdapter
+	DataplaneMode         string
+	TUNName               string
+	Proxy                 *ProxyConfig
+	DNSServer             string
+	DeliveryStore         smsdelivery.Store
+	Dispatch              events.EventDispatcher
+	OnIMSRegistered       func()
+	OnSMSReady            func()
+	OnSMSReadinessChanged func(imscore.SMSReadiness)
+	ResumeTicket          []byte
+	ResumeOldSKd          []byte
+	OnTicketUpdate        func([]byte, []byte)
+	FastReauthID          string
+	FastReauthMK          []byte
+	FastReauthKAut        []byte
+	FastReauthKEncr       []byte
+	OnFastReauthUpdate    func(string, []byte, []byte, []byte)
+	OnProgress            func(string)
+	OnTunnelReady         func(*SessionResult)
+	OmitInitialContact    bool
 }
 
 type SessionResult struct {

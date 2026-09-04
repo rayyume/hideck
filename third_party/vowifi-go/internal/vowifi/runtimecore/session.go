@@ -68,6 +68,9 @@ func startIMS(ctx context.Context, cfg SessionConfig, result *SessionResult) err
 	}
 	service.SetOnRegistered(cfg.OnIMSRegistered)
 	service.SetOnSMSReadinessChanged(func(readiness imscore.SMSReadiness) {
+		if cfg.OnSMSReadinessChanged != nil {
+			cfg.OnSMSReadinessChanged(readiness)
+		}
 		if readiness.Ready && cfg.OnSMSReady != nil {
 			cfg.OnSMSReady()
 		}

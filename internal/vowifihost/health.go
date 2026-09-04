@@ -125,12 +125,12 @@ func (s *wifiCallingHealthStore) Observe(deviceID string, state runtimehost.Stat
 	}
 	session.lastObservedAt = at
 	if session.startedAt.IsZero() {
-		if !state.IMSReady {
+		if !wifiCallingReady(state) {
 			session.currentState = "checking"
 			session.currentReason = healthReason(state)
 			return
 		}
-		session.start(at)
+		session.start(at, healthReason(state))
 		return
 	}
 	session.transition(healthState(state), at, healthReason(state))
@@ -196,14 +196,17 @@ func (s *wifiCallingHealthStore) Snapshot(deviceID string, now time.Time) (WiFiC
 	return session.snapshot(now), true
 }
 
-func (s *wifiCallingHealthSession) start(at time.Time) {
+func (s *wifiCallingHealthSession) start(at time.Time, reason string) {
 	s.active = true
 	s.startedAt = at
 	s.stableSince = at
 	s.currentState = "healthy"
 	s.currentReason = ""
 	s.currentStartedAt = at
-	s.appendEvent("started", "healthy", at, "IMS registered")
+	if strings.TrimSpace(reason) == "" {
+		reason = "IMS SMS receiver ready"
+	}
+	s.appendEvent("started", "healthy", at, reason)
 }
 
 func (s *wifiCallingHealthSession) transition(next string, at time.Time, reason string) {
@@ -347,7 +350,7 @@ func (s *wifiCallingHealthSession) appendEvent(kind, state string, at time.Time,
 }
 
 func healthState(state runtimehost.State) string {
-	if state.IMSReady {
+	if wifiCallingReady(state) {
 		return "healthy"
 	}
 	switch strings.TrimSpace(state.Phase) {
@@ -358,8 +361,17 @@ func healthState(state runtimehost.State) string {
 	}
 }
 
+func wifiCallingReady(state runtimehost.State) bool {
+	return state.IMSReady && state.SMSReady
+}
+
 func healthReason(state runtimehost.State) string {
-	for _, value := range []string{state.LastError, state.LastReason, state.Phase} {
+	values := []string{state.LastError, state.LastReason}
+	if state.IMSReady {
+		values = []string{state.SMSReadyReason, state.LastError, state.LastReason}
+	}
+	values = append(values, state.Phase)
+	for _, value := range values {
 		if value = strings.TrimSpace(value); value != "" {
 			return value
 		}

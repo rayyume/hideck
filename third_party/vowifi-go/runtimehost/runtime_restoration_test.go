@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/iniwex5/vowifi-go/engine/swu"
+	"github.com/iniwex5/vowifi-go/internal/vowifi/imscore"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/runtimecore"
 	"github.com/iniwex5/vowifi-go/runtimehost/identity"
 )
@@ -38,6 +39,28 @@ func TestObserverUnsubscribeAndContextPropagation(t *testing.T) {
 	instance.publish(ctx, Event{Kind: "prepared"})
 	if first.Load() != 1 || second.Load() != 2 {
 		t.Fatalf("observer calls first=%d second=%d", first.Load(), second.Load())
+	}
+}
+
+func TestCoreSMSReadinessUpdatesRuntimeState(t *testing.T) {
+	instance := &Instance{}
+	instance.setState(State{
+		DeviceID: "wwan0", Phase: "sms_ready", IMSReady: true, SMSReady: true,
+	})
+	observer := &instanceObserver{inst: instance, deviceID: "wwan0"}
+	request := runtimecore.RuntimeStartRequest{}
+	chainSMSReadinessHook(&request, observer)
+
+	request.Hooks.OnSMSReadinessChanged(context.Background(), imscore.SMSReadiness{
+		Registered: true, ProfileReady: true, TransportReady: true, SMSCPresent: true,
+		Reason: "IMS SMS receiver is not ready",
+	})
+	state := instance.State()
+	if state.SMSReady || state.Phase != "ims_ready" || state.LastEvent != "sms_unavailable" {
+		t.Fatalf("SMS unavailable state = %+v", state)
+	}
+	if state.SMSReadyReason != "IMS SMS receiver is not ready" {
+		t.Fatalf("SMS unavailable reason = %q", state.SMSReadyReason)
 	}
 }
 

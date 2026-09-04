@@ -243,6 +243,11 @@ func (i *Instance) updateSMSReadiness(readiness SMSReadiness) {
 		if state.SMSReady {
 			state.Phase = "sms_ready"
 			state.LastEvent = "sms_ready"
+			return
+		}
+		if state.IMSReady {
+			state.Phase = "ims_ready"
+			state.LastEvent = "sms_unavailable"
 		}
 	})
 }
