@@ -125,14 +125,23 @@ async function ensureContacts() {
 }
 
 async function removeContact(number: string, deviceId = '') {
-  const key = normalizedKey(number)
-  const target = contacts.find((item) => item.number === key || item.display_number === key)?.number || key
-  await phoneContactsService.remove(key, deviceId)
+  await removeContacts([number], deviceId)
+}
+
+async function removeContacts(numbers: string[], deviceId = '') {
+  const targets = numbers.map((number) => {
+    const key = normalizedKey(number)
+    return contacts.find((item) => item.number === key || item.display_number === key)?.number || key
+  }).filter(Boolean)
+  if (!targets.length) return
+  await phoneContactsService.removeMany(targets, deviceId)
   cacheRevision++
-  const index = contacts.findIndex((item) => item.number === target)
-  if (index >= 0) contacts.splice(index, 1)
+  const drop = new Set(targets)
+  for (let i = contacts.length - 1; i >= 0; i--) {
+    if (drop.has(contacts[i].number)) contacts.splice(i, 1)
+  }
   for (const [alias, value] of cache) {
-    if (value.number === target) cache.set(alias, withoutContactName(value))
+    if (drop.has(value.number)) cache.set(alias, withoutContactName(value))
   }
 }
 
@@ -156,6 +165,7 @@ const phoneIdentity = {
   reloadContacts,
   ensureContacts,
   removeContact,
+  removeContacts,
   titleFor,
   subtitleFor
 }

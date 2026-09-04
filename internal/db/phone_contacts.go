@@ -87,14 +87,52 @@ func DeletePhoneContact(ctx context.Context, number string) error {
 }
 
 func DeletePhoneContactWithRegion(ctx context.Context, number, region string) error {
-	number = NormalizePhoneContactNumberWithRegion(number, region)
-	if number == "" {
-		return ErrInvalidPhoneContact
-	}
+	_, err := DeletePhoneContactsWithRegion(ctx, []string{number}, region)
+	return err
+}
+
+func UpsertPhoneContactsWithRegion(ctx context.Context, inputs []PhoneContactInput, region string) (imported, skipped int, err error) {
 	if DB == nil {
-		return gorm.ErrInvalidDB
+		return 0, 0, gorm.ErrInvalidDB
 	}
-	return DB.WithContext(ctx).Where("number = ?", number).Delete(&PhoneContact{}).Error
+	for _, input := range inputs {
+		if strings.TrimSpace(input.Region) == "" {
+			input.Region = region
+		}
+		if _, upsertErr := UpsertPhoneContactWithRegion(ctx, input); upsertErr != nil {
+			if errors.Is(upsertErr, ErrInvalidPhoneContact) {
+				skipped++
+				continue
+			}
+			return imported, skipped, upsertErr
+		}
+		imported++
+	}
+	return imported, skipped, nil
+}
+
+func DeletePhoneContactsWithRegion(ctx context.Context, numbers []string, region string) (deleted int, err error) {
+	if DB == nil {
+		return 0, gorm.ErrInvalidDB
+	}
+	canonical := make([]string, 0, len(numbers))
+	seen := map[string]struct{}{}
+	for _, raw := range numbers {
+		number := NormalizePhoneContactNumberWithRegion(raw, region)
+		if number == "" {
+			continue
+		}
+		if _, ok := seen[number]; ok {
+			continue
+		}
+		seen[number] = struct{}{}
+		canonical = append(canonical, number)
+	}
+	if len(canonical) == 0 {
+		return 0, ErrInvalidPhoneContact
+	}
+	result := DB.WithContext(ctx).Where("number IN ?", canonical).Delete(&PhoneContact{})
+	return int(result.RowsAffected), result.Error
 }
 
 func LookupPhoneIdentity(ctx context.Context, raw string) phonelookup.Result {

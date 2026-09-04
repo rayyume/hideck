@@ -45,5 +45,41 @@ export const phoneContactsService = {
     await api.delete('/phone/contacts', {
       params: { number, device_id: deviceId || undefined }
     })
+  },
+  async removeMany(numbers: string[], deviceId = ''): Promise<number> {
+    const res = await api.post('/phone/contacts/delete', {
+      numbers,
+      device_id: deviceId || undefined
+    })
+    return Number(res.data?.deleted || 0)
+  },
+  async importFile(file: File, deviceId = ''): Promise<{ imported: number; skipped: number; parsed: number }> {
+    const body = new FormData()
+    body.append('file', file)
+    if (deviceId) body.append('device_id', deviceId)
+    const res = await api.post('/phone/contacts/import', body)
+    return {
+      imported: Number(res.data?.imported || 0),
+      skipped: Number(res.data?.skipped || 0),
+      parsed: Number(res.data?.parsed || 0)
+    }
+  },
+  async exportFile(format: 'vcf' | 'csv' = 'vcf'): Promise<void> {
+    const res = await api.get('/phone/contacts/export', {
+      params: { format },
+      responseType: 'blob'
+    })
+    const blob = new Blob([res.data], {
+      type: format === 'csv' ? 'text/csv;charset=utf-8' : 'text/vcard;charset=utf-8'
+    })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+    link.href = url
+    link.download = `hideck-contacts-${stamp}.${format}`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
   }
 }

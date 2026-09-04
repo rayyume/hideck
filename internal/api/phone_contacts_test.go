@@ -75,4 +75,80 @@ func TestPhoneLookupAndContacts(t *testing.T) {
 	if len(payload.Contacts) != 1 || payload.Contacts[0]["name"] != "移动客服" || payload.Contacts[0]["carrier"] != "中国移动" {
 		t.Fatalf("%v", payload)
 	}
+
+	vcf := "BEGIN:VCARD\nVERSION:3.0\nFN:张三\nTEL;TYPE=CELL:13800138000\nTEL;TYPE=CELL:18600001111\nEND:VCARD\n"
+	importReq := httptest.NewRequest(http.MethodPost, "/api/phone/contacts/import", bytes.NewReader(multipartVCF(t, vcf)))
+	importReq.Header.Set("Authorization", "Bearer "+token)
+	importReq.Header.Set("Content-Type", "multipart/form-data; boundary=testhideck")
+	imported := httptest.NewRecorder()
+	router.ServeHTTP(imported, importReq)
+	if imported.Code != http.StatusOK {
+		t.Fatalf("import status=%d body=%s", imported.Code, imported.Body.String())
+	}
+	var importResult struct {
+		Imported int `json:"imported"`
+		Skipped  int `json:"skipped"`
+		Parsed   int `json:"parsed"`
+	}
+	if err := json.Unmarshal(imported.Body.Bytes(), &importResult); err != nil {
+		t.Fatal(err)
+	}
+	if importResult.Imported != 2 || importResult.Parsed != 2 {
+		t.Fatalf("%+v %s", importResult, imported.Body.String())
+	}
+
+	list = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/api/phone/contacts", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	router.ServeHTTP(list, req)
+	if err := json.Unmarshal(list.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(payload.Contacts) != 3 {
+		t.Fatalf("want 3 contacts after multi-number import, got %v", payload)
+	}
+
+	exported := httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/api/phone/contacts/export", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	router.ServeHTTP(exported, req)
+	if exported.Code != http.StatusOK {
+		t.Fatalf("export status=%d body=%s", exported.Code, exported.Body.String())
+	}
+	bodyText := exported.Body.String()
+	if !bytes.Contains(exported.Body.Bytes(), []byte("13800138000")) ||
+		!bytes.Contains(exported.Body.Bytes(), []byte("18600001111")) ||
+		!bytes.Contains(exported.Body.Bytes(), []byte("BEGIN:VCARD")) {
+		t.Fatalf("export missing multi TEL: %s", bodyText)
+	}
+
+	del := httptest.NewRecorder()
+	delBody, _ := json.Marshal(map[string]any{"numbers": []string{"13800138000", "18600001111"}})
+	req = httptest.NewRequest(http.MethodPost, "/api/phone/contacts/delete", bytes.NewReader(delBody))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(del, req)
+	if del.Code != http.StatusOK {
+		t.Fatalf("batch delete status=%d body=%s", del.Code, del.Body.String())
+	}
+	var deleted struct {
+		Deleted int `json:"deleted"`
+	}
+	if err := json.Unmarshal(del.Body.Bytes(), &deleted); err != nil {
+		t.Fatal(err)
+	}
+	if deleted.Deleted != 2 {
+		t.Fatalf("%+v", deleted)
+	}
+}
+
+func multipartVCF(t *testing.T, body string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	buf.WriteString("--testhideck\r\n")
+	buf.WriteString(`Content-Disposition: form-data; name="file"; filename="xiaomi.vcf"` + "\r\n")
+	buf.WriteString("Content-Type: text/vcard\r\n\r\n")
+	buf.WriteString(body)
+	buf.WriteString("\r\n--testhideck--\r\n")
+	return buf.Bytes()
 }
