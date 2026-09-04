@@ -10,6 +10,7 @@ import { Settings24Regular } from '@vicons/fluent'
 import type { StatusLightTone } from './statusLight'
 import DeviceOverviewConnectionStage from './DeviceOverviewConnectionStage.vue'
 import DeviceOverviewIdentityPanel from './DeviceOverviewIdentityPanel.vue'
+import WiFiCallingHealth from './WiFiCallingHealth.vue'
 
 const props = defineProps<{
   device: DeviceOverviewItem | null
@@ -132,6 +133,12 @@ const networkPanelMessage = computed(() => {
 <template>
   <div class="device-overview-stack">
     <DeviceOverviewConnectionStage :device="device" />
+
+    <WiFiCallingHealth
+      v-if="device?.vowifi_health"
+      :health="device.vowifi_health"
+      mode="detail"
+    />
 
     <div class="device-overview-facts">
 

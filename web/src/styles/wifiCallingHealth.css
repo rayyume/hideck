@@ -1,0 +1,177 @@
+.wifi-health {
+  --health-tone: var(--ui-text-muted);
+  --health-surface: var(--ui-surface-muted);
+  min-width: 0;
+  color: var(--ui-text);
+}
+
+.wifi-health.is-success { --health-tone: var(--ui-success); --health-surface: var(--ui-success-surface); }
+.wifi-health.is-warning { --health-tone: var(--ui-warning); --health-surface: var(--ui-warning-surface); }
+.wifi-health.is-danger { --health-tone: var(--ui-danger); --health-surface: var(--ui-danger-surface); }
+.wifi-health.is-stopped { --health-tone: var(--ui-text-muted); --health-surface: var(--ui-surface-muted); }
+
+.wifi-health-header {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.wifi-health-icon {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--ui-radius-sm);
+  background: var(--health-surface);
+  color: var(--health-tone);
+}
+
+.wifi-health-icon svg { width: 21px; height: 21px; }
+.wifi-health-heading { min-width: 0; display: grid; gap: 2px; }
+.wifi-health-title { color: var(--ui-text-muted); font-size: var(--ui-font-caption); font-weight: 650; }
+.wifi-health-heading > strong { color: var(--health-tone); font-size: 15px; font-weight: 700; }
+.wifi-health-heading > small { min-width: 0; color: var(--ui-text-muted); font-size: var(--ui-font-caption); line-height: 1.45; overflow-wrap: anywhere; }
+.wifi-health-score { min-width: 72px; display: grid; justify-items: end; gap: 2px; }
+.wifi-health-score > strong { color: var(--health-tone); font: 700 20px "v-mono", ui-monospace, monospace; }
+.wifi-health-score > small { color: var(--ui-text-muted); font-size: var(--ui-font-caption); white-space: nowrap; }
+
+.wifi-health-meter {
+  height: 6px;
+  display: block;
+  overflow: hidden;
+  border-radius: var(--ui-radius-pill);
+  background: var(--ui-border-muted);
+}
+
+.wifi-health-meter > span {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border-radius: inherit;
+  background: var(--health-tone);
+  transform-origin: left center;
+  transition: transform 200ms var(--ui-ease-out);
+}
+
+.wifi-health--summary {
+  margin-bottom: 8px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.wifi-health--summary .wifi-health-meter { margin-top: 13px; }
+.wifi-health--summary .wifi-health-heading > small { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.wifi-health-summary-meta { margin-top: 8px; display: flex; justify-content: space-between; gap: 10px; color: var(--ui-text-muted); font-size: var(--ui-font-caption); }
+
+.wifi-health--compact {
+  min-height: 58px;
+  padding: 9px 14px 10px;
+  display: grid;
+  gap: 6px;
+  border-top: 1px solid var(--ui-border-muted);
+}
+
+.wifi-health-compact-row,
+.wifi-health-compact-meta { display: flex; justify-content: space-between; gap: 10px; }
+.wifi-health-compact-row > strong { color: var(--health-tone); font-size: var(--ui-font-caption); font-weight: 700; }
+.wifi-health-compact-meta { color: var(--ui-text-muted); font: var(--ui-font-caption) "v-mono", ui-monospace, monospace; }
+.wifi-health--compact .wifi-health-meter { height: 4px; }
+
+.wifi-health--detail {
+  padding: 20px 22px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 34%);
+  gap: 18px 28px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-xl);
+  background: var(--ui-surface-strong);
+}
+
+.wifi-health--detail > .wifi-health-header { grid-column: 1 / -1; }
+.wifi-health--detail > .wifi-health-meter { grid-column: 1 / -1; margin-top: -7px; }
+
+.wifi-health-metrics {
+  grid-column: 1 / -1;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-top: 1px solid var(--ui-border);
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.wifi-health-metrics > div { min-width: 0; padding: 13px 16px; border-right: 1px solid var(--ui-border); }
+.wifi-health-metrics > div:first-child { padding-left: 0; }
+.wifi-health-metrics > div:last-child { padding-right: 0; border-right: 0; }
+.wifi-health-metrics dt { color: var(--ui-text-muted); font-size: var(--ui-font-caption); }
+.wifi-health-metrics dd { margin: 4px 0 0; color: var(--ui-text); font: 650 14px "v-mono", ui-monospace, monospace; overflow-wrap: anywhere; }
+
+.wifi-health-timeline-block,
+.wifi-health-events { min-width: 0; }
+.wifi-health-section-heading { margin-bottom: 11px; display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.wifi-health-section-heading strong { font-size: 13px; font-weight: 700; }
+.wifi-health-section-heading span { color: var(--ui-text-muted); font-size: var(--ui-font-caption); }
+
+.wifi-health-timeline {
+  height: 18px;
+  padding: 3px;
+  display: flex;
+  gap: 2px;
+  overflow: hidden;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-sm);
+  background: var(--ui-surface-muted);
+}
+
+.wifi-health-timeline > span { min-width: 3px; flex-basis: 0; border-radius: 2px; background: var(--ui-text-muted); }
+.wifi-health-timeline > span.is-success { background: var(--ui-success); }
+.wifi-health-timeline > span.is-warning { background: var(--ui-warning); }
+.wifi-health-timeline > span.is-danger { background: var(--ui-danger); }
+.wifi-health-timeline.is-empty::after { width: 100%; border-radius: 2px; background: var(--ui-border); content: ""; }
+
+.wifi-health-legend { margin-top: 9px; display: flex; flex-wrap: wrap; gap: 8px 14px; color: var(--ui-text-muted); font-size: var(--ui-font-caption); }
+.wifi-health-legend > span { display: inline-flex; align-items: center; gap: 5px; }
+.wifi-health-legend i { width: 7px; height: 7px; border-radius: 50%; background: var(--ui-text-muted); }
+.wifi-health-legend i.is-success { background: var(--ui-success); }
+.wifi-health-legend i.is-warning { background: var(--ui-warning); }
+.wifi-health-legend i.is-danger { background: var(--ui-danger); }
+
+.wifi-health-events ol { margin: 0; padding: 0; display: grid; list-style: none; }
+.wifi-health-events li { min-width: 0; min-height: 42px; padding: 6px 0; display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: 8px; border-bottom: 1px solid var(--ui-border-muted); }
+.wifi-health-events li:last-child { border-bottom: 0; }
+.wifi-health-event-icon { width: 28px; height: 28px; display: grid; place-items: center; border-radius: var(--ui-radius-sm); background: var(--ui-surface-muted); color: var(--ui-text-muted); }
+.wifi-health-event-icon.is-success { background: var(--ui-success-surface); color: var(--ui-success); }
+.wifi-health-event-icon.is-warning { background: var(--ui-warning-surface); color: var(--ui-warning); }
+.wifi-health-event-icon.is-danger { background: var(--ui-danger-surface); color: var(--ui-danger); }
+.wifi-health-event-icon svg { width: 15px; height: 15px; }
+.wifi-health-event-copy { min-width: 0; display: grid; gap: 1px; }
+.wifi-health-event-copy strong { font-size: var(--ui-font-caption); font-weight: 650; }
+.wifi-health-event-copy small { color: var(--ui-text-muted); font-size: var(--ui-font-caption); overflow-wrap: anywhere; }
+.wifi-health-events time { color: var(--ui-text-muted); font: var(--ui-font-caption) "v-mono", ui-monospace, monospace; white-space: nowrap; }
+.wifi-health-empty { margin: 0; padding: 12px 0; color: var(--ui-text-muted); font-size: var(--ui-font-caption); }
+
+@media (max-width: 760px) {
+  .wifi-health--detail { padding: 18px 16px; grid-template-columns: minmax(0, 1fr); }
+  .wifi-health--detail > .wifi-health-header,
+  .wifi-health--detail > .wifi-health-meter,
+  .wifi-health-metrics { grid-column: auto; }
+  .wifi-health-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .wifi-health-metrics > div { padding: 11px 12px; border-bottom: 1px solid var(--ui-border); }
+  .wifi-health-metrics > div:nth-child(2n) { border-right: 0; }
+  .wifi-health-metrics > div:nth-last-child(-n + 2) { border-bottom: 0; }
+  .wifi-health-metrics > div:first-child { padding-left: 12px; }
+  .wifi-health-metrics > div:last-child { padding-right: 12px; }
+}
+
+@media (max-width: 420px) {
+  .wifi-health-header { grid-template-columns: 34px minmax(0, 1fr); }
+  .wifi-health-icon { width: 34px; height: 34px; }
+  .wifi-health-score { grid-column: 2; justify-items: start; }
+  .wifi-health-events li { grid-template-columns: 28px minmax(0, 1fr); }
+  .wifi-health-events time { grid-column: 2; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wifi-health-meter > span { transition: none; }
+}

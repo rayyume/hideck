@@ -1,0 +1,84 @@
+package vowifihost
+
+import (
+	"testing"
+	"time"
+
+	"github.com/iniwex5/vowifi-go/runtimehost"
+)
+
+func TestWiFiCallingHealthMeasuresRuntimeInterruptions(t *testing.T) {
+	store := newWiFiCallingHealthStore()
+	started := time.Date(2026, 9, 4, 8, 0, 0, 0, time.UTC)
+	observeHealth(store, started, true, "ims_ready", "")
+	observeHealth(store, started.Add(10*time.Second), false, "interrupted", "IMS transport lost")
+	observeHealth(store, started.Add(20*time.Second), false, "retrying", "retrying")
+	observeHealth(store, started.Add(40*time.Second), true, "ims_ready", "")
+
+	snapshot, ok := store.Snapshot("wwan0", started.Add(50*time.Second))
+	if !ok || !snapshot.Measured || snapshot.State != "healthy" {
+		t.Fatalf("snapshot = %+v, ok=%t", snapshot, ok)
+	}
+	if snapshot.SessionSeconds != 50 || snapshot.HealthySeconds != 20 || snapshot.InterruptedSeconds != 30 {
+		t.Fatalf("durations = total:%d healthy:%d interrupted:%d",
+			snapshot.SessionSeconds, snapshot.HealthySeconds, snapshot.InterruptedSeconds)
+	}
+	if snapshot.InterruptionCount != 1 || snapshot.LongestInterruptionSeconds != 30 || snapshot.StableSeconds != 10 {
+		t.Fatalf("interruption metrics = %+v", snapshot)
+	}
+	if snapshot.Availability != 40 {
+		t.Fatalf("availability = %v, want 40", snapshot.Availability)
+	}
+	if len(snapshot.Events) != 3 || snapshot.Events[1].Kind != "interrupted" || snapshot.Events[2].Kind != "recovered" {
+		t.Fatalf("events = %+v", snapshot.Events)
+	}
+}
+
+func TestWiFiCallingHealthRecordsIntentionalStopWithoutDowntime(t *testing.T) {
+	store := newWiFiCallingHealthStore()
+	started := time.Date(2026, 9, 4, 9, 0, 0, 0, time.UTC)
+	observeHealth(store, started, true, "ims_ready", "")
+	store.End("wwan0", "disable", started.Add(time.Minute))
+
+	stopped, ok := store.Snapshot("wwan0", started.Add(time.Hour))
+	if !ok || stopped.Active || stopped.State != "stopped" {
+		t.Fatalf("stopped snapshot = %+v, ok=%t", stopped, ok)
+	}
+	if stopped.SessionSeconds != 60 || stopped.HealthySeconds != 60 || stopped.InterruptedSeconds != 0 {
+		t.Fatalf("intentional stop counted as downtime: %+v", stopped)
+	}
+	if got := stopped.Events[len(stopped.Events)-1]; got.Kind != "stopped" || got.Reason != "disable" {
+		t.Fatalf("stop event = %+v", got)
+	}
+
+	observeHealth(store, started.Add(2*time.Hour), false, "connecting", "starting")
+	stillStopped, _ := store.Snapshot("wwan0", started.Add(2*time.Hour))
+	if stillStopped.State != "stopped" || stillStopped.Active {
+		t.Fatalf("teardown observation reopened stopped session: %+v", stillStopped)
+	}
+
+	store.Begin("wwan0", started.Add(2*time.Hour))
+	observeHealth(store, started.Add(2*time.Hour), false, "connecting", "starting")
+	checking, _ := store.Snapshot("wwan0", started.Add(2*time.Hour))
+	if checking.Measured || len(checking.Events) == 0 || checking.Events[len(checking.Events)-1].Kind != "stopped" {
+		t.Fatalf("new session did not retain stop history: %+v", checking)
+	}
+}
+
+func TestWiFiCallingHealthKeepsIMSReadyDuringPortSNotice(t *testing.T) {
+	store := newWiFiCallingHealthStore()
+	started := time.Date(2026, 9, 4, 10, 0, 0, 0, time.UTC)
+	observeHealth(store, started, true, "ims_ready", "")
+	observeHealth(store, started.Add(time.Minute), true, "ims_ready", "port-s EOF")
+
+	snapshot, _ := store.Snapshot("wwan0", started.Add(2*time.Minute))
+	if snapshot.State != "healthy" || snapshot.InterruptionCount != 0 || snapshot.Availability != 100 {
+		t.Fatalf("port-s notice changed health: %+v", snapshot)
+	}
+}
+
+func observeHealth(store *wifiCallingHealthStore, at time.Time, imsReady bool, phase, reason string) {
+	store.Observe("wwan0", runtimehost.State{
+		DeviceID: "wwan0", IMSReady: imsReady, Phase: phase, LastReason: reason, UpdatedAt: at,
+	})
+}

@@ -14,6 +14,7 @@ import {
   createDashboardDevicePresentation,
   hasDashboardSignal
 } from '../utils/dashboardPresentation'
+import WiFiCallingHealth from './WiFiCallingHealth.vue'
 
 const props = withDefaults(defineProps<{
   device: DashboardDevice
@@ -87,6 +88,12 @@ const showCellularFacts = computed(() => presentation.value.showsCellularFacts)
         </span>
       </span>
     </span>
+
+    <WiFiCallingHealth
+      v-if="device.vowifi_health"
+      :health="device.vowifi_health"
+      mode="compact"
+    />
 
     <span v-if="showCellularFacts" class="device-card-footer">
       <span class="device-addresses">

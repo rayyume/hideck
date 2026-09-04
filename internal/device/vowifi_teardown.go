@@ -12,7 +12,9 @@ import (
 )
 
 func (p *Pool) stopVoWiFiAppForTeardown(ctx context.Context, deviceID, reason string) bool {
-	return p.voWiFiHost().StopInstanceForTeardown(ctx, deviceID, reason)
+	host := p.voWiFiHost()
+	host.EndWiFiCallingHealth(deviceID, reason)
+	return host.StopInstanceForTeardown(ctx, deviceID, reason)
 }
 
 func (p *Pool) teardownVoWiFiForReconnect(deviceID string) bool {

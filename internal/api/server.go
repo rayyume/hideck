@@ -596,21 +596,22 @@ func (s *Server) handleListDevices(c *gin.Context) {
 	}
 
 	type DeviceStatus struct {
-		ID               string            `json:"id"`
-		Name             string            `json:"name"`
-		Interface        string            `json:"interface"`
-		ProxyPort        int               `json:"proxy_port"`
-		PublicIP         string            `json:"public_ip"`
-		PublicIPv6       string            `json:"public_ipv6,omitempty"`
-		Healthy          bool              `json:"healthy"`
-		Operator         string            `json:"operator"`
-		SignalDBM        int               `json:"signal_dbm"`
-		NetworkMode      string            `json:"network_mode"`
-		NetworkDuplex    string            `json:"network_duplex"`
-		VoWiFiActive     bool              `json:"vowifi_active"`
-		VoWiFiRuntime    *voWiFiRuntimeDTO `json:"vowifi_runtime,omitempty"`
-		Traffic          map[string]string `json:"traffic,omitempty"`
-		NetworkConnected bool              `json:"network_connected"`
+		ID               string                            `json:"id"`
+		Name             string                            `json:"name"`
+		Interface        string                            `json:"interface"`
+		ProxyPort        int                               `json:"proxy_port"`
+		PublicIP         string                            `json:"public_ip"`
+		PublicIPv6       string                            `json:"public_ipv6,omitempty"`
+		Healthy          bool                              `json:"healthy"`
+		Operator         string                            `json:"operator"`
+		SignalDBM        int                               `json:"signal_dbm"`
+		NetworkMode      string                            `json:"network_mode"`
+		NetworkDuplex    string                            `json:"network_duplex"`
+		VoWiFiActive     bool                              `json:"vowifi_active"`
+		VoWiFiRuntime    *voWiFiRuntimeDTO                 `json:"vowifi_runtime,omitempty"`
+		VoWiFiHealth     *device.WiFiCallingHealthSnapshot `json:"vowifi_health,omitempty"`
+		Traffic          map[string]string                 `json:"traffic,omitempty"`
+		NetworkConnected bool                              `json:"network_connected"`
 	}
 
 	list := make([]DeviceStatus, 0, len(workers))
@@ -634,6 +635,7 @@ func (s *Server) handleListDevices(c *gin.Context) {
 			NetworkDuplex:    status.NetworkDuplex,
 			VoWiFiActive:     s.pool.IsVoWiFiActive(w.ID), // 逐个设备判断 VoWiFi 状态，支持多设备
 			VoWiFiRuntime:    s.getVoWiFiRuntimeDTO(w.ID),
+			VoWiFiHealth:     s.getWiFiCallingHealth(w.ID),
 			NetworkConnected: w.NetworkConnected(),
 		}
 		// 添加格式化流量

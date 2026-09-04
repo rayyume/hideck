@@ -2,6 +2,7 @@ package vowifihost
 
 import (
 	"context"
+	"time"
 
 	"github.com/iniwex5/vowifi-go/runtimehost"
 	"github.com/iniwex5/vowifi-go/runtimehost/eventhost"
@@ -13,6 +14,7 @@ type Manager struct {
 	runtimeStore   RuntimeStore
 	stateHub       *StateHub
 	recoverStore   *DesiredRecoverStore
+	healthStore    *wifiCallingHealthStore
 	lifecycle      *LifecycleController
 	runtimeStart   runtimeStartFunc
 	runtimeRecycle func(deviceID, reason string)
@@ -34,6 +36,7 @@ func NewManagerWithRuntimeStore(store RuntimeStore) *Manager {
 		runtimeStore: store,
 		stateHub:     NewStateHub(),
 		recoverStore: NewDesiredRecoverStore(),
+		healthStore:  newWiFiCallingHealthStore(),
 	}
 	m.lifecycle = NewLifecycleController(LifecycleControllerOptions{
 		IsActive: m.Active,
@@ -66,8 +69,34 @@ func (m *Manager) RecordStartupState(deviceID string, state runtimehost.State) b
 	if !m.RuntimeStore().RecordStartupState(deviceID, state) {
 		return false
 	}
+	m.observeWiFiCallingHealth(deviceID, state)
 	m.BroadcastState(deviceID)
 	return true
+}
+
+func (m *Manager) observeWiFiCallingHealth(deviceID string, state runtimehost.State) {
+	if m != nil && m.healthStore != nil {
+		m.healthStore.Observe(deviceID, state)
+	}
+}
+
+func (m *Manager) EndWiFiCallingHealth(deviceID, reason string) {
+	if m != nil && m.healthStore != nil {
+		m.healthStore.End(deviceID, reason, time.Now())
+	}
+}
+
+func (m *Manager) BeginWiFiCallingHealth(deviceID string) {
+	if m != nil && m.healthStore != nil {
+		m.healthStore.Begin(deviceID, time.Now())
+	}
+}
+
+func (m *Manager) WiFiCallingHealth(deviceID string) (WiFiCallingHealthSnapshot, bool) {
+	if m == nil || m.healthStore == nil {
+		return WiFiCallingHealthSnapshot{}, false
+	}
+	return m.healthStore.Snapshot(deviceID, time.Now())
 }
 
 func (m *Manager) ClearStartupState(deviceID string) bool {

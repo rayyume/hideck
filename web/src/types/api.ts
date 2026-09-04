@@ -81,6 +81,43 @@ export type VoWiFiRuntimeState = {
   mwi_updated_at?: string
 }
 
+export type WiFiCallingHealthState = 'checking' | 'healthy' | 'recovering' | 'unavailable' | 'stopped'
+
+export type WiFiCallingHealthSegment = {
+  state: WiFiCallingHealthState
+  started_at: string
+  ended_at: string
+  reason?: string
+  current?: boolean
+}
+
+export type WiFiCallingHealthEvent = {
+  kind: 'started' | 'interrupted' | 'recovered' | 'stopped'
+  state: WiFiCallingHealthState
+  at: string
+  reason?: string
+}
+
+export type WiFiCallingHealthSnapshot = {
+  state: WiFiCallingHealthState
+  active: boolean
+  measured: boolean
+  session_started_at?: string
+  stable_since?: string
+  updated_at?: string
+  last_interruption_at?: string
+  session_seconds: number
+  healthy_seconds: number
+  interrupted_seconds: number
+  stable_seconds: number
+  longest_interruption_seconds: number
+  interruption_count: number
+  availability: number
+  last_reason?: string
+  timeline?: WiFiCallingHealthSegment[]
+  events?: WiFiCallingHealthEvent[]
+}
+
 export type DeviceLifecyclePhase =
   | 'offline'
   | 'rebooting'
@@ -126,6 +163,7 @@ export type DeviceOverviewItem = {
   vowifi_enabled?: boolean
   vowifi_active?: boolean
   vowifi_runtime?: VoWiFiRuntimeState
+  vowifi_health?: WiFiCallingHealthSnapshot
   native_volte?: NativeVoLTEStatus
   radio_live_ok?: boolean
   modem: ModemStatus
@@ -347,6 +385,7 @@ export type DashboardDevice = {
   public_ipv6?: string
   vowifi_active?: boolean
   vowifi_runtime?: VoWiFiRuntimeState
+  vowifi_health?: WiFiCallingHealthSnapshot
 }
 
 export type SMSMessage = {

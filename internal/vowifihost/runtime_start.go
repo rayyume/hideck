@@ -60,6 +60,7 @@ func (m *Manager) runtimeStateObserver(deviceID string, readiness *runtimeReadin
 		inst := ev.Session
 		if inst != nil && m.IsCurrentInstance(deviceID, inst) {
 			readiness.Observe(ev)
+			m.observeWiFiCallingHealth(deviceID, ev.State)
 			m.BroadcastState(deviceID)
 			if isTerminalRuntimeFailure(ev.State) {
 				go m.releaseFailedRuntime(deviceID, inst, ev.State)

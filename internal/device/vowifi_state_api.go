@@ -7,8 +7,11 @@ import (
 
 	"github.com/iniwex5/vowifi-go/runtimehost"
 	"github.com/iniwex5/vowifi-go/runtimehost/messaging"
+	"github.com/yibaiba/hideck/internal/vowifihost"
 	"github.com/yibaiba/hideck/pkg/smscodec"
 )
+
+type WiFiCallingHealthSnapshot = vowifihost.WiFiCallingHealthSnapshot
 
 func (p *Pool) GetVoWiFiApp() *runtimehost.Instance {
 	return p.GetVoWiFiAppForDevice()
@@ -146,6 +149,10 @@ func (p *Pool) GetVoWiFiObs(deviceID string) map[string]interface{} {
 
 func (p *Pool) GetVoWiFiRuntimeState(deviceID string) (runtimehost.State, bool) {
 	return p.voWiFiHost().State(deviceID)
+}
+
+func (p *Pool) GetWiFiCallingHealth(deviceID string) (WiFiCallingHealthSnapshot, bool) {
+	return p.voWiFiHost().WiFiCallingHealth(deviceID)
 }
 
 func (p *Pool) SubscribeVoWiFiState(deviceID string) (<-chan runtimehost.State, func()) {

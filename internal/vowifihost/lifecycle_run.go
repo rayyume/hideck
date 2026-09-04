@@ -35,12 +35,20 @@ func (m *Manager) runLifecycleCommand(ctx context.Context, cmd LifecycleCommand)
 			Reason:       cmd.Reason,
 		})
 	case LifecycleCommandDisable:
+		healthTargets := m.lifecycleTargetIDs(cmd.DeviceID)
+		if m.hostAdapter() == nil {
+			return m.disableRuntime(ctx, cmd.DeviceID, cmd.Reason, cmd.RestoreRadio, cmd.RuntimeInvalidated)
+		}
+		for _, deviceID := range healthTargets {
+			m.EndWiFiCallingHealth(deviceID, cmd.Reason)
+		}
 		return m.disableRuntime(ctx, cmd.DeviceID, cmd.Reason, cmd.RestoreRadio, cmd.RuntimeInvalidated)
 	case LifecycleCommandRestart:
 		return m.restartRuntime(ctx, cmd.DeviceID, cmd.Generation)
 	case LifecycleCommandRecover:
 		return m.recoverRuntime(ctx, cmd.DeviceID, cmd.Reason, cmd.Generation, cmd.OverrideEPDG)
 	case LifecycleCommandSwitchBegin:
+		m.EndWiFiCallingHealth(cmd.DeviceID, "switch")
 		m.TeardownForSwitch(ctx, cmd.DeviceID)
 		return nil
 	case LifecycleCommandSwitchEnd:
@@ -56,6 +64,13 @@ func (m *Manager) runLifecycleCommand(ctx context.Context, cmd LifecycleCommand)
 	default:
 		return fmt.Errorf("unsupported vowifi lifecycle command kind: %d", int(cmd.Kind))
 	}
+}
+
+func (m *Manager) lifecycleTargetIDs(deviceID string) []string {
+	if deviceID = strings.TrimSpace(deviceID); deviceID != "" {
+		return []string{deviceID}
+	}
+	return m.InstanceIDs()
 }
 
 func (m *Manager) enableRuntime(ctx context.Context, req runtimeEnableRequest) (retErr error) {
@@ -86,6 +101,7 @@ func (m *Manager) enableRuntime(ctx context.Context, req runtimeEnableRequest) (
 	if !startClaim.Accepted {
 		return fmt.Errorf("设备 %s 的 VoWiFi 启动声明失败", deviceID)
 	}
+	m.BeginWiFiCallingHealth(deviceID)
 	startupEpoch := startClaim.Epoch
 	startFinalized := false
 	defer func() {

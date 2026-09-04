@@ -4090,6 +4090,91 @@ components:
           type: string
           format: date-time
 
+    WiFiCallingHealthSegment:
+      type: object
+      properties:
+        state:
+          type: string
+          enum: [checking, healthy, recovering, unavailable, stopped]
+        started_at:
+          type: string
+          format: date-time
+        ended_at:
+          type: string
+          format: date-time
+        reason:
+          type: string
+        current:
+          type: boolean
+
+    WiFiCallingHealthEvent:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum: [started, interrupted, recovered, stopped]
+        state:
+          type: string
+          enum: [checking, healthy, recovering, unavailable, stopped]
+        at:
+          type: string
+          format: date-time
+        reason:
+          type: string
+
+    WiFiCallingHealth:
+      type: object
+      properties:
+        state:
+          type: string
+          enum: [checking, healthy, recovering, unavailable, stopped]
+        active:
+          type: boolean
+        measured:
+          type: boolean
+        session_started_at:
+          type: string
+          format: date-time
+        stable_since:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        last_interruption_at:
+          type: string
+          format: date-time
+        session_seconds:
+          type: integer
+          format: int64
+        healthy_seconds:
+          type: integer
+          format: int64
+        interrupted_seconds:
+          type: integer
+          format: int64
+        stable_seconds:
+          type: integer
+          format: int64
+        longest_interruption_seconds:
+          type: integer
+          format: int64
+        interruption_count:
+          type: integer
+        availability:
+          type: number
+          format: double
+        last_reason:
+          type: string
+        timeline:
+          type: array
+          items:
+            $ref: '#/components/schemas/WiFiCallingHealthSegment'
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/WiFiCallingHealthEvent'
+
     PNNRecord:
       type: object
       properties:
@@ -4235,6 +4320,8 @@ components:
           type: boolean
         vowifi_runtime:
           $ref: '#/components/schemas/VoWiFiRuntime'
+        vowifi_health:
+          $ref: '#/components/schemas/WiFiCallingHealth'
         traffic:
           $ref: '#/components/schemas/StringMap'
         network_connected:
@@ -5013,6 +5100,8 @@ components:
           type: boolean
         vowifi_runtime:
           $ref: '#/components/schemas/VoWiFiRuntime'
+        vowifi_health:
+          $ref: '#/components/schemas/WiFiCallingHealth'
         radio_live_ok:
           type: boolean
           nullable: true

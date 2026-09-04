@@ -11,6 +11,7 @@ import {
   canAnimateDashboardConnection,
   createDashboardDevicePresentation
 } from '../utils/dashboardPresentation'
+import WiFiCallingHealth from './WiFiCallingHealth.vue'
 
 const props = defineProps<{
   device?: DashboardDevice
@@ -108,6 +109,11 @@ function stageStatusLabel(ready: boolean | undefined): string {
     </div>
 
     <aside class="connection-stage-aside" aria-label="当前设备网络事实">
+      <WiFiCallingHealth
+        v-if="device?.vowifi_health"
+        :health="device.vowifi_health"
+        mode="summary"
+      />
       <dl>
         <div class="focus-fact-primary">
           <dt>{{ primaryFact.label }}</dt>

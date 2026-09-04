@@ -372,48 +372,49 @@ func (s *Server) handleDeviceMgmtOverview(c *gin.Context) {
 }
 
 type deviceMgmtOverviewLiteItem struct {
-	ID                     string             `json:"id"`
-	Name                   string             `json:"name"`
-	Running                bool               `json:"running"`
-	Healthy                bool               `json:"healthy"`
-	ControlOnline          bool               `json:"control_online"`
-	PhysicalPresent        bool               `json:"physical_present"`
-	WorkerRunning          bool               `json:"worker_running"`
-	DataConnected          bool               `json:"data_connected"`
-	RadioRegistered        bool               `json:"radio_registered"`
-	LifecyclePhase         string             `json:"lifecycle_phase"`
-	LifecycleReason        string             `json:"lifecycle_reason,omitempty"`
-	PrivateIP              string             `json:"private_ip,omitempty"`
-	PrivateIPv6            string             `json:"private_ipv6,omitempty"`
-	PublicIP               string             `json:"public_ip"`
-	PublicIPv6             string             `json:"public_ipv6,omitempty"`
-	Interface              string             `json:"interface,omitempty"`
-	ControlDevice          string             `json:"control_device,omitempty"`
-	ESIMTransport          string             `json:"esim_transport,omitempty"`
-	ATPort                 string             `json:"at_port,omitempty"`
-	USBPath                string             `json:"usb_path,omitempty"`
-	AudioDevice            string             `json:"audio_device,omitempty"`
-	LocalPhone             string             `json:"local_phone,omitempty"`
-	E911SetupAvailable     bool               `json:"e911_setup_available,omitempty"`
-	ActiveESIMProfileName  string             `json:"active_esim_profile_name,omitempty"`
-	RFLock                 string             `json:"rf_lock,omitempty"`
-	LebaraIdentityStatus   string             `json:"lebara_identity_status,omitempty"`
-	LebaraIdentityMessage  string             `json:"lebara_identity_message,omitempty"`
-	SMSEnabled             bool               `json:"sms_enabled"`
-	NetworkEnabled         bool               `json:"network_enabled"`
-	PhoneMode              string             `json:"phone_mode,omitempty"`
-	VoWiFiEnabled          bool               `json:"vowifi_enabled"`
-	VoWiFiActive           bool               `json:"vowifi_active"`
-	VoWiFiRuntime          *voWiFiRuntimeDTO  `json:"vowifi_runtime,omitempty"`
-	NativeVoLTE            volte.Status       `json:"native_volte,omitempty"`
-	RadioLiveOK            *bool              `json:"radio_live_ok,omitempty"`
-	Modem                  modem.DeviceStatus `json:"modem"`
-	Traffic                map[string]string  `json:"traffic,omitempty"`
-	TrafficRaw             map[string]int64   `json:"traffic_raw,omitempty"`
-	TrafficMeta            *deviceTrafficMeta `json:"traffic_meta,omitempty"`
-	BackendMode            string             `json:"backend_mode"`
-	NetworkConnected       bool               `json:"network_connected"`
-	RegistrationStateLabel string             `json:"registration_state_label"`
+	ID                     string                            `json:"id"`
+	Name                   string                            `json:"name"`
+	Running                bool                              `json:"running"`
+	Healthy                bool                              `json:"healthy"`
+	ControlOnline          bool                              `json:"control_online"`
+	PhysicalPresent        bool                              `json:"physical_present"`
+	WorkerRunning          bool                              `json:"worker_running"`
+	DataConnected          bool                              `json:"data_connected"`
+	RadioRegistered        bool                              `json:"radio_registered"`
+	LifecyclePhase         string                            `json:"lifecycle_phase"`
+	LifecycleReason        string                            `json:"lifecycle_reason,omitempty"`
+	PrivateIP              string                            `json:"private_ip,omitempty"`
+	PrivateIPv6            string                            `json:"private_ipv6,omitempty"`
+	PublicIP               string                            `json:"public_ip"`
+	PublicIPv6             string                            `json:"public_ipv6,omitempty"`
+	Interface              string                            `json:"interface,omitempty"`
+	ControlDevice          string                            `json:"control_device,omitempty"`
+	ESIMTransport          string                            `json:"esim_transport,omitempty"`
+	ATPort                 string                            `json:"at_port,omitempty"`
+	USBPath                string                            `json:"usb_path,omitempty"`
+	AudioDevice            string                            `json:"audio_device,omitempty"`
+	LocalPhone             string                            `json:"local_phone,omitempty"`
+	E911SetupAvailable     bool                              `json:"e911_setup_available,omitempty"`
+	ActiveESIMProfileName  string                            `json:"active_esim_profile_name,omitempty"`
+	RFLock                 string                            `json:"rf_lock,omitempty"`
+	LebaraIdentityStatus   string                            `json:"lebara_identity_status,omitempty"`
+	LebaraIdentityMessage  string                            `json:"lebara_identity_message,omitempty"`
+	SMSEnabled             bool                              `json:"sms_enabled"`
+	NetworkEnabled         bool                              `json:"network_enabled"`
+	PhoneMode              string                            `json:"phone_mode,omitempty"`
+	VoWiFiEnabled          bool                              `json:"vowifi_enabled"`
+	VoWiFiActive           bool                              `json:"vowifi_active"`
+	VoWiFiRuntime          *voWiFiRuntimeDTO                 `json:"vowifi_runtime,omitempty"`
+	VoWiFiHealth           *device.WiFiCallingHealthSnapshot `json:"vowifi_health,omitempty"`
+	NativeVoLTE            volte.Status                      `json:"native_volte,omitempty"`
+	RadioLiveOK            *bool                             `json:"radio_live_ok,omitempty"`
+	Modem                  modem.DeviceStatus                `json:"modem"`
+	Traffic                map[string]string                 `json:"traffic,omitempty"`
+	TrafficRaw             map[string]int64                  `json:"traffic_raw,omitempty"`
+	TrafficMeta            *deviceTrafficMeta                `json:"traffic_meta,omitempty"`
+	BackendMode            string                            `json:"backend_mode"`
+	NetworkConnected       bool                              `json:"network_connected"`
+	RegistrationStateLabel string                            `json:"registration_state_label"`
 }
 
 type deviceMgmtListModem struct {
@@ -526,6 +527,17 @@ func (s *Server) getVoWiFiRuntimeDTO(deviceID string) *voWiFiRuntimeDTO {
 		status = w.ProjectDeviceStatus()
 	}
 	return s.attachVoWiFiMWI(runtimeStateToDTO(st, status), deviceID)
+}
+
+func (s *Server) getWiFiCallingHealth(deviceID string) *device.WiFiCallingHealthSnapshot {
+	if s == nil || s.pool == nil {
+		return nil
+	}
+	health, ok := s.pool.GetWiFiCallingHealth(deviceID)
+	if !ok {
+		return nil
+	}
+	return &health
 }
 
 func (s *Server) attachVoWiFiMWI(dto *voWiFiRuntimeDTO, deviceID string) *voWiFiRuntimeDTO {
@@ -661,6 +673,7 @@ func (s *Server) buildOverviewLiteItemFromWorkerWithModem(w *device.Worker, cfg 
 		VoWiFiEnabled:          cardPolicyVoWiFiEnabled(strings.TrimSpace(status.ICCID), cfg.VoWiFiEnabled),
 		VoWiFiActive:           s.pool.IsVoWiFiActive(w.ID),
 		VoWiFiRuntime:          s.getVoWiFiRuntimeDTO(w.ID),
+		VoWiFiHealth:           s.getWiFiCallingHealth(w.ID),
 		NativeVoLTE:            s.pool.NativeVoLTEStatus(w.ID),
 		RadioLiveOK:            radioLiveOK,
 		Modem:                  modemStatus,
@@ -952,6 +965,7 @@ func (s *Server) handleDeviceMgmtOverviewLite(c *gin.Context) {
 				NetworkEnabled:         pol.NetworkEnabled,
 				VoWiFiEnabled:          pol.VoWiFiEnabled,
 				VoWiFiActive:           false,
+				VoWiFiHealth:           s.getWiFiCallingHealth(id),
 				NetworkConnected:       false,
 				RegistrationStateLabel: registrationStateLabel(0),
 				Modem:                  offlineModemStatus(id),
@@ -1014,6 +1028,7 @@ func (s *Server) handleDeviceMgmtOverviewLite(c *gin.Context) {
 			SMSEnabled:             true, // SMS 恒开（系统不变量）
 			NetworkEnabled:         dc.NetworkEnabled,
 			VoWiFiActive:           false, // 非运行设备无活跃 VoWiFi
+			VoWiFiHealth:           s.getWiFiCallingHealth(dc.ID),
 			NetworkConnected:       false,
 			RegistrationStateLabel: registrationStateLabel(0),
 			Modem:                  modem.DeviceStatus{},
@@ -2949,6 +2964,7 @@ func (s *Server) handleDeviceMgmtOverviewStreamSingle(c *gin.Context) {
 				NetworkEnabled:         pol.NetworkEnabled,
 				VoWiFiEnabled:          pol.VoWiFiEnabled,
 				VoWiFiActive:           false,
+				VoWiFiHealth:           s.getWiFiCallingHealth(deviceID),
 				NetworkConnected:       false,
 				RegistrationStateLabel: registrationStateLabel(0),
 				RadioLiveOK:            &trueVal,
