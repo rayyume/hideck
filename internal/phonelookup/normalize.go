@@ -1,6 +1,7 @@
 package phonelookup
 
 import (
+	"strconv"
 	"strings"
 	"unicode"
 )
@@ -76,13 +77,8 @@ func nationalDigits(normalized string) (cc, national string) {
 		return "", ""
 	}
 	if strings.HasPrefix(normalized, "+") {
-		for _, n := range countryCallingCodes {
-			if strings.HasPrefix(s, n.code) {
-				rest := strings.TrimPrefix(s, n.code)
-				if rest != "" || len(n.code) >= 3 {
-					return n.code, rest
-				}
-			}
+		if cc, rest := callingCodePrefix(normalized); cc != 0 {
+			return strconv.Itoa(cc), rest
 		}
 		if len(s) > 1 {
 			return s[:1], s[1:]

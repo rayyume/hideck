@@ -24,6 +24,7 @@ require (
 	github.com/lestrrat-go/file-rotatelogs v2.4.0+incompatible
 	github.com/makiuchi-d/gozxing v0.1.1
 	github.com/miekg/dns v1.1.67
+	github.com/nyaruka/phonenumbers/v2 v2.0.11
 	github.com/pdfcpu/pdfcpu v0.15.0
 	github.com/pion/ice/v4 v4.4.0
 	github.com/pion/rtp v1.10.5
@@ -41,6 +42,7 @@ require (
 	golang.org/x/image v0.45.0
 	golang.org/x/sync v0.22.0
 	golang.org/x/sys v0.47.0
+	golang.org/x/text v0.41.0
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/gorm v1.30.5
 )
@@ -124,7 +126,6 @@ require (
 	golang.org/x/exp v0.0.0-20250711185948-6ae5c78190dc // indirect
 	golang.org/x/mod v0.38.0 // indirect
 	golang.org/x/net v0.57.0 // indirect
-	golang.org/x/text v0.41.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	golang.org/x/tools v0.48.0 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect

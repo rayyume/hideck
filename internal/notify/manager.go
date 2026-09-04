@@ -41,14 +41,16 @@ type ManagerOptions struct {
 }
 
 type NotificationContext struct {
-	Event      string
-	Title      string
-	Text       string
-	DeviceID   string
-	DeviceName string
-	Number     string
-	Content    string
-	Timestamp  time.Time
+	Event       string
+	Title       string
+	Text        string
+	DeviceID    string
+	DeviceName  string
+	Number      string
+	ContactName string
+	Attribution string
+	Content     string
+	Timestamp   time.Time
 }
 
 func (c NotificationContext) DeviceLabel() string {
@@ -176,13 +178,10 @@ func (m *Manager) NotifySMSWithSource(deviceID, sender, content, source string, 
 		source = "蜂窝"
 	}
 	title := notificationTitle("sms_received")
-	msg := notificationLines(title,
-		"设备", deviceID,
-		"通道", source,
-		"号码", sender,
-		"时间", m.formatNotificationTime(timestamp),
-		"内容", content,
-	)
+	fields := []string{"设备", deviceID, "通道", source}
+	fields = append(fields, phoneIdentityFields("号码", sender)...)
+	fields = append(fields, "时间", m.formatNotificationTime(timestamp), "内容", content)
+	msg := notificationLines(title, fields...)
 
 	logger.Info("开始发送短信通知",
 		"event", "sms_received",
@@ -190,7 +189,7 @@ func (m *Manager) NotifySMSWithSource(deviceID, sender, content, source string, 
 		"source", source,
 		"channel_count", m.channelCount())
 
-	m.broadcastWithContext(NotificationContext{
+	ctx := NotificationContext{
 		Event:      "sms_received",
 		Title:      title,
 		Text:       msg,
@@ -199,7 +198,9 @@ func (m *Manager) NotifySMSWithSource(deviceID, sender, content, source string, 
 		Number:     sender,
 		Content:    content,
 		Timestamp:  timestamp,
-	})
+	}
+	fillPhoneIdentity(&ctx, sender)
+	m.broadcastWithContext(ctx)
 }
 
 func (m *Manager) formatNotificationTime(timestamp time.Time) string {
@@ -260,22 +261,24 @@ func (m *Manager) NotifyIncomingCall(deviceID, caller, callee string) {
 	m.incomingMu.Unlock()
 
 	title := notificationTitle("incoming_call")
-	msg := notificationLines(title,
-		"设备", deviceID,
-		"主叫", caller,
-		"被叫", callee,
-	)
+	fields := []string{"设备", deviceID}
+	fields = append(fields, phoneIdentityFields("主叫", caller)...)
+	fields = append(fields, "被叫", callee)
+	msg := notificationLines(title, fields...)
 
 	logger.Info("开始发送来电通知", "device", deviceID, "caller", caller, "channel_count", channelCount)
 
-	m.broadcastWithContext(NotificationContext{
+	ctx := NotificationContext{
 		Event:      "incoming_call",
 		Title:      title,
 		Text:       msg,
 		DeviceID:   deviceID,
 		DeviceName: m.resolveDeviceName(deviceID),
+		Number:     caller,
 		Timestamp:  time.Now(),
-	})
+	}
+	fillPhoneIdentity(&ctx, caller)
+	m.broadcastWithContext(ctx)
 }
 
 // NotifyCallResult publishes the terminal result after the call state machine
@@ -285,7 +288,7 @@ func (m *Manager) NotifyCallResult(deviceID, peer, direction, status, reason str
 		return
 	}
 	title := callResultTitle(status, reason)
-	m.broadcastWithContext(NotificationContext{
+	ctx := NotificationContext{
 		Event:      "call_" + status,
 		Title:      title,
 		Text:       formatCallResultMessage(deviceID, peer, direction, status, reason),
@@ -293,14 +296,15 @@ func (m *Manager) NotifyCallResult(deviceID, peer, direction, status, reason str
 		DeviceName: m.resolveDeviceName(deviceID),
 		Number:     peer,
 		Timestamp:  at,
-	})
+	}
+	fillPhoneIdentity(&ctx, peer)
+	m.broadcastWithContext(ctx)
 }
 
 func formatCallResultMessage(deviceID, peer, direction, status, reason string) string {
-	return notificationLines(callResultTitle(status, reason),
-		"设备", deviceID,
-		callResultPeerField(direction), peer,
-	)
+	fields := []string{"设备", deviceID}
+	fields = append(fields, phoneIdentityFields(callResultPeerField(direction), peer)...)
+	return notificationLines(callResultTitle(status, reason), fields...)
 }
 
 func callResultPeerField(direction string) string {

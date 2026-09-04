@@ -19,14 +19,16 @@ export const phoneContactsService = {
   },
   async list(): Promise<PhoneIdentity[]> {
     const res = await api.get('/phone/contacts')
-    const rows = (res.data?.contacts || []) as Array<{ number: string; name: string }>
-    return rows.map((row) => ({
+    return ((res.data?.contacts || []) as PhoneIdentity[]).map((row) => ({
       number: row.number,
-      display_number: row.number,
+      display_number: row.display_number || row.number,
       name: row.name,
-      title: row.name,
-      subtitle: '',
-      kind: 'contact'
+      title: row.title || row.name || row.display_number || row.number,
+      subtitle: row.subtitle || '',
+      carrier: row.carrier,
+      region: row.region,
+      country: row.country,
+      kind: row.kind || 'contact'
     }))
   },
   async save(number: string, name: string): Promise<PhoneIdentity> {

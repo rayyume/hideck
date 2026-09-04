@@ -427,7 +427,18 @@ func (m *Manager) handleCmdSMSInbox(cmdCtx CommandContext, args []string) string
 		}
 
 		timeStr := m.formatNotificationTime(sms.Timestamp)
-		sb.WriteString(fmt.Sprintf("%d. %s / %s\n", i+1, direction, peer))
+		id := lookupPhoneIdentity(peer)
+		label := strings.TrimSpace(id.DisplayNumber)
+		if label == "" {
+			label = peer
+		}
+		if name := strings.TrimSpace(id.Name); name != "" {
+			label = name + " / " + label
+		}
+		sb.WriteString(fmt.Sprintf("%d. %s / %s\n", i+1, direction, label))
+		if attr := strings.TrimSpace(id.Subtitle); attr != "" {
+			sb.WriteString(fmt.Sprintf("归属  %s\n", attr))
+		}
 		sb.WriteString(fmt.Sprintf("内容  %s\n", sms.Content))
 		sb.WriteString(fmt.Sprintf("时间  %s\n\n", timeStr))
 	}

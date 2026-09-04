@@ -87,6 +87,7 @@ declare module 'vue' {
     PageHeader: typeof import('./components/PageHeader.vue')['default']
     PhoneCallBar: typeof import('./components/PhoneCallBar.vue')['default']
     PhoneCallHistory: typeof import('./components/PhoneCallHistory.vue')['default']
+    PhoneContactsPanel: typeof import('./components/PhoneContactsPanel.vue')['default']
     PhoneDialPad: typeof import('./components/PhoneDialPad.vue')['default']
     ProxyCountryRuleDrawer: typeof import('./components/proxy/ProxyCountryRuleDrawer.vue')['default']
     ProxyInstanceEditorDrawer: typeof import('./components/proxy/ProxyInstanceEditorDrawer.vue')['default']

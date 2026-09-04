@@ -17,6 +17,7 @@ import {
 } from '@vicons/fluent'
 import PageHeader from '../components/PageHeader.vue'
 import PhoneCallHistory from '../components/PhoneCallHistory.vue'
+import PhoneContactsPanel from '../components/PhoneContactsPanel.vue'
 import PhoneDialPad from '../components/PhoneDialPad.vue'
 import type { PhoneCall, PhoneDevice } from '../services/phone'
 import { devicesService } from '../services/devices'
@@ -65,6 +66,7 @@ watch(callee, (value) => {
 
 onMounted(async () => {
   if (!phone.initialized) await phone.initialize()
+  void identities.ensureContacts()
 })
 
 function selectFirstAvailableDevice(devices: PhoneDevice[]) {
@@ -259,7 +261,7 @@ async function savePeerContact(number?: string) {
       inputValidator: (v) => !!String(v || '').trim() || '请填写名字'
     })
     const ident = await phoneContactsService.save(peer, String(value).trim())
-    identities.remember(ident)
+    identities.upsertLocal(ident)
     ElMessage.success('已保存联系人')
   } catch (error) {
     if (error === 'cancel' || error === 'close') return
@@ -665,7 +667,10 @@ async function sendDTMF(digit: string) {
         </div>
       </section>
 
-        <PhoneCallHistory :records="phone.history" />
+        <div class="phone-side">
+          <PhoneContactsPanel @dial="callee = $event" />
+          <PhoneCallHistory :records="phone.history" />
+        </div>
       </div>
     </section>
   </div>

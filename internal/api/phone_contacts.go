@@ -35,7 +35,11 @@ func (s *Server) handlePhoneContactsList(c *gin.Context) {
 	if rows == nil {
 		rows = []db.PhoneContact{}
 	}
-	c.JSON(http.StatusOK, gin.H{"contacts": rows})
+	out := make([]any, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, db.LookupPhoneIdentity(c.Request.Context(), row.Number))
+	}
+	c.JSON(http.StatusOK, gin.H{"contacts": out})
 }
 
 type phoneContactRequest struct {

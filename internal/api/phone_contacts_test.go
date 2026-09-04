@@ -58,4 +58,21 @@ func TestPhoneLookupAndContacts(t *testing.T) {
 	if ident["name"] != "移动客服" || ident["title"] != "移动客服" {
 		t.Fatalf("%v", ident)
 	}
+
+	list := httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/api/phone/contacts", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	router.ServeHTTP(list, req)
+	if list.Code != http.StatusOK {
+		t.Fatalf("list status=%d body=%s", list.Code, list.Body.String())
+	}
+	var payload struct {
+		Contacts []map[string]any `json:"contacts"`
+	}
+	if err := json.Unmarshal(list.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(payload.Contacts) != 1 || payload.Contacts[0]["name"] != "移动客服" || payload.Contacts[0]["carrier"] != "中国移动" {
+		t.Fatalf("%v", payload)
+	}
 }

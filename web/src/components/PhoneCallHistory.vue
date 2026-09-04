@@ -37,7 +37,7 @@ async function saveContact(record: PhoneRecord) {
       inputValue: current?.name || '',
       inputValidator: (v) => !!String(v || '').trim() || '请填写名字'
     })
-    identities.remember(await phoneContactsService.save(peer, String(value).trim()))
+    identities.upsertLocal(await phoneContactsService.save(peer, String(value).trim()))
     ElMessage.success('已保存联系人')
   } catch (error) {
     if (error === 'cancel' || error === 'close') return
