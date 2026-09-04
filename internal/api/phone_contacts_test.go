@@ -203,7 +203,7 @@ func TestPhoneContactsBatchReturnsOneAtomicGroup(t *testing.T) {
 	server.registerPhoneContactRoutes(api)
 	token := testSessionToken(t, "secret", time.Now().Add(time.Hour))
 
-	body, _ := json.Marshal(map[string]any{"contacts": []map[string]string{
+	body, _ := json.Marshal(map[string]any{"atomic": true, "contacts": []map[string]string{
 		{"number": "10000", "name": "客服", "group_key": "manual"},
 		{"number": "10001", "name": "客服", "group_key": "manual"},
 	}})
@@ -227,6 +227,92 @@ func TestPhoneContactsBatchReturnsOneAtomicGroup(t *testing.T) {
 		result.Contacts[0]["contact_id"] != result.Contacts[1]["contact_id"] {
 		t.Fatalf("batch result = %+v", result)
 	}
+}
+
+func TestPhoneContactsBatchKeepsPartialSuccessByDefault(t *testing.T) {
+	router, token := newPhoneContactsTestRouter(t, "phone_contacts_partial_batch.db")
+	body, _ := json.Marshal(map[string]any{"contacts": []map[string]string{
+		{"number": "10000", "name": "有效"},
+		{"number": "invalid", "name": "无效"},
+	}})
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/phone/contacts/batch", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("batch status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	var result struct {
+		Imported int `json:"imported"`
+		Skipped  int `json:"skipped"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Imported != 1 || result.Skipped != 1 {
+		t.Fatalf("batch result = %+v", result)
+	}
+}
+
+func TestPhoneContactGroupRoutesAffectUnloadedNumbers(t *testing.T) {
+	router, token := newPhoneContactsTestRouter(t, "phone_contacts_group_routes.db")
+	rows, err := db.UpsertPhoneContactBatchWithRegion(t.Context(), []db.PhoneContactInput{
+		{Number: "10000", Name: "旧名字", GroupKey: "person"},
+		{Number: "10001", Name: "旧名字", GroupKey: "person"},
+	}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	updateBody, _ := json.Marshal(map[string]string{"contact_id": rows[0].ContactID, "name": "新名字"})
+	updated := requestPhoneContactMutation(t, phoneContactMutationRequest{
+		Router: router, Token: token, Method: http.MethodPut,
+		Body: updateBody, Target: "/api/phone/contacts/group",
+	})
+	if updated.Code != http.StatusOK || !bytes.Contains(updated.Body.Bytes(), []byte("新名字")) {
+		t.Fatalf("update status=%d body=%s", updated.Code, updated.Body.String())
+	}
+	deleted := requestPhoneContactMutation(t, phoneContactMutationRequest{
+		Router: router, Token: token, Method: http.MethodDelete,
+		Target: "/api/phone/contacts/group?contact_id=" + rows[0].ContactID,
+	})
+	if deleted.Code != http.StatusOK || !bytes.Contains(deleted.Body.Bytes(), []byte(`"deleted":2`)) {
+		t.Fatalf("delete status=%d body=%s", deleted.Code, deleted.Body.String())
+	}
+}
+
+func newPhoneContactsTestRouter(t *testing.T, databaseName string) (http.Handler, string) {
+	t.Helper()
+	previous := db.DB
+	if err := db.Init(filepath.Join(t.TempDir(), databaseName)); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.DB = previous })
+	gin.SetMode(gin.TestMode)
+	server := &Server{auth: config.WebConfig{Username: "admin", Password: "secret"}}
+	router := gin.New()
+	api := router.Group("/api")
+	api.Use(server.authMiddleware())
+	server.registerPhoneContactRoutes(api)
+	return router, testSessionToken(t, "secret", time.Now().Add(time.Hour))
+}
+
+type phoneContactMutationRequest struct {
+	Router http.Handler
+	Token  string
+	Method string
+	Body   []byte
+	Target string
+}
+
+func requestPhoneContactMutation(t *testing.T, input phoneContactMutationRequest) *httptest.ResponseRecorder {
+	t.Helper()
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(input.Method, input.Target, bytes.NewReader(input.Body))
+	req.Header.Set("Authorization", "Bearer "+input.Token)
+	req.Header.Set("Content-Type", "application/json")
+	input.Router.ServeHTTP(recorder, req)
+	return recorder
 }
 
 type contactsPageResponse struct {

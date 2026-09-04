@@ -122,3 +122,37 @@ func TestPhoneContactStrictBatchIsAtomicAndSharesGroupID(t *testing.T) {
 		t.Fatalf("rolled-back contact lookup error = %v", err)
 	}
 }
+
+func TestPhoneContactGroupUpdateAndDeleteAffectEveryNumber(t *testing.T) {
+	database, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "contact-group.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := database.AutoMigrate(&PhoneContact{}); err != nil {
+		t.Fatal(err)
+	}
+	previous := DB
+	DB = database
+	t.Cleanup(func() { DB = previous })
+
+	rows, err := UpsertPhoneContactBatchWithRegion(t.Context(), []PhoneContactInput{
+		{Number: "10000", Name: "旧名字", GroupKey: "person"},
+		{Number: "10001", Name: "旧名字", GroupKey: "person"},
+		{Number: "10002", Name: "其他联系人"},
+	}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, err := UpdatePhoneContactGroupName(t.Context(), rows[0].ContactID, "新名字")
+	if err != nil || len(updated) != 2 || updated[0].Name != "新名字" || updated[1].Name != "新名字" {
+		t.Fatalf("updated contacts=%+v err=%v", updated, err)
+	}
+	deleted, err := DeletePhoneContactGroup(t.Context(), rows[0].ContactID)
+	if err != nil || len(deleted) != 2 {
+		t.Fatalf("deleted numbers=%v err=%v", deleted, err)
+	}
+	remaining, err := ListPhoneContacts(t.Context())
+	if err != nil || len(remaining) != 1 || remaining[0].Number != "10002" {
+		t.Fatalf("remaining contacts=%+v err=%v", remaining, err)
+	}
+}

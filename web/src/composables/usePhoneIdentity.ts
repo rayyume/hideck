@@ -138,14 +138,9 @@ async function loadCurrentContactPage(offset: number) {
 
 function replaceContactRows(page: PhoneContactsPage) {
   cacheRevision++
-  if (!page.hasMore) {
-    const currentNumbers = new Set(page.contacts.map((row) => row.number))
-    for (const [key, value] of cache) {
-      if (value.name && !currentNumbers.has(value.number)) cache.set(key, withoutContactName(value))
-    }
-  }
   contacts.splice(0, contacts.length, ...page.contacts)
   for (const row of page.contacts) rememberWithoutList(row)
+  if (!page.hasMore) reconcileContactNameCache(page.contacts)
   contactsState.total = page.total
   contactsState.nextOffset = page.nextOffset
   contactsState.hasMore = page.hasMore
@@ -157,9 +152,20 @@ function appendContactRows(page: PhoneContactsPage) {
   const rows = page.contacts.filter((row) => !loaded.has(row.number))
   contacts.push(...rows)
   for (const row of rows) rememberWithoutList(row)
+  if (!page.hasMore) {
+    cacheRevision++
+    reconcileContactNameCache(contacts)
+  }
   contactsState.total = page.total
   contactsState.nextOffset = page.nextOffset
   contactsState.hasMore = page.hasMore
+}
+
+function reconcileContactNameCache(rows: readonly PhoneIdentity[]) {
+  const currentNumbers = new Set(rows.map((row) => row.number))
+  for (const [key, value] of cache) {
+    if (value.name && !currentNumbers.has(value.number)) cache.set(key, withoutContactName(value))
+  }
 }
 
 function loadMoreContacts() {
@@ -209,14 +215,43 @@ async function removeContacts(numbers: string[], deviceId = '') {
   }).filter(Boolean)
   if (!targets.length) return
   const deleted = await phoneContactsService.removeMany(targets, deviceId)
+  removeLocalContacts(targets, deleted)
+}
+
+function applyContactGroupUpdate(rows: readonly PhoneIdentity[]) {
+  if (!rows.length) return
   cacheRevision++
-  const drop = new Set(targets)
+  const updated = new Map(rows.map((row) => [row.number, row]))
+  for (const [alias, value] of cache) {
+    const replacement = updated.get(value.number)
+    if (replacement) cache.set(alias, replacement)
+  }
+  for (const row of rows) rememberWithoutList(row)
+  const loadedCount = contacts.length
+  const reordered = [...rows, ...contacts.filter((item) => !updated.has(item.number))]
+  contacts.splice(0, contacts.length, ...reordered.slice(0, loadedCount))
+  contactsState.nextOffset = contacts.length
+  contactsState.hasMore = contactsState.nextOffset < contactsState.total
+}
+
+async function removeContactGroup(contactId: string) {
+  const result = await phoneContactsService.removeGroup(contactId)
+  removeLocalContacts(result.numbers, result.deleted)
+}
+
+function removeLocalContacts(numbers: readonly string[], deleted: number) {
+  cacheRevision++
+  const drop = new Set(numbers)
   const loadedDeleted = contacts.filter((item) => drop.has(item.number)).length
   for (let i = contacts.length - 1; i >= 0; i--) {
     if (drop.has(contacts[i].number)) contacts.splice(i, 1)
   }
   contactsState.total = Math.max(0, contactsState.total - deleted)
-  contactsState.nextOffset = Math.max(0, contactsState.nextOffset - loadedDeleted)
+  contactsState.nextOffset = Math.min(
+    contactsState.total,
+    Math.max(0, contactsState.nextOffset - loadedDeleted)
+  )
+  contactsState.hasMore = contactsState.nextOffset < contactsState.total
   for (const [alias, value] of cache) {
     if (drop.has(value.number)) cache.set(alias, withoutContactName(value))
   }
@@ -248,6 +283,8 @@ const phoneIdentity = {
   ensureContacts,
   removeContact,
   removeContacts,
+  applyContactGroupUpdate,
+  removeContactGroup,
   titleFor,
   subtitleFor
 }

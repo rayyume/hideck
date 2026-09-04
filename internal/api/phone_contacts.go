@@ -30,6 +30,8 @@ func (s *Server) registerPhoneContactRoutes(api *gin.RouterGroup) {
 	api.GET("/phone/contacts", s.handlePhoneContactsList)
 	api.PUT("/phone/contacts", s.handlePhoneContactsUpsert)
 	api.DELETE("/phone/contacts", s.handlePhoneContactsDelete)
+	api.PUT("/phone/contacts/group", s.handlePhoneContactGroupUpdate)
+	api.DELETE("/phone/contacts/group", s.handlePhoneContactGroupDelete)
 	api.POST("/phone/contacts/batch", s.handlePhoneContactsBatch)
 	api.POST("/phone/contacts/delete", s.handlePhoneContactsBatchDelete)
 	api.GET("/phone/contacts/export", s.handlePhoneContactsExport)
@@ -151,58 +153,9 @@ func (s *Server) phoneNumberRegion(deviceID string) string {
 	return s.pool.PhoneNumberRegion(deviceID)
 }
 
-type phoneContactBatchRequest struct {
-	DeviceID string                `json:"device_id"`
-	Contacts []phoneContactRequest `json:"contacts"`
-}
-
 type phoneContactDeleteRequest struct {
 	DeviceID string   `json:"device_id"`
 	Numbers  []string `json:"numbers"`
-}
-
-func (s *Server) handlePhoneContactsBatch(c *gin.Context) {
-	var req phoneContactBatchRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "code": "invalid_json", "message": "请求格式不正确"})
-		return
-	}
-	if len(req.Contacts) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "code": "empty_batch", "message": "没有可添加的联系人"})
-		return
-	}
-	if len(req.Contacts) > maxContactBatch {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "code": "batch_too_large", "message": "一次最多导入 5000 条"})
-		return
-	}
-	region := s.phoneNumberRegion(req.DeviceID)
-	inputs := make([]db.PhoneContactInput, 0, len(req.Contacts))
-	for _, item := range req.Contacts {
-		inputs = append(inputs, db.PhoneContactInput{
-			Number: item.Number, Name: item.Name, Region: region,
-			ContactID: item.ContactID, GroupKey: item.GroupKey,
-		})
-	}
-	rows, err := db.UpsertPhoneContactBatchWithRegion(c.Request.Context(), inputs, region)
-	if err != nil {
-		c.JSON(phoneContactBatchStatus(err), gin.H{
-			"status": "error", "code": "contact_batch_failed", "message": "批量保存失败",
-		})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"imported": len(rows), "skipped": 0, "contacts": phoneContactIdentities(rows),
-	})
-}
-
-func phoneContactBatchStatus(err error) int {
-	if errors.Is(err, db.ErrInvalidPhoneContact) {
-		return http.StatusBadRequest
-	}
-	if errors.Is(err, gorm.ErrInvalidDB) {
-		return http.StatusServiceUnavailable
-	}
-	return http.StatusInternalServerError
 }
 
 func phoneContactIdentities(rows []db.PhoneContact) []any {

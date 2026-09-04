@@ -167,6 +167,12 @@ function contactGroupKey(item: PhoneIdentity) {
   return item.contact_id || `number:${item.number}`
 }
 
+function contactGroupID(group: ContactGroup) {
+  const contactId = String(group.contactId || '').trim()
+  if (!contactId) throw new Error('联系人缺少稳定 ID，无法修改整个联系人')
+  return contactId
+}
+
 function handleOpenChange(open: boolean) {
   emit('update:modelValue', open)
 }
@@ -295,6 +301,7 @@ async function saveManual() {
 
 async function addNumberToGroup(group: ContactGroup) {
   try {
+    const contactId = contactGroupID(group)
     const { value } = await ElMessageBox.prompt(`给「${group.name}」再加一个号码`, '添加号码', {
       ...overlayDialog,
       confirmButtonText: '添加',
@@ -304,7 +311,7 @@ async function addNumberToGroup(group: ContactGroup) {
     })
     const number = normalizePhoneContactNumber(value)
     const ident = await phoneContactsService.save({
-      number, name: group.name, deviceId: props.deviceId, contactId: group.contactId
+      number, name: group.name, deviceId: props.deviceId, contactId
     })
     identities.upsertLocal(ident, number, props.deviceId)
     expanded.value = group.key
@@ -317,6 +324,7 @@ async function addNumberToGroup(group: ContactGroup) {
 
 async function editGroup(group: ContactGroup) {
   try {
+    const contactId = contactGroupID(group)
     const { value } = await ElMessageBox.prompt('保存后，来电和短信通知会显示这个名字', '改联系人', {
       ...overlayDialog,
       confirmButtonText: '保存',
@@ -326,12 +334,8 @@ async function editGroup(group: ContactGroup) {
       inputValidator: (v) => !!String(v || '').trim() || '请填写名字'
     })
     const name = String(value).trim()
-    const saved = await phoneContactsService.saveMany(group.items.map((item) => ({
-      number: item.number, name, contactId: group.contactId
-    })), props.deviceId)
-    saved.forEach((ident, index) => {
-      identities.upsertLocal(ident, group.items[index].number, props.deviceId)
-    })
+    const saved = await phoneContactsService.updateGroup(contactId, name)
+    identities.applyContactGroupUpdate(saved)
     ElMessage.success({ message: '已更新联系人', zIndex: 5100 })
   } catch (error) {
     if (error === 'cancel' || error === 'close') return
@@ -340,12 +344,10 @@ async function editGroup(group: ContactGroup) {
 }
 
 async function deleteGroup(group: ContactGroup) {
-  const count = group.items.length
   try {
+    const contactId = contactGroupID(group)
     await ElMessageBox.confirm(
-      count > 1
-        ? `确定删除「${group.name}」的 ${count} 个号码？删除后，来电和短信会重新只显示号码。`
-        : `确定删除「${group.name}」？删除后，来电和短信会重新只显示号码。`,
+      `确定删除「${group.name}」及其所有号码？删除后，来电和短信会重新只显示号码。`,
       '删除联系人',
       {
         ...overlayDialog,
@@ -355,7 +357,7 @@ async function deleteGroup(group: ContactGroup) {
         distinguishCancelAndClose: true
       }
     )
-    await identities.removeContacts(group.items.map((item) => item.number), props.deviceId)
+    await identities.removeContactGroup(contactId)
     ElMessage.success({ message: '已删除联系人', zIndex: 5100 })
   } catch (error) {
     if (error === 'cancel' || error === 'close') return

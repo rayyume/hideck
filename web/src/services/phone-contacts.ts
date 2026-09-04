@@ -99,6 +99,7 @@ export const phoneContactsService = {
   async saveMany(contacts: readonly PhoneContactSave[], deviceId = ''): Promise<PhoneIdentity[]> {
     const res = await api.post('/phone/contacts/batch', {
       device_id: deviceId || undefined,
+      atomic: true,
       contacts: contacts.map((contact) => ({
         number: contact.number,
         name: contact.name,
@@ -110,6 +111,30 @@ export const phoneContactsService = {
       throw new Error('批量保存联系人响应不完整')
     }
     return (res.data.contacts as PhoneIdentity[]).map(normalizeIdentity)
+  },
+  async updateGroup(contactId: string, name: string): Promise<PhoneIdentity[]> {
+    const res = await api.put('/phone/contacts/group', {
+      contact_id: contactId,
+      name
+    })
+    const contacts = res.data?.contacts
+    if (!Array.isArray(contacts) || contacts.length === 0 || contacts.some((contact) =>
+      typeof contact?.number !== 'string' || !contact.number || contact.contact_id !== contactId)) {
+      throw new Error('更新联系人响应不完整')
+    }
+    return (contacts as PhoneIdentity[]).map(normalizeIdentity)
+  },
+  async removeGroup(contactId: string): Promise<{ deleted: number; numbers: string[] }> {
+    const res = await api.delete('/phone/contacts/group', {
+      params: { contact_id: contactId }
+    })
+    const deleted = Number(res.data?.deleted)
+    const numbers = res.data?.numbers
+    if (!Number.isInteger(deleted) || deleted < 1 || !Array.isArray(numbers) ||
+      numbers.length !== deleted || numbers.some((number) => typeof number !== 'string' || !number.trim())) {
+      throw new Error('删除联系人响应不完整')
+    }
+    return { deleted, numbers: [...numbers] }
   },
   async remove(number: string, deviceId = ''): Promise<void> {
     await api.delete('/phone/contacts', {
