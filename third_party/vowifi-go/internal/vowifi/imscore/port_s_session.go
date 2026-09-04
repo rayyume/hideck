@@ -210,13 +210,3 @@ func registeredFlowRegIDLocked(s *Service) int {
 	}
 	return 0
 }
-
-func activeRegistrarPenaltiesLocked(values map[string]time.Time, now time.Time) map[string]time.Time {
-	result := make(map[string]time.Time)
-	for registrar, until := range values {
-		if until.IsZero() || now.Before(until) {
-			result[registrar] = until
-		}
-	}
-	return result
-}

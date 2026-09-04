@@ -36,6 +36,11 @@ func New(cfg *IMSConfig) (*Service, error) {
 	if bus == nil {
 		bus = newRuntimeEventBus()
 	}
+	registrarPenalties := cfg.RegistrarPenalties
+	if registrarPenalties == nil {
+		registrarPenalties = NewRegistrarPenaltyStore()
+		cfg.RegistrarPenalties = registrarPenalties
+	}
 	transport := newSIPTransport()
 	s := &Service{
 		cfg:                   cfg,
@@ -50,6 +55,7 @@ func New(cfg *IMSConfig) (*Service, error) {
 		maintenanceWake:       make(chan struct{}, 1),
 		protectedConns:        make(map[net.Conn]struct{}),
 		transport:             transport,
+		registrationRuntime:   registrationRuntime{registrarPenalties: registrarPenalties},
 		smsTransactionTimeout: outboundSMSTransactionTimeout,
 		smsReportTimeout:      defaultSMSDeliveryReportTimeout,
 		messagingRuntime: messagingRuntime{
@@ -139,7 +145,7 @@ func (s *Service) captureStatusSnapshot() ServiceStatus {
 		PortSLastInboundAt: portS.lastInboundAt,
 		PortSLastCloseKind: portS.lastCloseKind, PortSLastCloseReason: portS.lastCloseReason,
 		PortSPeerResetCount: portS.peerResetCount,
-		DeprioritizedPCSCF:  activeRegistrarPenaltiesLocked(s.registrarUnavailable, time.Now()),
+		DeprioritizedPCSCF:  s.registrarPenalties.snapshot(time.Now()),
 		IPSecInstalled:      len(s.spiPairs) > 0, RXRunning: rxRunning,
 		TCPSignalingRunning:    s.registrationTCP != nil,
 		TCPSignalingConnected:  s.registrationTCP != nil,

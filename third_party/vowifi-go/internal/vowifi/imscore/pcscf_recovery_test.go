@@ -50,9 +50,7 @@ func TestPCSCFUnavailableCandidatesAreSkipped(t *testing.T) {
 	service.registrarCandidates = []string{
 		"pcscf-a.example:5060", "pcscf-b.example:5060", "pcscf-c.example:5060",
 	}
-	service.registrarUnavailable = map[string]time.Time{
-		"pcscf-b.example:5060": time.Now().Add(time.Minute),
-	}
+	service.registrarPenalties.mark("pcscf-b.example:5060", time.Now().Add(time.Minute))
 	service.mu.Unlock()
 
 	next, current := service.markRegistrarUnavailableAndAdvance("pcscf-a.example:5060", time.Time{})
@@ -64,31 +62,56 @@ func TestPCSCFUnavailableCandidatesAreSkipped(t *testing.T) {
 	}
 }
 
-func TestPCSCFEarliestUnavailableCandidateCanBeReused(t *testing.T) {
-	service := newRegisteredClientInviteService(t)
+func TestPCSCFPenaltySurvivesServiceReplacement(t *testing.T) {
+	store := NewRegistrarPenaltyStore()
 	now := time.Now()
-	service.mu.Lock()
-	service.registrar = "pcscf-a.example:5060"
-	service.registrarCandidates = []string{
-		"pcscf-a.example:5060", "pcscf-b.example:5060", "pcscf-c.example:5060",
-	}
-	service.registrarUnavailable = map[string]time.Time{
-		"pcscf-b.example:5060": now.Add(20 * time.Minute),
-		"pcscf-c.example:5060": now.Add(10 * time.Minute),
-	}
-	service.mu.Unlock()
+	store.mark("pcscf-a.example:5060", now.Add(30*time.Minute))
 
-	if next, current := service.markRegistrarUnavailableAndAdvance(
-		"pcscf-a.example:5060", now.Add(30*time.Minute),
-	); !current || next != "" {
-		t.Fatalf("normal advance = %q current=%t, want no eligible candidate", next, current)
+	service, err := New(&IMSConfig{
+		Registrar: "pcscf-a.example:5060;pcscf-b.example:5060",
+		LocalAddr: "192.0.2.10", RegistrarPenalties: store,
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
-	next, previousUntil, current := service.advanceRegistrarToEarliestUnavailable("pcscf-a.example:5060")
-	if !current || next != "pcscf-c.example:5060" || !previousUntil.Equal(now.Add(10*time.Minute)) {
-		t.Fatalf("fallback advance = %q until=%s current=%t", next, previousUntil, current)
+	selected, err := service.selectRegistrarCandidate(context.Background(), "udp")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if _, exists := service.StatusCurrent().DeprioritizedPCSCF[next]; exists {
-		t.Fatal("selected fallback P-CSCF remained deprioritized")
+	if selected != "pcscf-b.example:5060" {
+		t.Fatalf("selected P-CSCF = %q, want unpenalized alternate", selected)
+	}
+	if _, exists := service.StatusCurrent().DeprioritizedPCSCF["pcscf-a.example:5060"]; !exists {
+		t.Fatal("replacement service lost the active P-CSCF penalty")
+	}
+}
+
+func TestPCSCFSelectionRejectsAllPenalizedCandidates(t *testing.T) {
+	store := NewRegistrarPenaltyStore()
+	until := time.Now().Add(30 * time.Minute)
+	store.mark("pcscf-a.example:5060", until)
+	store.mark("pcscf-b.example:5060", until)
+	service, err := New(&IMSConfig{
+		Registrar: "pcscf-a.example:5060;pcscf-b.example:5060",
+		LocalAddr: "192.0.2.10", RegistrarPenalties: store,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.selectRegistrarCandidate(context.Background(), "udp"); err == nil ||
+		!strings.Contains(err.Error(), "temporarily unavailable") {
+		t.Fatalf("selection error = %v", err)
+	}
+}
+
+func TestPCSCFShorterPenaltyDoesNotReplaceLongerPenalty(t *testing.T) {
+	store := NewRegistrarPenaltyStore()
+	now := time.Now()
+	longer := now.Add(time.Hour)
+	store.mark("pcscf-a.example:5060", longer)
+	store.mark("pcscf-a.example:5060", now.Add(30*time.Minute))
+	if got := store.snapshot(now)["pcscf-a.example:5060"]; !got.Equal(longer) {
+		t.Fatalf("penalty deadline = %s, want %s", got, longer)
 	}
 }
 

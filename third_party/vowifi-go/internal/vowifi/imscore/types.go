@@ -321,7 +321,7 @@ type registrationRuntime struct {
 	registrarCandidates  []string
 	registrarIndex       int
 	registrarSource      string
-	registrarUnavailable map[string]time.Time
+	registrarPenalties   *RegistrarPenaltyStore
 	regStatus            atomic.Int32
 	nextRegister         time.Time
 	lastSIPCode          atomic.Int32

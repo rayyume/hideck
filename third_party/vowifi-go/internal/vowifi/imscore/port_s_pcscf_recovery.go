@@ -10,9 +10,10 @@ import (
 )
 
 const (
-	vodafoneUKCarrierPresetID          = "vodafone_uk_23415"
-	vodafoneUKEarlyPortSResetWindow    = 2 * time.Minute
-	vodafoneUKPCSCFDeprioritizedPeriod = 30 * time.Minute
+	vodafoneUKCarrierPresetID           = "vodafone_uk_23415"
+	vodafoneUKPortSResetRecoveryPolicy  = "vodafone_uk_port_s_reset"
+	vodafoneUKMaturePortSResetThreshold = 2 * time.Minute
+	vodafoneUKPCSCFDeprioritizedPeriod  = 30 * time.Minute
 )
 
 type portSResetRecoveryState struct {
@@ -20,12 +21,12 @@ type portSResetRecoveryState struct {
 	observedAt          time.Time
 	recoveryAttemptedAt time.Time
 	recoverySucceeded   bool
-	failoverOnRecovery  bool
+	switchAfterRecovery bool
 	failoverPending     bool
 }
 
 func (s *Service) armVodafoneUKResetRecoveryLocked(registrar string, openedAt, now time.Time) bool {
-	if s.cfg == nil || s.cfg.CarrierPresetID != vodafoneUKCarrierPresetID || openedAt.IsZero() {
+	if !usesVodafoneUKPortSResetRecovery(s.cfg) || openedAt.IsZero() {
 		return false
 	}
 	lifetime := now.Sub(openedAt)
@@ -36,13 +37,12 @@ func (s *Service) armVodafoneUKResetRecoveryLocked(registrar string, openedAt, n
 	if registrar == "" {
 		return false
 	}
-	if lifetime > vodafoneUKEarlyPortSResetWindow {
-		// A reset on an established VOXI push flow can be the only local
-		// evidence that an MT delivery hit a stale network-side binding.
-		// First let the normal grace and REGISTER recovery run; fail over
-		// only after that recovery succeeds on the same P-CSCF.
+	if lifetime > vodafoneUKMaturePortSResetThreshold {
+		// Vodafone UK and its sub-brands share this IMS network policy. A
+		// mature push flow reset can indicate a stale MT delivery binding.
+		// Let same-P-CSCF REGISTER recovery complete before switching once.
 		s.portSSession.resetRecovery = portSResetRecoveryState{
-			registrar: registrar, observedAt: now, failoverOnRecovery: true,
+			registrar: registrar, observedAt: now, switchAfterRecovery: true,
 		}
 		return false
 	}
@@ -63,6 +63,10 @@ func (s *Service) armVodafoneUKResetRecoveryLocked(registrar string, openedAt, n
 		registrar: registrar, observedAt: now,
 	}
 	return false
+}
+
+func usesVodafoneUKPortSResetRecovery(cfg *IMSConfig) bool {
+	return cfg != nil && strings.TrimSpace(cfg.CarrierPresetID) == vodafoneUKCarrierPresetID
 }
 
 func (s *Service) markPortSResetRecoveryAttempt(registrar string) {
@@ -87,7 +91,7 @@ func (s *Service) markPortSResetRecoverySucceeded(registrar string) {
 	state := &s.portSSession.resetRecovery
 	if state.registrar == strings.TrimSpace(registrar) && !state.recoveryAttemptedAt.IsZero() {
 		state.recoverySucceeded = true
-		state.failoverPending = state.failoverOnRecovery
+		state.failoverPending = state.switchAfterRecovery
 	}
 }
 
@@ -134,15 +138,6 @@ func (s *Service) recoverPCSCFAfterPortSReset(failedRegistrar string, observedAt
 	if !current {
 		return
 	}
-	penaltyOverridden := false
-	var previousPenaltyUntil time.Time
-	if next == "" {
-		next, previousPenaltyUntil, current = s.advanceRegistrarToEarliestUnavailable(failedRegistrar)
-		if !current {
-			return
-		}
-		penaltyOverridden = next != ""
-	}
 	if next == "" {
 		err := fmt.Errorf(
 			"imscore: P-CSCF %s reset port-s and no alternate P-CSCF is available; fresh runtime required",
@@ -151,7 +146,8 @@ func (s *Service) recoverPCSCFAfterPortSReset(failedRegistrar string, observedAt
 		s.markPCSCFRegistrationUnboundForPortSReset(failedRegistrar)
 		logging.WarnRate("ims-ports-reset-no-alternate-"+s.DeviceID(), 30*time.Second,
 			"IMS port-s reset recovery has no alternate P-CSCF; rebuilding runtime",
-			"device", s.DeviceID(), "pcscf", failedRegistrar,
+			"device", s.DeviceID(), "policy", vodafoneUKPortSResetRecoveryPolicy,
+			"pcscf", failedRegistrar,
 			"reset_at", observedAt, "deprioritized_until", unavailableUntil)
 		s.reportRegistrationRuntimeError(err)
 		return
@@ -163,10 +159,9 @@ func (s *Service) recoverPCSCFAfterPortSReset(failedRegistrar string, observedAt
 	}
 	logging.WarnRate("ims-ports-reset-switch-"+s.DeviceID(), 30*time.Second,
 		"IMS port-s reset recovery switching P-CSCF",
-		"device", s.DeviceID(), "previous", failedRegistrar, "next", next,
-		"reset_at", observedAt, "deprioritized_until", unavailableUntil,
-		"penalty_overridden", penaltyOverridden,
-		"previous_penalty_until", previousPenaltyUntil)
+		"device", s.DeviceID(), "policy", vodafoneUKPortSResetRecoveryPolicy,
+		"previous", failedRegistrar, "next", next,
+		"reset_at", observedAt, "deprioritized_until", unavailableUntil)
 	ctx, cancel := context.WithTimeout(context.Background(), pcscfInitialRegistrationTimeout)
 	defer cancel()
 	if err := s.registerLocked(ctx); err != nil {
@@ -174,5 +169,6 @@ func (s *Service) recoverPCSCFAfterPortSReset(failedRegistrar string, observedAt
 		return
 	}
 	logging.Info("IMS port-s reset recovery completed",
-		"device", s.DeviceID(), "registrar", next)
+		"device", s.DeviceID(), "policy", vodafoneUKPortSResetRecoveryPolicy,
+		"registrar", next)
 }

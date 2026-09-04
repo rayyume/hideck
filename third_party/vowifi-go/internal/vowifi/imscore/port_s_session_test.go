@@ -41,7 +41,7 @@ func TestPortSSessionDiagnosticsRecordPeerReset(t *testing.T) {
 	}
 }
 
-func TestOnlyRepeatedVodafoneUKEarlyPeerResetArmsPCSCFFailover(t *testing.T) {
+func TestVodafoneUKPeerResetPolicyIsCarrierAndErrorScoped(t *testing.T) {
 	tests := []struct {
 		name   string
 		preset string
@@ -49,9 +49,9 @@ func TestOnlyRepeatedVodafoneUKEarlyPeerResetArmsPCSCFFailover(t *testing.T) {
 		age    time.Duration
 		want   bool
 	}{
-		{name: "VOXI early reset", preset: vodafoneUKCarrierPresetID, err: syscallConnectionReset(), age: time.Minute, want: true},
-		{name: "VOXI EOF", preset: vodafoneUKCarrierPresetID, err: io.EOF, age: time.Minute},
-		{name: "VOXI established EOF", preset: vodafoneUKCarrierPresetID, err: io.EOF, age: 9 * time.Minute},
+		{name: "Vodafone UK early reset", preset: vodafoneUKCarrierPresetID, err: syscallConnectionReset(), age: time.Minute, want: true},
+		{name: "Vodafone UK EOF", preset: vodafoneUKCarrierPresetID, err: io.EOF, age: time.Minute},
+		{name: "Vodafone UK established EOF", preset: vodafoneUKCarrierPresetID, err: io.EOF, age: 9 * time.Minute},
 		{name: "other carrier reset", preset: "2degrees_nz", err: syscallConnectionReset(), age: time.Minute},
 		{name: "other carrier established reset", preset: "2degrees_nz", err: syscallConnectionReset(), age: 9 * time.Minute},
 	}

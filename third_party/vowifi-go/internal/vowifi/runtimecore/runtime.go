@@ -25,6 +25,9 @@ func (Runtime) Start(
 	if req.DeviceID == "" {
 		return RuntimeStartResult{TraceID: req.TraceID}, errors.New("runtimecore: device ID is required")
 	}
+	if req.registrarPenalties == nil {
+		req.registrarPenalties = imscore.NewRegistrarPenaltyStore()
+	}
 	if req.Options.Voice != nil && req.voiceBinding == nil {
 		req.voiceBinding = &voiceLifecycleBinding{deviceID: req.DeviceID, voice: req.Options.Voice}
 	}
@@ -153,6 +156,7 @@ func sessionConfigFromRequest(
 			}
 		},
 		OnProgress: req.OnProgress, OmitInitialContact: req.omitInitialContact,
+		RegistrarPenalties: req.registrarPenalties,
 	}
 	req.fastReauth.Apply(&config)
 	return config

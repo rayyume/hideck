@@ -55,6 +55,7 @@ type IMSConfig struct {
 	TraceID                    string
 	PAccessNetworkCountry      string
 	RegisterTemplate           IMSRegisterTemplate
+	RegistrarPenalties         *RegistrarPenaltyStore
 	AllowEmergencyRegistration bool
 	OnLocalAddressChange       func(oldIP, newIP net.IP) error
 }

@@ -252,6 +252,7 @@ func TestBuildSWUConfigExposesMissingAKA(t *testing.T) {
 }
 
 func TestBuildIMSConfigUsesNegotiatedPCSCFAndCarrierRuntimeFields(t *testing.T) {
+	penalties := imscore.NewRegistrarPenaltyStore()
 	prepared := profile.PreparedSession{
 		Profile: profile.Profile{
 			IMSI: "234102356143376", MCC: "234", MNC: "10", IMEI: "123456789012345",
@@ -275,7 +276,7 @@ func TestBuildIMSConfigUsesNegotiatedPCSCFAndCarrierRuntimeFields(t *testing.T) 
 		},
 	}
 	config, err := buildIMSConfig(imsConfigInput{
-		session: SessionConfig{Prepared: prepared}, result: result,
+		session: SessionConfig{Prepared: prepared, RegistrarPenalties: penalties}, result: result,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -288,6 +289,9 @@ func TestBuildIMSConfigUsesNegotiatedPCSCFAndCarrierRuntimeFields(t *testing.T) 
 	}
 	if config.CellularNetworkInfo != "" || config.PAccessNetworkCountry != "GB" {
 		t.Fatalf("network identity = %q country=%q", config.CellularNetworkInfo, config.PAccessNetworkCountry)
+	}
+	if config.RegistrarPenalties != penalties {
+		t.Fatal("IMS config did not retain the runtime P-CSCF penalty store")
 	}
 }
 

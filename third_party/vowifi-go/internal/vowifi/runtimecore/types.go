@@ -127,6 +127,7 @@ type SessionConfig struct {
 	OnProgress            func(string)
 	OnTunnelReady         func(*SessionResult)
 	OmitInitialContact    bool
+	RegistrarPenalties    *imscore.RegistrarPenaltyStore
 }
 
 type SessionResult struct {
@@ -180,6 +181,7 @@ type RuntimeStartRequest struct {
 	redirectSeen        []string
 	fastReauth          FastReauthStore
 	omitInitialContact  bool
+	registrarPenalties  *imscore.RegistrarPenaltyStore
 }
 
 type VoiceLifecycle interface {
