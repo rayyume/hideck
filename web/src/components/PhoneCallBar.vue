@@ -37,8 +37,8 @@ watch(connected, (isConnected) => {
     lastDTMF.value = ''
   }
 })
-watch(() => call.value?.peer, (peer) => {
-  if (peer) void identities.resolve(peer)
+watch(() => [call.value?.peer, call.value?.device_id] as const, ([peer, deviceId]) => {
+  if (peer) void identities.resolve(peer, deviceId)
 }, { immediate: true })
 
 async function hangup() {
@@ -84,8 +84,8 @@ async function sendDigit(digit: string) {
       <button type="button" class="call-summary" @click="router.push('/phone')">
         <span class="call-pulse" aria-hidden="true" />
         <span class="call-copy">
-          <strong>{{ identities.titleFor(call.peer) }}</strong>
-          <small>{{ identities.subtitleFor(call.peer) ? identities.subtitleFor(call.peer) + ' · ' : '' }}{{ phone.mediaMode === 'listen-only' ? '仅听 · ' : '' }}{{ phoneCallStatusLabel(call, callEnding) }} · {{ formatCallDuration(call, phone.now) }}{{ waitingCall ? ` · 第二路 ${identities.titleFor(waitingCall.peer)}` : '' }}</small>
+          <strong>{{ identities.titleFor(call.peer, call.device_id) }}</strong>
+          <small>{{ identities.subtitleFor(call.peer, call.device_id) ? identities.subtitleFor(call.peer, call.device_id) + ' · ' : '' }}{{ phone.mediaMode === 'listen-only' ? '仅听 · ' : '' }}{{ phoneCallStatusLabel(call, callEnding) }} · {{ formatCallDuration(call, phone.now) }}{{ waitingCall ? ` · 第二路 ${identities.titleFor(waitingCall.peer, waitingCall.device_id)}` : '' }}</small>
         </span>
         <span v-if="call.read_only" class="read-only-tag">只读</span>
       </button>

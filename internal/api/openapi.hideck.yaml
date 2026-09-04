@@ -3336,6 +3336,9 @@ components:
           type: string
         iccid:
           type: string
+        phone_region:
+          type: string
+          description: SIM 归属国家或地区的 ISO 3166-1 alpha-2 代码
         voice:
           type: object
           additionalProperties: true
@@ -4112,7 +4115,7 @@ components:
       properties:
         kind:
           type: string
-          enum: [started, interrupted, recovered, stopped]
+          enum: [started, interrupted, recovered, failed, stopped]
         state:
           type: string
           enum: [checking, healthy, recovering, unavailable, stopped]

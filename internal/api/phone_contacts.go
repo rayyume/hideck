@@ -23,7 +23,8 @@ func (s *Server) handlePhoneLookup(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "code": "missing_number", "message": "缺少号码"})
 		return
 	}
-	c.JSON(http.StatusOK, db.LookupPhoneIdentity(c.Request.Context(), number))
+	region := s.phoneNumberRegion(c.Query("device_id"))
+	c.JSON(http.StatusOK, db.LookupPhoneIdentityWithRegion(c.Request.Context(), number, region))
 }
 
 func (s *Server) handlePhoneContactsList(c *gin.Context) {
@@ -43,8 +44,9 @@ func (s *Server) handlePhoneContactsList(c *gin.Context) {
 }
 
 type phoneContactRequest struct {
-	Number string `json:"number"`
-	Name   string `json:"name"`
+	Number   string `json:"number"`
+	Name     string `json:"name"`
+	DeviceID string `json:"device_id"`
 }
 
 func (s *Server) handlePhoneContactsUpsert(c *gin.Context) {
@@ -53,7 +55,10 @@ func (s *Server) handlePhoneContactsUpsert(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "code": "invalid_json", "message": "请求格式不正确"})
 		return
 	}
-	row, err := db.UpsertPhoneContact(c.Request.Context(), req.Number, req.Name)
+	region := s.phoneNumberRegion(req.DeviceID)
+	row, err := db.UpsertPhoneContactWithRegion(c.Request.Context(), db.PhoneContactInput{
+		Number: req.Number, Name: req.Name, Region: region,
+	})
 	if err != nil {
 		status := http.StatusBadRequest
 		if errors.Is(err, db.ErrInvalidPhoneContact) {
@@ -73,9 +78,17 @@ func (s *Server) handlePhoneContactsDelete(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "code": "missing_number", "message": "缺少号码"})
 		return
 	}
-	if err := db.DeletePhoneContact(c.Request.Context(), number); err != nil {
+	region := s.phoneNumberRegion(c.Query("device_id"))
+	if err := db.DeletePhoneContactWithRegion(c.Request.Context(), number, region); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "code": "contact_delete_failed", "message": err.Error()})
 		return
 	}
 	c.Status(http.StatusNoContent)
+}
+
+func (s *Server) phoneNumberRegion(deviceID string) string {
+	if s == nil || s.pool == nil {
+		return ""
+	}
+	return s.pool.PhoneNumberRegion(deviceID)
 }

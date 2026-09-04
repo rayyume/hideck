@@ -19,6 +19,7 @@ const eventLabels: Readonly<Record<WiFiCallingHealthEvent['kind'], string>> = Ob
   started: '开始监测',
   interrupted: '连接中断',
   recovered: '连接恢复',
+  failed: '启动失败',
   stopped: '主动关闭'
 })
 
@@ -44,6 +45,7 @@ export function wifiCallingHealthStateLabel(state?: WiFiCallingHealthState): str
 
 export function wifiCallingHealthDetail(health?: WiFiCallingHealthSnapshot): string {
   if (!health) return '本次服务启动后尚无 WiFi Calling 运行记录'
+  if (!health.measured && health.state === 'unavailable') return health.last_reason || 'WiFi Calling 启动失败'
   if (!health.active) return health.last_reason ? `关闭原因：${health.last_reason}` : '当前会话已结束'
   if (!health.measured) return '首次 IMS 注册成功后开始统计可用率'
   if (health.state === 'healthy') return `已稳定 ${formatHealthDuration(health.stable_seconds)}`

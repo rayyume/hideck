@@ -40,7 +40,7 @@ func TestPortSSessionDiagnosticsRecordPeerReset(t *testing.T) {
 	}
 }
 
-func TestOnlyVodafoneUKEarlyPeerResetArmsPCSCFFailover(t *testing.T) {
+func TestOnlyRepeatedVodafoneUKEarlyPeerResetArmsPCSCFFailover(t *testing.T) {
 	tests := []struct {
 		name   string
 		preset string
@@ -72,7 +72,21 @@ func TestOnlyVodafoneUKEarlyPeerResetArmsPCSCFFailover(t *testing.T) {
 				t.Fatal("P-CSCF failover started before the recovery REGISTER succeeded")
 			}
 			service.markPortSResetRecoverySucceeded("pcscf-a.example:5060")
+			if _, _, pending := service.pendingPortSResetFailover(); pending {
+				t.Fatal("a successful recovery REGISTER incorrectly triggered P-CSCF failover")
+			}
+
+			recoveredClient, recoveredServer := net.Pipe()
+			t.Cleanup(func() {
+				_ = recoveredClient.Close()
+				_ = recoveredServer.Close()
+			})
+			secondOpenedAt := time.Now().Add(time.Millisecond)
+			service.recordPortSOpened(recoveredClient, secondOpenedAt)
+			service.pcscfRecoveryPending.Store(true)
+			service.recordPortSClosed(recoveredClient, test.err, secondOpenedAt.Add(test.age))
 			_, _, got := service.pendingPortSResetFailover()
+			service.pcscfRecoveryPending.Store(false)
 			if got != test.want {
 				t.Fatalf("failover pending = %t, want %t", got, test.want)
 			}
@@ -98,6 +112,31 @@ func TestLocalPortSCloseIsNotTreatedAsPeerReset(t *testing.T) {
 	}
 	if kind := service.StatusCurrent().PortSLastCloseKind; kind != portSCloseLocal {
 		t.Fatalf("close kind = %q, want %q", kind, portSCloseLocal)
+	}
+}
+
+func TestVodafoneUKResetBeforeRegisterRecoverySuccessDoesNotArmFailover(t *testing.T) {
+	service := newPortSSessionTestService(t, vodafoneUKCarrierPresetID)
+	firstClient, firstServer := net.Pipe()
+	recoveredClient, recoveredServer := net.Pipe()
+	t.Cleanup(func() {
+		_ = firstClient.Close()
+		_ = firstServer.Close()
+		_ = recoveredClient.Close()
+		_ = recoveredServer.Close()
+	})
+
+	now := time.Now()
+	service.recordPortSOpened(firstClient, now.Add(-time.Minute))
+	service.recordPortSClosed(firstClient, syscallConnectionReset(), now)
+	service.markPortSResetRecoveryAttempt("pcscf-a.example:5060")
+	secondOpenedAt := time.Now().Add(time.Millisecond)
+	service.recordPortSOpened(recoveredClient, secondOpenedAt)
+	service.recordPortSClosed(recoveredClient, syscallConnectionReset(), secondOpenedAt.Add(time.Second))
+	service.markPortSResetRecoverySucceeded("pcscf-a.example:5060")
+
+	if _, _, pending := service.pendingPortSResetFailover(); pending {
+		t.Fatal("a reset before REGISTER recovery success armed P-CSCF failover")
 	}
 }
 

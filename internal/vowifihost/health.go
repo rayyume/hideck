@@ -153,6 +153,32 @@ func (s *wifiCallingHealthStore) End(deviceID, reason string, at time.Time) {
 	session.finish(at, strings.TrimSpace(reason))
 }
 
+func (s *wifiCallingHealthStore) FailStart(deviceID, reason string, at time.Time) {
+	deviceID = strings.TrimSpace(deviceID)
+	if s == nil || deviceID == "" {
+		return
+	}
+	if at.IsZero() {
+		at = time.Now()
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	session := s.sessions[deviceID]
+	if session == nil || !session.active || !session.startedAt.IsZero() {
+		return
+	}
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		reason = "VoWiFi startup failed"
+	}
+	session.active = false
+	session.endedAt = at
+	session.lastObservedAt = at
+	session.currentState = "unavailable"
+	session.currentReason = reason
+	session.appendEvent("failed", "unavailable", at, reason)
+}
+
 func (s *wifiCallingHealthStore) Snapshot(deviceID string, now time.Time) (WiFiCallingHealthSnapshot, bool) {
 	deviceID = strings.TrimSpace(deviceID)
 	if s == nil || deviceID == "" {
@@ -257,8 +283,12 @@ func (s *wifiCallingHealthSession) finish(at time.Time, reason string) {
 
 func (s *wifiCallingHealthSession) snapshot(now time.Time) WiFiCallingHealthSnapshot {
 	if s.startedAt.IsZero() {
+		state := strings.TrimSpace(s.currentState)
+		if state == "" {
+			state = "checking"
+		}
 		return WiFiCallingHealthSnapshot{
-			State: "checking", Active: s.active, Measured: false,
+			State: state, Active: s.active, Measured: false,
 			UpdatedAt: s.lastObservedAt, LastReason: s.currentReason,
 			Events: append([]WiFiCallingHealthEvent(nil), s.events...),
 		}

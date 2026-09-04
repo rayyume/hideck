@@ -9,11 +9,19 @@ import (
 )
 
 func lookupPhoneIdentity(raw string) phonelookup.Result {
-	return db.LookupPhoneIdentity(context.Background(), raw)
+	return lookupPhoneIdentityWithRegion(raw, "")
+}
+
+func lookupPhoneIdentityWithRegion(raw, region string) phonelookup.Result {
+	return db.LookupPhoneIdentityWithRegion(context.Background(), raw, region)
 }
 
 func phoneIdentityFields(numberKey, raw string) []string {
-	id := lookupPhoneIdentity(raw)
+	return phoneIdentityFieldsWithRegion(numberKey, raw, "")
+}
+
+func phoneIdentityFieldsWithRegion(numberKey, raw, region string) []string {
+	id := lookupPhoneIdentityWithRegion(raw, region)
 	display := strings.TrimSpace(id.DisplayNumber)
 	if display == "" {
 		display = strings.TrimSpace(raw)
@@ -28,11 +36,11 @@ func phoneIdentityFields(numberKey, raw string) []string {
 	return fields
 }
 
-func fillPhoneIdentity(ctx *NotificationContext, raw string) {
+func fillPhoneIdentityWithRegion(ctx *NotificationContext, raw, region string) {
 	if ctx == nil {
 		return
 	}
-	id := lookupPhoneIdentity(raw)
+	id := lookupPhoneIdentityWithRegion(raw, region)
 	if strings.TrimSpace(ctx.Number) == "" {
 		ctx.Number = strings.TrimSpace(raw)
 	}

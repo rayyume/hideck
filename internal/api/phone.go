@@ -96,6 +96,9 @@ func (s *Server) handlePhoneDevices(c *gin.Context) {
 				"software_ims_blocked": device.WorkerSoftwareIMSBlocked(worker),
 				"rf_lock":              class.RFLock(),
 			}
+			if region := s.phoneNumberRegion(worker.ID); region != "" {
+				item["phone_region"] = region
+			}
 			if recoverSnap := s.pool.LebaraUKIdentityRecoverSnapshot(worker.ID); recoverSnap.Status != "" {
 				item["lebara_identity_status"] = recoverSnap.Status
 				if recoverSnap.Message != "" {

@@ -92,7 +92,7 @@ export type WiFiCallingHealthSegment = {
 }
 
 export type WiFiCallingHealthEvent = {
-  kind: 'started' | 'interrupted' | 'recovered' | 'stopped'
+  kind: 'started' | 'interrupted' | 'recovered' | 'failed' | 'stopped'
   state: WiFiCallingHealthState
   at: string
   reason?: string

@@ -4,10 +4,16 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+
+	"github.com/nyaruka/phonenumbers/v2"
 )
 
 func Canonical(raw string) string {
-	normalized := Normalize(raw)
+	return CanonicalWithRegion(raw, "")
+}
+
+func CanonicalWithRegion(raw, region string) string {
+	normalized := NormalizeWithRegion(raw, region)
 	if normalized == "" {
 		return ""
 	}
@@ -23,6 +29,10 @@ func Canonical(raw string) string {
 }
 
 func Normalize(raw string) string {
+	return NormalizeWithRegion(raw, "")
+}
+
+func NormalizeWithRegion(raw, region string) string {
 	s := strings.TrimSpace(raw)
 	if s == "" {
 		return ""
@@ -57,18 +67,25 @@ func Normalize(raw string) string {
 	if strings.HasPrefix(out, "00") {
 		out = "+" + strings.TrimPrefix(out, "00")
 	}
-	digits := strings.TrimPrefix(out, "+")
-	if !strings.HasPrefix(out, "+") {
-		switch {
-		case len(digits) == 11 && digits[0] == '1':
-			out = "+86" + digits
-		case len(digits) >= 10 && digits[0] == '0':
-			out = "+86" + strings.TrimPrefix(digits, "0")
-		default:
-			out = digits
-		}
+	if strings.HasPrefix(out, "+") || normalizeRegion(region) == "" {
+		return out
 	}
-	return out
+	if _, ok := cnServiceNumbers[out]; ok {
+		return out
+	}
+	number, err := phonenumbers.Parse(out, normalizeRegion(region))
+	if err != nil || !phonenumbers.IsPossibleNumber(number) {
+		return out
+	}
+	return phonenumbers.Format(number, phonenumbers.E164)
+}
+
+func normalizeRegion(region string) string {
+	region = strings.ToUpper(strings.TrimSpace(region))
+	if len(region) != 2 || phonenumbers.GetCountryCodeForRegion(region) == 0 {
+		return ""
+	}
+	return region
 }
 
 func nationalDigits(normalized string) (cc, national string) {

@@ -52,21 +52,20 @@ const canPlaceCall = computed(() => CALLEE_PATTERN.test(callee.value)
 watch(() => phone.devices, (devices) => selectFirstAvailableDevice(devices), { immediate: true })
 watch(call, (current) => {
   if (!current || current.status !== 'connected') keypadVisible.value = false
-  if (current?.peer) void identities.resolve(current.peer)
-  if (waitingCall.value?.peer) void identities.resolve(waitingCall.value.peer)
+  if (current?.peer) void identities.resolve(current.peer, current.device_id)
+  if (waitingCall.value?.peer) void identities.resolve(waitingCall.value.peer, waitingCall.value.device_id)
 })
-watch(() => phone.history.map((item) => item.peer).join('|'), () => {
+watch(() => phone.history.map((item) => `${item.device_id}\u0000${item.peer}`).join('|'), () => {
   for (const record of phone.history) {
-    if (record.peer) void identities.resolve(record.peer)
+    if (record.peer) void identities.resolve(record.peer, record.device_id)
   }
 }, { immediate: true })
-watch(callee, (value) => {
-  if (CALLEE_PATTERN.test(value)) void identities.resolve(value)
+watch([callee, selectedDevice], ([value, deviceId]) => {
+  if (CALLEE_PATTERN.test(value)) void identities.resolve(value, deviceId)
 })
 
 onMounted(async () => {
   if (!phone.initialized) await phone.initialize()
-  void identities.ensureContacts()
 })
 
 function selectFirstAvailableDevice(devices: PhoneDevice[]) {
@@ -251,7 +250,8 @@ async function runAction(name: string, task: () => Promise<unknown>, success?: s
 async function savePeerContact(number?: string) {
   const peer = String(number || '').trim()
   if (!peer) return
-  const current = identities.identityFor(peer)
+  const deviceId = call.value?.device_id || selectedDevice.value
+  const current = identities.identityFor(peer, deviceId)
   try {
     const { value } = await ElMessageBox.prompt('保存后，来电会显示这个名字', '加到联系人', {
       confirmButtonText: '保存',
@@ -260,8 +260,8 @@ async function savePeerContact(number?: string) {
       inputValue: current?.name || '',
       inputValidator: (v) => !!String(v || '').trim() || '请填写名字'
     })
-    const ident = await phoneContactsService.save(peer, String(value).trim())
-    identities.upsertLocal(ident)
+    const ident = await phoneContactsService.save(peer, String(value).trim(), deviceId)
+    identities.upsertLocal(ident, peer, deviceId)
     ElMessage.success('已保存联系人')
   } catch (error) {
     if (error === 'cancel' || error === 'close') return
@@ -475,13 +475,13 @@ async function sendDTMF(digit: string) {
         <div v-else-if="call" class="active-call">
           <div class="call-identity">
             <span>{{ call.direction === 'inbound' ? 'INCOMING' : 'OUTGOING' }}</span>
-            <strong :class="{ 'is-named': !!identities.identityFor(call.peer)?.name }">{{ identities.titleFor(call.peer) }}</strong>
-            <p v-if="identities.identityFor(call.peer)?.name" class="call-number">{{ identities.identityFor(call.peer)?.display_number }}</p>
-            <p v-if="identities.subtitleFor(call.peer)" class="call-attribution">{{ identities.subtitleFor(call.peer) }}</p>
+            <strong :class="{ 'is-named': !!identities.identityFor(call.peer, call.device_id)?.name }">{{ identities.titleFor(call.peer, call.device_id) }}</strong>
+            <p v-if="identities.identityFor(call.peer, call.device_id)?.name" class="call-number">{{ identities.identityFor(call.peer, call.device_id)?.display_number }}</p>
+            <p v-if="identities.subtitleFor(call.peer, call.device_id)" class="call-attribution">{{ identities.subtitleFor(call.peer, call.device_id) }}</p>
             <p>{{ phoneCallStatusLabel(call, callEnding) }} · {{ formatCallDuration(call, phone.now) }}</p>
-            <p v-if="waitingCall" class="call-waiting-hint">第二路来电 {{ identities.titleFor(waitingCall.peer) }}（呼叫等待）</p>
+            <p v-if="waitingCall" class="call-waiting-hint">第二路来电 {{ identities.titleFor(waitingCall.peer, waitingCall.device_id) }}（呼叫等待）</p>
             <button type="button" class="contact-save" :disabled="!call.peer" @click="savePeerContact(call.peer)">
-              <el-icon><PersonAdd24Regular /></el-icon>{{ identities.identityFor(call.peer)?.name ? '改联系人' : '加到联系人' }}
+              <el-icon><PersonAdd24Regular /></el-icon>{{ identities.identityFor(call.peer, call.device_id)?.name ? '改联系人' : '加到联系人' }}
             </button>
           </div>
 
@@ -634,14 +634,14 @@ async function sendDTMF(digit: string) {
               </button>
             </div>
             <small v-if="callee && !CALLEE_PATTERN.test(callee)">号码只能包含可选的前导 + 和 1–32 位数字</small>
-            <small v-else-if="identities.subtitleFor(callee)" class="callee-hint">{{ identities.titleFor(callee) }}{{ identities.subtitleFor(callee) ? ` · ${identities.subtitleFor(callee)}` : '' }}</small>
+            <small v-else-if="identities.subtitleFor(callee, selectedDevice)" class="callee-hint">{{ identities.titleFor(callee, selectedDevice) }}{{ identities.subtitleFor(callee, selectedDevice) ? ` · ${identities.subtitleFor(callee, selectedDevice)}` : '' }}</small>
             <button
               v-if="CALLEE_PATTERN.test(callee)"
               type="button"
               class="contact-save"
               @click="savePeerContact(callee)"
             >
-              <el-icon><PersonAdd24Regular /></el-icon>{{ identities.identityFor(callee)?.name ? '改联系人' : '存为联系人' }}
+              <el-icon><PersonAdd24Regular /></el-icon>{{ identities.identityFor(callee, selectedDevice)?.name ? '改联系人' : '存为联系人' }}
             </button>
           </div>
 
@@ -676,7 +676,7 @@ async function sendDTMF(digit: string) {
       </section>
 
         <div class="phone-side">
-          <PhoneContactsPanel @dial="callee = $event" />
+          <PhoneContactsPanel :device-id="selectedDevice" @dial="callee = $event" />
           <PhoneCallHistory :records="phone.history" />
         </div>
       </div>

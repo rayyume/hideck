@@ -106,6 +106,7 @@ func (m *Manager) enableRuntime(ctx context.Context, req runtimeEnableRequest) (
 	startFinalized := false
 	defer func() {
 		if !startFinalized {
+			m.FailWiFiCallingHealthStart(deviceID, retErr)
 			m.FailStart(deviceID, startupEpoch, runtimehost.State{}, retErr)
 		}
 	}()

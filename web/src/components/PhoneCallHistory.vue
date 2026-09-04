@@ -19,16 +19,16 @@ const identities = usePhoneIdentity()
 
 const phone = usePhoneStore()
 
-watch(() => props.records.map((item) => item.peer).join('|'), () => {
+watch(() => props.records.map((item) => `${item.device_id}\u0000${item.peer}`).join('|'), () => {
   for (const record of props.records) {
-    if (record.peer) void identities.resolve(record.peer)
+    if (record.peer) void identities.resolve(record.peer, record.device_id)
   }
 }, { immediate: true })
 
 async function saveContact(record: PhoneRecord) {
   const peer = String(record.peer || '').trim()
   if (!peer) return
-  const current = identities.identityFor(peer)
+  const current = identities.identityFor(peer, record.device_id)
   try {
     const { value } = await ElMessageBox.prompt('保存后，来电和通话记录会显示这个名字', '加到联系人', {
       confirmButtonText: '保存',
@@ -37,7 +37,8 @@ async function saveContact(record: PhoneRecord) {
       inputValue: current?.name || '',
       inputValidator: (v) => !!String(v || '').trim() || '请填写名字'
     })
-    identities.upsertLocal(await phoneContactsService.save(peer, String(value).trim()))
+    const ident = await phoneContactsService.save(peer, String(value).trim(), record.device_id)
+    identities.upsertLocal(ident, peer, record.device_id)
     ElMessage.success('已保存联系人')
   } catch (error) {
     if (error === 'cancel' || error === 'close') return
@@ -112,7 +113,7 @@ onUnmounted(() => {
         </div>
         <div class="history-copy">
           <div class="history-primary">
-            <strong>{{ identities.titleFor(record.peer) }}</strong>
+            <strong>{{ identities.titleFor(record.peer, record.device_id) }}</strong>
             <time>{{ formatCallTime(record.started_at) }}</time>
           </div>
           <div class="history-secondary">
@@ -120,7 +121,7 @@ onUnmounted(() => {
             <span>{{ formatRecordDuration(record) }}</span>
             <span>{{ record.device_id }}</span>
           </div>
-          <p v-if="identities.subtitleFor(record.peer)" class="history-attribution">{{ identities.subtitleFor(record.peer) }}</p>
+          <p v-if="identities.subtitleFor(record.peer, record.device_id)" class="history-attribution">{{ identities.subtitleFor(record.peer, record.device_id) }}</p>
           <p v-if="record.recording_error" class="recording-error">录音失败：{{ record.recording_error }}</p>
         </div>
         <el-tooltip content="加到联系人" placement="left">

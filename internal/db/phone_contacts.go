@@ -20,10 +20,20 @@ type PhoneContact struct {
 	UpdatedAt time.Time `gorm:"column:updated_at" json:"updated_at"`
 }
 
+type PhoneContactInput struct {
+	Number string
+	Name   string
+	Region string
+}
+
 func (PhoneContact) TableName() string { return "phone_contacts" }
 
 func NormalizePhoneContactNumber(raw string) string {
-	return phonelookup.Canonical(raw)
+	return NormalizePhoneContactNumberWithRegion(raw, "")
+}
+
+func NormalizePhoneContactNumberWithRegion(raw, region string) string {
+	return phonelookup.CanonicalWithRegion(raw, region)
 }
 
 func ListPhoneContacts(ctx context.Context) ([]PhoneContact, error) {
@@ -36,8 +46,12 @@ func ListPhoneContacts(ctx context.Context) ([]PhoneContact, error) {
 }
 
 func UpsertPhoneContact(ctx context.Context, number, name string) (PhoneContact, error) {
-	number = NormalizePhoneContactNumber(number)
-	name = strings.TrimSpace(name)
+	return UpsertPhoneContactWithRegion(ctx, PhoneContactInput{Number: number, Name: name})
+}
+
+func UpsertPhoneContactWithRegion(ctx context.Context, input PhoneContactInput) (PhoneContact, error) {
+	number := NormalizePhoneContactNumberWithRegion(input.Number, input.Region)
+	name := strings.TrimSpace(input.Name)
 	if number == "" || name == "" {
 		return PhoneContact{}, ErrInvalidPhoneContact
 	}
@@ -69,7 +83,11 @@ func GetPhoneContact(ctx context.Context, number string) (PhoneContact, error) {
 }
 
 func DeletePhoneContact(ctx context.Context, number string) error {
-	number = NormalizePhoneContactNumber(number)
+	return DeletePhoneContactWithRegion(ctx, number, "")
+}
+
+func DeletePhoneContactWithRegion(ctx context.Context, number, region string) error {
+	number = NormalizePhoneContactNumberWithRegion(number, region)
 	if number == "" {
 		return ErrInvalidPhoneContact
 	}
@@ -80,11 +98,16 @@ func DeletePhoneContact(ctx context.Context, number string) error {
 }
 
 func LookupPhoneIdentity(ctx context.Context, raw string) phonelookup.Result {
-	result := phonelookup.Lookup(raw)
-	if result.Number == "" && phonelookup.Canonical(raw) == "" {
+	return LookupPhoneIdentityWithRegion(ctx, raw, "")
+}
+
+func LookupPhoneIdentityWithRegion(ctx context.Context, raw, region string) phonelookup.Result {
+	result := phonelookup.LookupWithRegion(raw, region)
+	canonical := phonelookup.CanonicalWithRegion(raw, region)
+	if result.Number == "" && canonical == "" {
 		return result
 	}
-	row, err := GetPhoneContact(ctx, raw)
+	row, err := GetPhoneContact(ctx, canonical)
 	if err != nil || strings.TrimSpace(row.Name) == "" {
 		return result
 	}

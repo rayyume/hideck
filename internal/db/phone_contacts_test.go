@@ -33,3 +33,31 @@ func TestPhoneContactLookupMergesNameAndCarrier(t *testing.T) {
 		t.Fatalf("normalized lookup: %v", err)
 	}
 }
+
+func TestPhoneContactUsesDeviceRegionForNationalNumber(t *testing.T) {
+	database, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "regional-contacts.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := database.AutoMigrate(&PhoneContact{}); err != nil {
+		t.Fatal(err)
+	}
+	prev := DB
+	DB = database
+	t.Cleanup(func() { DB = prev })
+
+	ctx := context.Background()
+	row, err := UpsertPhoneContactWithRegion(ctx, PhoneContactInput{
+		Number: "07911123456", Name: "UK mobile", Region: "GB",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if row.Number != "+447911123456" {
+		t.Fatalf("stored number = %q", row.Number)
+	}
+	got := LookupPhoneIdentityWithRegion(ctx, "07911123456", "GB")
+	if got.Number != row.Number || got.Name != "UK mobile" {
+		t.Fatalf("regional lookup = %+v", got)
+	}
+}

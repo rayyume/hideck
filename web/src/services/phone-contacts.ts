@@ -13,8 +13,10 @@ export type PhoneIdentity = {
 }
 
 export const phoneContactsService = {
-  async lookup(number: string): Promise<PhoneIdentity> {
-    const res = await api.get('/phone/lookup', { params: { number } })
+  async lookup(number: string, deviceId = ''): Promise<PhoneIdentity> {
+    const res = await api.get('/phone/lookup', {
+      params: { number, device_id: deviceId || undefined }
+    })
     return res.data as PhoneIdentity
   },
   async list(): Promise<PhoneIdentity[]> {
@@ -31,11 +33,17 @@ export const phoneContactsService = {
       kind: row.kind || 'contact'
     }))
   },
-  async save(number: string, name: string): Promise<PhoneIdentity> {
-    const res = await api.put('/phone/contacts', { number, name })
+  async save(number: string, name: string, deviceId = ''): Promise<PhoneIdentity> {
+    const res = await api.put('/phone/contacts', {
+      number,
+      name,
+      device_id: deviceId || undefined
+    })
     return res.data as PhoneIdentity
   },
-  async remove(number: string): Promise<void> {
-    await api.delete('/phone/contacts', { params: { number } })
+  async remove(number: string, deviceId = ''): Promise<void> {
+    await api.delete('/phone/contacts', {
+      params: { number, device_id: deviceId || undefined }
+    })
   }
 }

@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Call24Regular, Delete24Regular, PersonEdit24Regular } from '@vicons/fluent'
+import { ArrowClockwise24Regular, Call24Regular, Delete24Regular, PersonEdit24Regular } from '@vicons/fluent'
 import { usePhoneIdentity } from '../composables/usePhoneIdentity'
 import { phoneContactsService } from '../services/phone-contacts'
 
 const emit = defineEmits<{
   dial: [number: string]
 }>()
+const props = defineProps<{ deviceId?: string }>()
 
 const identities = usePhoneIdentity()
 const draftName = ref('')
@@ -30,15 +31,23 @@ const canSave = computed(() => {
 })
 
 onMounted(() => {
-  void identities.ensureContacts()
+  void loadContacts()
 })
+
+async function loadContacts() {
+  try {
+    await identities.ensureContacts()
+  } catch {
+    // The composable exposes the request error for the panel to render.
+  }
+}
 
 async function saveManual() {
   if (!canSave.value) return
   saving.value = true
   try {
-    const ident = await phoneContactsService.save(normalizedNumber.value, draftName.value.trim())
-    identities.upsertLocal(ident)
+    const ident = await phoneContactsService.save(normalizedNumber.value, draftName.value.trim(), props.deviceId)
+    identities.upsertLocal(ident, normalizedNumber.value, props.deviceId)
     draftName.value = ''
     draftNumber.value = ''
     ElMessage.success('已保存联系人')
@@ -59,7 +68,8 @@ async function editContact(number: string, currentName?: string) {
       inputValue: currentName || '',
       inputValidator: (v) => !!String(v || '').trim() || '请填写名字'
     })
-    identities.upsertLocal(await phoneContactsService.save(number, String(value).trim()))
+    const ident = await phoneContactsService.save(number, String(value).trim(), props.deviceId)
+    identities.upsertLocal(ident, number, props.deviceId)
     ElMessage.success('已更新联系人')
   } catch (error) {
     if (error === 'cancel' || error === 'close') return
@@ -74,7 +84,7 @@ async function deleteContact(number: string, name?: string) {
       cancelButtonText: '取消',
       type: 'warning'
     })
-    await identities.removeContact(number)
+    await identities.removeContact(number, props.deviceId)
     ElMessage.success('已删除联系人')
   } catch (error) {
     if (error === 'cancel' || error === 'close') return
@@ -106,7 +116,16 @@ async function deleteContact(number: string, name?: string) {
       <button type="submit" :disabled="!canSave">{{ saving ? '保存中…' : '保存' }}</button>
       <small v-if="draftNumber.trim() && !NUMBER_PATTERN.test(normalizedNumber)">号码只能是数字，可带开头的 +</small>
     </form>
-    <div v-if="identities.contacts.length" class="contacts-list">
+    <div v-if="identities.contactsError" class="contacts-state is-error" role="alert">
+      <span>{{ identities.contactsError }}</span>
+      <el-tooltip content="重新加载" placement="left">
+        <button type="button" class="icon-button" aria-label="重新加载联系人" @click="loadContacts">
+          <el-icon><ArrowClockwise24Regular /></el-icon>
+        </button>
+      </el-tooltip>
+    </div>
+    <div v-else-if="identities.contactsLoading" class="contacts-state">正在加载联系人</div>
+    <div v-else-if="identities.contacts.length" class="contacts-list">
       <article v-for="item in identities.contacts" :key="item.number" class="contacts-item">
         <button type="button" class="contacts-main" :aria-label="`拨打 ${item.title}`" @click="emit('dial', item.number)">
           <strong>{{ item.title }}</strong>
@@ -130,7 +149,7 @@ async function deleteContact(number: string, name?: string) {
         </el-tooltip>
       </article>
     </div>
-    <div v-else class="contacts-empty">还没有联系人。上面填名字和号码就能加。</div>
+    <div v-else-if="identities.contactsLoaded" class="contacts-empty">还没有联系人。上面填名字和号码就能加。</div>
   </section>
 </template>
 
@@ -156,6 +175,8 @@ async function deleteContact(number: string, name?: string) {
 .icon-button { width: 40px; height: 40px; flex: 0 0 40px; display: grid; place-items: center; border: 0; background: transparent; color: var(--ui-text-muted); cursor: pointer; }
 .icon-button:hover { color: var(--ui-text); }
 .contacts-empty { padding: 18px 16px 22px; color: var(--ui-text-muted); font-size: 13px; }
+.contacts-state { min-height: 72px; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--ui-border-muted); color: var(--ui-text-muted); font-size: 13px; }
+.contacts-state.is-error { color: var(--ui-danger); }
 @media (max-width: 640px) {
   .contacts-form { grid-template-columns: 1fr; }
 }

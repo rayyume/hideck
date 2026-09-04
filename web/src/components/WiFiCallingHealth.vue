@@ -105,7 +105,7 @@ function iconForState(state?: WiFiCallingHealthState) {
 
 function iconForEvent(event: WiFiCallingHealthEvent) {
   if (event.kind === 'stopped') return Stop24Regular
-  if (event.kind === 'interrupted') return Warning24Regular
+  if (event.kind === 'interrupted' || event.kind === 'failed') return Warning24Regular
   if (event.kind === 'recovered') return ArrowClockwise24Regular
   return CheckmarkCircle24Regular
 }

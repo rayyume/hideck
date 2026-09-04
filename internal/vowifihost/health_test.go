@@ -77,6 +77,24 @@ func TestWiFiCallingHealthKeepsIMSReadyDuringPortSNotice(t *testing.T) {
 	}
 }
 
+func TestWiFiCallingHealthRecordsFailureBeforeFirstRegistration(t *testing.T) {
+	store := newWiFiCallingHealthStore()
+	started := time.Date(2026, 9, 4, 11, 0, 0, 0, time.UTC)
+	store.Begin("wwan0", started)
+	store.FailStart("wwan0", "prepare SIM identity: unavailable", started.Add(time.Second))
+
+	snapshot, ok := store.Snapshot("wwan0", started.Add(time.Minute))
+	if !ok || snapshot.Active || snapshot.Measured || snapshot.State != "unavailable" {
+		t.Fatalf("failed startup snapshot = %+v, ok=%t", snapshot, ok)
+	}
+	if snapshot.LastReason != "prepare SIM identity: unavailable" {
+		t.Fatalf("failure reason = %q", snapshot.LastReason)
+	}
+	if len(snapshot.Events) != 1 || snapshot.Events[0].Kind != "failed" {
+		t.Fatalf("failure events = %+v", snapshot.Events)
+	}
+}
+
 func observeHealth(store *wifiCallingHealthStore, at time.Time, imsReady bool, phase, reason string) {
 	store.Observe("wwan0", runtimehost.State{
 		DeviceID: "wwan0", IMSReady: imsReady, Phase: phase, LastReason: reason, UpdatedAt: at,

@@ -388,11 +388,13 @@ func (m *Manager) handleCmdList(cmdCtx CommandContext, args []string) string {
 func (m *Manager) handleCmdSMSInbox(cmdCtx CommandContext, args []string) string {
 	limit := 5
 	var deviceID string
+	var phoneRegion string
 	var smsList []db.SMS
 	var err error
 
 	if len(args) > 0 {
 		deviceID = args[0]
+		phoneRegion = m.phoneNumberRegion(deviceID)
 		worker := m.pool.GetWorker(deviceID)
 		if worker == nil {
 			return commandFailureBlock("短信列表", deviceID, "设备未找到")
@@ -427,7 +429,7 @@ func (m *Manager) handleCmdSMSInbox(cmdCtx CommandContext, args []string) string
 		}
 
 		timeStr := m.formatNotificationTime(sms.Timestamp)
-		id := lookupPhoneIdentity(peer)
+		id := lookupPhoneIdentityWithRegion(peer, phoneRegion)
 		label := strings.TrimSpace(id.DisplayNumber)
 		if label == "" {
 			label = peer

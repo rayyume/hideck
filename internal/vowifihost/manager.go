@@ -92,6 +92,17 @@ func (m *Manager) BeginWiFiCallingHealth(deviceID string) {
 	}
 }
 
+func (m *Manager) FailWiFiCallingHealthStart(deviceID string, err error) {
+	if m == nil || m.healthStore == nil {
+		return
+	}
+	reason := ""
+	if err != nil {
+		reason = err.Error()
+	}
+	m.healthStore.FailStart(deviceID, reason, time.Now())
+}
+
 func (m *Manager) WiFiCallingHealth(deviceID string) (WiFiCallingHealthSnapshot, bool) {
 	if m == nil || m.healthStore == nil {
 		return WiFiCallingHealthSnapshot{}, false

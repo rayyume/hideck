@@ -67,3 +67,18 @@ test('does not report a percentage before the first IMS registration', () => {
   assert.equal(formatHealthAvailability(checking), '--')
   assert.equal(wifiCallingHealthDetail(checking), '首次 IMS 注册成功后开始统计可用率')
 })
+
+test('shows an explicit startup failure before the first IMS registration', () => {
+  const failed = health({
+    state: 'unavailable',
+    active: false,
+    measured: false,
+    availability: 0,
+    last_reason: 'SIM identity unavailable'
+  })
+
+  assert.equal(wifiCallingHealthDetail(failed), 'SIM identity unavailable')
+  assert.equal(wifiCallingHealthEventLabel({
+    kind: 'failed', state: 'unavailable', at: '2026-09-04T10:00:00Z'
+  }), '启动失败')
+})

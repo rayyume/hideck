@@ -16,23 +16,39 @@ const (
 )
 
 type portSResetRecoveryState struct {
-	registrar         string
-	observedAt        time.Time
-	recoveryAttempted bool
-	failoverPending   bool
+	registrar           string
+	observedAt          time.Time
+	recoveryAttemptedAt time.Time
+	recoverySucceeded   bool
+	failoverPending     bool
 }
 
-func (s *Service) armVodafoneUKResetRecoveryLocked(registrar string, openedAt, now time.Time) {
+func (s *Service) armVodafoneUKResetRecoveryLocked(registrar string, openedAt, now time.Time) bool {
 	if s.cfg == nil || s.cfg.CarrierPresetID != vodafoneUKCarrierPresetID || openedAt.IsZero() {
-		return
+		return false
 	}
 	lifetime := now.Sub(openedAt)
 	if lifetime < 0 || lifetime > vodafoneUKEarlyPortSResetWindow {
-		return
+		return false
+	}
+	registrar = strings.TrimSpace(registrar)
+	state := &s.portSSession.resetRecovery
+	if state.registrar == registrar && !state.recoveryAttemptedAt.IsZero() &&
+		!openedAt.Before(state.recoveryAttemptedAt) {
+		if !state.recoverySucceeded {
+			return false
+		}
+		state.observedAt = now
+		state.failoverPending = true
+		return true
+	}
+	if state.registrar == registrar && !state.observedAt.IsZero() {
+		return false
 	}
 	s.portSSession.resetRecovery = portSResetRecoveryState{
-		registrar: strings.TrimSpace(registrar), observedAt: now,
+		registrar: registrar, observedAt: now,
 	}
+	return false
 }
 
 func (s *Service) markPortSResetRecoveryAttempt(registrar string) {
@@ -43,7 +59,8 @@ func (s *Service) markPortSResetRecoveryAttempt(registrar string) {
 	defer s.portSSessionMu.Unlock()
 	state := &s.portSSession.resetRecovery
 	if state.registrar == strings.TrimSpace(registrar) && !state.observedAt.IsZero() {
-		state.recoveryAttempted = true
+		state.recoveryAttemptedAt = time.Now()
+		state.recoverySucceeded = false
 	}
 }
 
@@ -54,8 +71,8 @@ func (s *Service) markPortSResetRecoverySucceeded(registrar string) {
 	s.portSSessionMu.Lock()
 	defer s.portSSessionMu.Unlock()
 	state := &s.portSSession.resetRecovery
-	if state.registrar == strings.TrimSpace(registrar) && state.recoveryAttempted {
-		state.failoverPending = true
+	if state.registrar == strings.TrimSpace(registrar) && !state.recoveryAttemptedAt.IsZero() {
+		state.recoverySucceeded = true
 	}
 }
 

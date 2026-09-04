@@ -15,7 +15,11 @@ type Result struct {
 }
 
 func Lookup(raw string) Result {
-	normalized := Normalize(raw)
+	return LookupWithRegion(raw, "")
+}
+
+func LookupWithRegion(raw, region string) Result {
+	normalized := NormalizeWithRegion(raw, region)
 	out := Result{
 		Number:        normalized,
 		DisplayNumber: displayNumber(raw, normalized),
@@ -41,7 +45,7 @@ func Lookup(raw string) Result {
 		return out
 	}
 
-	if cc == "86" || (!strings.HasPrefix(normalized, "+") && isCNNational(national)) {
+	if cc == "86" {
 		if rec, ok := lookupCNHLR(national); ok {
 			out.Kind = "mobile"
 			out.Carrier = rec.CardType
@@ -143,11 +147,6 @@ func formatCNMobile(national string) string {
 		return national[:3] + " " + national[3:7] + " " + national[7:]
 	}
 	return national
-}
-
-func isCNNational(national string) bool {
-	return (len(national) == 11 && national[0] == '1') ||
-		(len(national) >= 10 && national[0] == '0')
 }
 
 func joinMeta(parts ...string) string {

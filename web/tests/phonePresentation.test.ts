@@ -7,6 +7,9 @@ const phoneCSS = await readFile(new URL('../src/styles/phone.css', import.meta.u
 const phoneStore = await readFile(new URL('../src/stores/phone.ts', import.meta.url), 'utf8')
 const dialPad = await readFile(new URL('../src/components/PhoneDialPad.vue', import.meta.url), 'utf8')
 const callBar = await readFile(new URL('../src/components/PhoneCallBar.vue', import.meta.url), 'utf8')
+const contactsPanel = await readFile(new URL('../src/components/PhoneContactsPanel.vue', import.meta.url), 'utf8')
+const contactService = await readFile(new URL('../src/services/phone-contacts.ts', import.meta.url), 'utf8')
+const phoneIdentity = await readFile(new URL('../src/composables/usePhoneIdentity.ts', import.meta.url), 'utf8')
 const shell = await readFile(new URL('../src/layouts/AuthenticatedShell.vue', import.meta.url), 'utf8')
 const router = await readFile(new URL('../src/router/index.ts', import.meta.url), 'utf8')
 
@@ -99,6 +102,23 @@ test('phone layout has responsive single-column and 44px touch targets', () => {
   assert.match(phoneCSS, /\.call-mode-actions \{[\s\S]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/)
   assert.match(callBar, /width: 44px; height: 44px/)
   assert.match(shell, /repeat\(5, minmax\(44px, 1fr\)\)/)
+})
+
+test('phone identities stay scoped to the device region and invalidate every cached alias', () => {
+  assert.match(contactService, /device_id: deviceId \|\| undefined/)
+  assert.match(phoneView, /identities\.resolve\(record\.peer, record\.device_id\)/)
+  assert.match(phoneView, /<PhoneContactsPanel :device-id="selectedDevice"/)
+  assert.match(phoneIdentity, /if \(value\.number === ident\.number\) cache\.set\(key, ident\)/)
+  assert.match(phoneIdentity, /if \(value\.number === target\) cache\.set\(alias, withoutContactName\(value\)\)/)
+  assert.match(phoneIdentity, /revision === cacheRevision/)
+})
+
+test('contact loading failures remain visible and retryable', () => {
+  assert.match(phoneIdentity, /contactsState\.error = errorMessage\(error\)/)
+  assert.match(contactsPanel, /v-if="identities\.contactsError"/)
+  assert.match(contactsPanel, /aria-label="重新加载联系人"/)
+  assert.match(contactsPanel, /v-else-if="identities\.contactsLoading"/)
+  assert.match(contactsPanel, /v-else-if="identities\.contactsLoaded"/)
 })
 
 test('wifi calling keeps a dedicated start switch under the mode control', () => {

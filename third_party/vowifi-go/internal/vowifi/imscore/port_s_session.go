@@ -96,9 +96,10 @@ func (s *Service) recordPortSClosed(conn net.Conn, err error, now time.Time) {
 	s.portSSession.closedAt = now
 	s.portSSession.lastCloseKind = kind
 	s.portSSession.lastCloseReason = errorText(err)
+	startFailover := false
 	if kind == portSClosePeerReset {
 		s.portSSession.peerResetCount++
-		s.armVodafoneUKResetRecoveryLocked(registrar, connection.openedAt, now)
+		startFailover = s.armVodafoneUKResetRecoveryLocked(registrar, connection.openedAt, now)
 	}
 	generation := s.portSSession.generation
 	lastInboundAt := s.portSSession.lastInboundAt
@@ -109,6 +110,9 @@ func (s *Service) recordPortSClosed(conn net.Conn, err error, now time.Time) {
 		"close_kind", kind, "reason", errorText(err),
 		"lifetime", elapsedSince(connection.openedAt, now),
 		"last_inbound_at", lastInboundAt)
+	if startFailover {
+		s.startPendingPortSResetFailover()
+	}
 }
 
 func (s *Service) markPortSLocalClose(conn net.Conn) {

@@ -178,8 +178,9 @@ func (m *Manager) NotifySMSWithSource(deviceID, sender, content, source string, 
 		source = "蜂窝"
 	}
 	title := notificationTitle("sms_received")
+	region := m.phoneNumberRegion(deviceID)
 	fields := []string{"设备", deviceID, "通道", source}
-	fields = append(fields, phoneIdentityFields("号码", sender)...)
+	fields = append(fields, phoneIdentityFieldsWithRegion("号码", sender, region)...)
 	fields = append(fields, "时间", m.formatNotificationTime(timestamp), "内容", content)
 	msg := notificationLines(title, fields...)
 
@@ -199,7 +200,7 @@ func (m *Manager) NotifySMSWithSource(deviceID, sender, content, source string, 
 		Content:    content,
 		Timestamp:  timestamp,
 	}
-	fillPhoneIdentity(&ctx, sender)
+	fillPhoneIdentityWithRegion(&ctx, sender, region)
 	m.broadcastWithContext(ctx)
 }
 
@@ -261,8 +262,9 @@ func (m *Manager) NotifyIncomingCall(deviceID, caller, callee string) {
 	m.incomingMu.Unlock()
 
 	title := notificationTitle("incoming_call")
+	region := m.phoneNumberRegion(deviceID)
 	fields := []string{"设备", deviceID}
-	fields = append(fields, phoneIdentityFields("主叫", caller)...)
+	fields = append(fields, phoneIdentityFieldsWithRegion("主叫", caller, region)...)
 	fields = append(fields, "被叫", callee)
 	msg := notificationLines(title, fields...)
 
@@ -277,7 +279,7 @@ func (m *Manager) NotifyIncomingCall(deviceID, caller, callee string) {
 		Number:     caller,
 		Timestamp:  time.Now(),
 	}
-	fillPhoneIdentity(&ctx, caller)
+	fillPhoneIdentityWithRegion(&ctx, caller, region)
 	m.broadcastWithContext(ctx)
 }
 
@@ -288,23 +290,37 @@ func (m *Manager) NotifyCallResult(deviceID, peer, direction, status, reason str
 		return
 	}
 	title := callResultTitle(status, reason)
+	region := m.phoneNumberRegion(deviceID)
+	message := callResultMessage{
+		DeviceID: deviceID, Peer: peer, Direction: direction, Status: status, Reason: reason,
+	}
 	ctx := NotificationContext{
 		Event:      "call_" + status,
 		Title:      title,
-		Text:       formatCallResultMessage(deviceID, peer, direction, status, reason),
+		Text:       formatCallResultMessage(message, region),
 		DeviceID:   deviceID,
 		DeviceName: m.resolveDeviceName(deviceID),
 		Number:     peer,
 		Timestamp:  at,
 	}
-	fillPhoneIdentity(&ctx, peer)
+	fillPhoneIdentityWithRegion(&ctx, peer, region)
 	m.broadcastWithContext(ctx)
 }
 
-func formatCallResultMessage(deviceID, peer, direction, status, reason string) string {
-	fields := []string{"设备", deviceID}
-	fields = append(fields, phoneIdentityFields(callResultPeerField(direction), peer)...)
-	return notificationLines(callResultTitle(status, reason), fields...)
+type callResultMessage struct {
+	DeviceID  string
+	Peer      string
+	Direction string
+	Status    string
+	Reason    string
+}
+
+func formatCallResultMessage(message callResultMessage, region string) string {
+	fields := []string{"设备", message.DeviceID}
+	fields = append(fields, phoneIdentityFieldsWithRegion(
+		callResultPeerField(message.Direction), message.Peer, region,
+	)...)
+	return notificationLines(callResultTitle(message.Status, message.Reason), fields...)
 }
 
 func callResultPeerField(direction string) string {
@@ -323,6 +339,13 @@ func (m *Manager) resolveDeviceName(deviceID string) string {
 		return ""
 	}
 	return strings.TrimSpace(m.pool.WorkerName(deviceID))
+}
+
+func (m *Manager) phoneNumberRegion(deviceID string) string {
+	if m == nil || m.pool == nil {
+		return ""
+	}
+	return m.pool.PhoneNumberRegion(deviceID)
 }
 
 func (m *Manager) deviceLabel(deviceID string) string {

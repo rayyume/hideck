@@ -35,7 +35,7 @@ func TestLookupChineseServiceNumbers(t *testing.T) {
 }
 
 func TestLookupCNMobileCarrier(t *testing.T) {
-	got := Lookup("18600001111")
+	got := LookupWithRegion("18600001111", "CN")
 	if got.Carrier != "中国联通" || got.Kind != "mobile" {
 		t.Fatalf("%+v", got)
 	}
@@ -49,7 +49,7 @@ func TestLookupCNMobileCarrier(t *testing.T) {
 	if cm.Region != "北京" {
 		t.Fatalf("region=%q %+v", cm.Region, cm)
 	}
-	ct := Lookup("13300001111")
+	ct := LookupWithRegion("13300001111", "CN")
 	if ct.Carrier != "中国电信" {
 		t.Fatalf("%+v", ct)
 	}
@@ -83,9 +83,37 @@ func TestLookupIntlAreaAndCarrier(t *testing.T) {
 }
 
 func TestLookupCNLandlineRegion(t *testing.T) {
-	got := Lookup("01012345678")
+	got := LookupWithRegion("01012345678", "CN")
 	if got.Region != "北京" || got.Kind != "landline" {
 		t.Fatalf("%+v", got)
+	}
+}
+
+func TestNormalizeNationalNumberUsesExplicitRegion(t *testing.T) {
+	tests := []struct {
+		name, number, region, want string
+	}{
+		{name: "UK mobile", number: "07911123456", region: "GB", want: "+447911123456"},
+		{name: "North American", number: "14165550123", region: "CA", want: "+14165550123"},
+		{name: "China mobile", number: "18600001111", region: "CN", want: "+8618600001111"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := NormalizeWithRegion(test.number, test.region); got != test.want {
+				t.Fatalf("NormalizeWithRegion(%q, %q)=%q want %q", test.number, test.region, got, test.want)
+			}
+		})
+	}
+}
+
+func TestNormalizeNationalNumberDoesNotAssumeChina(t *testing.T) {
+	for _, number := range []string{"07911123456", "14165550123"} {
+		if got := Normalize(number); got != number {
+			t.Fatalf("Normalize(%q)=%q want unchanged", number, got)
+		}
+		if got := Lookup(number); got.Country != "" {
+			t.Fatalf("Lookup(%q) inferred country %q without a region", number, got.Country)
+		}
 	}
 }
 
