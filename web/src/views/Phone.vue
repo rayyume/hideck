@@ -635,14 +635,6 @@ async function sendDTMF(digit: string) {
             </div>
             <small v-if="callee && !CALLEE_PATTERN.test(callee)">号码只能包含可选的前导 + 和 1–32 位数字</small>
             <small v-else-if="identities.subtitleFor(callee, selectedDevice)" class="callee-hint">{{ identities.titleFor(callee, selectedDevice) }}{{ identities.subtitleFor(callee, selectedDevice) ? ` · ${identities.subtitleFor(callee, selectedDevice)}` : '' }}</small>
-            <button
-              v-if="CALLEE_PATTERN.test(callee)"
-              type="button"
-              class="contact-save"
-              @click="savePeerContact(callee)"
-            >
-              <el-icon><PersonAdd24Regular /></el-icon>{{ identities.identityFor(callee, selectedDevice)?.name ? '改联系人' : '存为联系人' }}
-            </button>
           </div>
 
           <PhoneDialPad @digit="appendDigit" />

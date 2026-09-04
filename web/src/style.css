@@ -59,6 +59,7 @@
   --ui-focus: 0 0 0 3px rgba(0, 107, 255, 0.18);
   --ui-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ui-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ui-ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
   --el-color-primary: #0B3558;
   --el-color-primary-light-3: #3A6488;
   --el-color-primary-light-5: #6D8AA0;
@@ -535,14 +536,39 @@ html.dark .el-table td.el-table__cell {
 .el-dialog,
 .el-drawer,
 .el-message-box,
-.el-popover.el-popper,
-.el-select-dropdown,
-.el-dropdown-menu,
-.el-picker-panel {
+.el-popover.el-popper {
   border: 1px solid var(--ui-border);
   border-radius: var(--ui-radius-xl);
   background: var(--ui-surface-strong);
   box-shadow: var(--ui-shadow-lg);
+}
+
+.el-select__popper.el-popper,
+.el-dropdown__popper.el-popper,
+.el-picker__popper.el-popper {
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-sm);
+  background: var(--ui-surface-strong);
+  box-shadow: var(--ui-shadow-lg);
+}
+
+.el-select__popper .el-select-dropdown,
+.el-dropdown__popper .el-dropdown-menu,
+.el-picker__popper > .el-picker-panel {
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  box-shadow: none;
+}
+
+.el-select__popper .el-select-dropdown {
+  overflow: hidden;
+}
+
+.el-select__popper.el-popper .el-popper__arrow::before,
+.el-dropdown__popper.el-popper .el-popper__arrow::before,
+.el-picker__popper.el-popper .el-popper__arrow::before {
+  background: var(--ui-surface-strong);
 }
 
 .el-dialog.glass-modal {

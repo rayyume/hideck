@@ -14,8 +14,9 @@ import SmsThreadListPane from '../components/sms/SmsThreadListPane.vue'
 import SmsConversationHeader from '../components/sms/SmsConversationHeader.vue'
 import SmsMessageTimeline from '../components/sms/SmsMessageTimeline.vue'
 import SmsComposer from '../components/sms/SmsComposer.vue'
+import PhoneContactsDrawer from '../components/PhoneContactsDrawer.vue'
 import type { DeviceMgmtListItem, SMSMessage } from '../types/api'
-import { Delete24Regular, Send24Regular } from '@vicons/fluent'
+import { Delete24Regular, Person24Regular, Send24Regular } from '@vicons/fluent'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 import { formatDeviceDate } from '../utils/deviceTime'
 import { createSmsConversationContext, createSmsDeviceChannels } from '../utils/smsPresentation'
@@ -116,6 +117,7 @@ const selectedThreadGroups = computed(() => {
 const isNarrowLayout = computed(() => smsPageWidth.value > 0 && smsPageWidth.value < SMS_NARROW_BREAKPOINT)
 
 const showSendModal = ref(false)
+const showContactsPicker = ref(false)
 const sending = ref(false)
 const deletingMessageId = ref<number | null>(null)
 const deletingThreadKey = ref<string | null>(null)
@@ -560,6 +562,11 @@ function openSendModal() {
   showSendModal.value = true
 }
 
+function applyContactNumber(number: string) {
+  sendForm.value.phone = number
+  showContactsPicker.value = false
+}
+
 async function handleSendModal() {
   if (!selectedSendDeviceId.value || !sendForm.value.phone || !sendForm.value.message) {
     ElMessage.warning('请填写完整信息')
@@ -800,7 +807,13 @@ async function confirmDeleteThread(thread: SmsThread) {
           </el-select>
         </el-form-item>
         <el-form-item label="目标号码">
-          <el-input v-model="sendForm.phone" placeholder="+86138..." />
+          <div class="sms-recipient-field">
+            <el-input v-model="sendForm.phone" placeholder="+86138..." />
+            <el-button class="sms-contact-picker-button" aria-label="从联系人选择" @click="showContactsPicker = true">
+              <el-icon><Person24Regular /></el-icon>
+              联系人
+            </el-button>
+          </div>
         </el-form-item>
         <el-form-item label="短信内容">
           <el-input
@@ -825,12 +838,35 @@ async function confirmDeleteThread(thread: SmsThread) {
         </div>
       </template>
     </el-dialog>
+
+    <PhoneContactsDrawer
+      v-model="showContactsPicker"
+      :device-id="selectedSendDeviceId"
+      kind="sms"
+      @select="applyContactNumber"
+    />
   </div>
 </template>
 
 <style scoped>
 .sms-page {
   container-type: inline-size;
+}
+
+.sms-recipient-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  width: 100%;
+}
+
+.sms-recipient-field :deep(.el-input) {
+  min-width: 0;
+}
+
+.sms-contact-picker-button {
+  min-width: 88px;
+  margin: 0;
 }
 
 .sms-workspace {

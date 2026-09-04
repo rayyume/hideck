@@ -88,6 +88,13 @@ test('primary buttons are navy pills and selected nav uses the accent bar token'
   assert.match(shell, /background: var\(--ui-accent\);/)
 })
 
+test('floating controls draw one themed popper shell without nested panel borders', () => {
+  assert.match(globalStyles, /\.el-select__popper\.el-popper,\s*\.el-dropdown__popper\.el-popper,\s*\.el-picker__popper\.el-popper \{[\s\S]*border-radius: var\(--ui-radius-sm\);/)
+  assert.match(globalStyles, /\.el-select__popper \.el-select-dropdown,\s*\.el-dropdown__popper \.el-dropdown-menu,\s*\.el-picker__popper > \.el-picker-panel \{[\s\S]*border: 0;[\s\S]*background: transparent;/)
+  assert.match(globalStyles, /\.el-dropdown__popper\.el-popper \.el-popper__arrow::before/)
+  assert.match(globalStyles, /\.el-picker__popper\.el-popper \.el-popper__arrow::before/)
+})
+
 test('sun button wiring stays a two-state navy toggle', () => {
   assert.match(app, /const \{ isDark, toggleTheme \} = useTheme\(\)/)
   assert.match(themeComposable, /applyTheme\(nextNavyTheme\(theme\.value\)\)/)

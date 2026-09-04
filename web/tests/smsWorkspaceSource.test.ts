@@ -51,6 +51,13 @@ test('conversation actions remain wired to production handlers', () => {
   assert.match(composer, /Shift\+Enter 换行/)
 })
 
+test('send dialog lays out the recipient input and contact picker without an appended control', () => {
+  assert.match(smsView, /class="sms-recipient-field"/)
+  assert.match(smsView, /class="sms-contact-picker-button"/)
+  assert.match(smsView, /grid-template-columns: minmax\(0, 1fr\) auto/)
+  assert.doesNotMatch(smsView, /template #append/)
+})
+
 test('narrow SMS workspace keeps all three panes visible in the prototype composition', () => {
   assert.doesNotMatch(smsView, /v-if="showDeviceSidebar"/)
   assert.doesNotMatch(smsView, /v-if="showListPane"/)

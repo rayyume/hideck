@@ -8,6 +8,7 @@ const phoneStore = await readFile(new URL('../src/stores/phone.ts', import.meta.
 const dialPad = await readFile(new URL('../src/components/PhoneDialPad.vue', import.meta.url), 'utf8')
 const callBar = await readFile(new URL('../src/components/PhoneCallBar.vue', import.meta.url), 'utf8')
 const contactsPanel = await readFile(new URL('../src/components/PhoneContactsPanel.vue', import.meta.url), 'utf8')
+const contactsDrawer = await readFile(new URL('../src/components/PhoneContactsDrawer.vue', import.meta.url), 'utf8')
 const contactService = await readFile(new URL('../src/services/phone-contacts.ts', import.meta.url), 'utf8')
 const phoneIdentity = await readFile(new URL('../src/composables/usePhoneIdentity.ts', import.meta.url), 'utf8')
 const shell = await readFile(new URL('../src/layouts/AuthenticatedShell.vue', import.meta.url), 'utf8')
@@ -115,10 +116,9 @@ test('phone identities stay scoped to the device region and invalidate every cac
 
 test('contact loading failures remain visible and retryable', () => {
   assert.match(phoneIdentity, /contactsState\.error = errorMessage\(error\)/)
-  assert.match(contactsPanel, /v-if="identities\.contactsError"/)
-  assert.match(contactsPanel, /aria-label="重新加载联系人"/)
-  assert.match(contactsPanel, /v-else-if="identities\.contactsLoading"/)
-  assert.match(contactsPanel, /v-else-if="identities\.contactsLoaded"/)
+  assert.match(contactsDrawer, /v-if="identities\.contactsError"/)
+  assert.match(contactsDrawer, /aria-label="重新加载联系人"/)
+  assert.match(contactsDrawer, /v-else-if="identities\.contactsLoading/)
 })
 
 test('wifi calling keeps a dedicated start switch under the mode control', () => {
