@@ -141,6 +141,17 @@ test('contact management stays compact and message boxes render above the drawer
   assert.match(contactsDrawer, /v-show="dropActive" class="picker-drop-overlay"/)
 })
 
+test('contacts load on scroll and keep drag import discoverable', () => {
+  assert.match(contactService, /listPage\(params: PhoneContactsPageParams\)/)
+  assert.match(phoneIdentity, /listPage\(\{ limit: CONTACT_PAGE_SIZE, offset \}\)/)
+  assert.match(phoneIdentity, /function loadMoreContacts\(\)/)
+  assert.match(phoneIdentity, /while \(contactsState\.hasMore\) await loadMoreContacts\(\)/)
+  assert.match(contactsDrawer, /@scroll\.passive="onContactScroll"/)
+  assert.match(contactsDrawer, /继续向下滚动加载更多/)
+  assert.match(contactsDrawer, /支持将 vcf \/ csv 拖到此处导入/)
+  assert.match(contactsPanel, /identities\.contactsTotal/)
+})
+
 test('contact import behavior is shared and exposes list refresh failures', () => {
   assert.match(contactsPanel, /useContactImport\(/)
   assert.match(contactsDrawer, /useContactImport\(/)

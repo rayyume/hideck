@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Add24Regular,
@@ -41,6 +41,9 @@ type ContactGroup = {
   items: PhoneIdentity[]
 }
 
+const CONTACT_SCROLL_THRESHOLD = 160
+const CONTACT_SEARCH_DELAY_MS = 250
+
 const identities = usePhoneIdentity()
 const query = ref('')
 const adding = ref(false)
@@ -55,6 +58,7 @@ const draftNumber = ref('')
 const extraNumbers = ref<string[]>([])
 const saving = ref(false)
 const exporting = ref(false)
+const selectingAll = ref(false)
 
 const selectLabel = computed(() => props.kind === 'sms' ? '填入短信' : '填入拨号')
 const overlayDialog = {
@@ -113,11 +117,14 @@ const groupedContacts = computed(() => {
 })
 
 const selectedCount = computed(() => selected.value.length)
+let searchLoadTimer: number | undefined
 
 watch(() => props.modelValue, (open) => {
   if (!open) {
+    window.clearTimeout(searchLoadTimer)
     closeAddForm()
     selecting.value = false
+    selectingAll.value = false
     expanded.value = ''
     selected.value = []
     resetDropState()
@@ -129,6 +136,16 @@ watch(() => props.modelValue, (open) => {
     if (window.matchMedia('(pointer: fine)').matches) searchInput.value?.focus?.()
   })
 })
+
+watch(query, (value) => {
+  window.clearTimeout(searchLoadTimer)
+  if (!value.trim()) return
+  searchLoadTimer = window.setTimeout(() => {
+    void identities.loadAllContacts().catch(() => {})
+  }, CONTACT_SEARCH_DELAY_MS)
+})
+
+onBeforeUnmount(() => window.clearTimeout(searchLoadTimer))
 
 function contactHaystack(item: PhoneIdentity) {
   return [
@@ -189,7 +206,17 @@ function toggleNumber(number: string) {
   selected.value = [...selected.value, number]
 }
 
-function toggleSelectAll() {
+async function toggleSelectAll() {
+  if (selectingAll.value) return
+  selectingAll.value = true
+  try {
+    await identities.loadAllContacts()
+  } catch {
+    return
+  } finally {
+    selectingAll.value = false
+  }
+  if (!props.modelValue || !selecting.value) return
   const numbers = groupedContacts.value.flatMap((group) => group.items.map((item) => item.number))
   if (numbers.length && numbers.every((number) => selected.value.includes(number))) {
     selected.value = []
@@ -201,6 +228,16 @@ function toggleSelectAll() {
 function cancelSelection() {
   selecting.value = false
   selected.value = []
+}
+
+function loadMoreContacts() {
+  void identities.loadMoreContacts().catch(() => {})
+}
+
+function onContactScroll(event: Event) {
+  const target = event.currentTarget as HTMLElement
+  const remaining = target.scrollHeight - target.scrollTop - target.clientHeight
+  if (remaining <= CONTACT_SCROLL_THRESHOLD) loadMoreContacts()
 }
 
 function toggleAdd() {
@@ -370,7 +407,7 @@ async function reload() {
         <div class="picker-icon" aria-hidden="true"><el-icon><Person24Regular /></el-icon></div>
         <div>
           <span>CONTACTS</span>
-          <h2>全部联系人 · {{ peopleCount }}</h2>
+          <h2>全部联系人 · {{ peopleCount }}{{ identities.contactsHasMore ? '+' : '' }}</h2>
         </div>
         <el-button circle aria-label="关闭联系人" @click="handleOpenChange(false)">
           <el-icon><Dismiss24Regular /></el-icon>
@@ -403,9 +440,9 @@ async function reload() {
     <div class="picker-actions" role="toolbar" aria-label="联系人管理">
       <input ref="fileInput" type="file" accept=".vcf,.vcard,.csv,.txt,text/vcard,text/x-vcard,text/csv" hidden multiple @change="onImportFile">
       <template v-if="selecting">
-        <button type="button" class="picker-action" @click="toggleSelectAll">
+        <button type="button" class="picker-action" :disabled="selectingAll" @click="toggleSelectAll">
           <el-icon><SelectAllOn24Regular /></el-icon>
-          全选
+          {{ selectingAll ? '加载中…' : '全选' }}
         </button>
         <button type="button" class="picker-action is-danger" :disabled="!selectedCount" @click="deleteSelected">
           <el-icon><Delete24Regular /></el-icon>
@@ -431,6 +468,10 @@ async function reload() {
         </button>
       </template>
     </div>
+    <p class="picker-import-hint">
+      <el-icon><ArrowUpload24Regular /></el-icon>
+      支持将 vcf / csv 拖到此处导入
+    </p>
 
     <form v-if="adding" class="picker-form" @submit.prevent="saveManual">
       <label>
@@ -475,7 +516,7 @@ async function reload() {
       </button>
     </div>
     <div v-if="identities.contactsLoading && !identities.contacts.length" class="picker-state">正在加载联系人</div>
-    <div v-else-if="groupedContacts.length" class="picker-list" role="list">
+    <div v-else-if="groupedContacts.length" class="picker-list" role="list" @scroll.passive="onContactScroll">
       <article v-for="group in groupedContacts" :key="group.key" class="picker-item" :class="{ 'is-open': expanded === group.key }" role="listitem">
         <label v-if="selecting" class="picker-check" @click.stop>
           <input type="checkbox" :checked="groupSelected(group)" @change="toggleGroup(group)">
@@ -522,6 +563,12 @@ async function reload() {
           </template>
         </div>
       </article>
+      <div v-if="identities.contactsLoadingMore" class="picker-list-footer" role="listitem">
+        <div class="picker-list-status" role="status">正在加载更多联系人</div>
+      </div>
+      <div v-else-if="identities.contactsHasMore" class="picker-list-footer" role="listitem">
+        <button type="button" class="picker-load-more" @click="loadMoreContacts">继续向下滚动加载更多</button>
+      </div>
     </div>
     <div v-else-if="identities.contacts.length" class="picker-state">没有匹配「{{ query.trim() }}」的联系人</div>
     <div v-else-if="!identities.contactsError" class="picker-state">还没有联系人。可以添加，或把手机导出的 vcf / csv 拖进来。同一个人有多个号码会合并成一条。</div>
@@ -576,7 +623,6 @@ async function reload() {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
-  border-bottom: 1px solid var(--ui-border-muted);
 }
 .picker-action {
   min-height: 44px;
@@ -600,6 +646,19 @@ async function reload() {
 .picker-action[aria-pressed="true"] { background: var(--ui-surface-muted); color: var(--ui-text); }
 .picker-action:disabled { opacity: .45; cursor: not-allowed; }
 .picker-action.is-danger { color: var(--ui-danger); }
+.picker-import-hint {
+  min-height: 30px;
+  margin: 0;
+  padding: 0 18px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-bottom: 1px solid var(--ui-border-muted);
+  color: var(--ui-text-muted);
+  font-size: 12px;
+}
+.picker-import-hint .el-icon { flex: 0 0 auto; font-size: 15px; }
 .picker-add-toggle {
   min-height: 44px;
   padding: 0 12px;
@@ -629,6 +688,18 @@ async function reload() {
 .picker-number.is-add { color: var(--ui-primary); justify-items: start; }
 .picker-form small { color: var(--ui-danger); font-size: 12px; }
 .picker-list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.picker-list-status,
+.picker-load-more {
+  width: 100%;
+  min-height: 44px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--ui-text-muted);
+  font-size: 12px;
+}
+.picker-load-more { cursor: pointer; }
 .picker-item { min-height: 64px; padding: 8px 8px 8px 18px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; border-bottom: 1px solid var(--ui-border-muted); transition: background-color 120ms ease; }
 .picker-check { width: 44px; height: 44px; display: grid; place-items: center; }
 .picker-check input { width: 18px; height: 18px; }
@@ -649,6 +720,7 @@ async function reload() {
   .icon-button.is-danger:hover { color: var(--ui-danger); }
   .picker-action:not(:disabled):hover { background: var(--ui-surface-muted); color: var(--ui-text); }
   .picker-action.is-danger:not(:disabled):hover { color: var(--ui-danger); }
+  .picker-load-more:hover { color: var(--ui-primary); }
   .picker-item:hover { background: color-mix(in srgb, var(--ui-primary) 6%, var(--ui-surface)); }
 }
 .picker-state { min-height: 120px; padding: 24px 18px; display: flex; align-items: center; justify-content: center; gap: 12px; color: var(--ui-text-muted); font-size: 13px; text-align: center; }
@@ -657,6 +729,10 @@ async function reload() {
 @media (max-width: 640px) {
   :global(.phone-contacts-drawer) { border-radius: 0; }
   :global(.phone-contacts-drawer .el-drawer__body) { padding-bottom: env(safe-area-inset-bottom); }
+}
+@media (pointer: coarse) {
+  .picker-actions { border-bottom: 1px solid var(--ui-border-muted); }
+  .picker-import-hint { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   :global(.phone-contacts-drawer),

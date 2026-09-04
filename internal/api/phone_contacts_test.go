@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -140,6 +141,66 @@ func TestPhoneLookupAndContacts(t *testing.T) {
 	if deleted.Deleted != 2 {
 		t.Fatalf("%+v", deleted)
 	}
+}
+
+func TestPhoneContactsPagination(t *testing.T) {
+	if err := db.Init(filepath.Join(t.TempDir(), "phone_contacts_page.db")); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.DB = nil })
+	for index, number := range []string{"10000", "10001", "10002"} {
+		if _, err := db.UpsertPhoneContact(t.Context(), number, "联系人"+strconv.Itoa(index)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	gin.SetMode(gin.TestMode)
+	server := &Server{auth: config.WebConfig{Username: "admin", Password: "secret"}}
+	router := gin.New()
+	api := router.Group("/api")
+	api.Use(server.authMiddleware())
+	server.registerPhoneContactRoutes(api)
+	token := testSessionToken(t, "secret", time.Now().Add(time.Hour))
+
+	first := requestContactsPage(t, router, token, "/api/phone/contacts?limit=2&offset=0")
+	if len(first.Contacts) != 2 || first.Total != 3 || first.NextOffset != 2 || !first.HasMore {
+		t.Fatalf("unexpected first contacts page: %+v", first)
+	}
+	last := requestContactsPage(t, router, token, "/api/phone/contacts?limit=2&offset=2")
+	if len(last.Contacts) != 1 || last.Total != 3 || last.NextOffset != 3 || last.HasMore {
+		t.Fatalf("unexpected last contacts page: %+v", last)
+	}
+
+	invalid := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/phone/contacts?limit=201", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	router.ServeHTTP(invalid, req)
+	if invalid.Code != http.StatusBadRequest {
+		t.Fatalf("invalid pagination status=%d body=%s", invalid.Code, invalid.Body.String())
+	}
+}
+
+type contactsPageResponse struct {
+	Contacts   []map[string]any `json:"contacts"`
+	Total      int              `json:"total"`
+	NextOffset int              `json:"next_offset"`
+	HasMore    bool             `json:"has_more"`
+}
+
+func requestContactsPage(t *testing.T, router http.Handler, token, target string) contactsPageResponse {
+	t.Helper()
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, target, nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	router.ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("contacts page status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	var page contactsPageResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &page); err != nil {
+		t.Fatal(err)
+	}
+	return page
 }
 
 func multipartVCF(t *testing.T, body string) []byte {

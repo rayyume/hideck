@@ -41,8 +41,30 @@ func ListPhoneContacts(ctx context.Context) ([]PhoneContact, error) {
 		return nil, gorm.ErrInvalidDB
 	}
 	var rows []PhoneContact
-	err := DB.WithContext(ctx).Order("updated_at DESC").Find(&rows).Error
+	err := phoneContactsQuery(ctx).Find(&rows).Error
 	return rows, err
+}
+
+func ListPhoneContactsPage(ctx context.Context, limit, offset int) ([]PhoneContact, error) {
+	if DB == nil {
+		return nil, gorm.ErrInvalidDB
+	}
+	var rows []PhoneContact
+	err := phoneContactsQuery(ctx).Limit(limit).Offset(offset).Find(&rows).Error
+	return rows, err
+}
+
+func CountPhoneContacts(ctx context.Context) (int64, error) {
+	if DB == nil {
+		return 0, gorm.ErrInvalidDB
+	}
+	var total int64
+	err := DB.WithContext(ctx).Model(&PhoneContact{}).Count(&total).Error
+	return total, err
+}
+
+func phoneContactsQuery(ctx context.Context) *gorm.DB {
+	return DB.WithContext(ctx).Order("updated_at DESC, number ASC")
 }
 
 func UpsertPhoneContact(ctx context.Context, number, name string) (PhoneContact, error) {

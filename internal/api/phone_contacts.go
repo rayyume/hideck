@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,6 +17,13 @@ import (
 
 const maxContactImportBytes = 8 << 20
 const maxContactBatch = 5000
+const maxContactPageSize = 200
+
+type contactPageRequest struct {
+	Limit     int
+	Offset    int
+	Paginated bool
+}
 
 func (s *Server) registerPhoneContactRoutes(api *gin.RouterGroup) {
 	api.GET("/phone/lookup", s.handlePhoneLookup)
@@ -39,7 +47,12 @@ func (s *Server) handlePhoneLookup(c *gin.Context) {
 }
 
 func (s *Server) handlePhoneContactsList(c *gin.Context) {
-	rows, err := db.ListPhoneContacts(c.Request.Context())
+	page, err := contactPageParams(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "code": "invalid_pagination", "message": err.Error()})
+		return
+	}
+	rows, total, err := loadPhoneContacts(c, page)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "code": "contacts_list_failed", "message": err.Error()})
 		return
@@ -51,7 +64,42 @@ func (s *Server) handlePhoneContactsList(c *gin.Context) {
 	for _, row := range rows {
 		out = append(out, db.LookupPhoneIdentity(c.Request.Context(), row.Number))
 	}
-	c.JSON(http.StatusOK, gin.H{"contacts": out})
+	c.JSON(http.StatusOK, gin.H{
+		"contacts":    out,
+		"total":       total,
+		"offset":      page.Offset,
+		"next_offset": page.Offset + len(rows),
+		"has_more":    page.Paginated && int64(page.Offset+len(rows)) < total,
+	})
+}
+
+func contactPageParams(c *gin.Context) (contactPageRequest, error) {
+	rawLimit, paginated := c.GetQuery("limit")
+	if !paginated {
+		return contactPageRequest{}, nil
+	}
+	limit, err := strconv.Atoi(rawLimit)
+	if err != nil || limit < 1 || limit > maxContactPageSize {
+		return contactPageRequest{}, errors.New("limit 必须是 1 到 200")
+	}
+	offset, err := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	if err != nil || offset < 0 {
+		return contactPageRequest{}, errors.New("offset 不能小于 0")
+	}
+	return contactPageRequest{Limit: limit, Offset: offset, Paginated: true}, nil
+}
+
+func loadPhoneContacts(c *gin.Context, page contactPageRequest) ([]db.PhoneContact, int64, error) {
+	if !page.Paginated {
+		rows, err := db.ListPhoneContacts(c.Request.Context())
+		return rows, int64(len(rows)), err
+	}
+	total, err := db.CountPhoneContacts(c.Request.Context())
+	if err != nil {
+		return nil, 0, err
+	}
+	rows, err := db.ListPhoneContactsPage(c.Request.Context(), page.Limit, page.Offset)
+	return rows, total, err
 }
 
 type phoneContactRequest struct {

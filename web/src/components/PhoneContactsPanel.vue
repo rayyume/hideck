@@ -47,7 +47,7 @@ onMounted(() => {
         <span>CONTACTS</span>
         <h2 id="phone-contacts-title">联系人</h2>
       </div>
-      <strong>{{ identities.contacts.length }}</strong>
+      <strong>{{ identities.contactsTotal }}</strong>
       <em>{{ dropActive ? '放开导入' : (importing ? '导入中…' : '查看全部') }}</em>
     </button>
     <PhoneContactsDrawer v-model="drawerOpen" :device-id="props.deviceId" kind="dial" @select="emit('dial', $event)" />
