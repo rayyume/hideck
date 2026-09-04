@@ -20,6 +20,7 @@ type portSResetRecoveryState struct {
 	observedAt          time.Time
 	recoveryAttemptedAt time.Time
 	recoverySucceeded   bool
+	failoverOnRecovery  bool
 	failoverPending     bool
 }
 
@@ -28,10 +29,23 @@ func (s *Service) armVodafoneUKResetRecoveryLocked(registrar string, openedAt, n
 		return false
 	}
 	lifetime := now.Sub(openedAt)
-	if lifetime < 0 || lifetime > vodafoneUKEarlyPortSResetWindow {
+	if lifetime < 0 {
 		return false
 	}
 	registrar = strings.TrimSpace(registrar)
+	if registrar == "" {
+		return false
+	}
+	if lifetime > vodafoneUKEarlyPortSResetWindow {
+		// A reset on an established VOXI push flow can be the only local
+		// evidence that an MT delivery hit a stale network-side binding.
+		// First let the normal grace and REGISTER recovery run; fail over
+		// only after that recovery succeeds on the same P-CSCF.
+		s.portSSession.resetRecovery = portSResetRecoveryState{
+			registrar: registrar, observedAt: now, failoverOnRecovery: true,
+		}
+		return false
+	}
 	state := &s.portSSession.resetRecovery
 	if state.registrar == registrar && !state.recoveryAttemptedAt.IsZero() &&
 		!openedAt.Before(state.recoveryAttemptedAt) {
@@ -73,6 +87,7 @@ func (s *Service) markPortSResetRecoverySucceeded(registrar string) {
 	state := &s.portSSession.resetRecovery
 	if state.registrar == strings.TrimSpace(registrar) && !state.recoveryAttemptedAt.IsZero() {
 		state.recoverySucceeded = true
+		state.failoverPending = state.failoverOnRecovery
 	}
 }
 
@@ -119,11 +134,26 @@ func (s *Service) recoverPCSCFAfterPortSReset(failedRegistrar string, observedAt
 	if !current {
 		return
 	}
+	penaltyOverridden := false
+	var previousPenaltyUntil time.Time
 	if next == "" {
+		next, previousPenaltyUntil, current = s.advanceRegistrarToEarliestUnavailable(failedRegistrar)
+		if !current {
+			return
+		}
+		penaltyOverridden = next != ""
+	}
+	if next == "" {
+		err := fmt.Errorf(
+			"imscore: P-CSCF %s reset port-s and no alternate P-CSCF is available; fresh runtime required",
+			failedRegistrar,
+		)
+		s.markPCSCFRegistrationUnboundForPortSReset(failedRegistrar)
 		logging.WarnRate("ims-ports-reset-no-alternate-"+s.DeviceID(), 30*time.Second,
-			"IMS port-s reset recovery has no alternate P-CSCF; keeping current registration",
+			"IMS port-s reset recovery has no alternate P-CSCF; rebuilding runtime",
 			"device", s.DeviceID(), "pcscf", failedRegistrar,
 			"reset_at", observedAt, "deprioritized_until", unavailableUntil)
+		s.reportRegistrationRuntimeError(err)
 		return
 	}
 	s.markPCSCFRegistrationUnboundForPortSReset(failedRegistrar)
@@ -134,7 +164,9 @@ func (s *Service) recoverPCSCFAfterPortSReset(failedRegistrar string, observedAt
 	logging.WarnRate("ims-ports-reset-switch-"+s.DeviceID(), 30*time.Second,
 		"IMS port-s reset recovery switching P-CSCF",
 		"device", s.DeviceID(), "previous", failedRegistrar, "next", next,
-		"reset_at", observedAt, "deprioritized_until", unavailableUntil)
+		"reset_at", observedAt, "deprioritized_until", unavailableUntil,
+		"penalty_overridden", penaltyOverridden,
+		"previous_penalty_until", previousPenaltyUntil)
 	ctx, cancel := context.WithTimeout(context.Background(), pcscfInitialRegistrationTimeout)
 	defer cancel()
 	if err := s.registerLocked(ctx); err != nil {

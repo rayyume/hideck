@@ -261,6 +261,38 @@ func (s *Service) markRegistrarUnavailableAndAdvance(
 	return "", true
 }
 
+func (s *Service) advanceRegistrarToEarliestUnavailable(
+	expected string,
+) (string, time.Time, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if strings.TrimSpace(s.registrar) != strings.TrimSpace(expected) {
+		return "", time.Time{}, false
+	}
+	selectedIndex := -1
+	var selectedUntil time.Time
+	for offset := 1; offset < len(s.registrarCandidates); offset++ {
+		index := (s.registrarIndex + offset) % len(s.registrarCandidates)
+		candidate := strings.TrimSpace(s.registrarCandidates[index])
+		until, exists := s.registrarUnavailable[candidate]
+		if candidate == "" || candidate == s.registrar || !exists || until.IsZero() {
+			continue
+		}
+		if selectedIndex < 0 || until.Before(selectedUntil) {
+			selectedIndex = index
+			selectedUntil = until
+		}
+	}
+	if selectedIndex < 0 {
+		return "", time.Time{}, true
+	}
+	selected := strings.TrimSpace(s.registrarCandidates[selectedIndex])
+	delete(s.registrarUnavailable, selected)
+	s.registrarIndex = selectedIndex
+	s.registrar = selected
+	return selected, selectedUntil, true
+}
+
 func (s *Service) registrarUnavailableLocked(candidate string, now time.Time) bool {
 	until, exists := s.registrarUnavailable[candidate]
 	if !exists {

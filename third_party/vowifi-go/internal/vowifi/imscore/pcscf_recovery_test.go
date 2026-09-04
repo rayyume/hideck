@@ -64,6 +64,34 @@ func TestPCSCFUnavailableCandidatesAreSkipped(t *testing.T) {
 	}
 }
 
+func TestPCSCFEarliestUnavailableCandidateCanBeReused(t *testing.T) {
+	service := newRegisteredClientInviteService(t)
+	now := time.Now()
+	service.mu.Lock()
+	service.registrar = "pcscf-a.example:5060"
+	service.registrarCandidates = []string{
+		"pcscf-a.example:5060", "pcscf-b.example:5060", "pcscf-c.example:5060",
+	}
+	service.registrarUnavailable = map[string]time.Time{
+		"pcscf-b.example:5060": now.Add(20 * time.Minute),
+		"pcscf-c.example:5060": now.Add(10 * time.Minute),
+	}
+	service.mu.Unlock()
+
+	if next, current := service.markRegistrarUnavailableAndAdvance(
+		"pcscf-a.example:5060", now.Add(30*time.Minute),
+	); !current || next != "" {
+		t.Fatalf("normal advance = %q current=%t, want no eligible candidate", next, current)
+	}
+	next, previousUntil, current := service.advanceRegistrarToEarliestUnavailable("pcscf-a.example:5060")
+	if !current || next != "pcscf-c.example:5060" || !previousUntil.Equal(now.Add(10*time.Minute)) {
+		t.Fatalf("fallback advance = %q until=%s current=%t", next, previousUntil, current)
+	}
+	if _, exists := service.StatusCurrent().DeprioritizedPCSCF[next]; exists {
+		t.Fatal("selected fallback P-CSCF remained deprioritized")
+	}
+}
+
 func TestPCSCFSwitchDropsOldSecurityAgreement(t *testing.T) {
 	network := &removableCaptureNetwork{
 		captureIPSecNetwork: &captureIPSecNetwork{SystemIMSNetwork: NewSystemIMSNetwork(testLocalIP)},

@@ -128,7 +128,7 @@ func (s *Service) markPCSCFRegistrationUnbound(registrar string) {
 }
 
 func (s *Service) markPCSCFRegistrationUnboundForPortSReset(registrar string) {
-	reason := fmt.Sprintf("P-CSCF %s reset a newly established port-s flow", registrar)
+	reason := fmt.Sprintf("P-CSCF %s reset the protected port-s flow", registrar)
 	s.markPCSCFRegistrationUnboundWithReason(reason, 0, "port-s connection reset by peer")
 }
 
