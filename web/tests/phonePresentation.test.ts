@@ -147,6 +147,7 @@ test('contacts load on scroll and keep drag import discoverable', () => {
   assert.match(phoneIdentity, /function loadMoreContacts\(\)/)
   assert.match(phoneIdentity, /while \(contactsState\.hasMore\) await loadMoreContacts\(\)/)
   assert.match(contactsDrawer, /@scroll\.passive="onContactScroll"/)
+  assert.match(contactsDrawer, /async function toggleSelectAll\(\)[\s\S]*await identities\.loadAllContacts\(\)/)
   assert.match(contactsDrawer, /继续向下滚动加载更多/)
   assert.match(contactsDrawer, /支持将 vcf \/ csv 拖到此处导入/)
   assert.match(contactsPanel, /identities\.contactsTotal/)
