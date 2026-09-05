@@ -89,7 +89,6 @@ func (s *Service) buildSMSMESSAGEWithOptions(options smsMESSAGEOptions) (string,
 	}
 	request.WriteString("Content-Type: " + contentType + "\r\n")
 	if normalizedContentType(contentType) == imsSMSContentType {
-		request.WriteString("Content-Disposition: " + imsSMSContentDisposition + "\r\n")
 		if !options.OmitBinaryCTE {
 			request.WriteString("Content-Transfer-Encoding: binary\r\n")
 		}

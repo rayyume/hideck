@@ -318,7 +318,7 @@ func (s *Service) sendOutboundSMSPart(
 		return nil, smsDeliveryStateFailed, sipCode, s.recordOutboundSMSFailure(messageID, part, errors.Join(transactionErr, persistErr))
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		err = fmt.Errorf("MESSAGE rejected with status %d (%s)", response.StatusCode, strings.TrimSpace(response.Reason))
+		err = smsMESSAGERejectionError(response)
 		persistErr := s.persistOutboundSIPResult(
 			messageID, part.number, response.StatusCode, smsDeliveryStateFailed, err.Error(),
 		)
@@ -462,8 +462,8 @@ func (s *Service) dispatchSubmitPartWithRetry(
 			Timeout: s.smsTransactionTimeout, Callbacks: callbacks,
 		},
 	)
-	var response *sip.Response
-	if result.SIPCode > 0 {
+	response := result.Response
+	if response == nil && result.SIPCode > 0 {
 		response = sip.NewResponse(result.SIPCode, SIPStatusText(result.SIPCode))
 	}
 	if dispatchErr != nil {

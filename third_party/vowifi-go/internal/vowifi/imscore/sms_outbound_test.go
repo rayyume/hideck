@@ -10,6 +10,7 @@ import (
 	"testing/iotest"
 	"time"
 
+	"github.com/emiago/sipgo/sip"
 	"github.com/iniwex5/vowifi-go/internal/smscodec"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/events"
 )
@@ -251,6 +252,31 @@ func TestSendOutboundSMSRejectsNon2xxWithoutSuccessEvent(t *testing.T) {
 	want := []string{smsDeliveryStatePending, smsDeliveryStateFailed}
 	if strings.Join(store.partStates, ",") != strings.Join(want, ",") {
 		t.Fatalf("part states = %v", store.partStates)
+	}
+}
+
+func TestSendOutboundSMS415PreservesMediaDiagnostics(t *testing.T) {
+	service, _, _ := newOutboundSMSTestService(t)
+	service.transport.SetSendFn(func(request string) error {
+		response := registerResponseForRequest(request, 415, nil)
+		response.Reason = "Unsupported Media Type"
+		response.parsed = sip.NewResponse(415, response.Reason)
+		response.parsed.AppendHeader(sip.NewHeader("Via", response.Headers["Via"]))
+		response.parsed.AppendHeader(sip.NewHeader("Call-ID", response.CallID))
+		response.parsed.AppendHeader(sip.NewHeader("CSeq", response.CSeq))
+		response.parsed.AppendHeader(sip.NewHeader("Accept", imsSMSContentType))
+		response.parsed.AppendHeader(sip.NewHeader("Warning", `399 ipsmgw "unsupported disposition"`))
+		service.transport.DeliverResponse(response)
+		return nil
+	})
+
+	outcome, err := service.SendSMSWithResult(context.Background(), "+447700900123", "hello")
+	if err == nil || !strings.Contains(err.Error(), "accept=\"application/vnd.3gpp.sms\"") ||
+		!strings.Contains(err.Error(), "unsupported disposition") {
+		t.Fatalf("send error = %v", err)
+	}
+	if outcome.SIPCode != 415 || outcome.DeliveryState != smsDeliveryStateFailed {
+		t.Fatalf("outcome = %+v", outcome)
 	}
 }
 
@@ -576,6 +602,12 @@ func assertOutboundSMSRequest(t *testing.T, request, recipient, smsc string) {
 	}
 	if got := rawSIPHeaderValue(request, "Content-Type"); got != imsSMSContentType {
 		t.Fatalf("Content-Type = %q", got)
+	}
+	if got := rawSIPHeaderValue(request, "Content-Transfer-Encoding"); got != "binary" {
+		t.Fatalf("Content-Transfer-Encoding = %q", got)
+	}
+	if got := rawSIPHeaderValue(request, "Content-Disposition"); got != "" {
+		t.Fatalf("Content-Disposition = %q, want omitted", got)
 	}
 	wantHeaders := map[string]string{
 		"From":                 "<sip:+447840844894@o2.co.uk>",

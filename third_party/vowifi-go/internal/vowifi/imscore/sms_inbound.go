@@ -20,10 +20,9 @@ const (
 	// 24.229 originating ICSI marking; 24.341 5.3.2.1 applies 24.229 to RP-ACK.
 	// Missing these, originating iFC can deliver RP-ACK to an AS that 488s
 	// unmatched In-Reply-To (24.341 5.3.3.4.1).
-	imsSMSPreferredService   = "urn:urn-7:3gpp-service.ims.icsi.sms"
-	imsSMSAcceptContact      = `*;+g.3gpp.smsip;+g.3gpp.icsi-ref="urn%3Aurn-7%3A3gpp-service.ims.icsi.sms"`
-	imsSMSContentDisposition = "signal;handling=required"
-	rpCauseTemporaryFailure  = byte(41)
+	imsSMSPreferredService  = "urn:urn-7:3gpp-service.ims.icsi.sms"
+	imsSMSAcceptContact     = `*;+g.3gpp.smsip;+g.3gpp.icsi-ref="urn%3Aurn-7%3A3gpp-service.ims.icsi.sms"`
+	rpCauseTemporaryFailure = byte(41)
 	// TS 24.341 5.3.2.3 leaves the MT response to RFC 3428, which reserves
 	// 202 for a relay that has not delivered end to end (7) and tells the
 	// sender not to assume delivery on 202 (4). We are the final recipient,

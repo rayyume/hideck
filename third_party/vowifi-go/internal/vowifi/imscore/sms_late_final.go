@@ -2,8 +2,6 @@ package imscore
 
 import (
 	"errors"
-	"fmt"
-	"strings"
 	"time"
 )
 
@@ -40,9 +38,8 @@ func (s *Service) handleLateMOSIPFinal(
 	if response.StatusCode >= 200 && response.StatusCode < 300 {
 		return s.handleLateMOAccepted(lateContext, response.StatusCode)
 	}
-	reason := fmt.Sprintf(
-		"MESSAGE rejected with status %d (%s)", response.StatusCode, strings.TrimSpace(response.Reason),
-	)
+	rejectionErr := internalSMSMESSAGERejectionError(response)
+	reason := rejectionErr.Error()
 	persistErr := s.persistOutboundSIPResult(
 		lateContext.messageID, lateContext.part.number,
 		response.StatusCode, smsDeliveryStateFailed, reason,
@@ -50,7 +47,7 @@ func (s *Service) handleLateMOSIPFinal(
 	s.takePendingSMSByCallID(lateContext.part.callID)
 	notifySMSPending(lateContext.pending, smsSendResult{
 		Code: response.StatusCode, Status: smsDeliveryStateFailed,
-		Reason: errors.Join(errors.New(reason), persistErr).Error(), At: time.Now(),
+		Reason: errors.Join(rejectionErr, persistErr).Error(), At: time.Now(),
 	})
 	return persistErr
 }

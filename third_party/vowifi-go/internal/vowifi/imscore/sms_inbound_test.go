@@ -80,8 +80,8 @@ func TestInboundSMSDeliversEventAndSendsRPAck(t *testing.T) {
 	if got := rawSIPHeaderValue(request, "Content-Transfer-Encoding"); got != "binary" {
 		t.Fatalf("RP-ACK Content-Transfer-Encoding = %q", got)
 	}
-	if got := rawSIPHeaderValue(request, "Content-Disposition"); got != imsSMSContentDisposition {
-		t.Fatalf("RP-ACK Content-Disposition = %q", got)
+	if got := rawSIPHeaderValue(request, "Content-Disposition"); got != "" {
+		t.Fatalf("RP-ACK Content-Disposition = %q, want omitted", got)
 	}
 	if got := rawSIPHeaderValue(request, "Request-Disposition"); got != "" {
 		t.Fatalf("RP-ACK Request-Disposition = %q", got)
