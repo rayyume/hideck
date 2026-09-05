@@ -280,38 +280,66 @@ func TestRuntimeEventNamesAndStateAreRecovered(t *testing.T) {
 	instance.setState(State{
 		SessionState: "established", TunnelReady: true, DataPlaneUp: true,
 		IMSReady: true, SMSReady: true, SMSHealthReady: true,
+		IMSState: "registered", RegStatus: 1, RegStatusText: "registered",
+		SMSReadyReason: "IMS SMS receiver ready",
 	})
+	instance.setSession(&runtimecore.SessionResult{})
+	instance.setService(&stubService{})
 	observer := &instanceObserver{inst: instance, deviceID: "dev-1"}
-	observer.OnRuntimeEvent(context.Background(), runtimecore.RuntimeEvent[*runtimecore.SessionResult]{
-		Kind: "retry", Attempt: 2, RetryDelay: int64(time.Second), RedirectEPDG: "epdg-2.example",
-	})
-	state := instance.State()
-	if state.LastEvent != "retrying" || state.Phase != "retrying" || state.SessionState != "retrying" ||
-		state.LastRedirectEPDG != "epdg-2.example" || state.TunnelReady || state.IMSReady || state.SMSReady {
-		t.Fatalf("retry state = %+v", state)
-	}
 	observer.OnRuntimeEvent(context.Background(), runtimecore.RuntimeEvent[*runtimecore.SessionResult]{
 		Kind: "error", Message: "authentication rejected",
 	})
-	state = instance.State()
+	state := instance.State()
 	if state.LastEvent != "error" || state.Phase != "retrying" || state.SessionState != "retrying" ||
-		state.LastError != "authentication rejected" {
+		state.LastError != "authentication rejected" || state.IMSState != "retrying" || state.RegStatus != 0 ||
+		state.RegStatusText != "retrying" || state.SMSReadyReason != "" {
 		t.Fatalf("retryable error state = %+v", state)
 	}
+	assertRuntimeHandlesCleared(t, instance)
 	observer.OnRuntimeEvent(context.Background(), runtimecore.RuntimeEvent[*runtimecore.SessionResult]{
-		Kind: "ims_registered",
+		Kind: "retry", Attempt: 2, RetryDelay: int64(time.Second), RedirectEPDG: "epdg-2.example",
+	})
+	state = instance.State()
+	if state.LastEvent != "retrying" || state.Phase != "retrying" ||
+		state.LastRedirectEPDG != "epdg-2.example" || state.LastError != "authentication rejected" {
+		t.Fatalf("retry state = %+v", state)
+	}
+	newSession := &runtimecore.SessionResult{}
+	observer.OnRuntimeEvent(context.Background(), runtimecore.RuntimeEvent[*runtimecore.SessionResult]{
+		Kind: "established", Handle: newSession, Snapshot: runtimecore.Snapshot{Established: true},
+	})
+	state = instance.State()
+	if state.Phase != "ipsec_up" || state.IMSState != "registering" ||
+		state.RegStatus != 0 || state.RegStatusText != "registering" {
+		t.Fatalf("IPsec-ready IMS state = %+v", state)
+	}
+	observer.OnRuntimeEvent(context.Background(), runtimecore.RuntimeEvent[*runtimecore.SessionResult]{
+		Kind: "ims_registered", Handle: newSession,
 	})
 	state = instance.State()
 	if state.Phase != "ims_ready" || state.LastError != "" || state.LastErrorClass != "" || state.Error != "" {
 		t.Fatalf("recovered state still has last_error = %+v", state)
 	}
+	instance.setService(&stubService{})
 	observer.OnRuntimeEvent(context.Background(), runtimecore.RuntimeEvent[*runtimecore.SessionResult]{
 		Kind: "terminal_error", Message: "redirect loop",
 	})
 	state = instance.State()
 	if state.LastEvent != "terminal_error" || state.Phase != "error" || state.SessionState != "error" ||
-		state.LastError != "redirect loop" {
+		state.LastError != "redirect loop" || state.IMSState != "failed" || state.RegStatus != 0 ||
+		state.RegStatusText != "failed" {
 		t.Fatalf("terminal state = %+v", state)
+	}
+	assertRuntimeHandlesCleared(t, instance)
+}
+
+func assertRuntimeHandlesCleared(t *testing.T, instance *Instance) {
+	t.Helper()
+	instance.mu.RLock()
+	session := instance.session
+	instance.mu.RUnlock()
+	if session != nil || instance.Service() != nil {
+		t.Fatalf("runtime handles were not cleared: session=%p service=%T", session, instance.Service())
 	}
 }
 

@@ -62,6 +62,7 @@ func (observer *instanceObserver) applyEvent(
 		state.AccessReady = true
 	case "ipsec_up":
 		observer.installSession(event)
+		markIMSUnavailable(state, "registering")
 		state.Phase = readyPhase(*state)
 		state.SessionState = "established"
 		state.TunnelReady = event.Snapshot.Established || event.Handle != nil
@@ -85,41 +86,38 @@ func (observer *instanceObserver) applyEvent(
 		clearRuntimeError(state)
 	case "interrupted":
 		state.Phase = "interrupted"
+		state.SessionState = "interrupted"
 		state.TunnelReady = false
-		state.IMSReady = false
-		state.SMSReady = false
-		state.SMSHealthReady = false
 		state.DataPlaneUp = false
+		markIMSUnavailable(state, "restarting")
 		state.LastReason = strings.TrimSpace(event.Reason)
 		state.LastRedirectEPDG = strings.TrimSpace(event.RedirectEPDG)
 	case "retrying":
+		observer.clearRuntimeHandles()
 		applyRetryingState(state, event.Reason)
 	case "error":
+		observer.clearRuntimeHandles()
 		applyRetryingState(state, event.Reason)
 		state.LastErrorClass = "runtime"
 		state.LastError = firstNonEmptyString(event.Message, event.Reason)
 		state.Error = state.LastError
 	case "terminal_error":
+		observer.clearRuntimeHandles()
 		state.Phase = "error"
 		state.SessionState = "error"
 		state.TunnelReady = false
 		state.DataPlaneUp = false
-		state.IMSReady = false
-		state.SMSReady = false
-		state.SMSHealthReady = false
+		markIMSUnavailable(state, "failed")
 		state.LastErrorClass = "runtime"
 		state.LastError = firstNonEmptyString(event.Message, event.Reason)
 		state.Error = state.LastError
 	case "stopped":
-		observer.inst.setService(nil)
-		observer.inst.setSession(nil)
+		observer.clearRuntimeHandles()
 		state.Phase = "stopped"
 		state.SessionState = "stopped"
 		state.TunnelReady = false
-		state.IMSReady = false
-		state.SMSReady = false
-		state.SMSHealthReady = false
 		state.DataPlaneUp = false
+		markIMSUnavailable(state, "stopped")
 	}
 }
 
@@ -128,12 +126,20 @@ func applyRetryingState(state *State, reason string) {
 	state.SessionState = "retrying"
 	state.TunnelReady = false
 	state.DataPlaneUp = false
-	state.IMSReady = false
-	state.SMSReady = false
-	state.SMSHealthReady = false
+	markIMSUnavailable(state, "retrying")
 	if reason = strings.TrimSpace(reason); reason != "" {
 		state.LastReason = reason
 	}
+}
+
+func markIMSUnavailable(state *State, status string) {
+	state.IMSState = status
+	state.IMSReady = false
+	state.SMSReady = false
+	state.SMSHealthReady = false
+	state.SMSReadyReason = ""
+	state.RegStatus = 0
+	state.RegStatusText = status
 }
 
 func clearRuntimeError(state *State) {
@@ -160,6 +166,11 @@ func (observer *instanceObserver) installSession(
 ) {
 	observer.inst.setSession(event.Handle)
 	observer.installService(event)
+}
+
+func (observer *instanceObserver) clearRuntimeHandles() {
+	observer.inst.setService(nil)
+	observer.inst.setSession(nil)
 }
 
 func (observer *instanceObserver) installService(

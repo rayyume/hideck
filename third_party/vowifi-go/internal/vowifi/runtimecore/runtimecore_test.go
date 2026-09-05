@@ -400,23 +400,34 @@ func TestRuntimeStartEmitsTerminalErrorAfterReconnectLoopStops(t *testing.T) {
 }
 
 func TestRuntimeStartKeepsScheduledRegistrarRetryInCurrentLoop(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	recorder := &eventRecorder{onEvent: func(event RuntimeEvent[*SessionResult]) {
-		if event.Kind == "retry" {
-			cancel()
-		}
-	}}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	recorder := &eventRecorder{}
 	req := baseRuntimeRequest(recorder)
 	req.Reconnect = true
-	req.SessionStarter = func(context.Context, SessionConfig) (*SessionResult, error) {
-		return nil, scheduledRetryTestError{retryAt: time.Now().Add(30 * time.Minute)}
+	var firstStore *imscore.RegistrarPenaltyStore
+	attempts := 0
+	req.SessionStarter = func(_ context.Context, config SessionConfig) (*SessionResult, error) {
+		attempts++
+		if attempts == 1 {
+			firstStore = config.RegistrarPenalties
+			return nil, scheduledRetryTestError{retryAt: time.Now().Add(10 * time.Millisecond)}
+		}
+		if config.RegistrarPenalties != firstStore {
+			t.Fatal("runtime reconnect replaced the registrar penalty store")
+		}
+		cancel()
+		return nil, context.Canceled
 	}
 
 	_, err := (Runtime{}).Start(ctx, req)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("Runtime.Start() error = %v", err)
 	}
-	want := []string{"prepared", "connecting", "error", "retry"}
+	if attempts != 2 || firstStore == nil {
+		t.Fatalf("runtime attempts = %d, registrar store = %p", attempts, firstStore)
+	}
+	want := []string{"prepared", "connecting", "error", "retry", "prepared", "connecting", "error"}
 	if got := recorder.kinds(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("runtime events = %v, want %v", got, want)
 	}
@@ -484,18 +495,14 @@ func TestWaitRuntimeInterruptionUsesRecoveredContextKind(t *testing.T) {
 }
 
 type eventRecorder struct {
-	mu      sync.Mutex
-	events  []RuntimeEvent[*SessionResult]
-	onEvent func(RuntimeEvent[*SessionResult])
+	mu     sync.Mutex
+	events []RuntimeEvent[*SessionResult]
 }
 
 func (recorder *eventRecorder) OnRuntimeEvent(_ context.Context, event RuntimeEvent[*SessionResult]) {
 	recorder.mu.Lock()
 	recorder.events = append(recorder.events, event)
 	recorder.mu.Unlock()
-	if recorder.onEvent != nil {
-		recorder.onEvent(event)
-	}
 }
 
 func (recorder *eventRecorder) kinds() []string {
