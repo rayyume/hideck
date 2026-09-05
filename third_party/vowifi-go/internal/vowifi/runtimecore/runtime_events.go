@@ -2,6 +2,7 @@ package runtimecore
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -81,6 +82,16 @@ func emitRuntimeError(ctx context.Context, req *RuntimeStartRequest, err error) 
 	if req.Hooks.OnError != nil {
 		req.Hooks.OnError(ctx, err)
 	}
+}
+
+func emitTerminalRuntimeError(ctx context.Context, req *RuntimeStartRequest, err error) {
+	if err == nil || errors.Is(err, context.Canceled) || ctx.Err() != nil {
+		return
+	}
+	emitAllRuntimeEvents(ctx, req, RuntimeEvent[*SessionResult]{
+		Kind: "terminal_error", DeviceID: req.DeviceID, TraceID: req.TraceID,
+		Message: err.Error(), Reason: err.Error(),
+	})
 }
 
 func (outcome InterruptOutcome) Error() string {

@@ -277,20 +277,26 @@ func TestRecoveredPreparedSessionConversionsDetachCarrierData(t *testing.T) {
 
 func TestRuntimeEventNamesAndStateAreRecovered(t *testing.T) {
 	instance := &Instance{}
+	instance.setState(State{
+		SessionState: "established", TunnelReady: true, DataPlaneUp: true,
+		IMSReady: true, SMSReady: true, SMSHealthReady: true,
+	})
 	observer := &instanceObserver{inst: instance, deviceID: "dev-1"}
 	observer.OnRuntimeEvent(context.Background(), runtimecore.RuntimeEvent[*runtimecore.SessionResult]{
 		Kind: "retry", Attempt: 2, RetryDelay: int64(time.Second), RedirectEPDG: "epdg-2.example",
 	})
 	state := instance.State()
-	if state.LastEvent != "retrying" || state.Phase != "retrying" || state.LastRedirectEPDG != "epdg-2.example" {
+	if state.LastEvent != "retrying" || state.Phase != "retrying" || state.SessionState != "retrying" ||
+		state.LastRedirectEPDG != "epdg-2.example" || state.TunnelReady || state.IMSReady || state.SMSReady {
 		t.Fatalf("retry state = %+v", state)
 	}
 	observer.OnRuntimeEvent(context.Background(), runtimecore.RuntimeEvent[*runtimecore.SessionResult]{
 		Kind: "error", Message: "authentication rejected",
 	})
 	state = instance.State()
-	if state.LastEvent != "terminal_error" || state.LastError != "authentication rejected" {
-		t.Fatalf("terminal state = %+v", state)
+	if state.LastEvent != "error" || state.Phase != "retrying" || state.SessionState != "retrying" ||
+		state.LastError != "authentication rejected" {
+		t.Fatalf("retryable error state = %+v", state)
 	}
 	observer.OnRuntimeEvent(context.Background(), runtimecore.RuntimeEvent[*runtimecore.SessionResult]{
 		Kind: "ims_registered",
@@ -298,6 +304,14 @@ func TestRuntimeEventNamesAndStateAreRecovered(t *testing.T) {
 	state = instance.State()
 	if state.Phase != "ims_ready" || state.LastError != "" || state.LastErrorClass != "" || state.Error != "" {
 		t.Fatalf("recovered state still has last_error = %+v", state)
+	}
+	observer.OnRuntimeEvent(context.Background(), runtimecore.RuntimeEvent[*runtimecore.SessionResult]{
+		Kind: "terminal_error", Message: "redirect loop",
+	})
+	state = instance.State()
+	if state.LastEvent != "terminal_error" || state.Phase != "error" || state.SessionState != "error" ||
+		state.LastError != "redirect loop" {
+		t.Fatalf("terminal state = %+v", state)
 	}
 }
 

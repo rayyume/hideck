@@ -93,11 +93,17 @@ func (observer *instanceObserver) applyEvent(
 		state.LastReason = strings.TrimSpace(event.Reason)
 		state.LastRedirectEPDG = strings.TrimSpace(event.RedirectEPDG)
 	case "retrying":
-		state.Phase = "retrying"
-		state.LastReason = strings.TrimSpace(event.Reason)
+		applyRetryingState(state, event.Reason)
+	case "error":
+		applyRetryingState(state, event.Reason)
+		state.LastErrorClass = "runtime"
+		state.LastError = firstNonEmptyString(event.Message, event.Reason)
+		state.Error = state.LastError
 	case "terminal_error":
 		state.Phase = "error"
 		state.SessionState = "error"
+		state.TunnelReady = false
+		state.DataPlaneUp = false
 		state.IMSReady = false
 		state.SMSReady = false
 		state.SMSHealthReady = false
@@ -114,6 +120,19 @@ func (observer *instanceObserver) applyEvent(
 		state.SMSReady = false
 		state.SMSHealthReady = false
 		state.DataPlaneUp = false
+	}
+}
+
+func applyRetryingState(state *State, reason string) {
+	state.Phase = "retrying"
+	state.SessionState = "retrying"
+	state.TunnelReady = false
+	state.DataPlaneUp = false
+	state.IMSReady = false
+	state.SMSReady = false
+	state.SMSHealthReady = false
+	if reason = strings.TrimSpace(reason); reason != "" {
+		state.LastReason = reason
 	}
 }
 
@@ -161,8 +180,6 @@ func recoveredEventKind(kind string) string {
 		return "ipsec_up"
 	case "retry":
 		return "retrying"
-	case "error":
-		return "terminal_error"
 	default:
 		return strings.TrimSpace(kind)
 	}

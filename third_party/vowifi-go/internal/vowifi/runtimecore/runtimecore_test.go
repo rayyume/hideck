@@ -381,6 +381,47 @@ func TestRunLoopStopsAfterTooManyRedirects(t *testing.T) {
 	}
 }
 
+func TestRuntimeStartEmitsTerminalErrorAfterReconnectLoopStops(t *testing.T) {
+	recorder := &eventRecorder{}
+	req := baseRuntimeRequest(recorder)
+	req.Reconnect = true
+	req.SessionStarter = func(context.Context, SessionConfig) (*SessionResult, error) {
+		return nil, ErrTooManyRedirects
+	}
+
+	_, err := (Runtime{}).Start(context.Background(), req)
+	if !errors.Is(err, ErrTooManyRedirects) {
+		t.Fatalf("Runtime.Start() error = %v", err)
+	}
+	want := []string{"prepared", "connecting", "error", "terminal_error"}
+	if got := recorder.kinds(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("runtime events = %v, want %v", got, want)
+	}
+}
+
+func TestRuntimeStartKeepsScheduledRegistrarRetryInCurrentLoop(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	recorder := &eventRecorder{onEvent: func(event RuntimeEvent[*SessionResult]) {
+		if event.Kind == "retry" {
+			cancel()
+		}
+	}}
+	req := baseRuntimeRequest(recorder)
+	req.Reconnect = true
+	req.SessionStarter = func(context.Context, SessionConfig) (*SessionResult, error) {
+		return nil, scheduledRetryTestError{retryAt: time.Now().Add(30 * time.Minute)}
+	}
+
+	_, err := (Runtime{}).Start(ctx, req)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Runtime.Start() error = %v", err)
+	}
+	want := []string{"prepared", "connecting", "error", "retry"}
+	if got := recorder.kinds(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("runtime events = %v, want %v", got, want)
+	}
+}
+
 func TestRetryDecisionResetsRedirectAndFreshRuntime(t *testing.T) {
 	delay, attempt := retryDecision(&ErrRedirect{Delay: 17}, 4, func(int) int64 { return 99 })
 	if delay != 17 || attempt != 0 {
@@ -443,14 +484,18 @@ func TestWaitRuntimeInterruptionUsesRecoveredContextKind(t *testing.T) {
 }
 
 type eventRecorder struct {
-	mu     sync.Mutex
-	events []RuntimeEvent[*SessionResult]
+	mu      sync.Mutex
+	events  []RuntimeEvent[*SessionResult]
+	onEvent func(RuntimeEvent[*SessionResult])
 }
 
 func (recorder *eventRecorder) OnRuntimeEvent(_ context.Context, event RuntimeEvent[*SessionResult]) {
 	recorder.mu.Lock()
 	recorder.events = append(recorder.events, event)
 	recorder.mu.Unlock()
+	if recorder.onEvent != nil {
+		recorder.onEvent(event)
+	}
 }
 
 func (recorder *eventRecorder) kinds() []string {

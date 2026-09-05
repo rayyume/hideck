@@ -40,7 +40,9 @@ func (Runtime) Start(
 	if req.voiceBinding != nil {
 		defer req.voiceBinding.Stop()
 	}
-	return runReconnectLoop(ctx, &req)
+	result, err := runReconnectLoop(ctx, &req)
+	emitTerminalRuntimeError(ctx, &req, err)
+	return result, err
 }
 
 func runReconnectLoop(

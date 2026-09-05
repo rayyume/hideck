@@ -14,6 +14,9 @@ func TestTerminalRuntimeFailureRequiresExplicitError(t *testing.T) {
 	if isTerminalRuntimeFailure(runtimehost.State{SessionState: "error"}) {
 		t.Fatal("error state without an exposed cause must not trigger failure recovery")
 	}
+	if isTerminalRuntimeFailure(runtimehost.State{SessionState: "retrying", LastError: "all P-CSCF candidates unavailable"}) {
+		t.Fatal("retryable runtime errors must remain owned by the current runtime")
+	}
 	if !isTerminalRuntimeFailure(runtimehost.State{SessionState: "error", LastError: "refresh timeout"}) {
 		t.Fatal("explicit terminal runtime error was not recognized")
 	}
