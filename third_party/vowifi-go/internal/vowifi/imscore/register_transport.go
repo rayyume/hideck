@@ -498,6 +498,7 @@ func (s *Service) trackProtectedConnection(conn net.Conn) bool {
 		s.protectedConns[conn] = struct{}{}
 		changed := !s.portSPushReady.Swap(true)
 		s.protectedConnMu.Unlock()
+		s.confirmCurrentRegistrarDownlinkHealthy()
 		s.signalDownlinkValidation()
 		s.cancelPortSReconnectWatch()
 		s.recordOnDemandPortSReconnect()

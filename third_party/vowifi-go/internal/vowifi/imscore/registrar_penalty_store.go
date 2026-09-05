@@ -1,20 +1,26 @@
 package imscore
 
 import (
+	"math"
 	"strings"
 	"sync"
 	"time"
 )
 
-// RegistrarPenaltyStore retains temporary P-CSCF exclusions across IMS
-// service instances that belong to the same runtime reconnect loop.
+// RegistrarPenaltyStore retains temporary P-CSCF exclusions and consecutive
+// registration failures across service instances in one runtime reconnect loop.
 type RegistrarPenaltyStore struct {
 	mu      sync.Mutex
-	entries map[string]time.Time
+	entries map[string]registrarPenaltyEntry
+}
+
+type registrarPenaltyEntry struct {
+	unavailableUntil    time.Time
+	consecutiveFailures uint32
 }
 
 func NewRegistrarPenaltyStore() *RegistrarPenaltyStore {
-	return &RegistrarPenaltyStore{entries: make(map[string]time.Time)}
+	return &RegistrarPenaltyStore{entries: make(map[string]registrarPenaltyEntry)}
 }
 
 func (store *RegistrarPenaltyStore) mark(registrar string, until time.Time) {
@@ -25,13 +31,51 @@ func (store *RegistrarPenaltyStore) mark(registrar string, until time.Time) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	if store.entries == nil {
-		store.entries = make(map[string]time.Time)
+		store.entries = make(map[string]registrarPenaltyEntry)
 	}
-	current, exists := store.entries[registrar]
-	if exists && (current.IsZero() || (!until.IsZero() && !until.After(current))) {
+	entry := store.entries[registrar]
+	if !entry.unavailableUntil.IsZero() && !until.After(entry.unavailableUntil) {
 		return
 	}
-	store.entries[registrar] = until
+	entry.unavailableUntil = until
+	store.entries[registrar] = entry
+}
+
+func (store *RegistrarPenaltyStore) recordFailure(registrar string) uint32 {
+	registrar = strings.TrimSpace(registrar)
+	if store == nil || registrar == "" {
+		return 1
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if store.entries == nil {
+		store.entries = make(map[string]registrarPenaltyEntry)
+	}
+	entry := store.entries[registrar]
+	if entry.consecutiveFailures < math.MaxUint32 {
+		entry.consecutiveFailures++
+	}
+	store.entries[registrar] = entry
+	return entry.consecutiveFailures
+}
+
+func (store *RegistrarPenaltyStore) clearFailures(registrar string) {
+	registrar = strings.TrimSpace(registrar)
+	if store == nil || registrar == "" {
+		return
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	entry, exists := store.entries[registrar]
+	if !exists {
+		return
+	}
+	entry.consecutiveFailures = 0
+	if entry.unavailableUntil.IsZero() {
+		delete(store.entries, registrar)
+	} else {
+		store.entries[registrar] = entry
+	}
 }
 
 func (store *RegistrarPenaltyStore) unavailable(registrar string, now time.Time) bool {
@@ -41,14 +85,19 @@ func (store *RegistrarPenaltyStore) unavailable(registrar string, now time.Time)
 	}
 	store.mu.Lock()
 	defer store.mu.Unlock()
-	until, exists := store.entries[registrar]
+	entry, exists := store.entries[registrar]
 	if !exists {
 		return false
 	}
-	if !until.IsZero() && now.Before(until) {
+	if !entry.unavailableUntil.IsZero() && now.Before(entry.unavailableUntil) {
 		return true
 	}
-	delete(store.entries, registrar)
+	entry.unavailableUntil = time.Time{}
+	if entry.consecutiveFailures == 0 {
+		delete(store.entries, registrar)
+	} else {
+		store.entries[registrar] = entry
+	}
 	return false
 }
 
@@ -59,12 +108,17 @@ func (store *RegistrarPenaltyStore) snapshot(now time.Time) map[string]time.Time
 	}
 	store.mu.Lock()
 	defer store.mu.Unlock()
-	for registrar, until := range store.entries {
-		if until.IsZero() || !now.Before(until) {
-			delete(store.entries, registrar)
+	for registrar, entry := range store.entries {
+		if entry.unavailableUntil.IsZero() || !now.Before(entry.unavailableUntil) {
+			entry.unavailableUntil = time.Time{}
+			if entry.consecutiveFailures == 0 {
+				delete(store.entries, registrar)
+			} else {
+				store.entries[registrar] = entry
+			}
 			continue
 		}
-		result[registrar] = until
+		result[registrar] = entry.unavailableUntil
 	}
 	return result
 }

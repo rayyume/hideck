@@ -250,18 +250,29 @@ func (s *Service) rejectUnverifiedPortSRegistrar(registrar string, observedAt ti
 
 func (s *Service) rejectFailedPortSRegistrar(registrar string, observedAt time.Time, err error) {
 	now := time.Now()
-	unavailableUntil := s.failedRegisterUnavailableUntil(err, now)
+	failures := s.registrarPenalties.recordFailure(registrar)
+	unavailableUntil := s.failedRegisterUnavailableUntil(err, now, failures)
 	s.registrarPenalties.mark(registrar, unavailableUntil)
 	reason := fmt.Sprintf("initial registration failed: %v", err)
 	s.requestFreshRuntimeAfterPortSReset(registrar, observedAt, unavailableUntil, reason)
 }
 
-func (s *Service) failedRegisterUnavailableUntil(err error, now time.Time) time.Time {
-	retryDelay := s.jitterPortSRecoveryDelay(rfc5626RecoveryUpperBound(1, true))
+func (s *Service) failedRegisterUnavailableUntil(err error, now time.Time, failures uint32) time.Time {
+	if failures == 0 {
+		failures = 1
+	}
+	retryDelay := s.jitterPortSRecoveryDelay(rfc5626RecoveryUpperBound(failures, true))
 	if retryAfter, present := registerRetryAfterFromError(err); present && retryAfter > retryDelay {
 		retryDelay = retryAfter
 	}
 	return now.Add(retryDelay)
+}
+
+func (s *Service) confirmCurrentRegistrarDownlinkHealthy() {
+	if s == nil {
+		return
+	}
+	s.registrarPenalties.clearFailures(s.currentPortSRecoveryRegistrar())
 }
 
 func (s *Service) requestFreshRuntimeAfterPortSReset(

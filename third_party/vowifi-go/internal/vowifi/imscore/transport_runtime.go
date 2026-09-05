@@ -187,6 +187,7 @@ func (s *Service) dispatchInboundSIPMessageWithPeer(
 		err := s.dispatchInboundSIPRequest(parsed, raw, reply, peer)
 		if err == nil {
 			s.inboundSIPHandledRequest.Add(1)
+			s.confirmCurrentRegistrarDownlinkHealthy()
 			s.signalDownlinkValidation()
 		}
 		return err

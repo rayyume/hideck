@@ -369,7 +369,7 @@ func TestVodafoneUKFailedAlternateRegisterHonorsRetryAfter(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	err := registerResponseErrorWithRetryAfter(t, "3600")
 
-	if got := service.failedRegisterUnavailableUntil(err, now); !got.Equal(now.Add(time.Hour)) {
+	if got := service.failedRegisterUnavailableUntil(err, now, 1); !got.Equal(now.Add(time.Hour)) {
 		t.Fatalf("Retry-After penalty = %s, want %s", got, now.Add(time.Hour))
 	}
 }
@@ -380,20 +380,28 @@ func TestVodafoneUKFailedAlternateRegisterDoesNotLetRetryAfterShortenBackoff(t *
 	now := time.Unix(1_700_000_000, 0)
 	err := registerResponseErrorWithRetryAfter(t, "1")
 
-	if got := service.failedRegisterUnavailableUntil(err, now); !got.Equal(now.Add(30 * time.Second)) {
+	if got := service.failedRegisterUnavailableUntil(err, now, 1); !got.Equal(now.Add(30 * time.Second)) {
 		t.Fatalf("short Retry-After penalty = %s, want %s", got, now.Add(30*time.Second))
 	}
 }
 
-func TestVodafoneUKFailedAlternateRegisterUsesRFC5626Penalty(t *testing.T) {
+func TestVodafoneUKFailedAlternateRegisterUsesIncreasingRFC5626Penalty(t *testing.T) {
 	service := newPortSSessionTestService(t, vodafoneUKCarrierPresetID)
 	service.portSRecoveryJitter = func(upper time.Duration) time.Duration { return upper / 2 }
 	now := time.Unix(1_700_000_000, 0)
 	err := &registerResponseError{statusCode: 503, message: "Service Unavailable"}
 
-	want := now.Add(30 * time.Second)
-	if got := service.failedRegisterUnavailableUntil(err, now); !got.Equal(want) {
-		t.Fatalf("RFC 5626 penalty = %s, want %s", got, want)
+	for failures, delay := range map[uint32]time.Duration{
+		1: 30 * time.Second,
+		2: time.Minute,
+		3: 2 * time.Minute,
+		6: 15 * time.Minute,
+		9: 15 * time.Minute,
+	} {
+		want := now.Add(delay)
+		if got := service.failedRegisterUnavailableUntil(err, now, failures); !got.Equal(want) {
+			t.Fatalf("RFC 5626 penalty after %d failures = %s, want %s", failures, got, want)
+		}
 	}
 }
 

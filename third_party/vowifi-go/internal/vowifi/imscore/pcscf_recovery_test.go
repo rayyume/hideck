@@ -134,6 +134,58 @@ func TestPCSCFZeroPenaltyDoesNotPermanentlyExcludeRegistrar(t *testing.T) {
 	}
 }
 
+func TestPCSCFFailureCountSurvivesPenaltyExpiryAndServiceReplacement(t *testing.T) {
+	const registrar = "pcscf-a.example:5060"
+	store := NewRegistrarPenaltyStore()
+	now := time.Unix(1_700_000_000, 0)
+	if got := store.recordFailure(registrar); got != 1 {
+		t.Fatalf("first failure count = %d, want 1", got)
+	}
+	store.mark(registrar, now.Add(time.Minute))
+	if store.unavailable(registrar, now.Add(2*time.Minute)) {
+		t.Fatal("expired P-CSCF penalty remained active")
+	}
+
+	service, err := New(&IMSConfig{
+		Registrar: registrar, LocalAddr: "192.0.2.10", RegistrarPenalties: store,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(service.StopCurrent)
+	if got := service.registrarPenalties.recordFailure(registrar); got != 2 {
+		t.Fatalf("replacement service failure count = %d, want 2", got)
+	}
+}
+
+func TestProtectedDownlinkClearsPCSCFFailureCount(t *testing.T) {
+	const registrar = "pcscf-a.example:5060"
+	store := NewRegistrarPenaltyStore()
+	store.recordFailure(registrar)
+	store.mark(registrar, time.Now().Add(time.Minute))
+	service, err := New(&IMSConfig{
+		Registrar: registrar, LocalAddr: "192.0.2.10", RegistrarPenalties: store,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(service.StopCurrent)
+	service.mu.Lock()
+	service.registrar = registrar
+	service.mu.Unlock()
+	client, server := net.Pipe()
+	defer server.Close()
+	if !service.trackProtectedConnection(client) {
+		t.Fatal("track protected connection")
+	}
+	if !store.unavailable(registrar, time.Now()) {
+		t.Fatal("proven port-s removed an active P-CSCF penalty")
+	}
+	if got := store.recordFailure(registrar); got != 1 {
+		t.Fatalf("failure count after proven port-s = %d, want 1", got)
+	}
+}
+
 func TestPCSCFSwitchDropsOldSecurityAgreement(t *testing.T) {
 	network := &removableCaptureNetwork{
 		captureIPSecNetwork: &captureIPSecNetwork{SystemIMSNetwork: NewSystemIMSNetwork(testLocalIP)},
