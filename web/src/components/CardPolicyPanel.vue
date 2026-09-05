@@ -5,7 +5,7 @@ import { Loading } from '@element-plus/icons-vue'
 import type { CardPolicy } from '../types/api'
 import { devicesService } from '../services/devices'
 import { useCardPolicyToggles, type PolicyMirror } from '../composables/useCardPolicyToggles'
-import { useCardPolicyFields } from '../composables/useCardPolicyFields'
+import { CARD_POLICY_SAVED_RESTART_FAILED, useCardPolicyFields } from '../composables/useCardPolicyFields'
 import { cardsService } from '../services/cards'
 import { phoneModeLabel } from '../utils/phoneMode'
 import { useUpstreamProxyStore } from '../stores/upstream-proxy'
@@ -39,7 +39,7 @@ const mirror = computed<PolicyMirror | null>(() =>
     : null
 )
 
-const { ipVersion, apn, vowifiUpstreamProxyID, pending: fieldPending, error: fieldError, errorField, saveIPVersion, saveAPN, saveVowifiUpstreamProxy } =
+const { ipVersion, apn, vowifiUpstreamProxyID, pending: fieldPending, error: fieldError, errorCode: fieldErrorCode, errorField, saveIPVersion, saveAPN, saveVowifiUpstreamProxy } =
   useCardPolicyFields(toRef(props, 'policy'), async (patch) => {
     if (!props.iccid) return { ok: false, error: { message: 'SIM 身份未就绪' } }
     return cardsService.putPolicy(props.iccid, patch)
@@ -247,7 +247,7 @@ const airplaneHint = computed(() => {
             </el-select>
             <small v-if="fieldPending === 'vowifi_upstream_proxy_id'">{{ local.vowifi_enabled ? '正在保存并重连…' : '正在保存...' }}</small>
             <div v-if="fieldError && errorField === 'vowifi_upstream_proxy_id'" role="alert" class="text-xs text-red-600 dark:text-red-400">
-              {{ fieldError }}，请重试
+              {{ fieldError }}<template v-if="fieldErrorCode !== CARD_POLICY_SAVED_RESTART_FAILED">，请重试</template>
             </div>
           </div>
         </div>

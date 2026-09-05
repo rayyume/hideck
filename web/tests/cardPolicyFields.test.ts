@@ -64,3 +64,24 @@ test('saving a VoWiFi upstream proxy override persists the selected node', async
 
   assert.deepEqual(patches, [{ vowifi_upstream_proxy_id: 'uk-node-2' }])
 })
+
+test('a saved proxy policy keeps its value and exposes a restart failure', async () => {
+  const source = ref<CardPolicy | null>(policy())
+  let changed = 0
+  const fields = useCardPolicyFields(source, async () => ({
+    ok: false,
+    error: {
+      code: 'card_policy_saved_restart_failed',
+      message: '卡策略已保存，但 WiFi calling 重连失败'
+    }
+  }), () => { changed++ })
+  await nextTick()
+
+  fields.vowifiUpstreamProxyID.value = 'uk-node-2'
+  await fields.saveVowifiUpstreamProxy()
+
+  assert.equal(fields.vowifiUpstreamProxyID.value, 'uk-node-2')
+  assert.equal(fields.errorCode.value, 'card_policy_saved_restart_failed')
+  assert.equal(fields.error.value, '卡策略已保存，但 WiFi calling 重连失败')
+  assert.equal(changed, 1)
+})

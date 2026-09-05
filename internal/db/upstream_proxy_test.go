@@ -4,10 +4,13 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/glebarez/sqlite"
 	"github.com/yibaiba/hideck/internal/upstreamproxy"
+	"gorm.io/gorm"
 )
 
 func openTestDB(t *testing.T) {
@@ -114,5 +117,49 @@ func TestUpstreamProxyCountryRuleAllowsMultipleNodes(t *testing.T) {
 	}
 	if !seen["uk-a"] || !seen["uk-b"] {
 		t.Fatalf("random pick should hit both nodes, got %v", seen)
+	}
+}
+
+func TestMigrateUpstreamProxyCountryRuleCompositePKPreservesRowsAndIsIdempotent(t *testing.T) {
+	database, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "legacy.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacySchema := `CREATE TABLE upstream_proxy_country_rules (
+		country_code text PRIMARY KEY, upstream_proxy_id text, enabled numeric, updated_at datetime)`
+	if err := database.Exec(legacySchema).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := database.Exec(`INSERT INTO upstream_proxy_country_rules
+		(country_code, upstream_proxy_id, enabled) VALUES ('GB', 'uk-a', 1)`).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if err := MigrateUpstreamProxyCountryRuleCompositePK(database); err != nil {
+		t.Fatal(err)
+	}
+	primaryKeys, err := upstreamProxyCountryRulePrimaryKeys(database)
+	if err != nil || strings.Join(primaryKeys, ",") != "country_code,upstream_proxy_id" {
+		t.Fatalf("primary keys=%v err=%v", primaryKeys, err)
+	}
+	var before int
+	if err := database.Raw("PRAGMA schema_version").Scan(&before).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := MigrateUpstreamProxyCountryRuleCompositePK(database); err != nil {
+		t.Fatal(err)
+	}
+	var after int
+	if err := database.Raw("PRAGMA schema_version").Scan(&after).Error; err != nil {
+		t.Fatal(err)
+	}
+	if after != before {
+		t.Fatalf("idempotent migration changed schema version: before=%d after=%d", before, after)
+	}
+	var count int64
+	if err := database.Model(&UpstreamProxyCountryRule{}).Where(
+		"country_code = ? AND upstream_proxy_id = ?", "GB", "uk-a",
+	).Count(&count).Error; err != nil || count != 1 {
+		t.Fatalf("migrated row count=%d err=%v", count, err)
 	}
 }

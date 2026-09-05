@@ -15,10 +15,16 @@ import (
 
 var errCardPolicyIdentityUnavailable = errors.New("SIM 身份未就绪，无法保存卡策略")
 
+const cardPolicySavedRestartFailedCode = "card_policy_saved_restart_failed"
+
 type cardPolicyStore interface {
 	Get(string) (db.CardPolicy, error)
 	Resolve(string) (db.CardPolicy, error)
 	Upsert(db.CardPolicy) error
+}
+
+type cardPolicyVoWiFiRestarter interface {
+	RestartVoWiFiForICCID(string) error
 }
 
 type databaseCardPolicyStore struct{}
@@ -181,16 +187,33 @@ func (s *Server) handlePutCardPolicy(c *gin.Context) {
 		return
 	}
 
-	if req.VowifiUpstreamProxyID != nil && previousProxyID != pol.VowifiUpstreamProxyID && pol.VoWiFiEnabled && s.pool != nil {
-		if err := s.pool.RestartVoWiFiForICCID(pol.ICCID); err != nil {
+	if req.VowifiUpstreamProxyID != nil && previousProxyID != pol.VowifiUpstreamProxyID && pol.VoWiFiEnabled {
+		if err := s.restartVoWiFiForCardPolicy(pol.ICCID); err != nil {
 			logger.Warn("卡策略前置代理已保存，但 WiFi calling 重连失败",
 				"iccid", pol.ICCID,
 				"upstream_proxy_id", pol.VowifiUpstreamProxyID,
 				"err", err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"status":  "error",
+				"code":    cardPolicySavedRestartFailedCode,
+				"message": "卡策略已保存，但 WiFi calling 重连失败: " + err.Error(),
+				"policy":  pol,
+			})
+			return
 		}
 	}
 
 	c.JSON(http.StatusOK, pol)
+}
+
+func (s *Server) restartVoWiFiForCardPolicy(iccid string) error {
+	if s.cardPolicyRestarter != nil {
+		return s.cardPolicyRestarter.RestartVoWiFiForICCID(iccid)
+	}
+	if s.pool == nil {
+		return errors.New("设备池未初始化")
+	}
+	return s.pool.RestartVoWiFiForICCID(iccid)
 }
 
 func normalizeCardVoWiFiUpstreamProxyID(value string) (string, error) {
@@ -204,6 +227,9 @@ func normalizeCardVoWiFiUpstreamProxyID(value string) (string, error) {
 	}
 	if proxy == nil {
 		return "", fmt.Errorf("前置代理 %s 不存在", id)
+	}
+	if !proxy.Enabled {
+		return "", fmt.Errorf("前置代理 %s 已禁用", id)
 	}
 	return proxy.ID, nil
 }

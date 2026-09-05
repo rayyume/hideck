@@ -105,6 +105,7 @@ type Server struct {
 	carrierRules            carrierRuleStore
 	websheets               *vwebsheet.Broker
 	cardPolicies            cardPolicyStore
+	cardPolicyRestarter     cardPolicyVoWiFiRestarter
 	disclaimerAcceptances   disclaimerAcceptanceStore
 	systemTime              systemTimeProvider
 	backendSwitch           deviceBackendSwitcher

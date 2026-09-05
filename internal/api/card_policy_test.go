@@ -25,6 +25,16 @@ type cardPolicyStoreStub struct {
 	upsertErr  error
 }
 
+type cardPolicyRestarterStub struct {
+	iccid string
+	err   error
+}
+
+func (s *cardPolicyRestarterStub) RestartVoWiFiForICCID(iccid string) error {
+	s.iccid = iccid
+	return s.err
+}
+
 func (s *cardPolicyStoreStub) Get(string) (db.CardPolicy, error) {
 	return s.policy, s.getErr
 }
@@ -161,6 +171,63 @@ func TestPutCardPolicyVoWiFiUpstreamProxy(t *testing.T) {
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("missing proxy code=%d body=%s", w.Code, w.Body.String())
+	}
+
+	if err := db.UpsertUpstreamProxy(db.UpstreamProxy{
+		ID: "uk-disabled", Addr: "127.0.0.1:1081", Enabled: false, CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPut, "/api/cards/8944101/policy", strings.NewReader(
+		`{"vowifi_upstream_proxy_id":"uk-disabled"}`,
+	))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("disabled proxy code=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestPutCardPolicyReportsSavedPolicyWhenVoWiFiRestartFails(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	openTestDB(t)
+	now := time.Now()
+	if err := db.UpsertUpstreamProxy(db.UpstreamProxy{
+		ID: "uk-a", Addr: "127.0.0.1:1080", Enabled: true, CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	store := &cardPolicyStoreStub{policy: db.CardPolicy{
+		ICCID: "8944101", VoWiFiEnabled: true, Source: "user",
+	}}
+	restarter := &cardPolicyRestarterStub{err: errors.New("restart unavailable")}
+	s := &Server{cardPolicies: store, cardPolicyRestarter: restarter}
+	r := gin.New()
+	r.PUT("/api/cards/:iccid/policy", s.handlePutCardPolicy)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPut, "/api/cards/8944101/policy", strings.NewReader(
+		`{"vowifi_upstream_proxy_id":"uk-a"}`,
+	))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+	if store.policy.VowifiUpstreamProxyID != "uk-a" || restarter.iccid != "8944101" {
+		t.Fatalf("policy=%+v restarted_iccid=%q", store.policy, restarter.iccid)
+	}
+	var body struct {
+		Code   string        `json:"code"`
+		Policy db.CardPolicy `json:"policy"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Code != cardPolicySavedRestartFailedCode || body.Policy.VowifiUpstreamProxyID != "uk-a" {
+		t.Fatalf("response=%+v", body)
 	}
 }
 

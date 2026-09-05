@@ -15,7 +15,6 @@ const (
 	vodafoneUKPortSResetReconnectGrace  = 5 * time.Second
 	vodafoneUKMaturePortSResetThreshold = 2 * time.Minute
 	vodafoneUKPCSCFDeprioritizedPeriod  = 30 * time.Minute
-	initialRegisterPenaltyExtension     = 5 * time.Minute
 )
 
 type portSResetRecoveryState struct {
@@ -258,11 +257,11 @@ func (s *Service) rejectFailedPortSRegistrar(registrar string, observedAt time.T
 }
 
 func (s *Service) failedRegisterUnavailableUntil(err error, now time.Time) time.Time {
-	if retryAfter, present := registerRetryAfterFromError(err); present {
-		return now.Add(retryAfter)
-	}
 	retryDelay := s.jitterPortSRecoveryDelay(rfc5626RecoveryUpperBound(1, true))
-	return now.Add(retryDelay + initialRegisterPenaltyExtension)
+	if retryAfter, present := registerRetryAfterFromError(err); present && retryAfter > retryDelay {
+		retryDelay = retryAfter
+	}
+	return now.Add(retryDelay)
 }
 
 func (s *Service) requestFreshRuntimeAfterPortSReset(

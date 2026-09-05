@@ -2,7 +2,9 @@ import { ref, watch, type Ref } from 'vue'
 import type { CardPolicy } from '../types/api'
 
 type EditablePolicyFields = Pick<CardPolicy, 'ip_version' | 'apn' | 'vowifi_upstream_proxy_id'>
-type SaveResult = { ok: boolean; error?: { message?: string } }
+type SaveResult = { ok: boolean; error?: { message?: string; code?: string } }
+
+export const CARD_POLICY_SAVED_RESTART_FAILED = 'card_policy_saved_restart_failed'
 
 export function useCardPolicyFields(
   source: Ref<CardPolicy | null>,
@@ -14,6 +16,7 @@ export function useCardPolicyFields(
   const vowifiUpstreamProxyID = ref('')
   const pending = ref<keyof EditablePolicyFields | null>(null)
   const error = ref('')
+  const errorCode = ref('')
   const errorField = ref<keyof EditablePolicyFields | null>(null)
 
   watch(source, (policy) => {
@@ -45,12 +48,16 @@ export function useCardPolicyFields(
 
     pending.value = field
     error.value = ''
+    errorCode.value = ''
     errorField.value = null
     const result = await save({ [field]: value })
     pending.value = null
     if (!result.ok) {
-      restore(field)
+      const code = result.error?.code || ''
+      if (code === CARD_POLICY_SAVED_RESTART_FAILED) onChanged?.()
+      else restore(field)
       error.value = result.error?.message || '策略保存失败'
+      errorCode.value = code
       errorField.value = field
       return
     }
@@ -58,7 +65,7 @@ export function useCardPolicyFields(
   }
 
   return {
-    ipVersion, apn, vowifiUpstreamProxyID, pending, error, errorField,
+    ipVersion, apn, vowifiUpstreamProxyID, pending, error, errorCode, errorField,
     saveIPVersion: () => persist('ip_version'),
     saveAPN: () => persist('apn'),
     saveVowifiUpstreamProxy: () => persist('vowifi_upstream_proxy_id')

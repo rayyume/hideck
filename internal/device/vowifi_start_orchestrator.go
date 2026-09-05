@@ -2,6 +2,7 @@ package device
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -297,6 +298,17 @@ func (p *Pool) prepareVoWiFiStartContext(deviceID, traceID, runtimeEPDGOverride 
 		"aka_app_preference", prepared.IMSIdentity.AKAAppPreference,
 		"applied", prepared.IMSIdentity.Applied)
 
+	proxy, errProxy := resolveVoWiFiCountryProxy(voWiFiProxyResolveRequest{
+		HomeMCC:  startProfile.MCC,
+		TraceID:  traceID,
+		DeviceID: deviceID,
+		ICCID:    w.CurrentICCID(),
+	})
+	if errProxy != nil {
+		return startCtx, errProxy
+	}
+	startCtx.Proxy = proxy
+
 	if nc := w.NetworkController(); nc != nil {
 		logger.Info("VoWiFi 启用中，停止网络功能", "trace_id", traceID, "device", deviceID)
 		if err := w.StopNetwork(); err != nil {
@@ -307,8 +319,6 @@ func (p *Pool) prepareVoWiFiStartContext(deviceID, traceID, runtimeEPDGOverride 
 	if err := enterVoWiFiRFOff(p.Context(), w, traceID); err != nil {
 		return startCtx, err
 	}
-
-	startCtx.Proxy = resolveVoWiFiCountryProxy(startProfile.MCC, traceID, deviceID, w.CurrentICCID())
 
 	startCtx.NetworkMode = modemIface.GetNetworkMode()
 	startCtx.StartupState = newVoWiFiSIMReadyStartupState(deviceID, swu.DataplaneModeUserspace, startCtx.NetworkMode, time.Now())
@@ -415,7 +425,15 @@ func (p *Pool) prepareCellularStartContext(
 	}
 	startCtx.SIM = runtimehost.NewReaderSIMAdapter(akaProvider)
 
-	countryProxy := resolveVoWiFiCountryProxy(startProfile.MCC, traceID, deviceID, w.CurrentICCID())
+	countryProxy, errProxy := resolveVoWiFiCountryProxy(voWiFiProxyResolveRequest{
+		HomeMCC:  startProfile.MCC,
+		TraceID:  traceID,
+		DeviceID: deviceID,
+		ICCID:    w.CurrentICCID(),
+	})
+	if errProxy != nil {
+		return startCtx, errProxy
+	}
 	transport, errTransport := selectCellularIMSTransport(hasInternet, ifaceName, countryProxy)
 	if errTransport != nil {
 		return startCtx, errTransport
@@ -514,57 +532,66 @@ func enterVoWiFiRFOff(ctx context.Context, w *Worker, traceID string) error {
 	return nil
 }
 
-func resolveVoWiFiCountryProxy(homeMCC, traceID, deviceID, iccid string) *runtimehost.ProxyConfig {
-	if cfg, ok := resolveCardVoWiFiUpstreamProxy(iccid, traceID, deviceID); ok {
-		return cfg
-	}
-	proxies, countryCode, err := db.GetHomeMCCUpstreamProxies(homeMCC)
+type voWiFiProxyResolveRequest struct {
+	HomeMCC  string
+	TraceID  string
+	DeviceID string
+	ICCID    string
+}
+
+func resolveVoWiFiCountryProxy(req voWiFiProxyResolveRequest) (*runtimehost.ProxyConfig, error) {
+	cfg, matched, err := resolveCardVoWiFiUpstreamProxy(req.ICCID, req.TraceID, req.DeviceID)
 	if err != nil {
-		logger.Warn("VoWiFi 启动前读取国家前置代理配置失败",
-			"trace_id", traceID,
-			"device", deviceID,
-			"home_mcc", strings.TrimSpace(homeMCC),
-			"err", err)
-		return nil
+		return nil, err
+	}
+	if matched {
+		return cfg, nil
+	}
+	proxies, countryCode, err := db.GetHomeMCCUpstreamProxies(req.HomeMCC)
+	if err != nil {
+		return nil, fmt.Errorf("读取 VoWiFi 国家前置代理配置失败: %w", err)
 	}
 	proxy := db.PickUpstreamProxy(proxies)
 	if proxy == nil {
 		logger.Info("VoWiFi 国家前置代理未命中，使用直连",
-			"trace_id", traceID,
-			"device", deviceID,
-			"home_mcc", strings.TrimSpace(homeMCC),
+			"trace_id", req.TraceID,
+			"device", req.DeviceID,
+			"home_mcc", strings.TrimSpace(req.HomeMCC),
 			"proxy_country_code", countryCode,
 			"mcc_table_ready", upstreamproxy.CountryTableReady(),
 			"proxy_route", "direct")
-		return nil
+		return nil, nil
 	}
 	route := "country_rule"
 	if len(proxies) > 1 {
 		route = "country_pool"
 	}
 	logger.Info("VoWiFi 国家前置代理已命中",
-		"trace_id", traceID,
-		"device", deviceID,
-		"home_mcc", strings.TrimSpace(homeMCC),
+		"trace_id", req.TraceID,
+		"device", req.DeviceID,
+		"home_mcc", strings.TrimSpace(req.HomeMCC),
 		"proxy_country_code", countryCode,
 		"upstream_proxy_id", proxy.ID,
 		"proxy_pool_size", len(proxies),
 		"proxy_route", route)
-	return proxyConfigFromDB(proxy)
+	return proxyConfigFromDB(proxy), nil
 }
 
-func resolveCardVoWiFiUpstreamProxy(iccid, traceID, deviceID string) (*runtimehost.ProxyConfig, bool) {
+func resolveCardVoWiFiUpstreamProxy(iccid, traceID, deviceID string) (*runtimehost.ProxyConfig, bool, error) {
 	iccid = db.CanonicalICCID(iccid)
 	if iccid == "" {
-		return nil, false
+		return nil, false, nil
 	}
 	pol, err := db.GetCardPolicy(iccid)
 	if err != nil {
-		return nil, false
+		if errors.Is(err, db.ErrCardPolicyNotFound) {
+			return nil, false, nil
+		}
+		return nil, false, fmt.Errorf("读取 VoWiFi 卡级前置代理策略失败: %w", err)
 	}
 	id := db.NormalizeVoWiFiUpstreamProxyID(pol.VowifiUpstreamProxyID)
 	if id == "" {
-		return nil, false
+		return nil, false, nil
 	}
 	if id == db.VoWiFiUpstreamProxyDirect {
 		logger.Info("VoWiFi 卡策略指定直连",
@@ -572,25 +599,17 @@ func resolveCardVoWiFiUpstreamProxy(iccid, traceID, deviceID string) (*runtimeho
 			"device", deviceID,
 			"iccid", iccid,
 			"proxy_route", "card_direct")
-		return nil, true
+		return nil, true, nil
 	}
 	proxy, err := db.GetUpstreamProxyByID(id)
 	if err != nil {
-		logger.Warn("VoWiFi 卡策略读取指定前置代理失败，回退国家规则",
-			"trace_id", traceID,
-			"device", deviceID,
-			"iccid", iccid,
-			"upstream_proxy_id", id,
-			"err", err)
-		return nil, false
+		return nil, true, fmt.Errorf("读取卡级固定前置代理 %s 失败: %w", id, err)
 	}
-	if proxy == nil || !proxy.Enabled {
-		logger.Warn("VoWiFi 卡策略指定的前置代理不可用，回退国家规则",
-			"trace_id", traceID,
-			"device", deviceID,
-			"iccid", iccid,
-			"upstream_proxy_id", id)
-		return nil, false
+	if proxy == nil {
+		return nil, true, fmt.Errorf("卡级固定前置代理 %s 不存在", id)
+	}
+	if !proxy.Enabled {
+		return nil, true, fmt.Errorf("卡级固定前置代理 %s 已禁用", id)
 	}
 	logger.Info("VoWiFi 卡策略指定前置代理",
 		"trace_id", traceID,
@@ -598,7 +617,7 @@ func resolveCardVoWiFiUpstreamProxy(iccid, traceID, deviceID string) (*runtimeho
 		"iccid", iccid,
 		"upstream_proxy_id", proxy.ID,
 		"proxy_route", "card_override")
-	return proxyConfigFromDB(proxy), true
+	return proxyConfigFromDB(proxy), true, nil
 }
 
 func proxyConfigFromDB(proxy *db.UpstreamProxy) *runtimehost.ProxyConfig {

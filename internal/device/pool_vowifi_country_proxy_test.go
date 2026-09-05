@@ -40,7 +40,12 @@ func TestResolveVoWiFiCountryProxySelectsUSProxy(t *testing.T) {
 	if err := db.UpsertUpstreamProxyCountryRule(db.UpstreamProxyCountryRule{CountryCode: "US", UpstreamProxyID: "proxy-us", Enabled: true}); err != nil {
 		t.Fatalf("UpsertUpstreamProxyCountryRule() error=%v", err)
 	}
-	got := resolveVoWiFiCountryProxy("310", "trace-1", "dev-1", "")
+	got, err := resolveVoWiFiCountryProxy(voWiFiProxyResolveRequest{
+		HomeMCC: "310", TraceID: "trace-1", DeviceID: "dev-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got == nil || got.ID != "proxy-us" || got.Addr != "127.0.0.1:1080" || !got.Enabled {
 		t.Fatalf("resolveVoWiFiCountryProxy()=%+v, want proxy-us", got)
 	}
@@ -49,7 +54,13 @@ func TestResolveVoWiFiCountryProxySelectsUSProxy(t *testing.T) {
 func TestResolveVoWiFiCountryProxyDirectWhenNoCountryRule(t *testing.T) {
 	openDeviceTestDB(t)
 	loadDeviceCountryTableFixture(t)
-	if got := resolveVoWiFiCountryProxy("404", "trace-1", "dev-1", ""); got != nil {
+	got, err := resolveVoWiFiCountryProxy(voWiFiProxyResolveRequest{
+		HomeMCC: "404", TraceID: "trace-1", DeviceID: "dev-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != nil {
 		t.Fatalf("resolveVoWiFiCountryProxy(404)=%+v, want nil direct", got)
 	}
 }
@@ -71,7 +82,12 @@ func TestResolveVoWiFiCountryProxyCardOverride(t *testing.T) {
 	if err := db.UpsertCardPolicy(db.CardPolicy{ICCID: iccid, VowifiUpstreamProxyID: "proxy-uk-2", Source: "user"}); err != nil {
 		t.Fatal(err)
 	}
-	got := resolveVoWiFiCountryProxy("310", "trace-1", "dev-1", iccid)
+	got, err := resolveVoWiFiCountryProxy(voWiFiProxyResolveRequest{
+		HomeMCC: "310", TraceID: "trace-1", DeviceID: "dev-1", ICCID: iccid,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got == nil || got.ID != "proxy-uk-2" {
 		t.Fatalf("card override=%+v, want proxy-uk-2", got)
 	}
@@ -91,7 +107,42 @@ func TestResolveVoWiFiCountryProxyCardDirect(t *testing.T) {
 	if err := db.UpsertCardPolicy(db.CardPolicy{ICCID: iccid, VowifiUpstreamProxyID: db.VoWiFiUpstreamProxyDirect, Source: "user"}); err != nil {
 		t.Fatal(err)
 	}
-	if got := resolveVoWiFiCountryProxy("310", "trace-1", "dev-1", iccid); got != nil {
+	got, err := resolveVoWiFiCountryProxy(voWiFiProxyResolveRequest{
+		HomeMCC: "310", TraceID: "trace-1", DeviceID: "dev-1", ICCID: iccid,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != nil {
 		t.Fatalf("card direct=%+v, want nil", got)
+	}
+}
+
+func TestResolveVoWiFiCountryProxyDoesNotFailOpenPinnedRoute(t *testing.T) {
+	openDeviceTestDB(t)
+	loadDeviceCountryTableFixture(t)
+	now := time.Now()
+	if err := db.UpsertUpstreamProxy(db.UpstreamProxy{
+		ID: "country-node", Addr: "127.0.0.1:1081", Enabled: true, CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.UpsertUpstreamProxyCountryRule(db.UpstreamProxyCountryRule{
+		CountryCode: "US", UpstreamProxyID: "country-node", Enabled: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	iccid := "8944103333333333333"
+	if err := db.UpsertCardPolicy(db.CardPolicy{
+		ICCID: iccid, VowifiUpstreamProxyID: "missing-node", Source: "user",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := resolveVoWiFiCountryProxy(voWiFiProxyResolveRequest{
+		HomeMCC: "310", TraceID: "trace-1", DeviceID: "dev-1", ICCID: iccid,
+	})
+	if err == nil || got != nil {
+		t.Fatalf("pinned missing route resolved to %+v with err=%v", got, err)
 	}
 }

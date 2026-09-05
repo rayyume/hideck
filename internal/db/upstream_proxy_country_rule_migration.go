@@ -1,12 +1,47 @@
 package db
 
-import "gorm.io/gorm"
+import (
+	"sort"
+	"strings"
+
+	"gorm.io/gorm"
+)
 
 // MigrateUpstreamProxyCountryRuleCompositePK 让同一国家可以绑多条前置代理。
-func MigrateUpstreamProxyCountryRuleCompositePK(tx *gorm.DB) error {
-	if tx == nil || !tx.Migrator().HasTable(&UpstreamProxyCountryRule{}) {
+func MigrateUpstreamProxyCountryRuleCompositePK(database *gorm.DB) error {
+	if database == nil || !database.Migrator().HasTable(&UpstreamProxyCountryRule{}) {
 		return nil
 	}
+	primaryKeys, err := upstreamProxyCountryRulePrimaryKeys(database)
+	if err != nil {
+		return err
+	}
+	if strings.Join(primaryKeys, ",") == "country_code,upstream_proxy_id" {
+		return nil
+	}
+	return database.Transaction(rebuildUpstreamProxyCountryRules)
+}
+
+func upstreamProxyCountryRulePrimaryKeys(database *gorm.DB) ([]string, error) {
+	type columnInfo struct {
+		Name string `gorm:"column:name"`
+		PK   int    `gorm:"column:pk"`
+	}
+	var columns []columnInfo
+	if err := database.Raw("PRAGMA table_info('upstream_proxy_country_rules')").Scan(&columns).Error; err != nil {
+		return nil, err
+	}
+	primaryKeys := make([]string, 0, 2)
+	for _, column := range columns {
+		if column.PK > 0 {
+			primaryKeys = append(primaryKeys, column.Name)
+		}
+	}
+	sort.Strings(primaryKeys)
+	return primaryKeys, nil
+}
+
+func rebuildUpstreamProxyCountryRules(tx *gorm.DB) error {
 	var rows []UpstreamProxyCountryRule
 	if err := tx.Find(&rows).Error; err != nil {
 		return err
