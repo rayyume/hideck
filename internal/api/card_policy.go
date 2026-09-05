@@ -10,6 +10,7 @@ import (
 	"github.com/yibaiba/hideck/internal/config"
 	"github.com/yibaiba/hideck/internal/db"
 	"github.com/yibaiba/hideck/internal/device"
+	"github.com/yibaiba/hideck/pkg/logger"
 )
 
 var errCardPolicyIdentityUnavailable = errors.New("SIM 身份未就绪，无法保存卡策略")
@@ -94,13 +95,14 @@ func (s *Server) handleListCardPolicies(c *gin.Context) {
 func (s *Server) handlePutCardPolicy(c *gin.Context) {
 	iccid := c.Param("iccid")
 	var req struct {
-		NetworkEnabled  *bool   `json:"network_enabled"`
-		VoWiFiEnabled   *bool   `json:"vowifi_enabled"`
-		AirplaneEnabled *bool   `json:"airplane_enabled"`
-		IPVersion       *string `json:"ip_version"`
-		APN             *string `json:"apn"`
-		PhoneMode       *string `json:"phone_mode"`
-		DataStrategy    *string `json:"data_strategy"`
+		NetworkEnabled        *bool   `json:"network_enabled"`
+		VoWiFiEnabled         *bool   `json:"vowifi_enabled"`
+		AirplaneEnabled       *bool   `json:"airplane_enabled"`
+		IPVersion             *string `json:"ip_version"`
+		APN                   *string `json:"apn"`
+		PhoneMode             *string `json:"phone_mode"`
+		DataStrategy          *string `json:"data_strategy"`
+		VowifiUpstreamProxyID *string `json:"vowifi_upstream_proxy_id"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -114,6 +116,7 @@ func (s *Server) handlePutCardPolicy(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取卡策略失败: " + err.Error()})
 		return
 	}
+	previousProxyID := pol.VowifiUpstreamProxyID
 
 	class, classifyErr := s.classifyLebaraUKForICCID(c.Request.Context(), iccid)
 	if classifyErr != nil {
@@ -163,6 +166,14 @@ func (s *Server) handlePutCardPolicy(c *gin.Context) {
 	if req.DataStrategy != nil {
 		pol.DataStrategy = normalizeDataStrategy(req.DataStrategy)
 	}
+	if req.VowifiUpstreamProxyID != nil {
+		id, err := normalizeCardVoWiFiUpstreamProxyID(*req.VowifiUpstreamProxyID)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		pol.VowifiUpstreamProxyID = id
+	}
 	pol.Source = "user"
 
 	if err := s.cardPolicyStore().Upsert(pol); err != nil {
@@ -170,7 +181,31 @@ func (s *Server) handlePutCardPolicy(c *gin.Context) {
 		return
 	}
 
+	if req.VowifiUpstreamProxyID != nil && previousProxyID != pol.VowifiUpstreamProxyID && pol.VoWiFiEnabled && s.pool != nil {
+		if err := s.pool.RestartVoWiFiForICCID(pol.ICCID); err != nil {
+			logger.Warn("卡策略前置代理已保存，但 WiFi calling 重连失败",
+				"iccid", pol.ICCID,
+				"upstream_proxy_id", pol.VowifiUpstreamProxyID,
+				"err", err)
+		}
+	}
+
 	c.JSON(http.StatusOK, pol)
+}
+
+func normalizeCardVoWiFiUpstreamProxyID(value string) (string, error) {
+	id := db.NormalizeVoWiFiUpstreamProxyID(value)
+	if id == "" || id == db.VoWiFiUpstreamProxyDirect {
+		return id, nil
+	}
+	proxy, err := db.GetUpstreamProxyByID(id)
+	if err != nil {
+		return "", err
+	}
+	if proxy == nil {
+		return "", fmt.Errorf("前置代理 %s 不存在", id)
+	}
+	return proxy.ID, nil
 }
 
 func normalizeCardPolicyIPVersion(value string) (string, error) {

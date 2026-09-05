@@ -104,7 +104,7 @@ function formatCountryOption(country: UpstreamProxyCountry): string {
         <EmptyState
           v-if="rules.length === 0"
           title="暂无国家规则"
-          subtitle="未配置的国家会默认直连。"
+          subtitle="未配置的国家会默认直连。同一国家可以绑到多条代理，开 VoWiFi 时随机选一条。"
         />
 
         <div v-else class="proxy-rule-table" role="table" aria-label="国家路由规则">

@@ -74,10 +74,12 @@ export const upstreamProxyService = {
     })
   },
 
-  // 删除国家规则，删除后该国家默认直连
-  deleteCountryRule(countryCode: string) {
+  // 删除某条代理上的国家规则；该国没有其它节点时恢复直连
+  deleteCountryRule(countryCode: string, proxyId = '') {
     return callService(async () => {
-      await api.delete(`/upstream-proxy-country-rules/${encodeURIComponent(countryCode)}`)
+      await api.delete(`/upstream-proxy-country-rules/${encodeURIComponent(countryCode)}`, {
+        params: proxyId ? { upstream_proxy_id: proxyId } : undefined
+      })
       return true
     })
   }

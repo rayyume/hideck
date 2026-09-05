@@ -9,7 +9,7 @@ func TestCardPolicyTableMigrated(t *testing.T) {
 	if !DB.Migrator().HasTable(&CardPolicy{}) {
 		t.Fatal("card_policies 表未建")
 	}
-	for _, col := range []string{"iccid", "network_enabled", "vowifi_enabled", "airplane_enabled", "ip_version", "apn", "source"} {
+	for _, col := range []string{"iccid", "network_enabled", "vowifi_enabled", "airplane_enabled", "ip_version", "apn", "vowifi_upstream_proxy_id", "source"} {
 		if !DB.Migrator().HasColumn(&CardPolicy{}, col) {
 			t.Fatalf("card_policies 缺列 %s", col)
 		}

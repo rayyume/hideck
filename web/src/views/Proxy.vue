@@ -305,10 +305,10 @@ const selectedCountryCode = ref('')
 
 const availableCountries = computed(() => {
   if (!countryRuleTargetProxy.value) return []
-  return upstreamStore.countries.filter((country) => {
-    const rule = upstreamStore.getRuleForCountry(country.country_code)
-    return !rule || rule.upstream_proxy_id === countryRuleTargetProxy.value!.id
-  })
+  const bound = new Set(
+    upstreamStore.getRulesForProxy(countryRuleTargetProxy.value.id).map((rule) => rule.country_code)
+  )
+  return upstreamStore.countries.filter((country) => !bound.has(country.country_code))
 })
 
 const currentProxyCountryRules = computed(() => {
@@ -478,7 +478,7 @@ async function doUpsertCountryRule() {
       enabled: true
     })
     if (!result.ok) throw new Error(result.error.message || '保存规则失败')
-    ElMessage.success('国家规则已保存')
+    ElMessage.success('国家规则已保存。同一国家绑多条时，开 VoWiFi 会随机选节点')
     selectedCountryCode.value = ''
     await fetchUpstream()
   } catch (e: unknown) {
@@ -489,9 +489,9 @@ async function doUpsertCountryRule() {
 
 async function doDeleteCountryRule(countryCode: string) {
   try {
-    const result = await upstreamStore.deleteCountryRule(countryCode)
+    const result = await upstreamStore.deleteCountryRule(countryCode, countryRuleTargetProxy.value?.id || '')
     if (!result.ok) throw new Error(result.error.message || '删除规则失败')
-    ElMessage.success('国家规则已删除，该国家将默认直连')
+    ElMessage.success('已从该代理移除这个国家')
     await fetchUpstream()
   } catch (e: unknown) {
     const err = toAppError(e)

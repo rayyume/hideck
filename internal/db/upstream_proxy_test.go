@@ -84,3 +84,35 @@ func TestUpstreamProxyCountryRuleDirectWhenUnknownMCCOrMissingProxy(t *testing.T
 		t.Fatalf("missing proxy proxy=%+v country=%q err=%v, want nil/US/nil", proxy, country, err)
 	}
 }
+
+func TestUpstreamProxyCountryRuleAllowsMultipleNodes(t *testing.T) {
+	openTestDB(t)
+	now := time.Now()
+	if err := UpsertUpstreamProxy(UpstreamProxy{ID: "uk-a", Addr: "127.0.0.1:1081", Enabled: true, CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	if err := UpsertUpstreamProxy(UpstreamProxy{ID: "uk-b", Addr: "127.0.0.1:1082", Enabled: true, CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	if err := UpsertUpstreamProxyCountryRule(UpstreamProxyCountryRule{CountryCode: "US", UpstreamProxyID: "uk-a", Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := UpsertUpstreamProxyCountryRule(UpstreamProxyCountryRule{CountryCode: "US", UpstreamProxyID: "uk-b", Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	proxies, country, err := GetHomeMCCUpstreamProxies("310")
+	if err != nil || country != "US" || len(proxies) != 2 {
+		t.Fatalf("pool=%+v country=%q err=%v, want 2 US nodes", proxies, country, err)
+	}
+	seen := map[string]bool{}
+	for i := 0; i < 40; i++ {
+		got := PickUpstreamProxy(proxies)
+		if got == nil {
+			t.Fatal("pick returned nil")
+		}
+		seen[got.ID] = true
+	}
+	if !seen["uk-a"] || !seen["uk-b"] {
+		t.Fatalf("random pick should hit both nodes, got %v", seen)
+	}
+}

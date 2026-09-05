@@ -425,6 +425,7 @@ export type CardPolicy = {
   apn: string
   phone_mode?: 'wifi' | 'cellular' | 'volte' | string
   data_strategy?: 'always' | 'on_demand' | string
+  vowifi_upstream_proxy_id?: string
   source: 'auto' | 'user'
   updated_at?: string
 }

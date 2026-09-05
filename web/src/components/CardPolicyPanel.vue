@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, toRef } from 'vue'
+import { computed, onMounted, toRef } from 'vue'
 import { Sim24Regular } from '@vicons/fluent'
 import { Loading } from '@element-plus/icons-vue'
 import type { CardPolicy } from '../types/api'
@@ -8,6 +8,7 @@ import { useCardPolicyToggles, type PolicyMirror } from '../composables/useCardP
 import { useCardPolicyFields } from '../composables/useCardPolicyFields'
 import { cardsService } from '../services/cards'
 import { phoneModeLabel } from '../utils/phoneMode'
+import { useUpstreamProxyStore } from '../stores/upstream-proxy'
 
 const props = defineProps<{
   deviceId: string | undefined
@@ -38,11 +39,18 @@ const mirror = computed<PolicyMirror | null>(() =>
     : null
 )
 
-const { ipVersion, apn, pending: fieldPending, error: fieldError, errorField, saveIPVersion, saveAPN } =
+const { ipVersion, apn, vowifiUpstreamProxyID, pending: fieldPending, error: fieldError, errorField, saveIPVersion, saveAPN, saveVowifiUpstreamProxy } =
   useCardPolicyFields(toRef(props, 'policy'), async (patch) => {
     if (!props.iccid) return { ok: false, error: { message: 'SIM 身份未就绪' } }
     return cardsService.putPolicy(props.iccid, patch)
   }, () => emit('policyChanged'))
+
+const upstreamStore = useUpstreamProxyStore()
+const upstreamOptions = computed(() => upstreamStore.proxies.filter((proxy) => proxy.enabled))
+
+onMounted(() => {
+  void upstreamStore.fetchAll().catch(() => {})
+})
 
 function onAPNEnter(event: KeyboardEvent) {
   const target = event.target as HTMLInputElement | null
@@ -213,6 +221,34 @@ const airplaneHint = computed(() => {
           <div v-if="fieldError && errorField === 'apn'" role="alert" class="text-xs text-red-600 dark:text-red-400">
             {{ fieldError }}，请重试
           </div>
+          </div>
+        </div>
+
+        <div class="policy-setting-row">
+          <span>
+            <strong>前置代理</strong>
+            <small>指定这张卡走哪条。不指定就按国家，多条时随机；改完会自动重连</small>
+          </span>
+          <div class="policy-field-control">
+            <el-select
+              v-model="vowifiUpstreamProxyID"
+              class="w-full"
+              :disabled="!canEditPolicy || fieldPending !== null"
+              @change="saveVowifiUpstreamProxy"
+            >
+              <el-option label="按国家规则" value="" />
+              <el-option label="直连" value="direct" />
+              <el-option
+                v-for="proxy in upstreamOptions"
+                :key="proxy.id"
+                :label="proxy.name || proxy.id"
+                :value="proxy.id"
+              />
+            </el-select>
+            <small v-if="fieldPending === 'vowifi_upstream_proxy_id'">{{ local.vowifi_enabled ? '正在保存并重连…' : '正在保存...' }}</small>
+            <div v-if="fieldError && errorField === 'vowifi_upstream_proxy_id'" role="alert" class="text-xs text-red-600 dark:text-red-400">
+              {{ fieldError }}，请重试
+            </div>
           </div>
         </div>
 

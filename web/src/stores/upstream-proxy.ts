@@ -84,8 +84,8 @@ export const useUpstreamProxyStore = defineStore('upstreamProxy', () => {
     return upstreamProxyService.upsertCountryRule(countryCode, payload)
   }
 
-  async function deleteCountryRule(countryCode: string) {
-    return upstreamProxyService.deleteCountryRule(countryCode)
+  async function deleteCountryRule(countryCode: string, proxyId = '') {
+    return upstreamProxyService.deleteCountryRule(countryCode, proxyId)
   }
 
   // 获取某个代理的国家规则列表

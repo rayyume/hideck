@@ -28,7 +28,7 @@ defineEmits<{
   <ProxyInventoryShell
     add-label="新增代理"
     :empty="rows.length === 0"
-    empty-subtitle="创建 Socks5 前置代理后，可按 SIM 归属国家配置 VoWiFi 路由；未配置国家默认直连。"
+    empty-subtitle="创建 Socks5 前置代理后，按 SIM 归属国家配置 VoWiFi 路由。同一国家可绑多条，未配置则直连。"
     empty-title="暂无前置代理"
     kicker="ROAMING PROXY INVENTORY"
     :loading="loading"

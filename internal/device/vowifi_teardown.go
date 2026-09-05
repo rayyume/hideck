@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/yibaiba/hideck/internal/backend"
+	"github.com/yibaiba/hideck/internal/db"
 	"github.com/yibaiba/hideck/internal/vowifihost"
 	"github.com/yibaiba/hideck/pkg/logger"
 )
@@ -176,4 +177,30 @@ func (p *Pool) applyCardPolicyAfterVoWiFiDisable(deviceID, reason string) {
 
 func (p *Pool) RestartVoWiFi(deviceID string) error {
 	return p.voWiFiHost().Restart(p.ctx, deviceID)
+}
+
+func (p *Pool) RestartVoWiFiForICCID(iccid string) error {
+	if p == nil {
+		return nil
+	}
+	iccid = db.CanonicalICCID(iccid)
+	if iccid == "" {
+		return nil
+	}
+	var deviceIDs []string
+	for _, w := range p.GetAllWorkers() {
+		if w == nil || !w.Config.VoWiFiEnabled {
+			continue
+		}
+		if db.CanonicalICCID(w.CurrentICCID()) != iccid {
+			continue
+		}
+		deviceIDs = append(deviceIDs, w.ID)
+	}
+	for _, deviceID := range deviceIDs {
+		if err := p.RestartVoWiFi(deviceID); err != nil {
+			return err
+		}
+	}
+	return nil
 }

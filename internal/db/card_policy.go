@@ -11,20 +11,24 @@ import (
 
 // CardPolicy 是跟随卡(ICCID)走的可配置策略。SMS 恒开、SMSC 动态取，均不在此。
 type CardPolicy struct {
-	ICCID           string    `gorm:"column:iccid;primaryKey" json:"iccid"`
-	NetworkEnabled  bool      `gorm:"column:network_enabled" json:"network_enabled"`
-	VoWiFiEnabled   bool      `gorm:"column:vowifi_enabled" json:"vowifi_enabled"`
-	AirplaneEnabled bool      `gorm:"column:airplane_enabled" json:"airplane_enabled"`
-	IPVersion       string    `gorm:"column:ip_version" json:"ip_version"`
-	APN             string    `gorm:"column:apn" json:"apn"`
-	PhoneMode       string    `gorm:"column:phone_mode;default:wifi" json:"phone_mode"`            // wifi | cellular | volte
-	DataStrategy    string    `gorm:"column:data_strategy;default:on_demand" json:"data_strategy"` // always | on_demand
-	Source          string    `gorm:"column:source" json:"source"`                                 // auto | user
-	CreatedAt       time.Time `gorm:"column:created_at" json:"created_at"`
-	UpdatedAt       time.Time `gorm:"column:updated_at" json:"updated_at"`
+	ICCID                 string    `gorm:"column:iccid;primaryKey" json:"iccid"`
+	NetworkEnabled        bool      `gorm:"column:network_enabled" json:"network_enabled"`
+	VoWiFiEnabled         bool      `gorm:"column:vowifi_enabled" json:"vowifi_enabled"`
+	AirplaneEnabled       bool      `gorm:"column:airplane_enabled" json:"airplane_enabled"`
+	IPVersion             string    `gorm:"column:ip_version" json:"ip_version"`
+	APN                   string    `gorm:"column:apn" json:"apn"`
+	PhoneMode             string    `gorm:"column:phone_mode;default:wifi" json:"phone_mode"`            // wifi | cellular | volte
+	DataStrategy          string    `gorm:"column:data_strategy;default:on_demand" json:"data_strategy"` // always | on_demand
+	VowifiUpstreamProxyID string    `gorm:"column:vowifi_upstream_proxy_id" json:"vowifi_upstream_proxy_id"`
+	Source                string    `gorm:"column:source" json:"source"` // auto | user
+	CreatedAt             time.Time `gorm:"column:created_at" json:"created_at"`
+	UpdatedAt             time.Time `gorm:"column:updated_at" json:"updated_at"`
 }
 
 func (CardPolicy) TableName() string { return "card_policies" }
+
+// VoWiFiUpstreamProxyDirect 表示这张卡强制直连，不走国家前置代理。
+const VoWiFiUpstreamProxyDirect = "direct"
 
 // CanonicalICCID 规整 ICCID 为唯一形态：trim 空白、去引号、去尾部 BCD 填充位 F/f。
 // 必须用于 card_policies 的所有读写边界——否则 eSIM profile 侧（BCD 解码已剥 F）与
@@ -80,6 +84,15 @@ func NormalizeCardPolicy(p *CardPolicy) {
 	default:
 		p.DataStrategy = "on_demand"
 	}
+	p.VowifiUpstreamProxyID = NormalizeVoWiFiUpstreamProxyID(p.VowifiUpstreamProxyID)
+}
+
+func NormalizeVoWiFiUpstreamProxyID(id string) string {
+	id = strings.TrimSpace(id)
+	if strings.EqualFold(id, VoWiFiUpstreamProxyDirect) {
+		return VoWiFiUpstreamProxyDirect
+	}
+	return id
 }
 
 // ErrCardPolicyNotFound 表示 DB 中没有该 ICCID 的策略行。
@@ -116,15 +129,16 @@ func UpsertCardPolicy(p CardPolicy) error {
 	return DB.Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "iccid"}},
 		DoUpdates: clause.Assignments(map[string]any{
-			"network_enabled":  p.NetworkEnabled,
-			"vowifi_enabled":   p.VoWiFiEnabled,
-			"airplane_enabled": p.AirplaneEnabled,
-			"ip_version":       p.IPVersion,
-			"apn":              p.APN,
-			"phone_mode":       p.PhoneMode,
-			"data_strategy":    p.DataStrategy,
-			"source":           p.Source,
-			"updated_at":       p.UpdatedAt,
+			"network_enabled":          p.NetworkEnabled,
+			"vowifi_enabled":           p.VoWiFiEnabled,
+			"airplane_enabled":         p.AirplaneEnabled,
+			"ip_version":               p.IPVersion,
+			"apn":                      p.APN,
+			"phone_mode":               p.PhoneMode,
+			"data_strategy":            p.DataStrategy,
+			"vowifi_upstream_proxy_id": p.VowifiUpstreamProxyID,
+			"source":                   p.Source,
+			"updated_at":               p.UpdatedAt,
 		}),
 	}).Create(&p).Error
 }

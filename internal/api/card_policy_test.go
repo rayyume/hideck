@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 	"unsafe"
 
 	"github.com/gin-gonic/gin"
@@ -128,6 +129,38 @@ func TestPutCardPolicyCanClearAPN(t *testing.T) {
 	}
 	if store.policy.IPVersion != "v4v6" {
 		t.Fatalf("omitted ip_version changed to %q", store.policy.IPVersion)
+	}
+}
+
+func TestPutCardPolicyVoWiFiUpstreamProxy(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	openTestDB(t)
+	now := time.Now()
+	if err := db.UpsertUpstreamProxy(db.UpstreamProxy{ID: "uk-a", Addr: "127.0.0.1:1080", Enabled: true, CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{pool: device.NewPool(&config.Config{})}
+	r := gin.New()
+	r.PUT("/api/cards/:iccid/policy", s.handlePutCardPolicy)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPut, "/api/cards/8944101/policy", strings.NewReader(`{"vowifi_upstream_proxy_id":"uk-a"}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+	got, err := db.GetCardPolicy("8944101")
+	if err != nil || got.VowifiUpstreamProxyID != "uk-a" {
+		t.Fatalf("got=%+v err=%v", got, err)
+	}
+
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPut, "/api/cards/8944101/policy", strings.NewReader(`{"vowifi_upstream_proxy_id":"missing"}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("missing proxy code=%d body=%s", w.Code, w.Body.String())
 	}
 }
 

@@ -10,6 +10,7 @@ type PutCardPolicyRequest = {
   apn?: string
   phone_mode?: string
   data_strategy?: string
+  vowifi_upstream_proxy_id?: string
 }
 
 export const cardsService = {

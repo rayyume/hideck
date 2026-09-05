@@ -261,7 +261,8 @@ func (s *Server) handleUpsertUpstreamProxyCountryRule(c *gin.Context) {
 
 func (s *Server) handleDeleteUpstreamProxyCountryRule(c *gin.Context) {
 	countryCode := upstreamproxy.NormalizeCountryCode(countryCodeParam(c))
-	if err := db.DeleteUpstreamProxyCountryRule(countryCode); err != nil {
+	proxyID := strings.TrimSpace(c.Query("upstream_proxy_id"))
+	if err := db.DeleteUpstreamProxyCountryRule(countryCode, proxyID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": err.Error()})
 		return
 	}

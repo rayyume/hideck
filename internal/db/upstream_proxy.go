@@ -2,6 +2,7 @@ package db
 
 import (
 	"errors"
+	"math/rand/v2"
 	"strings"
 	"time"
 
@@ -22,10 +23,11 @@ type UpstreamProxy struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// UpstreamProxyCountryRule 将 SIM home country 路由到指定前置代理。
+// UpstreamProxyCountryRule 将 SIM home country 路由到一条前置代理。
+// 同一国家可以绑多条，开 VoWiFi 时从启用节点里随机选。
 type UpstreamProxyCountryRule struct {
-	CountryCode     string    `gorm:"primaryKey" json:"country_code"`
-	UpstreamProxyID string    `gorm:"index" json:"upstream_proxy_id"`
+	CountryCode     string    `gorm:"primaryKey;size:8" json:"country_code"`
+	UpstreamProxyID string    `gorm:"primaryKey;size:64" json:"upstream_proxy_id"`
 	Enabled         bool      `json:"enabled"`
 	UpdatedAt       time.Time `json:"updated_at"`
 }
@@ -108,42 +110,84 @@ func UpsertUpstreamProxyCountryRule(rule UpstreamProxyCountryRule) error {
 	return DB.Save(&rule).Error
 }
 
-func DeleteUpstreamProxyCountryRule(countryCode string) error {
+func DeleteUpstreamProxyCountryRule(countryCode, proxyID string) error {
 	countryCode = upstreamproxy.NormalizeCountryCode(countryCode)
 	if countryCode == "" {
 		return errors.New("empty country_code")
 	}
-	return DB.Delete(&UpstreamProxyCountryRule{}, "country_code = ?", countryCode).Error
+	proxyID = strings.TrimSpace(proxyID)
+	q := DB.Where("country_code = ?", countryCode)
+	if proxyID != "" {
+		q = q.Where("upstream_proxy_id = ?", proxyID)
+	}
+	return q.Delete(&UpstreamProxyCountryRule{}).Error
+}
+
+func GetCountryUpstreamProxies(countryCode string) ([]UpstreamProxy, error) {
+	countryCode = upstreamproxy.NormalizeCountryCode(countryCode)
+	if countryCode == "" || DB == nil {
+		return nil, nil
+	}
+	var rules []UpstreamProxyCountryRule
+	if err := DB.Where("country_code = ? AND enabled = ?", countryCode, true).Find(&rules).Error; err != nil {
+		return nil, err
+	}
+	out := make([]UpstreamProxy, 0, len(rules))
+	seen := map[string]struct{}{}
+	for _, rule := range rules {
+		id := strings.TrimSpace(rule.UpstreamProxyID)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		proxy, err := GetUpstreamProxyByID(id)
+		if err != nil {
+			return nil, err
+		}
+		if proxy == nil || !proxy.Enabled {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, *proxy)
+	}
+	return out, nil
+}
+
+func PickUpstreamProxy(proxies []UpstreamProxy) *UpstreamProxy {
+	if len(proxies) == 0 {
+		return nil
+	}
+	if len(proxies) == 1 {
+		p := proxies[0]
+		return &p
+	}
+	p := proxies[rand.IntN(len(proxies))]
+	return &p
 }
 
 func GetCountryUpstreamProxy(countryCode string) (*UpstreamProxy, error) {
-	countryCode = upstreamproxy.NormalizeCountryCode(countryCode)
-	if countryCode == "" {
-		return nil, nil
-	}
-	var rule UpstreamProxyCountryRule
-	err := DB.First(&rule, "country_code = ?", countryCode).Error
+	proxies, err := GetCountryUpstreamProxies(countryCode)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
-		}
 		return nil, err
 	}
-	if !rule.Enabled || strings.TrimSpace(rule.UpstreamProxyID) == "" {
-		return nil, nil
-	}
-	proxy, err := GetUpstreamProxyByID(rule.UpstreamProxyID)
-	if err != nil || proxy == nil || !proxy.Enabled {
-		return nil, err
-	}
-	return proxy, nil
+	return PickUpstreamProxy(proxies), nil
 }
 
-func GetHomeMCCUpstreamProxy(homeMCC string) (*UpstreamProxy, string, error) {
+func GetHomeMCCUpstreamProxies(homeMCC string) ([]UpstreamProxy, string, error) {
 	countryCode, ok := upstreamproxy.CountryCodeFromHomeMCC(homeMCC)
 	if !ok {
 		return nil, "", nil
 	}
-	proxy, err := GetCountryUpstreamProxy(countryCode)
-	return proxy, countryCode, err
+	proxies, err := GetCountryUpstreamProxies(countryCode)
+	return proxies, countryCode, err
+}
+
+func GetHomeMCCUpstreamProxy(homeMCC string) (*UpstreamProxy, string, error) {
+	proxies, countryCode, err := GetHomeMCCUpstreamProxies(homeMCC)
+	if err != nil {
+		return nil, countryCode, err
+	}
+	return PickUpstreamProxy(proxies), countryCode, nil
 }

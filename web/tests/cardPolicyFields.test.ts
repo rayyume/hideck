@@ -49,3 +49,18 @@ test('failed field save restores the persisted value and exposes the error', asy
   assert.equal(fields.errorField.value, 'ip_version')
   assert.equal(fields.pending.value, null)
 })
+
+test('saving a VoWiFi upstream proxy override persists the selected node', async () => {
+  const source = ref<CardPolicy | null>(policy())
+  const patches: Array<Record<string, unknown>> = []
+  const fields = useCardPolicyFields(source, async (patch) => {
+    patches.push(patch)
+    return { ok: true }
+  })
+  await nextTick()
+
+  fields.vowifiUpstreamProxyID.value = 'uk-node-2'
+  await fields.saveVowifiUpstreamProxy()
+
+  assert.deepEqual(patches, [{ vowifi_upstream_proxy_id: 'uk-node-2' }])
+})

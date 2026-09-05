@@ -183,6 +183,9 @@ func Init(dbPath string) error {
 	if err := MigratePhoneContactIDs(DB); err != nil {
 		return err
 	}
+	if err := MigrateUpstreamProxyCountryRuleCompositePK(DB); err != nil {
+		return err
+	}
 	if err := ensureSMSDeliveryPartUniqueIndex(DB); err != nil {
 		return err
 	}
