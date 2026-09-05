@@ -128,6 +128,16 @@ func (s *Service) markPortSLocalClose(conn net.Conn) {
 	s.portSSessionMu.Unlock()
 }
 
+func (s *Service) portSRegistrar(conn net.Conn) string {
+	if s == nil || conn == nil {
+		return ""
+	}
+	s.portSSessionMu.Lock()
+	registrar := s.portSSession.connections[conn].registrar
+	s.portSSessionMu.Unlock()
+	return strings.TrimSpace(registrar)
+}
+
 func (s *Service) capturePortSSession() portSSessionSnapshot {
 	if s == nil {
 		return portSSessionSnapshot{}

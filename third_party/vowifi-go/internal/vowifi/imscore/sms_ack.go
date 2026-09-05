@@ -28,7 +28,8 @@ type rpReportRequest struct {
 }
 
 type rpReportRejectError struct {
-	Status int
+	Status    int
+	Registrar string
 }
 
 func (e *rpReportRejectError) Error() string {
@@ -101,6 +102,7 @@ func (s *Service) sendRPReport(report rpReportRequest) error {
 		Timeout: inboundSMSAckTimeout, PeerConn: report.PeerConn,
 	})
 	err = rpReportTransactionError(result.SIPCode, dispatchErr)
+	annotateRPReportReject(err, modeCtx.Registrar)
 	s.logRPReportProtocolTrace(request, modeCtx, report, result.SIPCode, err)
 	s.logRPReportWireTrace(request, result.Response)
 	if err != nil {
@@ -134,6 +136,21 @@ func rpReportRejectStatus(err error) int {
 	return 0
 }
 
+func annotateRPReportReject(err error, registrar string) {
+	var rejected *rpReportRejectError
+	if errors.As(err, &rejected) && rejected != nil {
+		rejected.Registrar = strings.TrimSpace(registrar)
+	}
+}
+
+func rpReportRejectRegistrar(err error) string {
+	var rejected *rpReportRejectError
+	if errors.As(err, &rejected) && rejected != nil {
+		return strings.TrimSpace(rejected.Registrar)
+	}
+	return ""
+}
+
 func (s *Service) sendRPReportWithRetry(report rpReportRequest) {
 	attempts, err := s.sendRPReportWithRetryPolicy(
 		report, rpReportInitialDelay, rpReportRetryDelay,
@@ -144,7 +161,7 @@ func (s *Service) sendRPReportWithRetry(report rpReportRequest) {
 	}
 	if err != nil {
 		s.rememberRejectedMTReport(report.Identity)
-		s.triggerMTReportPCSCFRecovery(rpReportRejectStatus(err))
+		s.triggerMTReportPCSCFRecovery(err)
 		deviceID := ""
 		if s != nil && s.cfg != nil {
 			deviceID = s.cfg.DeviceID

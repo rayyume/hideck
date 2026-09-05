@@ -64,6 +64,7 @@ func (s *Service) resolveOutboundModeContextForPeer(
 		return outboundModeContext{}, errors.New("imscore: nil outbound request")
 	}
 	pani := s.GetPAccessNetworkInfo()
+	peerRegistrar := s.portSRegistrar(peer)
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.cfg == nil {
@@ -73,6 +74,9 @@ func (s *Service) resolveOutboundModeContextForPeer(
 	}
 	modeCtx := s.outboundModeSnapshotLocked(flow, req, pani)
 	modeCtx.useInboundPeer(peer)
+	if peerRegistrar != "" {
+		modeCtx.Registrar = peerRegistrar
+	}
 	sender := s.outboundSenderLocked(&modeCtx)
 	if sender == nil {
 		return outboundModeContext{}, newOutboundModeResolveError(
