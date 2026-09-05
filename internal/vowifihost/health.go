@@ -89,16 +89,26 @@ func (s *wifiCallingHealthStore) Begin(deviceID string, at time.Time) {
 	if previous != nil && previous.active {
 		return
 	}
-	var events []WiFiCallingHealthEvent
-	if previous != nil {
-		events = append(events, previous.events...)
-	}
+	events := retainedTerminalHealthEvent(previous)
 	s.sessions[deviceID] = &wifiCallingHealthSession{
 		active:         true,
 		lastObservedAt: at,
 		currentState:   "checking",
 		events:         events,
 	}
+}
+
+func retainedTerminalHealthEvent(session *wifiCallingHealthSession) []WiFiCallingHealthEvent {
+	if session == nil {
+		return nil
+	}
+	for index := len(session.events) - 1; index >= 0; index-- {
+		event := session.events[index]
+		if event.Kind == "stopped" || event.Kind == "failed" {
+			return []WiFiCallingHealthEvent{event}
+		}
+	}
+	return nil
 }
 
 func (s *wifiCallingHealthStore) Observe(deviceID string, state runtimehost.State) {

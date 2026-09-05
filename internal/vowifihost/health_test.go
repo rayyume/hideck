@@ -65,6 +65,28 @@ func TestWiFiCallingHealthRecordsIntentionalStopWithoutDowntime(t *testing.T) {
 	}
 }
 
+func TestWiFiCallingHealthNewSessionDoesNotAccumulatePriorEvents(t *testing.T) {
+	store := newWiFiCallingHealthStore()
+	started := time.Date(2026, 9, 4, 9, 30, 0, 0, time.UTC)
+	observeHealth(store, started, true, "ims_ready", "")
+	observeHealth(store, started.Add(time.Minute), false, "interrupted", "IMS transport lost")
+	observeHealth(store, started.Add(2*time.Minute), true, "ims_ready", "")
+	store.End("wwan0", "disable", started.Add(3*time.Minute))
+
+	store.Begin("wwan0", started.Add(4*time.Minute))
+	observeHealth(store, started.Add(5*time.Minute), true, "ims_ready", "")
+	snapshot, ok := store.Snapshot("wwan0", started.Add(6*time.Minute))
+	if !ok || len(snapshot.Events) != 2 {
+		t.Fatalf("new session events = %+v, ok=%t", snapshot.Events, ok)
+	}
+	if snapshot.Events[0].Kind != "stopped" || snapshot.Events[0].Reason != "disable" {
+		t.Fatalf("retained terminal event = %+v", snapshot.Events[0])
+	}
+	if snapshot.Events[1].Kind != "started" {
+		t.Fatalf("current session event = %+v", snapshot.Events[1])
+	}
+}
+
 func TestWiFiCallingHealthMeasuresPortSOutageFromSMSReadiness(t *testing.T) {
 	store := newWiFiCallingHealthStore()
 	started := time.Date(2026, 9, 4, 10, 0, 0, 0, time.UTC)
