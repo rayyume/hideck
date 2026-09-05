@@ -144,6 +144,7 @@ func (s *Service) sendRPReportWithRetry(report rpReportRequest) {
 	}
 	if err != nil {
 		s.rememberRejectedMTReport(report.Identity)
+		s.triggerMTReportPCSCFRecovery(rpReportRejectStatus(err))
 		deviceID := ""
 		if s != nil && s.cfg != nil {
 			deviceID = s.cfg.DeviceID

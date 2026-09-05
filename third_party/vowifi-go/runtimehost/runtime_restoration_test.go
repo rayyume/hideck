@@ -84,6 +84,49 @@ func TestCoreSMSHealthReadinessIsRecordedBeforeSessionPublication(t *testing.T) 
 	}
 }
 
+func TestSMSReadyClearsRecoveredFailureDetails(t *testing.T) {
+	instance := &Instance{}
+	instance.setState(State{
+		DeviceID: "wwan0", Phase: "ims_ready", IMSReady: true,
+		LastReason: "fresh runtime required", LastError: "previous runtime failure",
+		LastErrorClass: "runtime", Error: "previous runtime failure",
+	})
+	observer := &instanceObserver{inst: instance, deviceID: "wwan0"}
+
+	observer.OnRuntimeEvent(context.Background(), runtimecore.RuntimeEvent[*runtimecore.SessionResult]{
+		Kind: "sms_ready", Reason: "IMS SMS receiver ready",
+	})
+
+	state := instance.State()
+	if state.Phase != "sms_ready" || !state.SMSReady || !state.SMSHealthReady {
+		t.Fatalf("SMS-ready state = %+v", state)
+	}
+	if state.LastReason != "" || state.LastError != "" || state.LastErrorClass != "" || state.Error != "" {
+		t.Fatalf("recovered state still has failure details = %+v", state)
+	}
+}
+
+func TestCurrentSMSReadinessClearsRecoveredFailureDetails(t *testing.T) {
+	instance := &Instance{}
+	instance.setState(State{
+		DeviceID: "wwan0", Phase: "ims_ready", IMSReady: true,
+		LastReason: "IMS registered", LastError: "previous runtime failure",
+		LastErrorClass: "runtime", Error: "previous runtime failure",
+	})
+
+	instance.updateSMSReadiness(SMSReadiness{
+		Registered: true, Ready: true, HealthReady: true, Reason: "IMS SMS receiver ready",
+	})
+
+	state := instance.State()
+	if state.Phase != "sms_ready" || !state.SMSReady || !state.SMSHealthReady {
+		t.Fatalf("SMS-ready state = %+v", state)
+	}
+	if state.LastReason != "" || state.LastError != "" || state.LastErrorClass != "" || state.Error != "" {
+		t.Fatalf("recovered state still has failure details = %+v", state)
+	}
+}
+
 func TestMainStartWaitsForRecoveredIPSecReadyEvent(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

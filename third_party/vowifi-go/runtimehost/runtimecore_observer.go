@@ -83,7 +83,7 @@ func (observer *instanceObserver) applyEvent(
 		state.Phase = "sms_ready"
 		state.SMSReady = true
 		state.SMSHealthReady = true
-		clearRuntimeError(state)
+		clearRecoveredFailure(state)
 	case "interrupted":
 		state.Phase = "interrupted"
 		state.SessionState = "interrupted"
@@ -149,6 +149,14 @@ func clearRuntimeError(state *State) {
 	state.LastError = ""
 	state.LastErrorClass = ""
 	state.Error = ""
+}
+
+func clearRecoveredFailure(state *State) {
+	if state == nil {
+		return
+	}
+	clearRuntimeError(state)
+	state.LastReason = ""
 }
 
 func readyPhase(state State) string {

@@ -247,6 +247,7 @@ func (i *Instance) updateSMSReadiness(readiness SMSReadiness) {
 		if state.SMSReady {
 			state.Phase = "sms_ready"
 			state.LastEvent = "sms_ready"
+			clearRecoveredFailure(state)
 			return
 		}
 		if state.IMSReady {
