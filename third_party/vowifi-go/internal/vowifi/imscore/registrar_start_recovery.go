@@ -7,6 +7,14 @@ import (
 	"time"
 )
 
+type registrarAttemptFailure struct {
+	err       error
+	registrar string
+}
+
+func (err *registrarAttemptFailure) Error() string { return err.err.Error() }
+func (err *registrarAttemptFailure) Unwrap() error { return err.err }
+
 type registrarRecoveryRetryError struct {
 	err     error
 	retryAt time.Time
@@ -34,6 +42,10 @@ func (s *Service) scheduleInitialRecoveryFailure(err error) error {
 		return err
 	}
 	registrar := s.currentPortSRecoveryRegistrar()
+	var attempt *registrarAttemptFailure
+	if errors.As(err, &attempt) {
+		registrar = attempt.registrar
+	}
 	if registrar == "" {
 		return err
 	}

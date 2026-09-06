@@ -276,7 +276,15 @@ func (s *Service) confirmCurrentRegistrarDownlinkHealthy() {
 	if s == nil {
 		return
 	}
-	s.registrarPenalties.clearFailures(s.currentPortSRecoveryRegistrar())
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	// port-s may open (or deliver a request) before the final REGISTER response.
+	// It proves a downlink, not a successful registration. Keep recovery active
+	// until both are true, so a subsequent rejection retains its retry policy.
+	if s.regState != regRegistered || s.stopped() {
+		return
+	}
+	s.registrarPenalties.clearFailures(strings.TrimSpace(s.registrar))
 }
 
 func (s *Service) requestFreshRuntimeAfterPortSReset(

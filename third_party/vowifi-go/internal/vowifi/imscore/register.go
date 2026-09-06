@@ -84,6 +84,7 @@ func (s *Service) registerLocked(ctx context.Context) error {
 	s.mu.Lock()
 	hadBinding := s.regState == regRegistered || (s.regSession != nil && s.regSession.expires > 0)
 	s.regState = regRegistering
+	downlinkBaseline := s.inboundSIPHandledRequest.Load()
 	s.lastRegisterTraceID = common.TraceID(ctx)
 	s.lastRegisterAttemptAt = time.Now()
 	s.mu.Unlock()
@@ -132,6 +133,9 @@ func (s *Service) registerLocked(ctx context.Context) error {
 				return nil
 			}
 		}
+		// Failure handling may advance the candidate before Start schedules its
+		// recovery. Keep Retry-After and failure history on the attempted node.
+		err = &registrarAttemptFailure{err: err, registrar: s.currentPortSRecoveryRegistrar()}
 		s.mu.Lock()
 		s.regState = regFailed
 		s.lastError = err.Error()
@@ -168,6 +172,9 @@ func (s *Service) registerLocked(ctx context.Context) error {
 		secAgree = s.regSession.security != nil && strings.TrimSpace(s.regSession.security.verifyHeader) != ""
 	}
 	s.mu.Unlock()
+	if s.portSPushReady.Load() || s.inboundSIPHandledRequest.Load() > downlinkBaseline {
+		s.confirmCurrentRegistrarDownlinkHealthy()
+	}
 	s.recordIMSRegistrationSucceeded()
 	logging.Info("IMS REGISTER succeeded",
 		"device", s.DeviceID(),

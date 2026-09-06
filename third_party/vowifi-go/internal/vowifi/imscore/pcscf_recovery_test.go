@@ -172,6 +172,7 @@ func TestProtectedDownlinkClearsPCSCFFailureCount(t *testing.T) {
 	t.Cleanup(service.StopCurrent)
 	service.mu.Lock()
 	service.registrar = registrar
+	service.regState = regRegistered
 	service.mu.Unlock()
 	client, server := net.Pipe()
 	defer server.Close()
