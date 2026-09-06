@@ -131,18 +131,19 @@ type SessionConfig struct {
 }
 
 type SessionResult struct {
-	DeviceID     string
-	EPDGMgr      *epdg.Manager
-	Session      *swu.Session
-	Snapshot     swu.SessionSnapshot
-	IMSNetwork   *netstack.Network
-	IMSService   *imscore.Service
-	LocalAddr    string
-	XCAPRequired bool
-	XCAPSession  *swu.Session
-	XCAPNetwork  *netstack.Network
-	Proxy        *ProxyConfig
-	interrupts   chan InterruptOutcome
+	notifications *candidateNotifications
+	DeviceID      string
+	EPDGMgr       *epdg.Manager
+	Session       *swu.Session
+	Snapshot      swu.SessionSnapshot
+	IMSNetwork    *netstack.Network
+	IMSService    *imscore.Service
+	LocalAddr     string
+	XCAPRequired  bool
+	XCAPSession   *swu.Session
+	XCAPNetwork   *netstack.Network
+	Proxy         *ProxyConfig
+	interrupts    chan InterruptOutcome
 }
 
 type Snapshot struct {

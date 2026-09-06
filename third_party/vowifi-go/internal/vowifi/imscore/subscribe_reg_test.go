@@ -343,16 +343,33 @@ func TestRegistrationBindingCleanupOncePerIdentity(t *testing.T) {
 			regSession: &registerSession{contactUser: "current", publicID: "sip:user@example", authHeader: "Digest auth"}}
 	}
 	cte := newService("CTEUK_23433", "cte")
+	cte.cfg.DeviceID = t.Name() + "-cte"
+	isolateRegistrationCleanupAttempt(t, cte)
 	if !cte.requestRegistrationBindingCleanup(document) || !cte.bindingCleanupPending.Load() {
 		t.Fatal("duplicate binding did not request cleanup")
 	}
 	service := newService(giffgaffCarrierPresetID, "giffgaff-once")
+	service.cfg.DeviceID = t.Name() + "-giffgaff"
+	isolateRegistrationCleanupAttempt(t, service)
 	if !service.requestRegistrationBindingCleanup(document) || !service.bindingCleanupPending.Load() {
 		t.Fatal("duplicate binding did not request cleanup")
 	}
 	if service.requestRegistrationBindingCleanup(document) {
 		t.Fatal("duplicate binding requested cleanup more than once")
 	}
+	replacement := newService(giffgaffCarrierPresetID, service.cfg.DeviceID)
+	if replacement.requestRegistrationBindingCleanup(document) {
+		t.Fatal("replacement service repeated cleanup for the same identity")
+	}
+}
+
+func isolateRegistrationCleanupAttempt(t *testing.T, service *Service) {
+	t.Helper()
+	service.mu.RLock()
+	key := service.registrationBindingCleanupKeyLocked()
+	service.mu.RUnlock()
+	registrationCleanupAttempts.Delete(key)
+	t.Cleanup(func() { registrationCleanupAttempts.Delete(key) })
 }
 
 func TestRegistrationNotifyDeduplicatesReRegistration(t *testing.T) {

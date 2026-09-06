@@ -13,6 +13,7 @@ const overlappingReauthTUNSuffix = "-reauth"
 func startOverlappingReauth(
 	ctx context.Context,
 	req *RuntimeStartRequest,
+	previous *SessionResult,
 ) (*SessionResult, error) {
 	if req == nil {
 		return nil, errors.New("runtimecore: nil overlapping reauth request")
@@ -35,6 +36,9 @@ func startOverlappingReauth(
 			defaultStopSession(context.Background(), started.Session)
 		}
 		return nil, errors.New("runtimecore: overlapping reauth did not establish a Child SA")
+	}
+	if previous != nil {
+		previous.notifications.retire()
 	}
 	gate.commit()
 	return started.Session, nil

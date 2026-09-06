@@ -15,6 +15,7 @@ type candidateNotifications struct {
 	committed bool
 	discarded bool
 	draining  bool
+	idle      chan struct{}
 }
 
 func (g *candidateNotifications) emit(fn func()) {
@@ -27,6 +28,7 @@ func (g *candidateNotifications) emit(fn func()) {
 	start := g.committed && !g.draining
 	if start {
 		g.draining = true
+		g.idle = make(chan struct{})
 	}
 	g.mu.Unlock()
 	if start {
@@ -38,6 +40,7 @@ func (g *candidateNotifications) commit() {
 	g.mu.Lock()
 	g.committed = true
 	g.draining = true
+	g.idle = make(chan struct{})
 	g.mu.Unlock()
 	g.drain()
 }
@@ -47,6 +50,7 @@ func (g *candidateNotifications) drain() {
 		g.mu.Lock()
 		if len(g.pending) == 0 {
 			g.draining = false
+			close(g.idle)
 			g.mu.Unlock()
 			return
 		}
@@ -55,6 +59,21 @@ func (g *candidateNotifications) drain() {
 		g.pending = g.pending[1:]
 		g.mu.Unlock()
 		fn()
+	}
+}
+
+// Retire waits for in-flight callbacks before a successor publishes its state.
+func (g *candidateNotifications) retire() {
+	if g == nil {
+		return
+	}
+	g.mu.Lock()
+	g.discarded = true
+	g.pending = nil
+	idle := g.idle
+	g.mu.Unlock()
+	if idle != nil {
+		<-idle
 	}
 }
 

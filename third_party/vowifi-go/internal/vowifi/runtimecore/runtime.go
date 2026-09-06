@@ -74,6 +74,16 @@ func (Runtime) startOnce(
 	ctx context.Context,
 	req *RuntimeStartRequest,
 ) (RuntimeStartResult, error) {
+	localRequest := *req
+	req = &localRequest
+	notifications := gateCandidateNotifications(req)
+	notifications.commit()
+	completed := false
+	defer func() {
+		if !completed {
+			notifications.retire()
+		}
+	}()
 	result := RuntimeStartResult{TraceID: req.TraceID}
 	if req.ShouldRun != nil && !req.ShouldRun() {
 		return result, context.Canceled
@@ -137,6 +147,8 @@ func (Runtime) startOnce(
 		return result, err
 	}
 	notifier.SetSession(session)
+	session.notifications = notifications
+	completed = true
 	result.Session = session
 	emitTunnelReady(session)
 	return result, nil

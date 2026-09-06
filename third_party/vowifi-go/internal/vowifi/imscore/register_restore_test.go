@@ -944,7 +944,7 @@ func TestRegisterContactBindingCountSplitsContactList(t *testing.T) {
 
 func TestRegisterClearsProvenDuplicateBindingsBeforeRegistering(t *testing.T) {
 	config := registerTransportTestConfig("udp", "127.0.0.1:5060")
-	config.DeviceID = "dev-1"
+	config.DeviceID = t.Name()
 	config.CarrierPresetID = giffgaffCarrierPresetID
 	service, err := New(config)
 	if err != nil {
@@ -956,6 +956,7 @@ func TestRegisterClearsProvenDuplicateBindingsBeforeRegistering(t *testing.T) {
 		cseq: 7, authHeader: "Digest username=\"user\"", publicID: config.IMPU,
 		expires: time.Hour,
 	}
+	isolateRegistrationCleanupAttempt(t, service)
 	document, err := parseReginfoXML([]byte(`<reginfo><registration aor="sip:user@example">` +
 		`<contact id="contact-1" state="active"><uri>sip:contact-1@new.example</uri></contact>` +
 		`<contact id="stale" state="active"><uri>sip:stale@old.example</uri></contact>` +

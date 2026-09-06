@@ -123,7 +123,8 @@ func TestOverlappingReauthKeepsOldSessionWhenSuccessorFails(t *testing.T) {
 		stopped atomic.Bool
 		oldLive = make(chan *swu.Session, 1)
 	)
-	req := baseRuntimeRequest(&eventRecorder{})
+	recorder := &eventRecorder{}
+	req := baseRuntimeRequest(recorder)
 	req.Reconnect = true
 	req.StopSession = func(_ context.Context, result *SessionResult) {
 		stopped.Store(true)
@@ -176,6 +177,11 @@ func TestOverlappingReauthKeepsOldSessionWhenSuccessorFails(t *testing.T) {
 	if stopped.Load() {
 		t.Fatal("old SA was deleted after the successor failed")
 	}
+	for _, kind := range recorder.kinds() {
+		if kind == "interrupted" || kind == "error" {
+			t.Fatalf("failed reauth incorrectly marked live runtime %s", kind)
+		}
+	}
 	cancel()
 	select {
 	case <-done:
@@ -195,7 +201,7 @@ func TestStartOverlappingReauthOmitsInitialContactAndAppliesFastReauth(t *testin
 			Snapshot: swu.SessionSnapshot{Established: true, IPv4: []byte{10, 0, 0, 2}},
 		}, nil
 	}
-	session, err := startOverlappingReauth(context.Background(), &req)
+	session, err := startOverlappingReauth(context.Background(), &req, nil)
 	if err != nil {
 		t.Fatalf("startOverlappingReauth: %v", err)
 	}

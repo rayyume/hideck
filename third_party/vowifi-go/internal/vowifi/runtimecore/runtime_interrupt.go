@@ -27,7 +27,7 @@ func runUntilInterrupted(
 		}
 		outcome := waitRuntimeInterruption(ctx, req, current)
 		if outcome.Kind == "reauth" {
-			successor, err := startOverlappingReauth(ctx, req)
+			successor, err := startOverlappingReauth(ctx, req, current)
 			if err != nil {
 				logging.Info("overlapping IKE reauth failed; keeping old SA",
 					"device", req.DeviceID, "trace_id", req.TraceID, "error", err)
@@ -105,7 +105,9 @@ func waitRuntimeInterruption(
 		emitInterrupted(ctx, req, result, outcome)
 		return outcome
 	case outcome := <-outcomes:
-		emitInterrupted(ctx, req, result, outcome)
+		if outcome.Kind != "reauth" {
+			emitInterrupted(ctx, req, result, outcome)
+		}
 		return outcome
 	case <-sessionDone:
 		reason := "swu_session_down"

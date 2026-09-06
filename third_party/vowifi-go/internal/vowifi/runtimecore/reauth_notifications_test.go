@@ -23,12 +23,65 @@ func TestReauthCandidateFailureDoesNotPublishRuntimeState(t *testing.T) {
 		candidateReadiness = cfg.OnSMSReadinessChanged
 		return nil, wantErr
 	}
-	if _, err := startOverlappingReauth(context.Background(), &req); !errors.Is(err, wantErr) {
+	if _, err := startOverlappingReauth(context.Background(), &req, nil); !errors.Is(err, wantErr) {
 		t.Fatalf("reauth error = %v", err)
 	}
 	candidateReadiness(imscore.SMSReadiness{})
 	if got := recorder.kinds(); len(got) != 0 || readinessCalls != 0 {
 		t.Fatalf("failed candidate published events %v, readiness callbacks %d", got, readinessCalls)
+	}
+}
+
+func TestReauthSuccessRetiresPreviousSessionCallbacks(t *testing.T) {
+	req := baseRuntimeRequest(&eventRecorder{})
+	var configs []SessionConfig
+	ready := false
+	req.Hooks.OnSMSReadinessChanged = func(_ context.Context, r imscore.SMSReadiness) { ready = r.Ready }
+	req.SessionStarter = func(_ context.Context, cfg SessionConfig) (*SessionResult, error) {
+		configs = append(configs, cfg)
+		cfg.OnSMSReadinessChanged(imscore.SMSReadiness{Registered: true, Ready: true})
+		return &SessionResult{Snapshot: swu.SessionSnapshot{Established: true}}, nil
+	}
+	old, err := (Runtime{}).startOnce(context.Background(), &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = startOverlappingReauth(context.Background(), &req, old.Session)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configs[0].OnSMSReadinessChanged(imscore.SMSReadiness{})
+	if !ready {
+		t.Fatal("old session shutdown cleared successor readiness")
+	}
+	configs[1].OnSMSReadinessChanged(imscore.SMSReadiness{})
+	if ready {
+		t.Fatal("successor readiness callback was discarded")
+	}
+}
+
+func TestReauthFailureKeepsPreviousSessionCallbacks(t *testing.T) {
+	req := baseRuntimeRequest(&eventRecorder{})
+	var oldCallback func(imscore.SMSReadiness)
+	ready := false
+	req.Hooks.OnSMSReadinessChanged = func(_ context.Context, r imscore.SMSReadiness) { ready = r.Ready }
+	req.SessionStarter = func(_ context.Context, cfg SessionConfig) (*SessionResult, error) {
+		oldCallback = cfg.OnSMSReadinessChanged
+		return &SessionResult{Snapshot: swu.SessionSnapshot{Established: true}}, nil
+	}
+	old, err := (Runtime{}).startOnce(context.Background(), &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.SessionStarter = func(context.Context, SessionConfig) (*SessionResult, error) {
+		return nil, errors.New("candidate failed")
+	}
+	if _, err := startOverlappingReauth(context.Background(), &req, old.Session); err == nil {
+		t.Fatal("expected candidate failure")
+	}
+	oldCallback(imscore.SMSReadiness{Registered: true, Ready: true})
+	if !ready {
+		t.Fatal("failed candidate retired the live session callbacks")
 	}
 }
 
@@ -48,7 +101,7 @@ func TestReauthCandidatePublishesOnlyAfterSuccessAndKeepsLiveCallbacks(t *testin
 		}
 		return result, nil
 	}
-	if _, err := startOverlappingReauth(context.Background(), &req); err != nil {
+	if _, err := startOverlappingReauth(context.Background(), &req, nil); err != nil {
 		t.Fatal(err)
 	}
 	if len(recorder.kinds()) == 0 || readinessCalls != 1 {
