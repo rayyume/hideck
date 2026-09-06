@@ -8,6 +8,7 @@ import LoadingScreen from '../components/LoadingScreen.vue'
 import ErrorBoundary from '../components/ErrorBoundary.vue'
 import SwitchDark from '../components/SwitchDark.vue'
 import PhoneCallBar from '../components/PhoneCallBar.vue'
+import SmsNotificationCenter from '../components/sms/SmsNotificationCenter.vue'
 import { debugCollector } from '../debug/collector'
 import {
   Mail24Regular,
@@ -250,6 +251,7 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
             <span class="service-state-dot" />
             <span>实时连接</span>
           </div>
+          <SmsNotificationCenter />
           <SwitchDark :is-dark="isDark" @toggle="(e) => emit('toggle-theme', e)" />
         </div>
       </el-header>

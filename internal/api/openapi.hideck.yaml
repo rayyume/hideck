@@ -279,6 +279,43 @@ paths:
         '404':
           $ref: '#/components/responses/ErrorMessage'
 
+  /sms/notifications:
+    get:
+      tags: [sms]
+      summary: 全局短信未读数量与增量来信提醒
+      description: 省略 after_id 时仅返回当前游标和未读数量，不重放旧短信。后续按入库 ID 汇总全部新增未读来信，latest 为其中最新一条；不会修改已读状态。发送短信不计入提醒。
+      parameters:
+        - in: query
+          name: after_id
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 9007199254740991
+      responses:
+        '200':
+          description: 未读数量、新来信数量、最新来信和下一次查询游标
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [cursor, unread_count, new_count]
+                properties:
+                  cursor:
+                    type: integer
+                  unread_count:
+                    type: integer
+                  new_count:
+                    type: integer
+                  latest:
+                    type: object
+                    description: 最新一条新增未读短信，字段与短信会话中的短信记录一致
+        '400':
+          $ref: '#/components/responses/ErrorMessage'
+        '401':
+          $ref: '#/components/responses/ErrorMessage'
+        '500':
+          $ref: '#/components/responses/ErrorMessage'
+
   /sms/contacts:
     get:
       tags: [sms]

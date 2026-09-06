@@ -107,6 +107,7 @@ declare module 'vue' {
     SmsConversationHeader: typeof import('./components/sms/SmsConversationHeader.vue')['default']
     SmsDeviceRail: typeof import('./components/sms/SmsDeviceRail.vue')['default']
     SmsMessageTimeline: typeof import('./components/sms/SmsMessageTimeline.vue')['default']
+    SmsNotificationCenter: typeof import('./components/sms/SmsNotificationCenter.vue')['default']
     SmsThreadListPane: typeof import('./components/sms/SmsThreadListPane.vue')['default']
     StatusLight: typeof import('./components/StatusLight.vue')['default']
     SwitchDark: typeof import('./components/SwitchDark.vue')['default']
