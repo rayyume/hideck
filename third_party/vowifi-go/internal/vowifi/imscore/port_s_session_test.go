@@ -105,7 +105,11 @@ func TestVodafoneUKPeerResetUsesShortReconnectGrace(t *testing.T) {
 	}{
 		{name: "Vodafone UK peer reset", preset: vodafoneUKCarrierPresetID, kind: portSClosePeerReset, want: 5 * time.Second},
 		{name: "Vodafone UK EOF", preset: vodafoneUKCarrierPresetID, kind: portSCloseEOF, want: defaultPortSReconnectGrace},
-		{name: "other carrier reset", preset: "2degrees_nz", kind: portSClosePeerReset, want: defaultPortSReconnectGrace},
+		{name: "Vodafone UK timeout", preset: vodafoneUKCarrierPresetID, kind: portSCloseTimeout, want: 30 * time.Second},
+		{name: "other carrier reset", preset: "2degrees_nz", kind: portSClosePeerReset},
+		{name: "other carrier timeout", preset: "2degrees_nz", kind: portSCloseTimeout},
+		{name: "other carrier clean EOF", preset: "2degrees_nz", kind: portSCloseEOF, want: defaultPortSReconnectGrace},
+		{name: "unconfigured carrier timeout", kind: portSCloseTimeout},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

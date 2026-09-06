@@ -13,6 +13,7 @@ const (
 	vodafoneUKCarrierPresetID           = "vodafone_uk_23415"
 	vodafoneUKPortSResetRecoveryPolicy  = "vodafone_uk_port_s_reset"
 	vodafoneUKPortSResetReconnectGrace  = 5 * time.Second
+	vodafoneUKPortSReconnectGrace       = 30 * time.Second
 	vodafoneUKMaturePortSResetThreshold = 2 * time.Minute
 	vodafoneUKPCSCFDeprioritizedPeriod  = 30 * time.Minute
 )
@@ -229,7 +230,7 @@ func (s *Service) portSFailoverValidationWait() time.Duration {
 	if s != nil && s.portSFailoverVerifyWait > 0 {
 		return s.portSFailoverVerifyWait
 	}
-	return defaultPortSReconnectGrace
+	return defaultPortSDownlinkValidationWait
 }
 
 func (s *Service) signalDownlinkValidation() {

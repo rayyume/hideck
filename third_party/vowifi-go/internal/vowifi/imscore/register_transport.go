@@ -271,10 +271,13 @@ func (s *Service) serveProtectedSIPConnection(conn net.Conn) {
 
 // handleProtectedServerPushClosed waits for the P-CSCF to reopen port-s and
 // falls back to a REGISTER refresh if it does not. A failed refresh is not
-// evidence of an on-demand flow: only a later peer connection without a
-// successful refresh proves that behavior for the active P-CSCF.
+// evidence of an on-demand flow. A later peer reconnect permits waiting after
+// clean EOF only; it does not establish reachability after transport errors.
 func (s *Service) handleProtectedServerPushClosed() {
 	if s == nil || s.stopped() || s.pcscfRecoveryPending.Load() {
+		return
+	}
+	if s.capturePortSSession().lastCloseKind == portSCloseLocal {
 		return
 	}
 	s.protectedConnMu.Lock()
@@ -285,8 +288,8 @@ func (s *Service) handleProtectedServerPushClosed() {
 	}
 	s.portSReconnectWaiting.Store(true)
 	s.protectedConnMu.Unlock()
-	if s.suppressesPortSReconnectWatch() {
-		logging.Info("IMS protected server push closed; wait for proven on-demand port-s reconnect",
+	if s.canAwaitOnDemandPortS() {
+		logging.Info("IMS protected server push closed cleanly; await peer port-s reconnect",
 			"device", s.DeviceID(), "since_last_read", s.portSSinceLastRead(),
 			"reason", "peer previously reopened port-s without a successful REGISTER")
 		return
@@ -299,11 +302,11 @@ func (s *Service) handleProtectedServerPushClosed() {
 		s.schedulePortSReconnectWatchAt(retryAt)
 		return
 	}
-	wakeAt := now.Add(s.portSReconnectWait())
-	logging.Info("IMS protected server push closed; wait for port-s reconnect",
-		"device", s.DeviceID(), "grace", s.portSReconnectWait(),
+	grace := s.portSReconnectWait()
+	logging.Info("IMS protected server push closed; schedule port-s recovery",
+		"device", s.DeviceID(), "grace", grace,
 		"since_last_read", s.portSSinceLastRead())
-	s.schedulePortSReconnectWatchAt(wakeAt)
+	s.schedulePortSReconnectWatchAt(now.Add(grace))
 }
 
 func (s *Service) portSReconnectWait() time.Duration {
@@ -313,7 +316,22 @@ func (s *Service) portSReconnectWait() time.Duration {
 	if s.usesVodafoneUKPeerResetGrace() {
 		return vodafoneUKPortSResetReconnectGrace
 	}
-	return defaultPortSReconnectGrace
+	if s != nil && usesVodafoneUKPortSResetRecovery(s.cfg) {
+		return vodafoneUKPortSReconnectGrace
+	}
+	if s != nil && s.capturePortSSession().lastCloseKind == portSCloseEOF {
+		return defaultPortSReconnectGrace
+	}
+	// RFC 5626 section 4.5 recovers failed flows without this carrier-specific
+	// grace. Failed attempts are still gated by the existing recovery backoff.
+	return 0
+}
+
+func (s *Service) portSRecoveryValidationWait() time.Duration {
+	if grace := s.portSReconnectWait(); grace > 0 {
+		return grace
+	}
+	return defaultPortSDownlinkValidationWait
 }
 
 func (s *Service) schedulePortSReconnectWatchAt(wakeAt time.Time) {
@@ -359,7 +377,7 @@ func (s *Service) portSReconnectWatchFired(generation uint64, registrar string) 
 	}
 	s.protectedConnMu.Lock()
 	remaining := len(s.protectedConns)
-	if remaining > 0 || s.suppressesPortSReconnectWatch() {
+	if remaining > 0 || s.canAwaitOnDemandPortS() {
 		s.protectedConnMu.Unlock()
 		return
 	}
@@ -379,8 +397,11 @@ func (s *Service) portSReconnectWatchFired(generation uint64, registrar string) 
 	s.triggerRegisterImmediate("port-s flow failed")
 }
 
-func (s *Service) suppressesPortSReconnectWatch() bool {
-	return s != nil && s.portSOnDemandObserved.Load() && !s.usesVodafoneUKPeerResetGrace()
+// A historical peer reconnect is a compatibility hint for clean EOF, not a
+// guarantee that a reset or timed-out downlink can recover without REGISTER.
+func (s *Service) canAwaitOnDemandPortS() bool {
+	return s != nil && s.portSOnDemandObserved.Load() &&
+		s.capturePortSSession().lastCloseKind == portSCloseEOF
 }
 
 func (s *Service) consumePortSReconnectWatch(generation uint64, registrar string) bool {
@@ -416,7 +437,7 @@ func (s *Service) completePortSRecovery(err error, bindingPreserved bool) {
 			s.clearPortSRecoveryDeadline()
 			s.portSRecoveryAwaitingFlow.Store(true)
 			s.portSReconnectWaiting.Store(true)
-			s.schedulePortSReconnectWatchAt(time.Now().Add(s.portSReconnectWait()))
+			s.schedulePortSReconnectWatchAt(time.Now().Add(s.portSRecoveryValidationWait()))
 		}
 		return
 	}
@@ -465,7 +486,7 @@ func (s *Service) recordOnDemandPortSReconnect() {
 	}
 	s.clearPortSResetRecovery(s.currentPortSRecoveryRegistrar())
 	s.resetPortSRecoveryBackoff()
-	logging.Info("IMS on-demand port-s reconnect observed",
+	logging.Info("IMS peer-initiated port-s reconnect observed",
 		"device", s.DeviceID(),
 		"reason", "peer reopened port-s without a successful REGISTER")
 }

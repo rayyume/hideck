@@ -17,6 +17,9 @@ func TestVodafoneUKMTReport488RequestsFreshPCSCFPath(t *testing.T) {
 	service.registrar = "pcscf-a.example:5060"
 	service.registrarCandidates = []string{"pcscf-a.example:5060", "pcscf-b.example:5060"}
 	service.mu.Unlock()
+	// RP-report 488 requests a new path independently of port-s grace/backoff.
+	service.portSReconnectGrace = time.Hour
+	service.recordPortSRecoveryFailure(registerResponseErrorWithRetryAfter(t, "600"), time.Now())
 	service.transport.SetSendFn(func(request string) error {
 		service.transport.DeliverResponse(registerResponseForRequest(request, 488, nil))
 		return nil

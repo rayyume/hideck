@@ -37,18 +37,17 @@ const (
 	imsKeepaliveFailureLimit       = 3
 	imsMaintenancePollInterval     = 5 * time.Second
 	imsMaintenanceMinimumDelay     = 100 * time.Millisecond
-	// Wait this long for the P-CSCF to reopen port-s before RFC 5626 flow
-	// recovery. Long enough for a network that reopens the flow on demand to
-	// do so untouched; on Vodafone UK it never has, measured once over 4m
-	// with an MT SMS queued and once over 12m35s, so the wait is the whole
-	// window in which MT SMS is undeliverable and must not grow further.
-	defaultPortSReconnectGrace     = 30 * time.Second
-	imsLongRegistrationThreshold   = 1200 * time.Second
-	imsLongRegistrationRefreshLead = 600 * time.Second
-	imsSubscriptionRefreshAdvance  = 60 * time.Second
-	imsKeepaliveFlow               = "options_keepalive"
-	imsKeepaliveSupported          = "path, 100rel, replaces, outbound, gruu"
-	imsProtectedKeepaliveSupported = "path, sec-agree, 100rel, replaces, outbound, gruu"
+	// Compatibility observation for clean EOF, not a transport-failure retry delay.
+	defaultPortSReconnectGrace = 30 * time.Second
+	// Allow an asynchronous peer connection after REGISTER before counting a
+	// missing downlink as a failed recovery. This is not a pre-recovery delay.
+	defaultPortSDownlinkValidationWait = 30 * time.Second
+	imsLongRegistrationThreshold       = 1200 * time.Second
+	imsLongRegistrationRefreshLead     = 600 * time.Second
+	imsSubscriptionRefreshAdvance      = 60 * time.Second
+	imsKeepaliveFlow                   = "options_keepalive"
+	imsKeepaliveSupported              = "path, 100rel, replaces, outbound, gruu"
+	imsProtectedKeepaliveSupported     = "path, sec-agree, 100rel, replaces, outbound, gruu"
 )
 
 var (

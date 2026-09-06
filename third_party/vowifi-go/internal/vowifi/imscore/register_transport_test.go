@@ -872,7 +872,7 @@ func TestProtectedServerPushClosureRecoversTheFlow(t *testing.T) {
 
 // 2degrees reopens port-s when downlink traffic arrives even after rejecting
 // the proactive REGISTER. That observed reconnect, not the 503 by itself,
-// proves that future closures can wait for the peer.
+// allows future clean EOF closures to wait for the peer, not transport errors.
 func TestPeerReconnectAfterRejectedRecoveryEnablesOnDemandMode(t *testing.T) {
 	service := newProtectedKeepaliveTestService(t)
 	service.portSReconnectGrace = time.Millisecond
@@ -903,6 +903,8 @@ func TestPeerReconnectAfterRejectedRecoveryEnablesOnDemandMode(t *testing.T) {
 	if _, waiting := service.portSRecoveryDeadline(time.Now()); waiting {
 		t.Fatal("observed on-demand reconnect kept recovery backoff")
 	}
+	service.recordPortSOpened(client, time.Now())
+	service.recordPortSClosed(client, io.EOF, time.Now())
 	service.untrackProtectedConnection(client)
 	service.handleProtectedServerPushClosed()
 	time.Sleep(20 * time.Millisecond)

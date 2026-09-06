@@ -338,7 +338,7 @@ func serveUDPChallengeThenTCPSuccess(udpServer *net.UDPConn, tcpServer *net.TCPL
 		result <- err
 		return
 	}
-	subscribe, err := readSIPStreamMessage(reader)
+	subscribe, err := readRegistrationSubscriptionAfterMWI(conn, reader)
 	if err != nil {
 		result <- err
 		return
@@ -349,6 +349,21 @@ func serveUDPChallengeThenTCPSuccess(udpServer *net.UDPConn, tcpServer *net.TCPL
 	}
 	_, err = conn.Write([]byte(registerWireResponse(subscribe, 200, "")))
 	result <- err
+}
+
+// Registration and MWI subscriptions are independent; either may arrive first.
+func readRegistrationSubscriptionAfterMWI(conn net.Conn, reader *bufio.Reader) (string, error) {
+	request, err := readSIPStreamMessage(reader)
+	if err != nil {
+		return "", err
+	}
+	if strings.HasPrefix(request, "SUBSCRIBE ") && sipHeaderValue(request, "Event") == "message-summary" {
+		if _, err := conn.Write([]byte(registerWireResponse(request, 200, ""))); err != nil {
+			return "", err
+		}
+		return readSIPStreamMessage(reader)
+	}
+	return request, nil
 }
 
 func observeInitialUDPRegister(conn *net.UDPConn, seen chan<- string) {

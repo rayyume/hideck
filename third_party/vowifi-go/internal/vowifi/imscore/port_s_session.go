@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"os"
 	"strings"
 	"syscall"
 	"time"
@@ -17,6 +18,8 @@ const (
 	portSCloseEOF       = "eof"
 	portSCloseLocal     = "local_close"
 	portSCloseOther     = "other"
+	portSCloseTimeout   = "transport_timeout"
+	portSCloseDeadline  = "read_deadline"
 )
 
 type portSConnectionState struct {
@@ -154,17 +157,21 @@ func (s *Service) capturePortSSession() portSSessionSnapshot {
 }
 
 func classifyPortSClose(err error) string {
-	if err == nil || errors.Is(err, net.ErrClosed) || errors.Is(err, context.Canceled) {
+	if err == nil {
 		return portSCloseOther
+	}
+	if errors.Is(err, net.ErrClosed) || errors.Is(err, context.Canceled) {
+		return portSCloseLocal
 	}
 	if errors.Is(err, syscall.ECONNRESET) || strings.Contains(strings.ToLower(err.Error()), "connection reset by peer") {
 		return portSClosePeerReset
 	}
-	if errors.Is(err, net.ErrClosed) || errors.Is(err, syscall.EPIPE) {
-		return portSCloseOther
+	if errors.Is(err, os.ErrDeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {
+		return portSCloseDeadline
 	}
-	if errors.Is(err, syscall.ECONNABORTED) {
-		return portSCloseOther
+	var timeout net.Error
+	if errors.Is(err, syscall.ETIMEDOUT) || (errors.As(err, &timeout) && timeout.Timeout()) {
+		return portSCloseTimeout
 	}
 	if errors.Is(err, io.EOF) {
 		return portSCloseEOF
