@@ -103,9 +103,10 @@ func (s *Service) recordPortSClosed(conn net.Conn, err error, now time.Time) boo
 	}
 	// Retired cleanup must not replace the latest failure. An older live
 	// connection still matters if it is the final downlink on this registrar.
-	current := tracked && strings.EqualFold(registrar, currentRegistrar) &&
+	relevant := tracked && strings.EqualFold(registrar, currentRegistrar)
+	current := relevant &&
 		(connection.generation == s.portSSession.generation ||
-			(kind != portSCloseLocal && len(s.portSSession.connections) == 0))
+			(kind != portSCloseLocal && !s.hasLivePortSConnectionLocked(currentRegistrar)))
 	if current {
 		s.portSSession.closedAt = now
 		s.portSSession.lastCloseKind = kind
@@ -128,7 +129,19 @@ func (s *Service) recordPortSClosed(conn net.Conn, err error, now time.Time) boo
 	if startFailover {
 		s.startPendingPortSResetFailover()
 	}
-	return current && kind != portSCloseLocal
+	// Reader cleanup can interleave after recording closes. Every relevant
+	// non-local close must check the actual live connections after untracking,
+	// even if a newer close already supplied the lifecycle diagnostic.
+	return relevant && kind != portSCloseLocal
+}
+
+func (s *Service) hasLivePortSConnectionLocked(registrar string) bool {
+	for _, connection := range s.portSSession.connections {
+		if !connection.localClosing && strings.EqualFold(connection.registrar, registrar) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Service) markPortSLocalClose(conn net.Conn) {

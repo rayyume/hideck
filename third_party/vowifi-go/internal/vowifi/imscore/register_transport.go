@@ -371,12 +371,18 @@ func (s *Service) cancelPortSReconnectWatch() {
 }
 
 func (s *Service) portSReconnectWatchFired(generation uint64, registrar string) {
+	if s == nil {
+		return
+	}
+	// REGISTER owns recovery completion and the periodic schedule until it
+	// releases registerMu. Revalidate the watch afterwards: completion or a
+	// peer reconnect may have replaced it while this callback was waiting.
+	s.registerMu.Lock()
+	defer s.registerMu.Unlock()
 	if !s.consumePortSReconnectWatch(generation, registrar) {
 		return
 	}
-	if s == nil || s.stopped() || s.RegState() != regRegistered {
-		// An in-flight REGISTER owns the next decision. Keep reconnectWaiting
-		// set so completion also handles a failure not initiated by this watch.
+	if s.stopped() || s.RegState() != regRegistered {
 		return
 	}
 	s.protectedConnMu.Lock()
