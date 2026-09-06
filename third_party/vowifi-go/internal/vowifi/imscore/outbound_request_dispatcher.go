@@ -182,7 +182,7 @@ func (s *Service) dispatchOutboundRequestWithCallbacks(
 	if options.Context == nil {
 		options.Context = context.Background()
 	}
-	modeCtx, err := s.resolveOutboundModeContextForPeer(options.Flow, options.Request, options.PeerConn)
+	modeCtx, err := s.dispatchModeContext(options)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -222,6 +222,13 @@ func (s *Service) dispatchOutboundRequestWithCallbacks(
 	case <-s.stop:
 		return nil, seq, errors.New("imscore: service stopped")
 	}
+}
+
+func (s *Service) dispatchModeContext(options outboundDispatchOptions) (outboundModeContext, error) {
+	if options.Mode != nil {
+		return *options.Mode, nil
+	}
+	return s.resolveOutboundModeContextForPeer(options.Flow, options.Request, options.PeerConn)
 }
 
 func (s *Service) buildOutboundRequest(req *sip.Request) (*sip.Request, error) {

@@ -98,6 +98,7 @@ func (s *Service) sendRPReport(report rpReportRequest) error {
 	ctx, cancel := context.WithTimeout(common.WithTraceID(context.Background(), traceID), inboundSMSAckTimeout)
 	defer cancel()
 	result, dispatchErr := s.dispatchOutboundMESSAGEWithCallbacks(outboundDispatchOptions{
+		Mode:    &modeCtx,
 		Context: ctx, Flow: "mt-rp-ack", Request: request,
 		Timeout: inboundSMSAckTimeout, PeerConn: report.PeerConn,
 	})

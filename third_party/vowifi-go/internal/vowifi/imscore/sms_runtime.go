@@ -22,6 +22,7 @@ type outboundMessageReply struct {
 }
 
 type outboundDispatchOptions struct {
+	Mode      *outboundModeContext
 	Context   context.Context
 	Flow      string
 	Request   *sip.Request
@@ -31,6 +32,7 @@ type outboundDispatchOptions struct {
 }
 
 type outboundMessageTask struct {
+	mode      *outboundModeContext
 	ctx       context.Context
 	flow      string
 	req       *sip.Request
