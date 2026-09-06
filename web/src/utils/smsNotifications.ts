@@ -25,7 +25,7 @@ export function parseSmsNotificationSnapshot(value: unknown): SmsNotificationSna
 export function smsNotificationTarget(message?: SMSMessage) {
   const identity = message?.iccid || message?.imsi
   const peer = message?.peer || message?.sender
-  return { path: '/sms', query: identity && peer ? { contact: `${identity}|${peer}` } : {} }
+  return { path: '/sms', query: identity && peer && message ? { contact: `${identity}|${peer}`, message: String(message.id) } : {} }
 }
 
 export function mergeSmsNotice(current: SmsNotice | null, snapshot: SmsNotificationSnapshot): SmsNotice | null {

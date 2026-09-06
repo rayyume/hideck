@@ -43,7 +43,7 @@ test('conversation pane exposes real runtime context and explicit message status
 })
 
 test('conversation actions remain wired to production handlers', () => {
-  assert.match(smsView, /@refresh="\(\) => void fetchThreadLatest\(false\)"/)
+  assert.match(smsView, /@refresh="\(\) => void fetchMessagesAndThread\(false\)"/)
   assert.match(smsView, /@delete="selectedThread && void confirmDeleteThread\(selectedThread\)"/)
   assert.match(smsView, /@load-more="loadMoreHistory"/)
   assert.match(smsView, /@delete="\(message\) => void confirmDeleteMessage\(message\)"/)

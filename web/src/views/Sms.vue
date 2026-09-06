@@ -7,6 +7,8 @@ import { useSMSStore } from '../stores/sms'
 import { usePollingScheduler } from '../composables/usePollingScheduler'
 import { toAppError } from '../services/http'
 import { resolveSmsThreadKey, type SmsThreadQueryParams } from '../services/sms'
+import { fetchSmsMessageTarget, type SmsMessageTarget } from '../services/sms-message-target'
+import { includeSmsTargetThread } from '../utils/smsMessageTarget'
 import EmptyState from '../components/EmptyState.vue'
 import ErrorState from '../components/ErrorState.vue'
 import SmsDeviceRail from '../components/sms/SmsDeviceRail.vue'
@@ -52,6 +54,9 @@ const messagesError = ref<{ message: string; status?: number; method?: string; u
 
 const selectedDevice = ref<string>(typeof route.query.device === 'string' ? route.query.device : 'all')
 const selectedThreadKey = ref<string>(typeof route.query.contact === 'string' ? route.query.contact : '')
+const targetMessageQuery = ref<unknown>(route.query.message)
+const messageTarget = ref<SmsMessageTarget | null>(null)
+const viewingTarget = computed(() => !!messageTarget.value && route.query.latest !== '1')
 const searchQuery = ref('')
 
 const smsPageRef = ref<HTMLElement | null>(null)
@@ -187,6 +192,8 @@ function buildSmsQuery(device: string, contact?: string) {
   const nextContact = String(contact || '').trim()
   return {
     ...route.query,
+    message: undefined,
+    latest: undefined,
     device: normalizeQueryDevice(device),
     contact: nextContact || undefined
   }
@@ -327,6 +334,9 @@ async function onActionSheetDelete() {
 }
 
 function clearSelectedThread(syncRoute = false) {
+  targetMessageQuery.value = undefined
+  messageTarget.value = null
+  messagesFetchSeq += 1
   threadFetchSeq += 1
   selectedThreadKey.value = ''
   threadMessages.value = []
@@ -363,14 +373,25 @@ async function fetchMessages(silent = false) {
   const wasNearBottom = isNearBottom()
   const result = await smsStore.fetchThreads(selectedDevice.value)
   if (seq !== messagesFetchSeq) return false
+  if (targetMessageQuery.value !== undefined) {
+    const target = await fetchSmsMessageTarget(targetMessageQuery.value)
+    if (seq !== messagesFetchSeq) return false
+    if (!target.ok) {
+      messagesError.value = target.error
+      loading.value = false
+      return false
+    }
+    messageTarget.value = target.data
+    selectedThreadKey.value = target.data.thread.key
+  }
   if (result.ok) {
-    threads.value = (result.data || []) as SmsThread[]
+    threads.value = messageTarget.value ? includeSmsTargetThread(result.data, messageTarget.value.thread) : result.data
     messagesLastOkAt.value = Date.now()
   } else {
     messagesError.value = result.error
   }
   if (!silent) loading.value = false
-  if (result.ok && selectedThreadKey.value && wasNearBottom) {
+  if (result.ok && selectedThreadKey.value && wasNearBottom && !viewingTarget.value) {
     scrollThreadToBottom()
   }
   return result.ok
@@ -382,6 +403,11 @@ async function fetchThreadLatest(silent = false) {
     threadMessages.value = []
     threadHasMore.value = false
     return false
+  }
+  if (viewingTarget.value && messageTarget.value?.thread.key === t.key) {
+    threadMessages.value = messageTarget.value.messages
+    threadHasMore.value = messageTarget.value.hasMore
+    return true
   }
   const seq = ++threadFetchSeq
   if (!silent) threadLoading.value = true
@@ -446,6 +472,9 @@ async function ensureThreadSelection(options: { syncRoute?: boolean; silent?: bo
 async function selectThread(key: string, options: { syncRoute?: boolean; silent?: boolean; scrollToBottom?: boolean } = {}) {
   if (!key) return
   if (selectedThreadKey.value === key && threadMessages.value.length > 0) return
+  targetMessageQuery.value = undefined
+  messageTarget.value = null
+  messagesFetchSeq += 1
 
   const syncRoute = options.syncRoute !== false
   const silent = options.silent === true
@@ -505,6 +534,14 @@ async function refreshAll() {
   await fetchMessagesAndThread()
 }
 
+function showLatestMessages() {
+  if (viewingTarget.value) {
+    void router.replace({ query: { ...route.query, latest: '1' } })
+    return
+  }
+  scrollThreadToBottom()
+}
+
 async function pollRefresh() {
   if (loading.value || threadLoading.value || loadingHistoryMore.value) return
   try {
@@ -542,14 +579,17 @@ onMounted(async () => {
     window.addEventListener('resize', syncSmsPageWidth, { passive: true })
   }
   const initialDevice = selectedDevice.value
-  const [, messagesOk] = await Promise.all([fetchDevices(), fetchMessages()])
+  let [, messagesOk] = await Promise.all([fetchDevices(), fetchMessages()])
   if (!messagesOk && selectedDevice.value !== initialDevice) {
-    await fetchMessages()
+    messagesOk = await fetchMessages()
   }
-  await ensureThreadSelection({ syncRoute: false, silent: false, scrollToBottom: false })
+  if (messagesOk) await ensureThreadSelection({ syncRoute: false, silent: false, scrollToBottom: !!messageTarget.value })
 })
 
 onUnmounted(() => {
+  messagesFetchSeq += 1
+  devicesFetchSeq += 1
+  threadFetchSeq += 1
   smsPageResizeObserver?.disconnect()
   smsPageResizeObserver = null
   window.removeEventListener('resize', syncSmsPageWidth)
@@ -608,6 +648,10 @@ async function sendToCurrentThread() {
     const result = await smsStore.send({ iccid: t.iccid, phone: t.peer, message: text })
     if (!result.ok) throw new Error(result.error.message || '发送失败')
     composer.value = ''
+    if (viewingTarget.value && selectedThreadKey.value === t.key) {
+      showLatestMessages()
+      return
+    }
     scrollThreadToBottom()
     setTimeout(async () => {
       await fetchMessagesAndThread()
@@ -641,6 +685,11 @@ async function confirmDeleteMessage(message: SMSMessage) {
     const result = await smsStore.deleteMessage(message.id)
     if (!result.ok) throw new Error(result.error.message || '删除失败')
     ElMessage.success('已删除短信')
+    if (messageTarget.value?.message.id === message.id) {
+      clearSelectedThread(true)
+      await fetchMessages(false)
+      return
+    }
     await fetchMessagesAndThread()
     if (result.data.thread_empty) {
       clearSelectedThread(true)
@@ -750,10 +799,15 @@ async function confirmDeleteThread(thread: SmsThread) {
             :context="conversationContext"
             :loading="threadLoading"
             :show-back="false"
-            @refresh="() => void fetchThreadLatest(false)"
-            @latest="scrollThreadToBottom"
+            @refresh="() => void fetchMessagesAndThread(false)"
+            @latest="showLatestMessages"
             @delete="selectedThread && void confirmDeleteThread(selectedThread)"
           />
+
+          <div v-if="viewingTarget" class="sms-target-notice" role="status">
+            <span>正在查看提醒短信</span>
+            <el-button text type="primary" @click="showLatestMessages">返回最新短信</el-button>
+          </div>
 
           <div v-if="!selectedThread" class="flex-1 flex items-center justify-center p-6">
             <EmptyState title="请选择一个会话" subtitle="从左侧联系人列表进入短信明细" />
@@ -766,6 +820,7 @@ async function confirmDeleteThread(thread: SmsThread) {
               :can-load-more="canLoadMoreHistory"
               :loading-more="loadingHistoryMore"
               :deleting-id="deletingMessageId"
+              :highlighted-id="viewingTarget ? messageTarget?.message.id : undefined"
               @load-more="loadMoreHistory"
               @delete="(message) => void confirmDeleteMessage(message)"
               @open-actions="showMessageActionSheet"
@@ -849,6 +904,8 @@ async function confirmDeleteThread(thread: SmsThread) {
 </template>
 
 <style scoped>
+.sms-target-notice { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 16px; border-bottom: 1px solid var(--ui-border); background: var(--ui-selected); color: var(--ui-text); font-size: 13px; }
+.sms-target-notice :deep(.el-button) { min-height: 44px; flex-shrink: 0; }
 .sms-page {
   container-type: inline-size;
 }

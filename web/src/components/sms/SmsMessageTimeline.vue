@@ -11,6 +11,7 @@ defineProps<{
   canLoadMore: boolean
   loadingMore: boolean
   deletingId: number | null
+  highlightedId?: number
 }>()
 
 const emit = defineEmits<{
@@ -87,7 +88,7 @@ onUnmounted(clearLongPress)
         v-for="message in group.items"
         :key="message.id"
         class="sms-message"
-        :class="message.type === 1 ? 'is-incoming' : 'is-outgoing'"
+        :class="[message.type === 1 ? 'is-incoming' : 'is-outgoing', { 'is-highlighted': message.id === highlightedId }]"
         @pointerdown="(event) => beginLongPress(message, event)"
         @pointermove="moveLongPress"
         @pointerup="clearLongPress"
@@ -124,6 +125,7 @@ onUnmounted(clearLongPress)
 
 .sms-message { width: fit-content; max-width: 64%; margin-top: 16px; }
 .sms-message.is-outgoing { margin-left: auto; }
+.sms-message.is-highlighted p { border-color: var(--ui-primary); outline: 2px solid var(--ui-primary); outline-offset: 2px; }
 .sms-message-meta { min-height: 22px; margin-bottom: 5px; display: flex; align-items: center; gap: 7px; color: var(--ui-text-muted); }
 .sms-message.is-outgoing .sms-message-meta { justify-content: flex-end; }
 .sms-message-meta strong { max-width: 150px; overflow: hidden; color: var(--ui-text); font-size: var(--ui-font-body-sm); text-overflow: ellipsis; white-space: nowrap; }

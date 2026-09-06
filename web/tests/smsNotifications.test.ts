@@ -20,8 +20,8 @@ test('aggregates arrivals into one notice without dropping the count', () => {
 })
 
 test('links to the exact SIM conversation and falls back to the inbox when identity is absent', () => {
-  assert.deepEqual(smsNotificationTarget(message), { path: '/sms', query: { contact: 'card-A|+44123' } })
-  assert.deepEqual(smsNotificationTarget({ ...message, iccid: 'card-B' }), { path: '/sms', query: { contact: 'card-B|+44123' } })
+  assert.deepEqual(smsNotificationTarget(message), { path: '/sms', query: { contact: 'card-A|+44123', message: '8' } })
+  assert.deepEqual(smsNotificationTarget({ ...message, iccid: 'card-B' }), { path: '/sms', query: { contact: 'card-B|+44123', message: '8' } })
   assert.deepEqual(smsNotificationTarget(), { path: '/sms', query: {} })
 })
 
