@@ -165,19 +165,23 @@ func (s *Service) selectRegistrarCandidate(ctx context.Context, transport string
 		if err != nil {
 			return "", err
 		}
+		s.logRegistrarDiscovery(existing, source)
 	}
 	selected, candidates, index, err := selectRegisterAttemptRegistrar(*s.cfg, existing, index)
 	if err != nil {
 		return "", err
 	}
 	now := time.Now()
-	index, ok := s.firstAvailableRegistrarIndex(candidates, index, now)
+	penalties := s.registrarPenalties.states(now)
+	index, ok := preferredRegistrarIndex(candidates, index, penalties)
 	if !ok {
+		s.logRegistrarEligibility(candidates, penalties, "")
 		return "", &allRegistrarCandidatesUnavailableError{
-			retryAt: earliestRegistrarAvailability(candidates, s.registrarPenalties.snapshot(now)),
+			retryAt: earliestRegistrarAvailability(candidates, penalties),
 		}
 	}
 	selected = strings.TrimSpace(candidates[index])
+	s.logRegistrarEligibility(candidates, penalties, selected)
 	s.mu.Lock()
 	s.registrar = selected
 	s.registrarCandidates = candidates
@@ -187,11 +191,11 @@ func (s *Service) selectRegistrarCandidate(ctx context.Context, transport string
 	return selected, nil
 }
 
-func earliestRegistrarAvailability(candidates []string, penalties map[string]time.Time) time.Time {
+func earliestRegistrarAvailability(candidates []string, penalties map[string]registrarPenaltyEntry) time.Time {
 	var earliest time.Time
 	for _, candidate := range candidates {
-		until, exists := penalties[strings.TrimSpace(candidate)]
-		if !exists || until.IsZero() {
+		until := penalties[strings.TrimSpace(candidate)].retryNotBefore
+		if until.IsZero() {
 			continue
 		}
 		if earliest.IsZero() || until.Before(earliest) {
@@ -199,23 +203,6 @@ func earliestRegistrarAvailability(candidates []string, penalties map[string]tim
 		}
 	}
 	return earliest
-}
-
-func (s *Service) firstAvailableRegistrarIndex(candidates []string, start int, now time.Time) (int, bool) {
-	if len(candidates) == 0 {
-		return 0, false
-	}
-	if start < 0 || start >= len(candidates) {
-		start = 0
-	}
-	for offset := 0; offset < len(candidates); offset++ {
-		index := (start + offset) % len(candidates)
-		candidate := strings.TrimSpace(candidates[index])
-		if candidate != "" && !s.registrarPenalties.unavailable(candidate, now) {
-			return index, true
-		}
-	}
-	return 0, false
 }
 
 func parseUseProxyContact(contact string) string {
@@ -275,21 +262,7 @@ func (s *Service) advanceRegistrarForNextRetry(reason string) bool {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if len(s.registrarCandidates) < 2 {
-		return false
-	}
-	now := time.Now()
-	for offset := 1; offset < len(s.registrarCandidates); offset++ {
-		next := (s.registrarIndex + offset) % len(s.registrarCandidates)
-		selected := strings.TrimSpace(s.registrarCandidates[next])
-		if selected == "" || selected == s.registrar || s.registrarUnavailableLocked(selected, now) {
-			continue
-		}
-		s.registrarIndex = next
-		s.registrar = selected
-		return true
-	}
-	return false
+	return s.advanceAvailableRegistrarLocked() != ""
 }
 
 func (s *Service) markRegistrarUnavailableAndAdvance(
@@ -302,20 +275,5 @@ func (s *Service) markRegistrarUnavailableAndAdvance(
 		return "", false
 	}
 	s.registrarPenalties.mark(s.registrar, until)
-	now := time.Now()
-	for offset := 1; offset < len(s.registrarCandidates); offset++ {
-		next := (s.registrarIndex + offset) % len(s.registrarCandidates)
-		candidate := strings.TrimSpace(s.registrarCandidates[next])
-		if candidate == "" || s.registrarUnavailableLocked(candidate, now) {
-			continue
-		}
-		s.registrarIndex = next
-		s.registrar = candidate
-		return candidate, true
-	}
-	return "", true
-}
-
-func (s *Service) registrarUnavailableLocked(candidate string, now time.Time) bool {
-	return s.registrarPenalties.unavailable(candidate, now)
+	return s.advanceAvailableRegistrarLocked(), true
 }

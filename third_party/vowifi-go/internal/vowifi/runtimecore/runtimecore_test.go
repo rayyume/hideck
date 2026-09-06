@@ -293,6 +293,13 @@ func TestBuildIMSConfigUsesNegotiatedPCSCFAndCarrierRuntimeFields(t *testing.T) 
 	if config.RegistrarPenalties != penalties {
 		t.Fatal("IMS config did not retain the runtime P-CSCF penalty store")
 	}
+	result.Snapshot.PCSCFv4 = []net.IP{net.ParseIP("192.0.2.20")}
+	replacement, err := buildIMSConfig(imsConfigInput{
+		session: SessionConfig{Prepared: prepared, RegistrarPenalties: penalties}, result: result,
+	})
+	if err != nil || replacement.Registrar != "192.0.2.20:5060" || replacement.RegistrarPenalties != penalties {
+		t.Fatalf("replacement must use new tunnel candidates and keep recovery history: config=%+v err=%v", replacement, err)
+	}
 }
 
 func TestEmptyDataplaneModeSelectsUserspaceNetwork(t *testing.T) {

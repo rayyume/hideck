@@ -17,12 +17,11 @@ func (s *Service) triggerMTReportPCSCFRecovery(reportErr error) {
 		!usesVodafoneUKPortSResetRecovery(s.cfg) || s.stopped() {
 		return
 	}
-	unavailableUntil := time.Now().Add(vodafoneUKPCSCFDeprioritizedPeriod)
-	s.registrarPenalties.mark(registrar, unavailableUntil)
+	penalty := s.markVodafoneRegistrarFailure(registrar, "mt_report_488", nil)
 	if !s.pcscfRecoveryPending.CompareAndSwap(false, true) {
 		return
 	}
-	go s.requestFreshRuntimeAfterMTReportReject(registrar, status, unavailableUntil)
+	go s.requestFreshRuntimeAfterMTReportReject(registrar, status, penalty.deprioritizedUntil)
 }
 
 func (s *Service) requestFreshRuntimeAfterMTReportReject(

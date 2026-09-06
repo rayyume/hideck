@@ -50,6 +50,18 @@
 - MO 短信经 `smsSendMu` 串行化。
 - 入向 Privacy/TIR 未处理（TS 24.608）。
 
+## Vodafone UK / VOXI 的 P-CSCF 恢复策略
+
+此节是 `vodafone_uk_23415` 预设的经验性兼容策略，不是所有运营商必须采用的协议行为。明确 port-s RST 仍使用 5 秒宽限；RP 报告 488 仍触发换路径。普通 EOF 和其他运营商的恢复分支不因此改变。
+
+- **优先级与重试资格分离**：异常节点保留 30 分钟的 `deprioritizedUntil`，有其他合格节点时优先选择其他节点；该记录本身不禁止重试，也不因候选耗尽被删除。
+- **独立的 `retryNotBefore`**：替代路径建立失败使用 RFC 5626 §4.5 随机指数退避，Retry-After 只能延长等待。节点尚未到允许重试时间时，即使没有其他候选也不会提前使用。
+- **跨重建保留历史**：新隧道使用新下发的 P-CSCF 列表，同时保留重试时间与连续失败次数。没有可选节点时等待最早的重试时间，再进入新的连接尝试；不通过清空记录连续重建。替代 runtime 的初始 REGISTER 失败也参与该恢复计数。
+- **下行验证与成功注册分开**：REGISTER 成功并不直接表示 VOXI 短信下行已恢复。验证超时不再导致固定禁止选择 30 分钟，而是保留低优先级并调度恢复退避。退避期内，同一退役路径的重复报告不会按短信数量累计恢复失败次数。下行验证成功后结束本轮恢复，但其他节点的降权历史仍保留，不把历史记录当作下一次普通断开的恢复触发条件。
+- **诊断日志**：`IMS P-CSCF configuration from new tunnel` 记录下发的 IPv4/IPv6 列表；`IMS P-CSCF candidates resolved` 记录前后候选与来源；`IMS P-CSCF candidate eligibility`、`IMS P-CSCF recovery preference and retry scheduled` 分别记录选择结果、降权原因及允许重试时间。重新获取可能仍返回相同节点，不保证产生新的 P-CSCF。
+
+回归入口：`registrar_selection_test.go`、`pcscf_recovery_test.go`、`port_s_session_test.go`、`runtimecore_test.go`。退避参考：[RFC 5626 §4.5](https://www.rfc-editor.org/rfc/rfc5626.html#section-4.5)。30 分钟偏好与 VOXI 下行验证仍属于实现策略，不应写成协议规定的黑名单期限。
+
 ## 验证边界
 
 自动化测试验证消息构造、事务时序、状态迁移和主要失败路径。真实网络还需要分别验证运营商策略、P-CSCF 行为、NAT、IPv4/IPv6、媒体编码和超时参数。只有完成目标运营商的实验室一致性用例后，才能声明通过该运营商认证。

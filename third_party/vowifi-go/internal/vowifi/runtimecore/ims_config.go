@@ -8,6 +8,7 @@ import (
 
 	"github.com/iniwex5/vowifi-go/engine/swu"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/imscore"
+	"github.com/iniwex5/vowifi-go/internal/vowifi/logging"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/netstack"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/policy"
 )
@@ -54,6 +55,10 @@ func buildIMSConfig(input imsConfigInput) (*imscore.IMSConfig, error) {
 	value.Registrar = firstNonEmpty(
 		assignedPCSCF(input.result.Snapshot, localIP), imsPlan.PCSCF, imsPlan.Registrar, value.Domain,
 	)
+	logging.Info("IMS P-CSCF configuration from new tunnel",
+		"device", input.session.DeviceID, "inner_ip", input.result.LocalAddr,
+		"assigned_pcscf_v4", input.result.Snapshot.PCSCFv4,
+		"assigned_pcscf_v6", input.result.Snapshot.PCSCFv6, "registrar", value.Registrar)
 	value.KeepaliveInterval = time.Duration(imsPlan.OptionsPingIntervalSeconds) * time.Second
 	value.AKAProvider, value.IMSNetwork = input.aka, input.network
 	value.DeliveryStore = adaptDeliveryStore(input.session.DeliveryStore)

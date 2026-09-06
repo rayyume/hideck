@@ -1,0 +1,71 @@
+package imscore
+
+import (
+	"math"
+	"strings"
+	"time"
+
+	"github.com/iniwex5/vowifi-go/internal/vowifi/logging"
+)
+
+// The 30-minute preference is an empirical Vodafone UK policy, not a server
+// Retry-After. Eligibility is controlled independently by recovery backoff.
+func (s *Service) markVodafoneRegistrarFailure(registrar, reason string, err error) registrarPenaltyEntry {
+	now := time.Now()
+	var retryAfter time.Time
+	if delay, present := registerRetryAfterFromError(err); present {
+		retryAfter = now.Add(delay)
+	}
+	entry := s.registrarPenalties.recordDeprioritizedFailure(registrar, registrarRecoveryInput{
+		now: now, reason: reason, minimumRetryAt: retryAfter,
+		nextRetry: func(failures uint32) time.Time {
+			return s.failedRegisterUnavailableUntil(err, now, failures)
+		},
+	})
+	logging.Info("IMS P-CSCF recovery preference and retry scheduled",
+		"device", s.DeviceID(), "pcscf", registrar, "reason", reason,
+		"deprioritized_until", entry.deprioritizedUntil,
+		"retry_not_before", entry.retryNotBefore, "failures", entry.consecutiveFailures)
+	return entry
+}
+
+type registrarRecoveryInput struct {
+	now            time.Time
+	reason         string
+	minimumRetryAt time.Time
+	nextRetry      func(uint32) time.Time
+}
+
+func (store *RegistrarPenaltyStore) recordDeprioritizedFailure(registrar string, input registrarRecoveryInput) registrarPenaltyEntry {
+	registrar = strings.TrimSpace(registrar)
+	if store == nil || registrar == "" {
+		return registrarPenaltyEntry{}
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	store.recovering = true
+	if store.entries == nil {
+		store.entries = make(map[string]registrarPenaltyEntry)
+	}
+	entry := store.entries[registrar]
+	// Reports during an existing cooldown are not additional recovery attempts.
+	// Only a later server Retry-After may extend this retry deadline.
+	if !input.now.Before(entry.retryNotBefore) {
+		if entry.consecutiveFailures < math.MaxUint32 {
+			entry.consecutiveFailures++
+		}
+		entry.retryNotBefore = input.nextRetry(entry.consecutiveFailures)
+	}
+	entry.retryNotBefore = laterRegistrarDeadline(entry.retryNotBefore, input.minimumRetryAt)
+	entry.deprioritizedUntil = laterRegistrarDeadline(entry.deprioritizedUntil, input.now.Add(vodafoneUKPCSCFDeprioritizedPeriod))
+	entry.reason = input.reason
+	store.entries[registrar] = entry
+	return entry
+}
+
+func laterRegistrarDeadline(current, next time.Time) time.Time {
+	if next.After(current) {
+		return next
+	}
+	return current
+}

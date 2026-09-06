@@ -144,11 +144,15 @@ func (s *Service) recoverPCSCFAfterPortSReset(failedRegistrar string, observedAt
 	defer s.pcscfRecoveryPending.Store(false)
 	s.registerMu.Lock()
 	defer s.registerMu.Unlock()
-	unavailableUntil := time.Now().Add(vodafoneUKPCSCFDeprioritizedPeriod)
-	next, current := s.markRegistrarUnavailableAndAdvance(failedRegistrar, unavailableUntil)
-	if !current {
+	s.mu.Lock()
+	if strings.TrimSpace(s.registrar) != strings.TrimSpace(failedRegistrar) {
+		s.mu.Unlock()
 		return
 	}
+	penalty := s.markVodafoneRegistrarFailure(failedRegistrar, "port_s_peer_reset", nil)
+	next := s.advanceAvailableRegistrarLocked()
+	s.mu.Unlock()
+	unavailableUntil := penalty.deprioritizedUntil
 	if next == "" {
 		s.requestFreshRuntimeAfterPortSReset(
 			failedRegistrar, observedAt, unavailableUntil,
@@ -244,18 +248,17 @@ func (s *Service) signalDownlinkValidation() {
 }
 
 func (s *Service) rejectUnverifiedPortSRegistrar(registrar string, observedAt time.Time, reason string) {
-	unavailableUntil := time.Now().Add(vodafoneUKPCSCFDeprioritizedPeriod)
-	s.registrarPenalties.mark(registrar, unavailableUntil)
-	s.requestFreshRuntimeAfterPortSReset(registrar, observedAt, unavailableUntil, reason)
+	if s.stopped() {
+		return
+	}
+	penalty := s.markVodafoneRegistrarFailure(registrar, "downlink_validation_timeout", nil)
+	s.requestFreshRuntimeAfterPortSReset(registrar, observedAt, penalty.deprioritizedUntil, reason)
 }
 
 func (s *Service) rejectFailedPortSRegistrar(registrar string, observedAt time.Time, err error) {
-	now := time.Now()
-	failures := s.registrarPenalties.recordFailure(registrar)
-	unavailableUntil := s.failedRegisterUnavailableUntil(err, now, failures)
-	s.registrarPenalties.mark(registrar, unavailableUntil)
+	penalty := s.markVodafoneRegistrarFailure(registrar, "initial_registration_failed", err)
 	reason := fmt.Sprintf("initial registration failed: %v", err)
-	s.requestFreshRuntimeAfterPortSReset(registrar, observedAt, unavailableUntil, reason)
+	s.requestFreshRuntimeAfterPortSReset(registrar, observedAt, penalty.deprioritizedUntil, reason)
 }
 
 func (s *Service) failedRegisterUnavailableUntil(err error, now time.Time, failures uint32) time.Time {

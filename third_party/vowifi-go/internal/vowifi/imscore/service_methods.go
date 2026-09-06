@@ -19,7 +19,7 @@ func (s *Service) Start(ctx context.Context) error {
 		return err
 	}
 	s.startFragmentCleanup()
-	return s.Register(ctx)
+	return s.scheduleInitialRecoveryFailure(s.Register(ctx))
 }
 
 // SnapshotMap retains the additive map snapshot API.
