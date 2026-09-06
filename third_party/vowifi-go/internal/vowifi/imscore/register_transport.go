@@ -260,12 +260,14 @@ func (s *Service) serveProtectedSIPConnection(conn net.Conn) {
 	defer s.networkDone.Done()
 	defer conn.Close()
 	err := s.readRegistrationStreamSync(conn)
-	s.recordPortSClosed(conn, err, time.Now())
+	recoverFlow := s.recordPortSClosed(conn, err, time.Now())
 	s.untrackProtectedConnection(conn)
 	if err != nil && !s.stopped() {
 		logging.WarnRate("ims-protected-server-stream-"+s.DeviceID(),
 			"IMS protected server push connection closed", "err", err)
-		s.handleProtectedServerPushClosed()
+		if recoverFlow {
+			s.handleProtectedServerPushClosed()
+		}
 	}
 }
 
@@ -373,6 +375,8 @@ func (s *Service) portSReconnectWatchFired(generation uint64, registrar string) 
 		return
 	}
 	if s == nil || s.stopped() || s.RegState() != regRegistered {
+		// An in-flight REGISTER owns the next decision. Keep reconnectWaiting
+		// set so completion also handles a failure not initiated by this watch.
 		return
 	}
 	s.protectedConnMu.Lock()
@@ -441,16 +445,17 @@ func (s *Service) completePortSRecovery(err error, bindingPreserved bool) {
 		}
 		return
 	}
-	if !pending {
+	// A failed REGISTER supersedes any earlier post-success validation wait.
+	s.portSRecoveryAwaitingFlow.Store(false)
+	if !bindingPreserved {
+		s.portSReconnectWaiting.Store(false)
+		s.resetPortSRecoveryBackoff()
+		return
+	}
+	if !pending && (s.portSPushReady.Load() || !s.portSReconnectWaiting.Load() || s.canAwaitOnDemandPortS()) {
 		if s.portSPushReady.Load() {
 			s.portSReconnectWaiting.Store(false)
 		}
-		return
-	}
-	if !bindingPreserved {
-		s.portSRecoveryAwaitingFlow.Store(false)
-		s.portSReconnectWaiting.Store(false)
-		s.resetPortSRecoveryBackoff()
 		return
 	}
 	backoff := s.recordPortSRecoveryFailure(err, time.Now())

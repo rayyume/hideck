@@ -23,6 +23,7 @@ const (
 )
 
 type portSConnectionState struct {
+	generation   uint64
 	openedAt     time.Time
 	registrar    string
 	localClosing bool
@@ -60,8 +61,10 @@ func (s *Service) recordPortSOpened(conn net.Conn, now time.Time) {
 	if s.portSSession.connections == nil {
 		s.portSSession.connections = make(map[net.Conn]portSConnectionState)
 	}
-	s.portSSession.connections[conn] = portSConnectionState{openedAt: now, registrar: registrar}
 	s.portSSession.generation++
+	s.portSSession.connections[conn] = portSConnectionState{
+		generation: s.portSSession.generation, openedAt: now, registrar: registrar,
+	}
 	s.portSSession.openedAt = now
 	generation := s.portSSession.generation
 	s.portSSessionMu.Unlock()
@@ -80,13 +83,15 @@ func (s *Service) recordPortSInbound(now time.Time) {
 	s.portSSessionMu.Unlock()
 }
 
-func (s *Service) recordPortSClosed(conn net.Conn, err error, now time.Time) {
+// recordPortSClosed logs every close, but only a relevant non-local close may
+// drive recovery. A detached reader may finish after its replacement failed.
+func (s *Service) recordPortSClosed(conn net.Conn, err error, now time.Time) bool {
 	if s == nil || conn == nil {
-		return
+		return false
 	}
 	currentRegistrar := s.currentPortSRecoveryRegistrar()
 	s.portSSessionMu.Lock()
-	connection := s.portSSession.connections[conn]
+	connection, tracked := s.portSSession.connections[conn]
 	delete(s.portSSession.connections, conn)
 	registrar := connection.registrar
 	if registrar == "" {
@@ -96,15 +101,22 @@ func (s *Service) recordPortSClosed(conn net.Conn, err error, now time.Time) {
 	if connection.localClosing {
 		kind = portSCloseLocal
 	}
-	s.portSSession.closedAt = now
-	s.portSSession.lastCloseKind = kind
-	s.portSSession.lastCloseReason = errorText(err)
+	// Retired cleanup must not replace the latest failure. An older live
+	// connection still matters if it is the final downlink on this registrar.
+	current := tracked && strings.EqualFold(registrar, currentRegistrar) &&
+		(connection.generation == s.portSSession.generation ||
+			(kind != portSCloseLocal && len(s.portSSession.connections) == 0))
+	if current {
+		s.portSSession.closedAt = now
+		s.portSSession.lastCloseKind = kind
+		s.portSSession.lastCloseReason = errorText(err)
+	}
 	startFailover := false
-	if kind == portSClosePeerReset {
+	if current && kind == portSClosePeerReset {
 		s.portSSession.peerResetCount++
 		startFailover = s.armVodafoneUKResetRecoveryLocked(registrar, connection.openedAt, now)
 	}
-	generation := s.portSSession.generation
+	generation := connection.generation
 	lastInboundAt := s.portSSession.lastInboundAt
 	s.portSSessionMu.Unlock()
 	logging.Info("IMS port-s lifecycle",
@@ -116,6 +128,7 @@ func (s *Service) recordPortSClosed(conn net.Conn, err error, now time.Time) {
 	if startFailover {
 		s.startPendingPortSResetFailover()
 	}
+	return current && kind != portSCloseLocal
 }
 
 func (s *Service) markPortSLocalClose(conn net.Conn) {

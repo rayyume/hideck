@@ -1122,6 +1122,7 @@ func TestServeProtectedSIPConnectionRecoversTheFlowOnReset(t *testing.T) {
 	if !service.trackProtectedConnection(client) {
 		t.Fatal("trackProtectedConnection")
 	}
+	service.recordPortSOpened(client, time.Now())
 	service.networkDone.Add(1)
 	done := make(chan struct{})
 	go func() {
