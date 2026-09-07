@@ -42,6 +42,10 @@ func New(cfg *IMSConfig) (*Service, error) {
 		cfg.RegistrarPenalties = registrarPenalties
 	}
 	transport := newSIPTransport()
+	registrations := cfg.SubscriptionRegistrations
+	if registrations == nil {
+		registrations = NewSubscriptionRegistrationStore()
+	}
 	s := &Service{
 		cfg:                    cfg,
 		state:                  regIdle,
@@ -76,6 +80,8 @@ func New(cfg *IMSConfig) (*Service, error) {
 		keepaliveTimeout:      keepaliveTimeout,
 		keepaliveFailureLimit: imsKeepaliveFailureLimit,
 		portSRecoveryJitter:   randomRFC5626RecoveryDelay,
+
+		subscriptionRegistrations: registrations,
 	}
 	transport.SetFatalHandler(s.handleFatalTransactionError)
 	return s, nil

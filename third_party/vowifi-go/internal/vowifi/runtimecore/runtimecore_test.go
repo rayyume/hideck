@@ -253,6 +253,7 @@ func TestBuildSWUConfigExposesMissingAKA(t *testing.T) {
 
 func TestBuildIMSConfigUsesNegotiatedPCSCFAndCarrierRuntimeFields(t *testing.T) {
 	penalties := imscore.NewRegistrarPenaltyStore()
+	registrations := imscore.NewSubscriptionRegistrationStore()
 	prepared := profile.PreparedSession{
 		Profile: profile.Profile{
 			IMSI: "234102356143376", MCC: "234", MNC: "10", IMEI: "123456789012345",
@@ -276,7 +277,7 @@ func TestBuildIMSConfigUsesNegotiatedPCSCFAndCarrierRuntimeFields(t *testing.T) 
 		},
 	}
 	config, err := buildIMSConfig(imsConfigInput{
-		session: SessionConfig{Prepared: prepared, RegistrarPenalties: penalties}, result: result,
+		session: SessionConfig{Prepared: prepared, RegistrarPenalties: penalties, SubscriptionRegistrations: registrations}, result: result,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -293,12 +294,18 @@ func TestBuildIMSConfigUsesNegotiatedPCSCFAndCarrierRuntimeFields(t *testing.T) 
 	if config.RegistrarPenalties != penalties {
 		t.Fatal("IMS config did not retain the runtime P-CSCF penalty store")
 	}
+	if config.SubscriptionRegistrations != registrations {
+		t.Fatal("IMS config replaced subscription registration state")
+	}
 	result.Snapshot.PCSCFv4 = []net.IP{net.ParseIP("192.0.2.20")}
 	replacement, err := buildIMSConfig(imsConfigInput{
-		session: SessionConfig{Prepared: prepared, RegistrarPenalties: penalties}, result: result,
+		session: SessionConfig{Prepared: prepared, RegistrarPenalties: penalties, SubscriptionRegistrations: registrations}, result: result,
 	})
 	if err != nil || replacement.Registrar != "192.0.2.20:5060" || replacement.RegistrarPenalties != penalties {
 		t.Fatalf("replacement must use new tunnel candidates and keep recovery history: config=%+v err=%v", replacement, err)
+	}
+	if replacement.SubscriptionRegistrations != registrations {
+		t.Fatal("replacement tunnel lost subscription registration state")
 	}
 }
 
@@ -413,15 +420,20 @@ func TestRuntimeStartKeepsScheduledRegistrarRetryInCurrentLoop(t *testing.T) {
 	req := baseRuntimeRequest(recorder)
 	req.Reconnect = true
 	var firstStore *imscore.RegistrarPenaltyStore
+	var subscriptions *imscore.SubscriptionRegistrationStore
 	attempts := 0
 	req.SessionStarter = func(_ context.Context, config SessionConfig) (*SessionResult, error) {
 		attempts++
 		if attempts == 1 {
 			firstStore = config.RegistrarPenalties
+			subscriptions = config.SubscriptionRegistrations
 			return nil, scheduledRetryTestError{retryAt: time.Now().Add(10 * time.Millisecond)}
 		}
 		if config.RegistrarPenalties != firstStore {
 			t.Fatal("runtime reconnect replaced the registrar penalty store")
+		}
+		if subscriptions == nil || config.SubscriptionRegistrations != subscriptions {
+			t.Fatal("runtime reconnect replaced subscription registration state")
 		}
 		cancel()
 		return nil, context.Canceled

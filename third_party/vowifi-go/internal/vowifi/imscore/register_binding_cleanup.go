@@ -43,6 +43,7 @@ func (s *Service) clearRegistrationBindingsLocked(ctx context.Context) error {
 	}
 	s.mu.Lock()
 	s.regSession = session
+	s.endSubscriptionRegistrationLocked(true)
 	s.mu.Unlock()
 	logging.Info("IMS registrar bindings cleared", "device", s.DeviceID(), "cseq", session.cseq)
 	return nil
@@ -244,6 +245,7 @@ func (s *Service) unregisterBindings(ctx context.Context, allBindings bool) erro
 			response, err = s.exchangeUnregisterAttempt(ctx, fallbackSession, fallbackWildcard)
 			if err == nil {
 				session = fallbackSession
+				allBindings = fallbackWildcard
 			}
 		}
 	}
@@ -257,6 +259,7 @@ func (s *Service) unregisterBindings(ctx context.Context, allBindings bool) erro
 	s.mu.Lock()
 	s.regSession = session
 	s.regState = regUnregister
+	s.endSubscriptionRegistrationLocked(allBindings)
 	s.mu.Unlock()
 	logging.Info("IMS Contact binding removed", "device", s.DeviceID(), "cseq", session.cseq)
 	return nil

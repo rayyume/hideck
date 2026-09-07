@@ -50,6 +50,13 @@
 - MO 短信经 `smsSendMu` 串行化。
 - 入向 Privacy/TIR 未处理（TS 24.608）。
 
+## IMS 订阅拒绝与注册生命周期
+
+- REGISTER 刷新不重建已开始的 `reg` / `message-summary` 订阅，也不清除拒绝原因。有效订阅沿用对话并按协商有效期刷新；`reg` 初始注册新 Contact 后建立新订阅，见 [TS 24.229 §5.1.1.3](https://www.etsi.org/deliver/etsi_ts/124200_124299/124229/18.10.00_60/ts_124229v181000p.pdf)。短有效期采用半周期刷新，避免提前量大于有效期时立即循环发送。
+- MWI 收到 405/489 后不重试，直到公共用户身份注销，见 [TS 24.606 §4.7.2.1](https://www.etsi.org/deliver/etsi_ts/124600_124699/124606/18.00.00_60/ts_124606v180000p.pdf)。记录按设备、IMS 身份隔离，在同一次运行的自动恢复和 IKE 重鉴权间共享；TCP 关闭或 Service 销毁不等于注销。确认注销对应绑定后移除绑定；仍有其他已知有效绑定则保留拒绝记录，最后一个已知绑定注销或到期后才结束该记录。不写入永久运营商黑名单。
+- `reg` 初始拒绝不随普通 REGISTER 刷新重试。403、超时或 5xx 不写入 MWI 的“不支持”记录；403 保留原有本地拒绝处理，超时和 5xx 保留原有重试处理。订阅结果带注册上下文校验，旧响应不得覆盖新对话状态。
+- 失败原因与跳过原因保留在诊断中；本项不改变 port-s 普通 EOF、2degrees 按需下行、VOXI RST/短信回执 488 或 P-CSCF 退避策略。回归入口：`subscription_lifecycle_test.go`、`subscription_registration_store_test.go`。
+
 ## Vodafone UK / VOXI 的 P-CSCF 恢复策略
 
 此节是 `vodafone_uk_23415` 预设的经验性兼容策略，不是所有运营商必须采用的协议行为。明确 port-s RST 仍使用 5 秒宽限；RP 报告 488 仍触发换路径。普通 EOF 和其他运营商的恢复分支不因此改变。

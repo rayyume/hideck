@@ -168,6 +168,7 @@ func (s *Service) resetRegistrationForPCSCFSwitch() error {
 	}
 	s.mu.Lock()
 	s.regSession = nil
+	s.subscriptionGeneration++
 	s.serviceRoute = ""
 	s.path = ""
 	s.pubGRUU = ""

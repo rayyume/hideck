@@ -587,12 +587,12 @@ func TestSubscriptionStateTerminatedParsesHeader(t *testing.T) {
 	}
 }
 
-func TestSubscriptionRefreshDelayMatchesRecoveredClient(t *testing.T) {
-	if got := subscriptionRefreshDelay(time.Hour); got != 59*time.Minute {
+func TestSubscriptionRefreshDelayMatches3GPP(t *testing.T) {
+	if got := subscriptionRefreshDelay(time.Hour); got != 50*time.Minute {
 		t.Fatalf("hour subscription refresh delay = %s", got)
 	}
-	if got := subscriptionRefreshDelay(time.Minute); got != 0 {
-		t.Fatalf("one-minute subscription refresh delay = %s, want immediate", got)
+	if got := subscriptionRefreshDelay(time.Minute); got != 30*time.Second {
+		t.Fatalf("one-minute subscription refresh delay = %s, want half lifetime", got)
 	}
 }
 
@@ -651,11 +651,14 @@ func TestRecordSubscriptionResultClosesOnPermanentReject(t *testing.T) {
 	for _, status := range []int{403, 405, 489} {
 		t.Run(strconv.Itoa(status), func(t *testing.T) {
 			service := newProtectedKeepaliveTestService(t)
-			service.recordSubscriptionAttempt(time.Now(), time.Hour)
-			err := service.recordSubscriptionResult(
-				&sip.Response{StatusCode: status, Reason: "rejected"},
-				time.Hour, false, fmt.Errorf("SUBSCRIBE rejected with status %d", status),
-			)
+			if err := service.recordSubscriptionAttempt(subscriptionResult{context: service.subscriptionContextLocked(), requestedExpires: time.Hour}); err != nil {
+				t.Fatal(err)
+			}
+			err := service.recordSubscriptionResult(subscriptionResult{
+				context:          service.subscriptionContextLocked(),
+				response:         &sip.Response{StatusCode: status, Reason: "rejected"},
+				requestedExpires: time.Hour, err: fmt.Errorf("SUBSCRIBE rejected with status %d", status),
+			})
 			if err == nil {
 				t.Fatal("expected permanent reject error")
 			}
@@ -680,12 +683,15 @@ func TestRecordSubscriptionResultClosesOnPermanentReject(t *testing.T) {
 
 func TestRecordSubscriptionResultKeepsRetryOnTemporaryReject(t *testing.T) {
 	service := newProtectedKeepaliveTestService(t)
-	service.recordSubscriptionAttempt(time.Now(), time.Hour)
+	if err := service.recordSubscriptionAttempt(subscriptionResult{context: service.subscriptionContextLocked(), requestedExpires: time.Hour}); err != nil {
+		t.Fatal(err)
+	}
 	before := service.subscriptionRefreshAt
-	err := service.recordSubscriptionResult(
-		&sip.Response{StatusCode: 503, Reason: "Service Unavailable"},
-		time.Hour, false, errors.New("SUBSCRIBE rejected with status 503"),
-	)
+	err := service.recordSubscriptionResult(subscriptionResult{
+		context:          service.subscriptionContextLocked(),
+		response:         &sip.Response{StatusCode: 503, Reason: "Service Unavailable"},
+		requestedExpires: time.Hour, err: errors.New("SUBSCRIBE rejected with status 503"),
+	})
 	if err == nil {
 		t.Fatal("expected 503 error")
 	}

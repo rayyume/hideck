@@ -433,8 +433,11 @@ func TestRegistrationRefreshDelayFollowsTS24229(t *testing.T) {
 			t.Fatalf("registrationRefreshDelay(%s) = %s, want %s", test.expires, got, test.want)
 		}
 	}
-	if got := subscriptionRefreshDelay(time.Hour); got != 59*time.Minute {
-		t.Fatalf("subscription refresh must stay on the 60s advance: %s", got)
+	if got := subscriptionRefreshDelay(time.Hour); got != 50*time.Minute {
+		t.Fatalf("reg subscription refresh must use the 3GPP advance: %s", got)
+	}
+	if got := mwiSubscriptionRefreshDelay(time.Hour); got != 59*time.Minute {
+		t.Fatalf("MWI subscription refresh changed its advance: %s", got)
 	}
 }
 

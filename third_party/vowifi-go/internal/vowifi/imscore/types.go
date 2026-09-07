@@ -219,6 +219,11 @@ type Service struct {
 	subscriptionInFlight      atomic.Bool
 	subscriptionClosed        bool
 	subscriptionDialog        registrationSubscriptionDialog
+	subscriptionLifecycle     subscriptionLifecycle
+	mwiSubscriptionLifecycle  subscriptionLifecycle
+	subscriptionGeneration    uint64
+	subscriptionBinding       subscriptionRegistration
+	subscriptionRegistrations *SubscriptionRegistrationStore
 	notifyReconnectPending    atomic.Bool
 	bindingCleanupPending     atomic.Bool
 	lastRegisterContactCount  atomic.Int32

@@ -128,6 +128,8 @@ type SessionConfig struct {
 	OnTunnelReady         func(*SessionResult)
 	OmitInitialContact    bool
 	RegistrarPenalties    *imscore.RegistrarPenaltyStore
+
+	SubscriptionRegistrations *imscore.SubscriptionRegistrationStore
 }
 
 type SessionResult struct {
@@ -183,6 +185,8 @@ type RuntimeStartRequest struct {
 	fastReauth          *FastReauthStore
 	omitInitialContact  bool
 	registrarPenalties  *imscore.RegistrarPenaltyStore
+
+	subscriptionRegistrations *imscore.SubscriptionRegistrationStore
 }
 
 type VoiceLifecycle interface {

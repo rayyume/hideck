@@ -213,11 +213,14 @@ func TestRecordMWISubscriptionResultClosesOnPermanentReject(t *testing.T) {
 	for _, status := range []int{405, 489} {
 		t.Run(strconv.Itoa(status), func(t *testing.T) {
 			service := newProtectedKeepaliveTestService(t)
-			service.recordMWISubscriptionAttempt(time.Now(), time.Hour)
-			err := service.recordMWISubscriptionResult(
-				&sip.Response{StatusCode: status, Reason: "rejected"},
-				time.Hour, false, fmt.Errorf("SUBSCRIBE rejected with status %d", status),
-			)
+			if err := service.recordMWISubscriptionAttempt(subscriptionResult{context: service.subscriptionContextLocked(), requestedExpires: time.Hour}); err != nil {
+				t.Fatal(err)
+			}
+			err := service.recordMWISubscriptionResult(subscriptionResult{
+				context:          service.subscriptionContextLocked(),
+				response:         &sip.Response{StatusCode: status, Reason: "rejected"},
+				requestedExpires: time.Hour, err: fmt.Errorf("SUBSCRIBE rejected with status %d", status),
+			})
 			if err == nil {
 				t.Fatal("expected permanent reject error")
 			}

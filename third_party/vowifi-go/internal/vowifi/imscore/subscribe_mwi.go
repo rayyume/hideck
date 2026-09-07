@@ -22,8 +22,7 @@ const (
 )
 
 func (s *Service) startMWISubscription() {
-	s.resetMWISubscription()
-	eligible, skipReason := s.registrationSubscriptionGate()
+	eligible, skipReason := s.prepareSubscriptionStart(true)
 	if !eligible {
 		logging.Info("IMS SUBSCRIBE(mwi) skipped",
 			"device", s.DeviceID(), "reason", skipReason)
@@ -41,17 +40,12 @@ func (s *Service) startMWISubscription() {
 	}()
 }
 
-func (s *Service) resetMWISubscription() {
-	if s == nil {
-		return
-	}
-	s.mu.Lock()
+func (s *Service) resetMWISubscriptionLocked() {
 	s.mwiSubscriptionClosed = false
 	s.mwiSubscriptionDialog = registrationSubscriptionDialog{}
 	s.mwiSubscriptionRefreshAt = time.Time{}
 	s.mwiSubscriptionExpires = 0
 	s.mwiSubscriptionLastErr = ""
-	s.mu.Unlock()
 }
 
 func (s *Service) mwiSubscriptionEligibleLocked() bool {
@@ -61,6 +55,11 @@ func (s *Service) mwiSubscriptionEligibleLocked() bool {
 
 func (s *Service) reportMWISubscriptionRuntimeError(err error) {
 	if err == nil || s.stopped() {
+		return
+	}
+	if errors.Is(err, errSubscriptionContextChanged) {
+		logging.Debug("IMS SUBSCRIBE(mwi) retired attempt completed; checking current registration", "device", s.DeviceID(), "err", err)
+		s.startMWISubscription()
 		return
 	}
 	if !s.hasProtectedRegistrationTransport() {
@@ -122,33 +121,40 @@ func (s *Service) sendMWISubscription(ctx context.Context, expires time.Duration
 		return nil
 	}
 
+	attempt, err := s.beginSubscriptionAttempt(true, unsubscribe)
+	if err != nil {
+		return err
+	}
+	result := subscriptionResult{context: attempt, unsubscribe: unsubscribe}
 	request, requestedExpires, err := s.buildMWISubscription(expires)
+	result.request, result.requestedExpires, result.err = request, requestedExpires, err
 	if err != nil {
-		return s.recordMWISubscriptionResult(nil, 0, unsubscribe, err)
+		return s.recordMWISubscriptionResult(result)
 	}
-	response, err := s.exchangeMWISubscription(ctx, request, requestedExpires)
+	response, err := s.exchangeMWISubscription(ctx, result)
+	result.response, result.err = response, err
 	if err != nil {
-		return s.recordMWISubscriptionResult(nil, requestedExpires, unsubscribe, err)
+		return s.recordMWISubscriptionResult(result)
 	}
-	if response.StatusCode == 481 && !unsubscribe && s.hasMWISubscriptionDialog() {
-		s.clearMWISubscriptionDialog()
+	if response.StatusCode == 481 && !unsubscribe && s.retrySubscriptionAfter481(result, true) {
 		logging.Info("IMS SUBSCRIBE(mwi) dialog gone; retrying as initial",
 			"device", s.DeviceID())
 		request, requestedExpires, err = s.buildMWISubscription(expires)
+		result.request, result.requestedExpires, result.err = request, requestedExpires, err
 		if err != nil {
-			return s.recordMWISubscriptionResult(nil, 0, false, err)
+			return s.recordMWISubscriptionResult(result)
 		}
-		response, err = s.exchangeMWISubscription(ctx, request, requestedExpires)
+		response, err = s.exchangeMWISubscription(ctx, result)
+		result.response, result.err = response, err
 		if err != nil {
-			return s.recordMWISubscriptionResult(nil, requestedExpires, false, err)
+			return s.recordMWISubscriptionResult(result)
 		}
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		err = fmt.Errorf("SUBSCRIBE rejected with status %d (%s)", response.StatusCode, response.Reason)
-		return s.recordMWISubscriptionResult(response, requestedExpires, unsubscribe, err)
+		result.err = fmt.Errorf("SUBSCRIBE rejected with status %d (%s)", response.StatusCode, response.Reason)
+		return s.recordMWISubscriptionResult(result)
 	}
-	s.learnMWISubscriptionDialog(request, response)
-	if err := s.recordMWISubscriptionResult(response, requestedExpires, unsubscribe, nil); err != nil {
+	if err := s.recordMWISubscriptionResult(result); err != nil {
 		return err
 	}
 	if unsubscribe {
@@ -161,10 +167,12 @@ func (s *Service) sendMWISubscription(ctx context.Context, expires time.Duration
 
 func (s *Service) exchangeMWISubscription(
 	ctx context.Context,
-	request *sip.Request,
-	requestedExpires time.Duration,
+	result subscriptionResult,
 ) (*sip.Response, error) {
-	s.recordMWISubscriptionAttempt(time.Now(), requestedExpires)
+	if err := s.recordMWISubscriptionAttempt(result); err != nil {
+		return nil, err
+	}
+	request := result.request
 	logging.Debug("IMS SUBSCRIBE(mwi) outbound", "device", s.DeviceID(), "sip", logging.RedactSIPRaw(request.String()))
 	response, _, err := s.dispatchOutboundRequest(
 		ctx, mwiSubscriptionFlow, request, mwiSubscriptionTimeout, true,
@@ -254,27 +262,35 @@ func (s *Service) reserveMWISubscriptionBuildContext() (SIPDialogProfile, regist
 	}, dialog, nil
 }
 
-func (s *Service) recordMWISubscriptionAttempt(at time.Time, expires time.Duration) {
+func (s *Service) recordMWISubscriptionAttempt(result subscriptionResult) error {
 	s.mu.Lock()
+	if !s.subscriptionResultCurrentLocked(result) {
+		s.mu.Unlock()
+		return errSubscriptionContextChanged
+	}
+	at, expires := time.Now(), result.requestedExpires
 	s.mwiSubscriptionLastAttemptAt = at
 	s.mwiSubscriptionExpires = expires
-	s.mwiSubscriptionRefreshAt = at.Add(subscriptionRefreshDelay(expires))
+	s.mwiSubscriptionRefreshAt = at.Add(mwiSubscriptionRefreshDelay(expires))
 	s.mwiSubscriptionLastErr = ""
 	s.mu.Unlock()
 	s.signalIMSMaintenance()
+	return nil
 }
 
-func (s *Service) recordMWISubscriptionResult(
-	response *sip.Response,
-	requestedExpires time.Duration,
-	unsubscribe bool,
-	resultErr error,
-) error {
+func (s *Service) recordMWISubscriptionResult(result subscriptionResult) error {
+	response, requestedExpires, unsubscribe, resultErr := result.response, result.requestedExpires, result.unsubscribe, result.err
 	completedAt := time.Now()
 	s.mu.Lock()
+	if !s.subscriptionResultCurrentLocked(result) {
+		s.mu.Unlock()
+		return errors.Join(errSubscriptionContextChanged, result.err)
+	}
 	if resultErr != nil {
 		s.mwiSubscriptionLastErr = resultErr.Error()
 		if subscriptionPermanentlyRejected(response) {
+			s.mwiSubscriptionLifecycle.rejectedStatus = response.StatusCode
+			s.subscriptionRegistrations.rejectMWI(result.context.binding, response.StatusCode)
 			s.mwiSubscriptionClosed = true
 			s.mwiSubscriptionDialog = registrationSubscriptionDialog{}
 			s.mwiSubscriptionExpires = 0
@@ -283,6 +299,7 @@ func (s *Service) recordMWISubscriptionResult(
 		s.mu.Unlock()
 		return resultErr
 	}
+	s.learnMWISubscriptionDialogLocked(result.request, response)
 	s.mwiSubscriptionLastOKAt = completedAt
 	s.mwiSubscriptionLastErr = ""
 	if unsubscribe || requestedExpires <= 0 {
@@ -295,18 +312,16 @@ func (s *Service) recordMWISubscriptionResult(
 	}
 	expires := subscriptionExpires(response, requestedExpires)
 	s.mwiSubscriptionExpires = expires
-	s.mwiSubscriptionRefreshAt = completedAt.Add(subscriptionRefreshDelay(expires))
+	s.mwiSubscriptionRefreshAt = completedAt.Add(mwiSubscriptionRefreshDelay(expires))
 	s.mu.Unlock()
 	s.signalIMSMaintenance()
 	return nil
 }
 
-func (s *Service) learnMWISubscriptionDialog(request *sip.Request, response *sip.Response) {
+func (s *Service) learnMWISubscriptionDialogLocked(request *sip.Request, response *sip.Response) {
 	if s == nil || request == nil {
 		return
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	dialog := s.mwiSubscriptionDialog
 	if request.CallID() != nil {
 		dialog.callID = request.CallID().Value()
@@ -329,15 +344,6 @@ func (s *Service) learnMWISubscriptionDialog(request *sip.Request, response *sip
 		}
 	}
 	s.mwiSubscriptionDialog = dialog
-}
-
-func (s *Service) clearMWISubscriptionDialog() {
-	if s == nil {
-		return
-	}
-	s.mu.Lock()
-	s.mwiSubscriptionDialog = registrationSubscriptionDialog{}
-	s.mu.Unlock()
 }
 
 func (s *Service) closeMWISubscription() {
@@ -385,6 +391,13 @@ func (s *Service) refreshMWISubscription() {
 	if err := s.sendSubscribeMWI(ctx); err != nil {
 		s.reportMWISubscriptionRuntimeError(err)
 	}
+}
+
+func mwiSubscriptionRefreshDelay(expires time.Duration) time.Duration {
+	if expires > 2*imsSubscriptionRefreshAdvance {
+		return expires - imsSubscriptionRefreshAdvance
+	}
+	return expires / 2
 }
 
 func sipEventPackage(raw string) string {

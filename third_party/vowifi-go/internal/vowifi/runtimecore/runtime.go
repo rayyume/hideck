@@ -31,6 +31,9 @@ func (Runtime) Start(
 	if req.fastReauth == nil {
 		req.fastReauth = &FastReauthStore{}
 	}
+	if req.subscriptionRegistrations == nil {
+		req.subscriptionRegistrations = imscore.NewSubscriptionRegistrationStore()
+	}
 	if req.Options.Voice != nil && req.voiceBinding == nil {
 		req.voiceBinding = &voiceLifecycleBinding{deviceID: req.DeviceID, voice: req.Options.Voice}
 	}
@@ -173,7 +176,8 @@ func sessionConfigFromRequest(
 			}
 		},
 		OnProgress: req.OnProgress, OmitInitialContact: req.omitInitialContact,
-		RegistrarPenalties: req.registrarPenalties,
+		RegistrarPenalties:        req.registrarPenalties,
+		SubscriptionRegistrations: req.subscriptionRegistrations,
 	}
 	req.fastReauth.Apply(&config)
 	return config

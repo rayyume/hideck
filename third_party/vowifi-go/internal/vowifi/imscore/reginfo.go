@@ -75,6 +75,9 @@ func (s *Service) handleRegistrationNotification(raw string) {
 		s.reRegisterAfterDelay(reginfoReconnectDelay)
 	}
 	if s.myContactTerminated(document) {
+		s.mu.Lock()
+		s.endSubscriptionRegistrationLocked(false)
+		s.mu.Unlock()
 		logging.WarnRate("ims-reginfo-terminated-"+s.DeviceID(),
 			"IMS registration binding terminated", "device", s.DeviceID(), "aor", aor)
 		s.reRegisterAfterDelay(reginfoReconnectDelay)

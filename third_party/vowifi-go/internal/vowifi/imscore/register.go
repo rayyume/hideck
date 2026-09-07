@@ -170,6 +170,7 @@ func (s *Service) registerLocked(ctx context.Context) error {
 	if s.regSession != nil {
 		publicID = s.regSession.publicID
 		secAgree = s.regSession.security != nil && strings.TrimSpace(s.regSession.security.verifyHeader) != ""
+		s.trackSubscriptionRegistrationLocked(expires)
 	}
 	s.mu.Unlock()
 	if s.portSPushReady.Load() || s.inboundSIPHandledRequest.Load() > downlinkBaseline {

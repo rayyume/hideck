@@ -69,6 +69,7 @@ func (s *Service) detachDeadSignaling(err error, expectedPacket net.PacketConn) 
 	s.subscriptionRefreshAt = time.Time{}
 	s.subscriptionClosed = false
 	s.subscriptionDialog = registrationSubscriptionDialog{}
+	s.subscriptionGeneration++
 	s.nextRegister = time.Time{}
 	s.signalingGeneration++
 	s.signalingReady = false

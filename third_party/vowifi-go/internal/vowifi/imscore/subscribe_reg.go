@@ -36,8 +36,7 @@ func (d registrationSubscriptionDialog) ready() bool {
 }
 
 func (s *Service) startRegistrationSubscription() {
-	s.resetRegistrationSubscription()
-	eligible, skipReason := s.registrationSubscriptionGate()
+	eligible, skipReason := s.prepareSubscriptionStart(false)
 	if !eligible {
 		logging.Info("IMS SUBSCRIBE(reg) skipped",
 			"device", s.DeviceID(), "reason", skipReason)
@@ -55,17 +54,12 @@ func (s *Service) startRegistrationSubscription() {
 	}()
 }
 
-func (s *Service) resetRegistrationSubscription() {
-	if s == nil {
-		return
-	}
-	s.mu.Lock()
+func (s *Service) resetRegistrationSubscriptionLocked() {
 	s.subscriptionClosed = false
 	s.subscriptionDialog = registrationSubscriptionDialog{}
 	s.subscriptionRefreshAt = time.Time{}
 	s.subscriptionExpires = 0
 	s.subscriptionLastErr = ""
-	s.mu.Unlock()
 }
 
 func (s *Service) hasProtectedRegistrationTransport() bool {
@@ -127,6 +121,11 @@ func (s *Service) reportRegistrationRuntimeError(err error) {
 
 func (s *Service) reportSubscriptionRuntimeError(err error) {
 	if err == nil || s.stopped() {
+		return
+	}
+	if errors.Is(err, errSubscriptionContextChanged) {
+		logging.Debug("IMS SUBSCRIBE(reg) retired attempt completed; checking current registration", "device", s.DeviceID(), "err", err)
+		s.startRegistrationSubscription()
 		return
 	}
 	if !s.hasProtectedRegistrationTransport() {
@@ -191,33 +190,40 @@ func (s *Service) sendRegistrationSubscription(ctx context.Context, expires time
 		return nil
 	}
 
+	attempt, err := s.beginSubscriptionAttempt(false, unsubscribe)
+	if err != nil {
+		return err
+	}
+	result := subscriptionResult{context: attempt, unsubscribe: unsubscribe}
 	request, requestedExpires, err := s.buildRegistrationSubscription(expires)
+	result.request, result.requestedExpires, result.err = request, requestedExpires, err
 	if err != nil {
-		return s.recordSubscriptionResult(nil, 0, unsubscribe, err)
+		return s.recordSubscriptionResult(result)
 	}
-	response, err := s.exchangeRegistrationSubscription(ctx, request, requestedExpires)
+	response, err := s.exchangeRegistrationSubscription(ctx, result)
+	result.response, result.err = response, err
 	if err != nil {
-		return s.recordSubscriptionResult(nil, requestedExpires, unsubscribe, err)
+		return s.recordSubscriptionResult(result)
 	}
-	if response.StatusCode == 481 && !unsubscribe && s.hasSubscriptionDialog() {
-		s.clearSubscriptionDialog()
+	if response.StatusCode == 481 && !unsubscribe && s.retrySubscriptionAfter481(result, false) {
 		logging.Info("IMS SUBSCRIBE(reg) dialog gone; retrying as initial",
 			"device", s.DeviceID())
 		request, requestedExpires, err = s.buildRegistrationSubscription(expires)
+		result.request, result.requestedExpires, result.err = request, requestedExpires, err
 		if err != nil {
-			return s.recordSubscriptionResult(nil, 0, false, err)
+			return s.recordSubscriptionResult(result)
 		}
-		response, err = s.exchangeRegistrationSubscription(ctx, request, requestedExpires)
+		response, err = s.exchangeRegistrationSubscription(ctx, result)
+		result.response, result.err = response, err
 		if err != nil {
-			return s.recordSubscriptionResult(nil, requestedExpires, false, err)
+			return s.recordSubscriptionResult(result)
 		}
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		err = fmt.Errorf("SUBSCRIBE rejected with status %d (%s)", response.StatusCode, response.Reason)
-		return s.recordSubscriptionResult(response, requestedExpires, unsubscribe, err)
+		result.err = fmt.Errorf("SUBSCRIBE rejected with status %d (%s)", response.StatusCode, response.Reason)
+		return s.recordSubscriptionResult(result)
 	}
-	s.learnSubscriptionDialog(request, response)
-	if err := s.recordSubscriptionResult(response, requestedExpires, unsubscribe, nil); err != nil {
+	if err := s.recordSubscriptionResult(result); err != nil {
 		return err
 	}
 	if unsubscribe {
@@ -230,10 +236,12 @@ func (s *Service) sendRegistrationSubscription(ctx context.Context, expires time
 
 func (s *Service) exchangeRegistrationSubscription(
 	ctx context.Context,
-	request *sip.Request,
-	requestedExpires time.Duration,
+	result subscriptionResult,
 ) (*sip.Response, error) {
-	s.recordSubscriptionAttempt(time.Now(), requestedExpires)
+	if err := s.recordSubscriptionAttempt(result); err != nil {
+		return nil, err
+	}
+	request := result.request
 	logging.Debug("IMS SUBSCRIBE(reg) outbound", "device", s.DeviceID(), "sip", logging.RedactSIPRaw(request.String()))
 	response, _, err := s.dispatchOutboundRequest(
 		ctx, registrationSubscriptionFlow, request, registrationSubscriptionTimeout, true,
@@ -383,14 +391,20 @@ func buildSubscribeContactHeader(value, transport string, protected bool) (*sip.
 	return &sip.ContactHeader{DisplayName: displayName, Address: uri, Params: params}, nil
 }
 
-func (s *Service) recordSubscriptionAttempt(at time.Time, expires time.Duration) {
+func (s *Service) recordSubscriptionAttempt(result subscriptionResult) error {
 	s.mu.Lock()
+	if !s.subscriptionResultCurrentLocked(result) {
+		s.mu.Unlock()
+		return errSubscriptionContextChanged
+	}
+	at, expires := time.Now(), result.requestedExpires
 	s.subscriptionLastAttemptAt = at
 	s.subscriptionExpires = expires
 	s.subscriptionRefreshAt = at.Add(subscriptionRefreshDelay(expires))
 	s.subscriptionLastErr = ""
 	s.mu.Unlock()
 	s.signalIMSMaintenance()
+	return nil
 }
 
 func subscriptionPermanentlyRejected(response *sip.Response) bool {
@@ -405,17 +419,18 @@ func subscriptionPermanentlyRejected(response *sip.Response) bool {
 	}
 }
 
-func (s *Service) recordSubscriptionResult(
-	response *sip.Response,
-	requestedExpires time.Duration,
-	unsubscribe bool,
-	resultErr error,
-) error {
+func (s *Service) recordSubscriptionResult(result subscriptionResult) error {
+	response, requestedExpires, unsubscribe, resultErr := result.response, result.requestedExpires, result.unsubscribe, result.err
 	completedAt := time.Now()
 	s.mu.Lock()
+	if !s.subscriptionResultCurrentLocked(result) {
+		s.mu.Unlock()
+		return errors.Join(errSubscriptionContextChanged, result.err)
+	}
 	if resultErr != nil {
 		s.subscriptionLastErr = resultErr.Error()
 		if subscriptionPermanentlyRejected(response) {
+			s.subscriptionLifecycle.rejectedStatus = response.StatusCode
 			s.subscriptionClosed = true
 			s.subscriptionDialog = registrationSubscriptionDialog{}
 			s.subscriptionExpires = 0
@@ -424,6 +439,7 @@ func (s *Service) recordSubscriptionResult(
 		s.mu.Unlock()
 		return resultErr
 	}
+	s.learnSubscriptionDialogLocked(result.request, response)
 	s.subscriptionLastOKAt = completedAt
 	s.subscriptionLastErr = ""
 	if unsubscribe || requestedExpires <= 0 {
@@ -442,12 +458,10 @@ func (s *Service) recordSubscriptionResult(
 	return nil
 }
 
-func (s *Service) learnSubscriptionDialog(request *sip.Request, response *sip.Response) {
+func (s *Service) learnSubscriptionDialogLocked(request *sip.Request, response *sip.Response) {
 	if s == nil || request == nil {
 		return
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	dialog := s.subscriptionDialog
 	if request.CallID() != nil {
 		dialog.callID = request.CallID().Value()
@@ -470,15 +484,6 @@ func (s *Service) learnSubscriptionDialog(request *sip.Request, response *sip.Re
 		}
 	}
 	s.subscriptionDialog = dialog
-}
-
-func (s *Service) clearSubscriptionDialog() {
-	if s == nil {
-		return
-	}
-	s.mu.Lock()
-	s.subscriptionDialog = registrationSubscriptionDialog{}
-	s.mu.Unlock()
 }
 
 func (s *Service) closeRegistrationSubscription() {
@@ -554,10 +559,9 @@ func subscriptionStateTerminated(raw string) bool {
 }
 
 func subscriptionRefreshDelay(expires time.Duration) time.Duration {
-	if expires > imsSubscriptionRefreshAdvance {
-		return expires - imsSubscriptionRefreshAdvance
-	}
-	return 0
+	// TS 24.229 5.1.1.3: 600 seconds early for lifetimes above 1200
+	// seconds, otherwise halfway through the negotiated lifetime.
+	return registrationRefreshDelay(expires)
 }
 
 func subscriptionExpires(response *sip.Response, fallback time.Duration) time.Duration {
