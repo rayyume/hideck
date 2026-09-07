@@ -196,20 +196,25 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y musl-tools
-          triple="${{ matrix.musl_triple }}"
-          if [ -z "$triple" ]; then
+          if [ -z "${{ matrix.musl_triple }}" ]; then
+            sudo apt-get update
+            sudo apt-get install -y musl-tools
             echo "CC=musl-gcc" >> "${GITHUB_ENV}"
             exit 0
           fi
-          tarball="/tmp/${triple}-cross.tgz"
-          if ! curl -fsSL --retry 3 "https://more.musl.cc/11/x86_64-linux-musl/${triple}-cross.tgz" -o "$tarball"; then
-            curl -fsSL --retry 3 "https://musl.cc/${triple}-cross.tgz" -o "$tarball"
-          fi
-          sudo tar -C /opt -xzf "$tarball"
-          echo "/opt/${triple}-cross/bin" >> "${GITHUB_PATH}"
-          echo "CC=${triple}-gcc" >> "${GITHUB_ENV}"
+          case "${{ matrix.goarch }}" in
+            arm64) zig_target=aarch64-linux-musl ;;
+            arm) zig_target=arm-linux-musleabihf ;;
+            *) echo "unsupported goarch ${{ matrix.goarch }}" >&2; exit 1 ;;
+          esac
+          curl -fsSL --retry 3 "https://ziglang.org/download/0.13.0/zig-linux-x86_64-0.13.0.tar.xz" \
+            | tar -C "$RUNNER_TEMP" -xJ
+          echo "$RUNNER_TEMP/zig-linux-x86_64-0.13.0" >> "${GITHUB_PATH}"
+          wrapper="$RUNNER_TEMP/musl-cc"
+          printf '#!/bin/sh\nexec "%s/zig-linux-x86_64-0.13.0/zig" cc -target %s "$@"\n' \
+            "$RUNNER_TEMP" "$zig_target" > "$wrapper"
+          chmod +x "$wrapper"
+          echo "CC=${wrapper}" >> "${GITHUB_ENV}"
 
       - name: Download frontend dist
         uses: actions/download-artifact@v4
