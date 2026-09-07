@@ -137,7 +137,7 @@ func TestSubscriptionFinalNotifyAfterUnsubscribeDoesNotResubscribe(t *testing.T)
 		if err != nil {
 			t.Fatal(err)
 		}
-		result := subscriptionResult{context: s.subscriptionContextLocked(), request: request, requestedExpires: expires, unsubscribe: true}
+		result := subscriptionResult{context: s.subscriptionAttemptContextLocked(mwi), request: request, requestedExpires: expires, unsubscribe: true}
 		if err := s.recordSubscriptionUsageAttempt(result, mwi); err != nil {
 			t.Fatal(err)
 		}

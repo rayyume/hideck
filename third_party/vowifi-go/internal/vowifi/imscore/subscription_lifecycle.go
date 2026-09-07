@@ -18,24 +18,30 @@ type subscriptionContext struct {
 }
 
 type subscriptionLifecycle struct {
-	context        subscriptionContext
-	started        bool
-	rejectedStatus int
-	blockedReason  string
-	attemptKey     sipTransactionKey
-	sentAt         time.Time
-	notifyDeadline time.Time
-	expiresAt      time.Time
-	retryAt        time.Time
-	notifyExpires  bool
-	initial        bool
-	unsubscribing  bool
-	notifyVersion  uint64
-	notifications  *subscriptionNotificationQueue
+	context         subscriptionContext
+	started         bool
+	rejectedStatus  int
+	blockedReason   string
+	attemptKey      sipTransactionKey
+	sentAt          time.Time
+	notifyDeadline  time.Time
+	expiresAt       time.Time
+	retryAt         time.Time
+	notifyExpires   bool
+	initial         bool
+	unsubscribing   bool
+	notifyVersion   uint64
+	notifications   *subscriptionNotificationQueue
+	usageGeneration uint64
+}
+
+type subscriptionAttemptContext struct {
+	subscriptionContext
+	usageGeneration uint64
 }
 
 type subscriptionResult struct {
-	context          subscriptionContext
+	context          subscriptionAttemptContext
 	request          *sip.Request
 	response         *sip.Response
 	requestedExpires time.Duration
@@ -134,59 +140,29 @@ func (s *Service) subscriptionAttemptPendingLocked(mwi bool) bool {
 	return s.subscriptionInFlight.Load() || !s.subscriptionRefreshAt.IsZero() || s.subscriptionDialog.ready()
 }
 
-func (s *Service) beginSubscriptionAttempt(mwi, unsubscribe bool) (subscriptionContext, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	lifecycle := s.alignSubscriptionContextLocked(mwi)
-	current := lifecycle.context
-	status := lifecycle.rejectedStatus
-	if mwi {
-		if rejected := s.subscriptionRegistrations.mwiRejected(current.binding); rejected != 0 {
-			status = rejected
-		}
-	}
-	if !unsubscribe && status != 0 {
-		return current, fmt.Errorf("imscore: subscription previously rejected with status %d", status)
-	}
-	if !unsubscribe && lifecycle.blockedReason != "" {
-		return current, errors.New(lifecycle.blockedReason)
-	}
-	if !unsubscribe && lifecycle.unsubscribing {
-		return current, errors.New("imscore: subscription is being removed")
-	}
-	if !unsubscribe && !lifecycle.retryAt.IsZero() && time.Now().Before(lifecycle.retryAt) {
-		return current, errors.New("imscore: subscription retry is not due")
-	}
-	lifecycle.context, lifecycle.started = current, true
-	return current, nil
-}
-
 func (s *Service) subscriptionResultCurrentLocked(result subscriptionResult) bool {
 	// An in-place REGISTER refresh does not retire the existing subscription.
 	registered := s.regState == regRegistered || s.regState == regRegistering
-	return !s.stopped() && registered && result.context == s.subscriptionContextLocked()
+	return !s.stopped() && registered && result.context.subscriptionContext == s.subscriptionContextLocked()
 }
 
-func (s *Service) retrySubscriptionAfter481(result subscriptionResult, mwi bool) bool {
+func (s *Service) retrySubscriptionAfter481(result subscriptionResult, mwi bool) (subscriptionResult, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if !s.subscriptionResultCurrentLocked(result) {
-		return false
+	if result.response == nil || result.response.StatusCode != 481 || result.unsubscribe {
+		return result, false
 	}
-	dialog := &s.subscriptionDialog
-	if mwi {
-		dialog = &s.mwiSubscriptionDialog
+	s.expireSubscriptionTimersLocked(time.Now())
+	if s.validateSubscriptionAttemptLocked(result, mwi) != nil {
+		return result, false
 	}
-	if !dialog.ready() {
-		return false
-	}
-	*dialog = registrationSubscriptionDialog{}
 	fields := s.subscriptionFieldsLocked(mwi)
-	fields.lifecycle.expiresAt = time.Time{}
-	fields.lifecycle.notifyDeadline = time.Time{}
-	*fields.expires = 0
-	*fields.refreshAt = time.Time{}
-	return true
+	if !fields.dialog.ready() {
+		return result, false
+	}
+	fields.terminate("SUBSCRIBE dialog rejected with 481")
+	*fields.closed = false // The fresh attempt must also record failures before dispatch.
+	return subscriptionResult{context: s.subscriptionAttemptContextLocked(mwi)}, true
 }
 
 func (s *Service) endSubscriptionRegistrationLocked(all bool) {

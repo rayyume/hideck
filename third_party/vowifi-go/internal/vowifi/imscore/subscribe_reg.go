@@ -116,7 +116,7 @@ func (s *Service) reportSubscriptionRuntimeError(err error) {
 	if err == nil || s.stopped() {
 		return
 	}
-	if errors.Is(err, errSubscriptionContextChanged) {
+	if errors.Is(err, errSubscriptionContextChanged) || errors.Is(err, errSubscriptionUsageChanged) {
 		logging.Debug("IMS SUBSCRIBE(reg) retired attempt completed; checking current registration", "device", s.DeviceID(), "err", err)
 		s.startRegistrationSubscription()
 		return
@@ -198,7 +198,8 @@ func (s *Service) sendRegistrationSubscription(ctx context.Context, expires time
 	if err != nil {
 		return s.recordSubscriptionResult(result)
 	}
-	if response.StatusCode == 481 && !unsubscribe && s.retrySubscriptionAfter481(result, false) {
+	if retry, ok := s.retrySubscriptionAfter481(result, false); ok {
+		result = retry
 		logging.Info("IMS SUBSCRIBE(reg) dialog gone; retrying as initial",
 			"device", s.DeviceID())
 		request, requestedExpires, err = s.buildRegistrationSubscription(expires)

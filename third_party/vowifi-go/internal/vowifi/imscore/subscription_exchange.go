@@ -13,8 +13,9 @@ const subscriptionTimerNMultiplier = 64
 func (s *Service) recordSubscriptionUsageAttempt(result subscriptionResult, mwi bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if !s.subscriptionResultCurrentLocked(result) {
-		return errSubscriptionContextChanged
+	s.expireSubscriptionTimersLocked(time.Now())
+	if err := s.validateSubscriptionAttemptLocked(result, mwi); err != nil {
+		return err
 	}
 	f := s.subscriptionFieldsLocked(mwi)
 	key, err := subscriptionRequestKey(result.request)
@@ -22,7 +23,7 @@ func (s *Service) recordSubscriptionUsageAttempt(result subscriptionResult, mwi 
 		return err
 	}
 	l := f.lifecycle
-	l.context, l.started = result.context, true
+	l.context, l.started = result.context.subscriptionContext, true
 	l.attemptKey, l.sentAt = key, time.Time{}
 	l.notifyDeadline, l.retryAt = time.Time{}, time.Time{}
 	l.notifyExpires, l.unsubscribing = false, result.unsubscribe
@@ -51,13 +52,17 @@ func (s *Service) subscriptionSent(result subscriptionResult, mwi bool) error {
 	t1 := s.transport.transactionTimers().t1
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.expireSubscriptionTimersLocked(time.Now())
+	if err := s.validateSubscriptionAttemptLocked(result, mwi); err != nil {
+		return err
+	}
 	f := s.subscriptionFieldsLocked(mwi)
 	key, err := subscriptionRequestKey(result.request)
 	if err != nil {
 		return err
 	}
-	if !s.subscriptionResultCurrentLocked(result) || f.lifecycle.attemptKey != key || *f.closed {
-		return errSubscriptionContextChanged
+	if f.lifecycle.attemptKey != key || *f.closed {
+		return errSubscriptionUsageChanged
 	}
 	at := time.Now()
 	f.lifecycle.sentAt = at
@@ -79,6 +84,15 @@ func (s *Service) recordSubscriptionUsageResult(result subscriptionResult, mwi b
 	}
 	s.expireSubscriptionTimersLocked(time.Now())
 	f := s.subscriptionFieldsLocked(mwi)
+	if errors.Is(result.err, errSubscriptionUsageChanged) {
+		return result.err // An unsent retired request cannot change the usage.
+	}
+	if result.context.usageGeneration != f.lifecycle.usageGeneration {
+		if result.err == nil && *f.closed {
+			return nil // A terminal NOTIFY already completed this usage.
+		}
+		return errors.Join(errSubscriptionUsageChanged, result.err)
+	}
 	if result.err != nil {
 		return s.failSubscriptionUsageLocked(f, result)
 	}

@@ -24,6 +24,18 @@ func primeSubscriptionNotifyDialog(s *Service, mwi bool) {
 
 func beginProtocolSubscription(t *testing.T, s *Service, mwi bool) subscriptionResult {
 	t.Helper()
+	result := buildProtocolSubscription(t, s, mwi)
+	if err := s.recordSubscriptionUsageAttempt(result, mwi); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.subscriptionSent(result, mwi); err != nil {
+		t.Fatal(err)
+	}
+	return result
+}
+
+func buildProtocolSubscription(t *testing.T, s *Service, mwi bool) subscriptionResult {
+	t.Helper()
 	attempt, err := s.beginSubscriptionAttempt(mwi, false)
 	if err != nil {
 		t.Fatal(err)
@@ -36,14 +48,7 @@ func beginProtocolSubscription(t *testing.T, s *Service, mwi bool) subscriptionR
 	if err != nil {
 		t.Fatal(err)
 	}
-	result := subscriptionResult{context: attempt, request: request, requestedExpires: expires}
-	if err := s.recordSubscriptionUsageAttempt(result, mwi); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.subscriptionSent(result, mwi); err != nil {
-		t.Fatal(err)
-	}
-	return result
+	return subscriptionResult{context: attempt, request: request, requestedExpires: expires}
 }
 
 func completeProtocolSubscription(t *testing.T, s *Service, mwi bool, result subscriptionResult) {
@@ -193,7 +198,7 @@ func TestSubscriptionQueuedNotifyDoesNotConfirmUnsentRefresh(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		refresh := subscriptionResult{context: s.subscriptionContextLocked(), request: request, requestedExpires: expires}
+		refresh := subscriptionResult{context: s.subscriptionAttemptContextLocked(mwi), request: request, requestedExpires: expires}
 		if err := s.recordSubscriptionUsageAttempt(refresh, mwi); err != nil {
 			t.Fatal(err)
 		}

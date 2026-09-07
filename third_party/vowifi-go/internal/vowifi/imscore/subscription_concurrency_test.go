@@ -12,7 +12,7 @@ import (
 
 func TestSubscriptionRetiredAttemptCannotChangeNewTimers(t *testing.T) {
 	s := newSubscriptionLifecycleTestService(t, nil)
-	old := subscriptionResult{context: s.subscriptionContextLocked(), requestedExpires: time.Hour}
+	old := subscriptionResult{context: s.subscriptionAttemptContextLocked(false), requestedExpires: time.Hour}
 	s.mu.Lock()
 	s.subscriptionGeneration++
 	s.mu.Unlock()

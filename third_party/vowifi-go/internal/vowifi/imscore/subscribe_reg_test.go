@@ -450,6 +450,7 @@ func TestStopUnsubscribesRegistrationWithoutDeregistering(t *testing.T) {
 
 	seen := make(chan string, 4)
 	go func() {
+		defer close(seen)
 		reader := bufio.NewReader(server)
 		for {
 			request, err := readSIPStreamMessage(reader)
@@ -457,7 +458,11 @@ func TestStopUnsubscribesRegistrationWithoutDeregistering(t *testing.T) {
 				return
 			}
 			seen <- request
-			if _, err = io.WriteString(server, subscriptionWireResponse(request, 200, "Expires: 0\r\n")); err != nil {
+			expires := "120"
+			if rawSIPHeaderValue(request, "Expires") == "0" {
+				expires = "0"
+			}
+			if _, err = io.WriteString(server, subscriptionWireResponse(request, 200, "Expires: "+expires+"\r\n")); err != nil {
 				return
 			}
 		}
@@ -469,15 +474,20 @@ func TestStopUnsubscribesRegistrationWithoutDeregistering(t *testing.T) {
 	if err := service.Stop(context.Background()); err != nil {
 		t.Fatalf("Stop: %v", err)
 	}
-	unsubscribe := <-seen
+	unsubscribe, ok := <-seen
+	if !ok {
+		t.Fatal("shutdown closed the transport without sending unsubscribe")
+	}
 	assertRegistrationSubscription(t, unsubscribe, 6, 0, "reg-notifier")
 	if rawSIPHeaderValue(unsubscribe, "Call-ID") != rawSIPHeaderValue(initial, "Call-ID") {
 		t.Fatal("unsubscribe used a different Call-ID")
 	}
 	select {
-	case extra := <-seen:
-		t.Fatalf("shutdown sent %q after unsubscribing",
-			strings.SplitN(extra, "\r\n", 2)[0])
+	case extra, ok := <-seen:
+		if ok {
+			t.Fatalf("shutdown sent %q after unsubscribing",
+				strings.SplitN(extra, "\r\n", 2)[0])
+		}
 	case <-time.After(200 * time.Millisecond):
 	}
 	if service.hasSubscriptionDialog() || !service.subscriptionClosed {
@@ -654,11 +664,11 @@ func TestRecordSubscriptionResultClosesOnPermanentReject(t *testing.T) {
 	for _, status := range []int{403, 405, 489} {
 		t.Run(strconv.Itoa(status), func(t *testing.T) {
 			service := newProtectedKeepaliveTestService(t)
-			if err := service.recordSubscriptionAttempt(subscriptionResult{context: service.subscriptionContextLocked(), requestedExpires: time.Hour}); err != nil {
+			if err := service.recordSubscriptionAttempt(subscriptionResult{context: service.subscriptionAttemptContextLocked(false), requestedExpires: time.Hour}); err != nil {
 				t.Fatal(err)
 			}
 			err := service.recordSubscriptionResult(subscriptionResult{
-				context:          service.subscriptionContextLocked(),
+				context:          service.subscriptionAttemptContextLocked(false),
 				response:         &sip.Response{StatusCode: status, Reason: "rejected"},
 				requestedExpires: time.Hour, err: fmt.Errorf("SUBSCRIBE rejected with status %d", status),
 			})
@@ -686,12 +696,12 @@ func TestRecordSubscriptionResultClosesOnPermanentReject(t *testing.T) {
 
 func TestRecordSubscriptionResultKeepsRetryOnTemporaryReject(t *testing.T) {
 	service := newProtectedKeepaliveTestService(t)
-	if err := service.recordSubscriptionAttempt(subscriptionResult{context: service.subscriptionContextLocked(), requestedExpires: time.Hour}); err != nil {
+	if err := service.recordSubscriptionAttempt(subscriptionResult{context: service.subscriptionAttemptContextLocked(false), requestedExpires: time.Hour}); err != nil {
 		t.Fatal(err)
 	}
 	before := time.Now()
 	err := service.recordSubscriptionResult(subscriptionResult{
-		context:          service.subscriptionContextLocked(),
+		context:          service.subscriptionAttemptContextLocked(false),
 		response:         &sip.Response{StatusCode: 503, Reason: "Service Unavailable"},
 		requestedExpires: time.Hour, err: errors.New("SUBSCRIBE rejected with status 503"),
 	})

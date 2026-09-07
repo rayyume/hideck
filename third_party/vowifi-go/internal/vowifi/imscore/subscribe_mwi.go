@@ -50,7 +50,7 @@ func (s *Service) reportMWISubscriptionRuntimeError(err error) {
 	if err == nil || s.stopped() {
 		return
 	}
-	if errors.Is(err, errSubscriptionContextChanged) {
+	if errors.Is(err, errSubscriptionContextChanged) || errors.Is(err, errSubscriptionUsageChanged) {
 		logging.Debug("IMS SUBSCRIBE(mwi) retired attempt completed; checking current registration", "device", s.DeviceID(), "err", err)
 		s.startMWISubscription()
 		return
@@ -129,7 +129,8 @@ func (s *Service) sendMWISubscription(ctx context.Context, expires time.Duration
 	if err != nil {
 		return s.recordMWISubscriptionResult(result)
 	}
-	if response.StatusCode == 481 && !unsubscribe && s.retrySubscriptionAfter481(result, true) {
+	if retry, ok := s.retrySubscriptionAfter481(result, true); ok {
+		result = retry
 		logging.Info("IMS SUBSCRIBE(mwi) dialog gone; retrying as initial",
 			"device", s.DeviceID())
 		request, requestedExpires, err = s.buildMWISubscription(expires)

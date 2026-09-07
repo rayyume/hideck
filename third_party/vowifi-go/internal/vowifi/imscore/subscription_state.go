@@ -47,6 +47,9 @@ func (f subscriptionFields) setExpiry(now time.Time, expires time.Duration) {
 }
 
 func (f subscriptionFields) terminate(reason string) {
+	// Invalidate requests built before termination without retiring already
+	// accepted NOTIFY bodies belonging to the same IMS registration.
+	f.lifecycle.usageGeneration++
 	*f.closed = true
 	*f.dialog = registrationSubscriptionDialog{}
 	*f.expires = 0

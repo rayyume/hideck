@@ -37,7 +37,11 @@ func TestSubscriptionTimerNStartsAfterQueueAndOnlyClosesUsage(t *testing.T) {
 			}
 			// A queued attempt must not count queueing time towards Timer N.
 			f.lifecycle.retryAt = time.Time{}
-			if err := s.recordSubscriptionUsageAttempt(result, mwi); err != nil {
+			if err := s.recordSubscriptionUsageAttempt(result, mwi); !errors.Is(err, errSubscriptionUsageChanged) {
+				t.Fatalf("expired usage reused after Timer N: %v", err)
+			}
+			queued := buildProtocolSubscription(t, s, mwi)
+			if err := s.recordSubscriptionUsageAttempt(queued, mwi); err != nil {
 				t.Fatal(err)
 			}
 			if !f.lifecycle.notifyDeadline.IsZero() || !f.lifecycle.sentAt.IsZero() {
