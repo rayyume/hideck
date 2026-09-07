@@ -21,11 +21,42 @@ type SMSReadResult struct {
 	UnreadCount int
 }
 
+type smsReadScope struct {
+	throughID  uint
+	messageIDs []uint
+}
+
 // MarkSMSThreadReadByICCID marks the response snapshot; later inserts stay unread.
 func MarkSMSThreadReadByICCID(iccid, peer string, throughID uint) (SMSReadResult, error) {
+	if throughID == 0 {
+		return SMSReadResult{}, ErrSMSReadBoundaryInvalid
+	}
+	return markSMSReadByICCID(iccid, peer, smsReadScope{throughID: throughID})
+}
+
+// MarkSMSMessagesReadByICCID marks only the displayed historical window.
+func MarkSMSMessagesReadByICCID(iccid, peer string, messageIDs []uint) (SMSReadResult, error) {
+	if len(messageIDs) == 0 {
+		return SMSReadResult{}, ErrSMSReadBoundaryInvalid
+	}
+	ids := make([]uint, 0, len(messageIDs))
+	seen := make(map[uint]bool, len(messageIDs))
+	for _, id := range messageIDs {
+		if id == 0 {
+			return SMSReadResult{}, ErrSMSReadBoundaryInvalid
+		}
+		if !seen[id] {
+			ids = append(ids, id)
+			seen[id] = true
+		}
+	}
+	return markSMSReadByICCID(iccid, peer, smsReadScope{messageIDs: ids})
+}
+
+func markSMSReadByICCID(iccid, peer string, scope smsReadScope) (SMSReadResult, error) {
 	iccid = CanonicalICCID(iccid)
 	peer = strings.TrimSpace(peer)
-	if iccid == "" || peer == "" || throughID == 0 {
+	if iccid == "" || peer == "" {
 		return SMSReadResult{}, ErrSMSReadBoundaryInvalid
 	}
 	if DB == nil {
@@ -41,13 +72,12 @@ func MarkSMSThreadReadByICCID(iccid, peer string, throughID uint) (SMSReadResult
 			}
 			return err
 		}
-		if err := validateSMSReadBoundary(tx, iccid, peer, throughID); err != nil {
+		if err := scope.validate(tx.Model(&SMS{}).Where("iccid = ? AND peer = ?", iccid, peer)); err != nil {
 			return err
 		}
 
-		updated := tx.Model(&SMS{}).
+		updated := scope.apply(tx.Model(&SMS{})).
 			Where("iccid = ? AND peer = ? AND type = ? AND status = ?", iccid, peer, smsTypeIncoming, smsStatusUnread).
-			Where("id <= ?", throughID).
 			Update("status", smsStatusRead)
 		if updated.Error != nil {
 			return updated.Error
@@ -68,11 +98,24 @@ func MarkSMSThreadReadByICCID(iccid, peer string, throughID uint) (SMSReadResult
 	return result, err
 }
 
-func validateSMSReadBoundary(tx *gorm.DB, iccid, peer string, throughID uint) error {
-	var boundary SMS
-	err := tx.Select("id").Where("id = ? AND iccid = ? AND peer = ?", throughID, iccid, peer).First(&boundary).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
+func (scope smsReadScope) apply(query *gorm.DB) *gorm.DB {
+	if scope.messageIDs != nil {
+		return query.Where("id IN ?", scope.messageIDs)
+	}
+	return query.Where("id <= ?", scope.throughID)
+}
+
+func (scope smsReadScope) validate(query *gorm.DB) error {
+	ids := scope.messageIDs
+	if ids == nil {
+		ids = []uint{scope.throughID}
+	}
+	var count int64
+	if err := query.Where("id IN ?", ids).Count(&count).Error; err != nil {
+		return err
+	}
+	if count != int64(len(ids)) {
 		return ErrSMSReadBoundaryInvalid
 	}
-	return err
+	return nil
 }

@@ -203,12 +203,15 @@ async function markThreadSeen(t: SmsThread | null) {
   if (!t || threadMessages.value.length === 0) return true
   const hasDisplayedUnread = threadMessages.value.some(message => message.type === 1 && message.status === 0)
   if (t.unreadCount <= 0 && !hasDisplayedUnread) return true
-  const throughID = Math.max(...threadMessages.value.map(message => message.id))
+  const messageIDs = threadMessages.value.map(message => message.id)
+  const scope = viewingTarget.value
+    ? { message_ids: messageIDs }
+    : { through_id: Math.max(...messageIDs) }
   if (!t.iccid) {
     messagesError.value = { message: '短信会话缺少 ICCID，无法保存已读状态' }
     return false
   }
-  const result = await smsStore.markThreadRead({ iccid: t.iccid, peer: t.peer, through_id: throughID })
+  const result = await smsStore.markThreadRead({ iccid: t.iccid, peer: t.peer, ...scope })
   if (!result.ok) {
     messagesError.value = result.error
     return false
@@ -289,6 +292,7 @@ async function loadMoreHistory() {
       w.scrollTop = prevTop + delta
     })
     messagesError.value = null
+    if (viewingTarget.value) await markThreadSeen(selectedThread.value)
   } catch (error: unknown) {
     if (selectedThreadKey.value !== requestThreadKey) return
     messagesError.value = toAppError(error)

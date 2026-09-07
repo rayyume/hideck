@@ -284,7 +284,12 @@ func (s *Service) confirmCurrentRegistrarDownlinkHealthy() {
 	if s.regState != regRegistered || s.stopped() {
 		return
 	}
-	s.registrarPenalties.clearFailures(strings.TrimSpace(s.registrar))
+	if s.registrarRecoveryAttempt.registrar != strings.TrimSpace(s.registrar) {
+		return
+	}
+	// Compare under the penalty-store lock so a concurrent failure cannot be
+	// cleared by a REGISTER or downlink event from the rejected binding.
+	s.registrarPenalties.clearFailures(s.registrarRecoveryAttempt)
 }
 
 func (s *Service) requestFreshRuntimeAfterPortSReset(

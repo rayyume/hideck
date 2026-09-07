@@ -338,6 +338,8 @@ type registrationRuntime struct {
 	OnReconnectNeeded    func()
 	reconnectTriggering  atomic.Bool
 	pcscfRecoveryPending atomic.Bool
+
+	registrarRecoveryAttempt registrarRecoveryAttempt
 }
 
 type pingState struct {

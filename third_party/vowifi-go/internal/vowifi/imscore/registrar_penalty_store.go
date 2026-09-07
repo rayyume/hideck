@@ -13,6 +13,22 @@ type RegistrarPenaltyStore struct {
 	entries        map[string]registrarPenaltyEntry
 	lastCandidates []string
 	recovering     bool
+	generation     uint64
+}
+
+// A successful binding can confirm only failures observed before its attempt.
+type registrarRecoveryAttempt struct {
+	registrar  string
+	generation uint64
+}
+
+func (store *RegistrarPenaltyStore) recoveryGeneration() uint64 {
+	if store == nil {
+		return 0
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	return store.generation
 }
 
 func (store *RegistrarPenaltyStore) rememberCandidates(candidates []string) []string {
@@ -31,6 +47,7 @@ type registrarPenaltyEntry struct {
 	deprioritizedUntil  time.Time
 	reason              string
 	consecutiveFailures uint32
+	failureGeneration   uint64
 }
 
 func NewRegistrarPenaltyStore() *RegistrarPenaltyStore {
@@ -55,15 +72,18 @@ func (store *RegistrarPenaltyStore) mark(registrar string, until time.Time) {
 	store.entries[registrar] = entry
 }
 
-func (store *RegistrarPenaltyStore) clearFailures(registrar string) {
-	registrar = strings.TrimSpace(registrar)
+func (store *RegistrarPenaltyStore) clearFailures(attempt registrarRecoveryAttempt) {
+	registrar := strings.TrimSpace(attempt.registrar)
 	if store == nil || registrar == "" {
 		return
 	}
 	store.mu.Lock()
 	defer store.mu.Unlock()
-	store.recovering = false
 	entry, exists := store.entries[registrar]
+	if entry.failureGeneration > attempt.generation {
+		return
+	}
+	store.recovering = false
 	if !exists {
 		return
 	}

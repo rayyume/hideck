@@ -33,13 +33,13 @@ export type SmsDeleteThreadPayload = {
 export type SmsMarkThreadReadPayload = {
   iccid: string
   peer: string
-  through_id: number
-}
+} & ({ through_id: number; message_ids?: never } | { message_ids: readonly number[]; through_id?: never })
 
 export type SmsMarkThreadReadResult = {
   marked: number
   unread_count: number
-  through_id: number
+  through_id?: number
+  message_ids?: number[]
 }
 
 function parseTs(s: string) {
@@ -135,8 +135,8 @@ export const smsService = {
   },
   markThreadRead(payload: SmsMarkThreadReadPayload) {
     return callService(async () => {
-      const params = { iccid: payload.iccid, peer: payload.peer }
-      const body = { through_id: payload.through_id }
+      const { iccid, peer, ...body } = payload
+      const params = { iccid, peer }
       const res = await api.patch<SmsMarkThreadReadResult>('/sms/thread', body, { params })
       return res.data
     })

@@ -182,7 +182,9 @@ func TestProvenReplacementDownlinkEndsRecoveryWithoutErasingPreferences(t *testi
 	store := service.registrarPenalties
 	recordTestRegistrarFailure(store, "pcscf-a.example:5060", time.Now().Add(-time.Minute))
 	// The newly discovered healthy node need not have a penalty entry.
-	store.clearFailures("pcscf-new.example:5060")
+	store.clearFailures(registrarRecoveryAttempt{
+		registrar: "pcscf-new.example:5060", generation: store.recoveryGeneration(),
+	})
 	if store.recoveryInProgress() {
 		t.Fatal("healthy replacement did not end incident")
 	}

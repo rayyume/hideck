@@ -1530,46 +1530,6 @@ func (s *Server) handleGetSMSThread(c *gin.Context) {
 	c.JSON(http.StatusOK, enriched)
 }
 
-type markSMSThreadReadRequest struct {
-	ThroughID uint `json:"through_id" binding:"required"`
-}
-
-func (s *Server) handleMarkSMSThreadRead(c *gin.Context) {
-	iccid := db.CanonicalICCID(c.Query("iccid"))
-	if iccid == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "缺少 iccid 参数"})
-		return
-	}
-	peer := strings.TrimSpace(c.Query("peer"))
-	if peer == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "缺少 peer 参数"})
-		return
-	}
-	var request markSMSThreadReadRequest
-	if err := c.ShouldBindJSON(&request); err != nil || request.ThroughID == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "through_id 必须是正整数"})
-		return
-	}
-	result, err := db.MarkSMSThreadReadByICCID(iccid, peer, request.ThroughID)
-	if err != nil {
-		if errors.Is(err, db.ErrSMSReadBoundaryInvalid) {
-			c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "through_id 不属于当前短信会话"})
-			return
-		}
-		if errors.Is(err, db.ErrSMSNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": "短信会话不存在"})
-			return
-		}
-		logger.Error("标记短信已读失败", "iccid", iccid, "peer", peer, "err", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "标记短信已读失败"})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"status": "ok", "iccid": iccid, "peer": peer, "through_id": request.ThroughID,
-		"marked": result.Marked, "unread_count": result.UnreadCount,
-	})
-}
-
 func (s *Server) handleDeleteSMSMessage(c *gin.Context) {
 	id64, err := strconv.ParseUint(strings.TrimSpace(c.Param("id")), 10, 64)
 	if err != nil || id64 == 0 {

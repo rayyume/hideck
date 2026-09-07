@@ -44,10 +44,12 @@ func (store *RegistrarPenaltyStore) recordDeprioritizedFailure(registrar string,
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	store.recovering = true
+	store.generation++
 	if store.entries == nil {
 		store.entries = make(map[string]registrarPenaltyEntry)
 	}
 	entry := store.entries[registrar]
+	entry.failureGeneration = store.generation
 	// Reports during an existing cooldown are not additional recovery attempts.
 	// Only a later server Retry-After may extend this retry deadline.
 	if !input.now.Before(entry.retryNotBefore) {

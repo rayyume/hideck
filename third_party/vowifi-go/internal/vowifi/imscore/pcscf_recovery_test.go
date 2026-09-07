@@ -160,20 +160,18 @@ func TestPCSCFFailureCountSurvivesPenaltyExpiryAndServiceReplacement(t *testing.
 
 func TestProtectedDownlinkClearsPCSCFFailureCount(t *testing.T) {
 	const registrar = "pcscf-a.example:5060"
-	store := NewRegistrarPenaltyStore()
-	recordTestRegistrarFailure(store, registrar, time.Now())
+	service := newRecoveryCompletionTestService(t)
+	store := service.registrarPenalties
 	store.mark(registrar, time.Now().Add(time.Minute))
-	service, err := New(&IMSConfig{
-		Registrar: registrar, LocalAddr: "192.0.2.10", RegistrarPenalties: store,
+	service.transport.SetSendFn(func(request string) error {
+		service.transport.DeliverResponse(registerResponseForRequest(request, 200, nil))
+		return nil
 	})
-	if err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := service.Start(ctx); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(service.StopCurrent)
-	service.mu.Lock()
-	service.registrar = registrar
-	service.regState = regRegistered
-	service.mu.Unlock()
 	client, server := net.Pipe()
 	defer server.Close()
 	if !service.trackProtectedConnection(client) {

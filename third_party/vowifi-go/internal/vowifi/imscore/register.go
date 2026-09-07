@@ -83,6 +83,11 @@ func (s *Service) registerLocked(ctx context.Context) error {
 	}
 	s.mu.Lock()
 	hadBinding := s.regState == regRegistered || (s.regSession != nil && s.regSession.expires > 0)
+	// Refreshing an existing binding does not create a fresh recovery path.
+	recoveryGeneration := s.registrarRecoveryAttempt.generation
+	if !hadBinding {
+		recoveryGeneration = s.registrarPenalties.recoveryGeneration()
+	}
 	s.regState = regRegistering
 	downlinkBaseline := s.inboundSIPHandledRequest.Load()
 	s.lastRegisterTraceID = common.TraceID(ctx)
@@ -160,6 +165,9 @@ func (s *Service) registerLocked(ctx context.Context) error {
 	s.completePortSRecovery(nil, true)
 	s.mu.Lock()
 	s.regState = regRegistered
+	s.registrarRecoveryAttempt = registrarRecoveryAttempt{
+		registrar: strings.TrimSpace(s.registrar), generation: recoveryGeneration,
+	}
 	s.lastError = ""
 	s.lastRegisterErr = ""
 	s.lastRegisterOKAt = time.Now()

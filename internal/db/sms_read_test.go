@@ -1,10 +1,82 @@
 package db
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
 )
+
+func TestMarkSMSHistoricalWindowReadPreservesUnseenMessages(t *testing.T) {
+	openTestDB(t)
+	const iccid, peer = "ICC-HISTORY", "+10086"
+	base := time.Date(2026, 8, 13, 9, 0, 0, 0, time.UTC)
+	save := func(at time.Time) uint {
+		return saveMessageTargetFixture(t, SMSRecord{
+			Identity: SMSIdentity{ICCID: iccid, IMSI: "IMSI-HISTORY"}, Sender: peer,
+			Content: at.String(), Type: smsTypeIncoming, Status: smsStatusUnread, Timestamp: at,
+		})
+	}
+	save(base.Add(time.Hour))
+	targetID := save(base)
+	window, err := GetSMSMessageTarget(context.Background(), targetID)
+	if err != nil || len(window.Messages) != 1 {
+		t.Fatalf("historical window=%+v err=%v", window, err)
+	}
+	// A concurrent arrival with an older SMSC timestamp is outside the snapshot too.
+	save(base.Add(-time.Hour))
+	result, err := MarkSMSMessagesReadByICCID(iccid, peer, []uint{window.Messages[0].ID})
+	if err != nil || result.Marked != 1 || result.UnreadCount != 2 {
+		t.Fatalf("read result=%+v err=%v", result, err)
+	}
+	// Repeated submissions remain idempotent, including duplicate IDs.
+	result, err = MarkSMSMessagesReadByICCID(iccid, peer, []uint{targetID, targetID})
+	if err != nil || result.Marked != 0 || result.UnreadCount != 2 {
+		t.Fatalf("repeated read=%+v err=%v", result, err)
+	}
+	var messages []SMS
+	if err := DB.Order("id").Find(&messages).Error; err != nil {
+		t.Fatal(err)
+	}
+	if messages[0].Status != smsStatusUnread || messages[1].Status != smsStatusRead || messages[2].Status != smsStatusUnread {
+		t.Fatalf("outside-window and later arrivals must remain unread: %+v", messages)
+	}
+	var contact SMSContact
+	if err := DB.Where("iccid = ? AND peer = ?", iccid, peer).First(&contact).Error; err != nil {
+		t.Fatal(err)
+	}
+	if contact.UnreadCount != 2 {
+		t.Fatalf("unread count=%d, want 2", contact.UnreadCount)
+	}
+	notifications, err := GetSMSNotifications(context.Background(), nil)
+	if err != nil || notifications.UnreadCount != 2 {
+		t.Fatalf("global unread count=%d err=%v", notifications.UnreadCount, err)
+	}
+}
+
+func TestMarkSMSMessagesReadRejectsInvalidScopeAtomically(t *testing.T) {
+	openTestDB(t)
+	for _, identity := range []SMSIdentity{{ICCID: "card-a", IMSI: "imsi-a"}, {ICCID: "card-b", IMSI: "imsi-b"}} {
+		for _, peer := range []string{"sender", "other"} {
+			if err := SaveSMSForIdentity(SMSRecord{Identity: identity, Sender: peer, Content: "unread", Type: 1, Timestamp: time.Now()}); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	var messages []SMS
+	if err := DB.Order("id").Find(&messages).Error; err != nil {
+		t.Fatal(err)
+	}
+	for _, ids := range [][]uint{nil, {}, {0}, {messages[0].ID, messages[1].ID}, {messages[0].ID, messages[2].ID}, {messages[0].ID, messages[3].ID + 1}} {
+		if _, err := MarkSMSMessagesReadByICCID("card-a", "sender", ids); !errors.Is(err, ErrSMSReadBoundaryInvalid) {
+			t.Fatalf("ids=%v err=%v", ids, err)
+		}
+	}
+	var unread int64
+	if err := DB.Model(&SMS{}).Where("status = ?", smsStatusUnread).Count(&unread).Error; err != nil || unread != 4 {
+		t.Fatalf("partial update: unread=%d err=%v", unread, err)
+	}
+}
 
 func TestMarkSMSThreadReadPersistsAndPreservesNewerUnreadMessages(t *testing.T) {
 	openTestDB(t)

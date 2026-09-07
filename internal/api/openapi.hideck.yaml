@@ -414,7 +414,7 @@ paths:
     patch:
       tags: [sms]
       summary: 持久化短信会话已读进度
-      description: 仅将 through_id 及之前的已展示来信标为已读，之后到达的短信保持未读
+      description: 最新会话使用 through_id 将该 ID 及之前的来信标为已读；历史窗口使用 message_ids 仅标记指定消息。两种范围必须且只能选择一种，窗口外或之后到达的短信保持未读。
       parameters:
         - in: query
           name: iccid
@@ -432,11 +432,19 @@ paths:
           application/json:
             schema:
               type: object
-              required: [through_id]
+              oneOf:
+                - required: [through_id]
+                - required: [message_ids]
               properties:
                 through_id:
                   type: integer
                   minimum: 1
+                message_ids:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: integer
+                    minimum: 1
       responses:
         '200':
           description: 会话已读状态
@@ -451,6 +459,10 @@ paths:
                     type: integer
                   through_id:
                     type: integer
+                  message_ids:
+                    type: array
+                    items:
+                      type: integer
         '400':
           $ref: '#/components/responses/ErrorMessage'
         '401':
