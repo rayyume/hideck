@@ -43,7 +43,7 @@ func imsLinkMTU(protocol tcpip.NetworkProtocolNumber) uint32 {
 	return imsIPv6LinkMTU
 }
 
-func dialTCPWithMSS(ctx context.Context, networkStack *stack.Stack, cfg tcpDialConfig) (*gonet.TCPConn, error) {
+func dialTCPWithMSS(ctx context.Context, networkStack *stack.Stack, cfg tcpDialConfig) (net.Conn, error) {
 	mss := cfg.mss
 	if mss <= 0 {
 		mss = imsTCPMSS
@@ -71,7 +71,7 @@ func dialTCPWithMSS(ctx context.Context, networkStack *stack.Stack, cfg tcpDialC
 		endpoint.Close()
 		return nil, err
 	}
-	return gonet.NewTCPConn(&queue, endpoint), nil
+	return &imsTCPConn{gonet.NewTCPConn(&queue, endpoint)}, nil
 }
 
 func configureIMSTCPKeepalive(endpoint tcpip.Endpoint) error {
@@ -107,7 +107,7 @@ func connectTCPEndpoint(ctx context.Context, endpoint tcpip.Endpoint, queue *wai
 	if err == nil {
 		return nil
 	}
-	return &net.OpError{Op: "connect", Net: "tcp", Addr: tcpAddress(remote), Err: errors.New(err.String())}
+	return normalizeGonetTCPError(&net.OpError{Op: "connect", Net: "tcp", Addr: tcpAddress(remote), Err: errors.New(err.String())})
 }
 
 func listenTCPWithMSS(networkStack *stack.Stack, address tcpip.FullAddress, protocol tcpip.NetworkProtocolNumber) (net.Listener, error) {
@@ -199,7 +199,7 @@ func (l *imsTCPListener) acceptTCP() (net.Conn, tcpip.Endpoint, error) {
 		n.Close()
 		return nil, nil, kaErr
 	}
-	return gonet.NewTCPConn(wq, n), n, nil
+	return &imsTCPConn{gonet.NewTCPConn(wq, n)}, n, nil
 }
 
 func tcpAddress(address tcpip.FullAddress) *net.TCPAddr {

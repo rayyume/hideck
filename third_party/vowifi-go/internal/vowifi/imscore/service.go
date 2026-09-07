@@ -424,6 +424,7 @@ func (s *Service) StopCurrent() {
 	s.clearPendingSMS()
 	s.getIMSEventBus().close()
 	s.mu.Lock()
+	s.cancelReplacementDownlinkWatchLocked()
 	registrationIO := s.registrationIO
 	registrationTCP := s.registrationTCP
 	registrationPreviousTCP := s.registrationPreviousTCP

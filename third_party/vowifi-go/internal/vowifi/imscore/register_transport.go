@@ -276,7 +276,7 @@ func (s *Service) serveProtectedSIPConnection(conn net.Conn) {
 // evidence of an on-demand flow. A later peer reconnect permits waiting after
 // clean EOF only; it does not establish reachability after transport errors.
 func (s *Service) handleProtectedServerPushClosed() {
-	if s == nil || s.stopped() || s.pcscfRecoveryPending.Load() {
+	if s == nil || s.stopped() {
 		return
 	}
 	if s.capturePortSSession().lastCloseKind == portSCloseLocal {
@@ -387,7 +387,7 @@ func (s *Service) portSReconnectWatchFired(generation uint64, registrar string) 
 	}
 	s.protectedConnMu.Lock()
 	remaining := len(s.protectedConns)
-	if remaining > 0 || s.canAwaitOnDemandPortS() {
+	if remaining > 0 || s.canAwaitOnDemandPortS() || s.portSTimeoutDownlinkProven() {
 		s.protectedConnMu.Unlock()
 		return
 	}
@@ -398,6 +398,9 @@ func (s *Service) portSReconnectWatchFired(generation uint64, registrar string) 
 	}
 	if retryAt, waiting := s.portSRecoveryDeadline(time.Now()); waiting {
 		s.schedulePortSReconnectWatchAt(retryAt)
+		return
+	}
+	if s.recoverTimedOutPortSLocked() {
 		return
 	}
 	if !s.portSRecoveryPending.CompareAndSwap(false, true) {
@@ -437,10 +440,18 @@ func (s *Service) completePortSRecovery(err error, bindingPreserved bool) {
 		if pending {
 			s.markPortSResetRecoverySucceeded(s.currentPortSRecoveryRegistrar())
 		}
-		if s.portSPushReady.Load() {
+		if s.portSPushReady.Load() || s.portSTimeoutDownlinkProven() {
 			s.portSRecoveryAwaitingFlow.Store(false)
 			s.portSReconnectWaiting.Store(false)
 			s.resetPortSRecoveryBackoff()
+			return
+		}
+		// A periodic success on the old flow cannot postpone an already
+		// validated downlink failure or erase its retry deadline.
+		if s.pendingPortSTimeoutFailover().registrar != "" {
+			if retryAt, _ := s.portSRecoveryDeadline(time.Now()); !retryAt.IsZero() {
+				s.schedulePortSReconnectWatchAt(retryAt)
+			}
 			return
 		}
 		if pending || s.portSReconnectWaiting.Load() {
@@ -452,6 +463,7 @@ func (s *Service) completePortSRecovery(err error, bindingPreserved bool) {
 		return
 	}
 	// A failed REGISTER supersedes any earlier post-success validation wait.
+	s.retainReplacementRegisterRetryAfter(err)
 	s.portSRecoveryAwaitingFlow.Store(false)
 	if !bindingPreserved {
 		s.portSReconnectWaiting.Store(false)
@@ -483,7 +495,9 @@ func (s *Service) recordOnDemandPortSReconnect() {
 	if s == nil {
 		return
 	}
-	if s.portSRecoveryAwaitingFlow.Swap(false) {
+	timeout := s.clearPortSTimeoutRecovery()
+	awaitingFlow := s.portSRecoveryAwaitingFlow.Swap(false)
+	if awaitingFlow || timeout.validationFailed {
 		s.portSReconnectWaiting.Store(false)
 		s.resetPortSRecoveryBackoff()
 		logging.Info("IMS port-s reopened after successful REGISTER", "device", s.DeviceID())
@@ -512,24 +526,35 @@ func (s *Service) resetPortSRecoveryKnowledge() {
 	if s == nil {
 		return
 	}
+	s.mu.Lock()
+	s.downlinkGeneration++
+	s.downlinkRequests = 0
+	s.cancelReplacementDownlinkWatchLocked()
+	s.mu.Unlock()
 	s.resetPortSRecoveryBackoff()
 	s.portSReconnectWaiting.Store(false)
 	s.portSRecoveryPending.Store(false)
 	s.portSRecoveryAwaitingFlow.Store(false)
 	s.portSOnDemandObserved.Store(false)
 	s.clearPortSResetRecovery("")
+	s.clearPortSTimeoutRecovery()
 }
 
 func (s *Service) trackProtectedConnection(conn net.Conn) bool {
+	// Validation commits a failed path under mu; accepting a new downlink must
+	// be serialized with that final decision, not just the connection map.
+	s.mu.RLock()
 	s.protectedConnMu.Lock()
 	select {
 	case <-s.stop:
 		s.protectedConnMu.Unlock()
+		s.mu.RUnlock()
 		return false
 	default:
 		s.protectedConns[conn] = struct{}{}
 		changed := !s.portSPushReady.Swap(true)
 		s.protectedConnMu.Unlock()
+		s.mu.RUnlock()
 		s.confirmCurrentRegistrarDownlinkHealthy()
 		s.signalDownlinkValidation()
 		s.cancelPortSReconnectWatch()

@@ -182,11 +182,13 @@ func (s *Service) dispatchInboundSIPMessageWithPeer(
 		return nil
 	case *sip.Request:
 		s.inboundSIPParsedRequest.Add(1)
+		checkpoint, currentPeer := s.captureInboundDownlink(peer)
 		err := s.dispatchInboundSIPRequest(parsed, raw, reply, peer)
 		if err == nil {
 			s.inboundSIPHandledRequest.Add(1)
-			s.confirmCurrentRegistrarDownlinkHealthy()
-			s.signalDownlinkValidation()
+			if currentPeer {
+				s.recordCurrentDownlinkRequest(peer, checkpoint)
+			}
 		}
 		return err
 	default:

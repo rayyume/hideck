@@ -19,7 +19,12 @@ func (s *Service) Start(ctx context.Context) error {
 		return err
 	}
 	s.startFragmentCleanup()
-	return s.scheduleInitialRecoveryFailure(s.Register(ctx))
+	baseline := s.captureDownlinkCheckpoint()
+	err := s.Register(ctx)
+	if err == nil {
+		s.startReplacementDownlinkWatch(baseline)
+	}
+	return s.scheduleInitialRecoveryFailure(err)
 }
 
 // SnapshotMap retains the additive map snapshot API.

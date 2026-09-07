@@ -101,7 +101,7 @@ func (s *Service) recoverPCSCFAfter503(
 	failedRegistrar string,
 	decision pcscf503RecoveryDecision,
 ) {
-	defer s.pcscfRecoveryPending.Store(false)
+	defer s.finishPCSCFRecovery()
 	s.registerMu.Lock()
 	defer s.registerMu.Unlock()
 	next, current := s.markRegistrarUnavailableAndAdvance(
@@ -138,9 +138,9 @@ func (s *Service) markPCSCFRegistrationUnbound(registrar string) {
 	s.markPCSCFRegistrationUnboundWithReason(reason, 503, "503 Service Unavailable")
 }
 
-func (s *Service) markPCSCFRegistrationUnboundForPortSReset(registrar string) {
-	reason := fmt.Sprintf("P-CSCF %s reset the protected port-s flow", registrar)
-	s.markPCSCFRegistrationUnboundWithReason(reason, 0, "port-s connection reset by peer")
+func (s *Service) markPCSCFRegistrationUnboundForPortSFailure(registrar, failure string) {
+	reason := fmt.Sprintf("P-CSCF %s protected port-s recovery failed: %s", registrar, failure)
+	s.markPCSCFRegistrationUnboundWithReason(reason, 0, failure)
 }
 
 func (s *Service) markPCSCFRegistrationUnboundWithReason(reason string, sipCode int32, sipText string) {

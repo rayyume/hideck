@@ -205,6 +205,10 @@ type Service struct {
 	inboundStatsCancel        context.CancelFunc
 	inboundStatsDone          chan struct{}
 	downlinkValidationWake    chan struct{}
+	downlinkGeneration        uint64
+	downlinkRequests          uint64
+	registerDownlinkBaseline  downlinkCheckpoint
+	replacementDownlinkWatch  *replacementDownlinkWatch
 	networkDone               sync.WaitGroup
 	registerErrors            chan error
 	keepaliveOnce             sync.Once

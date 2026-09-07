@@ -324,17 +324,20 @@ func TestVodafoneUKFailoverValidationRequiresProvenDownlink(t *testing.T) {
 	service.regSession = &registerSession{security: &securityAgreement{verifyHeader: "ipsec-3gpp"}}
 	service.mu.Unlock()
 
-	if validatedBy, ok := service.waitForPortSFailoverValidation(0); ok || validatedBy != "" {
+	baseline := service.captureDownlinkCheckpoint()
+	if validatedBy, ok := service.waitForPortSFailoverValidation(baseline); ok || validatedBy != "" {
 		t.Fatalf("unproven downlink validation = (%q, %t)", validatedBy, ok)
 	}
 
-	service.portSPushReady.Store(true)
-	if validatedBy, ok := service.waitForPortSFailoverValidation(0); !ok || validatedBy != "port-s" {
+	push := newRecoveryCompletionPortS(t)
+	service.trackProtectedConnection(push)
+	if validatedBy, ok := service.waitForPortSFailoverValidation(baseline); !ok || validatedBy != "port-s" {
 		t.Fatalf("port-s validation = (%q, %t)", validatedBy, ok)
 	}
-	service.portSPushReady.Store(false)
-	service.inboundSIPHandledRequest.Add(1)
-	if validatedBy, ok := service.waitForPortSFailoverValidation(0); !ok || validatedBy != "inbound_sip_request" {
+	service.untrackProtectedConnection(push)
+	service.registrationTCP, service.registrationTCPProtected = push, true
+	service.recordCurrentDownlinkRequest(push, baseline)
+	if validatedBy, ok := service.waitForPortSFailoverValidation(baseline); !ok || validatedBy != "inbound_sip_request" {
 		t.Fatalf("inbound request validation = (%q, %t)", validatedBy, ok)
 	}
 }
@@ -349,7 +352,7 @@ func TestVodafoneUKUnverifiedFailoverPreservesCandidatePenalties(t *testing.T) {
 	firstUntil := time.Now().Add(vodafoneUKPCSCFDeprioritizedPeriod)
 	service.registrarPenalties.mark("pcscf-a.example:5060", firstUntil)
 
-	service.rejectUnverifiedPortSRegistrar("pcscf-b.example:5060", time.Now(), "downlink validation timed out")
+	service.rejectUnverifiedPortSRegistrar("pcscf-b.example:5060", portSFailoverCause{observedAt: time.Now()}, "downlink validation timed out")
 	status := service.StatusCurrent()
 	if len(status.DeprioritizedPCSCF) != 2 {
 		t.Fatalf("deprioritized P-CSCFs = %v, want one complete candidate round", status.DeprioritizedPCSCF)

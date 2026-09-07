@@ -95,6 +95,12 @@ func (s *Service) clearPortSRecoveryDeadline() {
 
 func (s *Service) backoffMissingPortSAfterRegister() {
 	backoff := s.recordPortSRecoveryFailure(errPortSNotReopenedAfterRegister, time.Now())
+	if s.armPortSTimeoutFailover() {
+		logging.WarnRate("ims-ports-timeout-failover-"+s.DeviceID(), 30*time.Second,
+			"IMS port-s timeout recovery did not restore downlink; schedule P-CSCF replacement after backoff",
+			"device", s.DeviceID(), "pcscf", s.currentPortSRecoveryRegistrar(),
+			"failures", backoff.failures, "retry_at", backoff.retryAt)
+	}
 	s.schedulePortSReconnectWatchAt(backoff.retryAt)
 	logging.WarnRate("ims-ports-recovery-no-flow-"+s.DeviceID(), 30*time.Second,
 		"IMS port-s did not reopen after REGISTER; keep current binding and back off",

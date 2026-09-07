@@ -101,7 +101,7 @@ func TestVodafoneUnverifiedCandidatesRetryBeforePreferenceExpires(t *testing.T) 
 	service.portSRecoveryJitter = func(upper time.Duration) time.Duration { return upper / 2 }
 	before := time.Now()
 	service.markVodafoneRegistrarFailure("pcscf-a.example:5060", "port_s_peer_reset", nil)
-	service.rejectUnverifiedPortSRegistrar("pcscf-b.example:5060", before, "downlink validation timed out")
+	service.rejectUnverifiedPortSRegistrar("pcscf-b.example:5060", portSFailoverCause{observedAt: before}, "downlink validation timed out")
 	replacement, err := New(&IMSConfig{Registrar: "pcscf-a.example:5060;pcscf-b.example:5060", LocalAddr: "192.0.2.10", RegistrarPenalties: service.registrarPenalties})
 	if err != nil {
 		t.Fatal(err)

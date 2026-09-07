@@ -57,7 +57,7 @@ func smsReceiverHealthReady(input smsHealthInput) bool {
 }
 
 func (s *Service) protectedSMSPushRequiredLocked() bool {
-	return !s.externalTransport && !s.canAwaitOnDemandPortS() &&
+	return !s.externalTransport && !s.canAwaitOnDemandPortS() && !s.portSTimeoutDownlinkProven() &&
 		s.regSession != nil &&
 		s.regSession.security != nil &&
 		strings.TrimSpace(s.regSession.security.verifyHeader) != ""

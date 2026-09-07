@@ -11,19 +11,29 @@ import (
 // The 30-minute preference is an empirical Vodafone UK policy, not a server
 // Retry-After. Eligibility is controlled independently by recovery backoff.
 func (s *Service) markVodafoneRegistrarFailure(registrar, reason string, err error) registrarPenaltyEntry {
+	return s.recordVodafoneRegistrarFailure(registrar, registrarFailureOptions{reason: reason, err: err})
+}
+
+type registrarFailureOptions struct {
+	reason         string
+	err            error
+	minimumRetryAt time.Time
+}
+
+func (s *Service) recordVodafoneRegistrarFailure(registrar string, options registrarFailureOptions) registrarPenaltyEntry {
 	now := time.Now()
-	var retryAfter time.Time
-	if delay, present := registerRetryAfterFromError(err); present {
-		retryAfter = now.Add(delay)
+	retryAfter := options.minimumRetryAt
+	if delay, present := registerRetryAfterFromError(options.err); present {
+		retryAfter = laterRegistrarDeadline(retryAfter, now.Add(delay))
 	}
 	entry := s.registrarPenalties.recordDeprioritizedFailure(registrar, registrarRecoveryInput{
-		now: now, reason: reason, minimumRetryAt: retryAfter,
+		now: now, reason: options.reason, minimumRetryAt: retryAfter,
 		nextRetry: func(failures uint32) time.Time {
-			return s.failedRegisterUnavailableUntil(err, now, failures)
+			return s.failedRegisterUnavailableUntil(options.err, now, failures)
 		},
 	})
 	logging.Info("IMS P-CSCF recovery preference and retry scheduled",
-		"device", s.DeviceID(), "pcscf", registrar, "reason", reason,
+		"device", s.DeviceID(), "pcscf", registrar, "reason", options.reason,
 		"deprioritized_until", entry.deprioritizedUntil,
 		"retry_not_before", entry.retryNotBefore, "failures", entry.consecutiveFailures)
 	return entry

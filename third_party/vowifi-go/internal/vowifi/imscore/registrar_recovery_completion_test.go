@@ -126,7 +126,7 @@ func observeRecoveryTestDownlink(service *Service, conn net.Conn, phase string) 
 		service.trackProtectedConnection(conn)
 	case "request before 200":
 		service.inboundSIPHandledRequest.Add(1)
-		service.confirmCurrentRegistrarDownlinkHealthy()
+		service.recordCurrentDownlinkRequest(nil, service.captureDownlinkCheckpoint())
 	case "early port-s closed":
 		service.trackProtectedConnection(conn)
 		service.untrackProtectedConnection(conn)

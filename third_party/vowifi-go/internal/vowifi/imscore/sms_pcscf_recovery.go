@@ -33,11 +33,11 @@ func (s *Service) requestFreshRuntimeAfterMTReportReject(
 	defer s.registerMu.Unlock()
 	current := s.currentPortSRecoveryRegistrar()
 	if s.stopped() {
-		s.pcscfRecoveryPending.Store(false)
+		s.finishPCSCFRecovery()
 		return
 	}
 	if !strings.EqualFold(current, registrar) {
-		s.pcscfRecoveryPending.Store(false)
+		s.finishPCSCFRecovery()
 		logging.Info("IMS MT report rejection belongs to an earlier P-CSCF path",
 			"device", s.DeviceID(), "policy", vodafoneUKMTReportRecoveryPolicy,
 			"rejected_pcscf", registrar, "current_pcscf", current,

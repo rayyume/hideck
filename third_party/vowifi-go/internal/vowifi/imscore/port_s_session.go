@@ -39,6 +39,7 @@ type portSSessionState struct {
 	lastCloseReason string
 	peerResetCount  uint64
 	resetRecovery   portSResetRecoveryState
+	timeoutRecovery portSTimeoutRecoveryState
 }
 
 type portSSessionSnapshot struct {
@@ -111,6 +112,7 @@ func (s *Service) recordPortSClosed(conn net.Conn, err error, now time.Time) boo
 		s.portSSession.closedAt = now
 		s.portSSession.lastCloseKind = kind
 		s.portSSession.lastCloseReason = errorText(err)
+		s.recordPortSTimeoutLocked(registrar, kind)
 	}
 	startFailover := false
 	if current && kind == portSClosePeerReset {

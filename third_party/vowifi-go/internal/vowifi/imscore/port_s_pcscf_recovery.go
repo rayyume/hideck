@@ -1,12 +1,8 @@
 package imscore
 
 import (
-	"context"
-	"fmt"
 	"strings"
 	"time"
-
-	"github.com/iniwex5/vowifi-go/internal/vowifi/logging"
 )
 
 const (
@@ -134,175 +130,17 @@ func (s *Service) startPendingPortSResetFailover() {
 	}
 	failed, observedAt, ok := s.pendingPortSResetFailover()
 	if !ok {
-		s.pcscfRecoveryPending.Store(false)
+		s.finishPCSCFRecovery()
 		return
 	}
 	go s.recoverPCSCFAfterPortSReset(failed, observedAt)
 }
 
 func (s *Service) recoverPCSCFAfterPortSReset(failedRegistrar string, observedAt time.Time) {
-	defer s.pcscfRecoveryPending.Store(false)
+	defer s.finishPCSCFRecovery()
 	s.registerMu.Lock()
 	defer s.registerMu.Unlock()
-	s.mu.Lock()
-	if strings.TrimSpace(s.registrar) != strings.TrimSpace(failedRegistrar) {
-		s.mu.Unlock()
-		return
-	}
-	penalty := s.markVodafoneRegistrarFailure(failedRegistrar, "port_s_peer_reset", nil)
-	next := s.advanceAvailableRegistrarLocked()
-	s.mu.Unlock()
-	unavailableUntil := penalty.deprioritizedUntil
-	if next == "" {
-		s.requestFreshRuntimeAfterPortSReset(
-			failedRegistrar, observedAt, unavailableUntil,
-			"no alternate P-CSCF is available",
-		)
-		return
-	}
-	s.recoverPortSResetOnAlternate(failedRegistrar, next, observedAt, unavailableUntil)
-}
-
-func (s *Service) recoverPortSResetOnAlternate(
-	failedRegistrar, next string,
-	observedAt, failedUnavailableUntil time.Time,
-) {
-	s.markPCSCFRegistrationUnboundForPortSReset(failedRegistrar)
-	if err := s.resetRegistrationForPCSCFSwitch(); err != nil {
-		s.reportRegistrationRuntimeError(err)
-		return
-	}
-	logging.WarnRate("ims-ports-reset-switch-"+s.DeviceID(), 30*time.Second,
-		"IMS port-s reset recovery switching P-CSCF",
-		"device", s.DeviceID(), "policy", vodafoneUKPortSResetRecoveryPolicy,
-		"previous", failedRegistrar, "next", next,
-		"reset_at", observedAt, "deprioritized_until", failedUnavailableUntil)
-	baseline := s.inboundSIPHandledRequest.Load()
-	ctx, cancel := context.WithTimeout(context.Background(), pcscfInitialRegistrationTimeout)
-	err := s.registerLocked(ctx)
-	cancel()
-	if err != nil {
-		s.rejectFailedPortSRegistrar(next, observedAt, err)
-		return
-	}
-	logging.Info("IMS port-s reset recovery registered; awaiting downlink validation",
-		"device", s.DeviceID(), "policy", vodafoneUKPortSResetRecoveryPolicy,
-		"registrar", next, "timeout", s.portSFailoverValidationWait())
-	validatedBy, ok := s.waitForPortSFailoverValidation(baseline)
-	if !ok {
-		s.rejectUnverifiedPortSRegistrar(next, observedAt, "downlink validation timed out")
-		return
-	}
-	logging.Info("IMS port-s reset recovery completed",
-		"device", s.DeviceID(), "policy", vodafoneUKPortSResetRecoveryPolicy,
-		"registrar", next, "validated_by", validatedBy)
-}
-
-func (s *Service) waitForPortSFailoverValidation(baseline uint64) (string, bool) {
-	if !s.protectedDownlinkValidationRequired() {
-		return "not_required", true
-	}
-	timer := time.NewTimer(s.portSFailoverValidationWait())
-	defer timer.Stop()
-	for {
-		if s.portSPushReady.Load() {
-			return "port-s", true
-		}
-		if s.inboundSIPHandledRequest.Load() > baseline {
-			return "inbound_sip_request", true
-		}
-		select {
-		case <-s.downlinkValidationWake:
-		case <-timer.C:
-			return "", false
-		case <-s.stop:
-			return "", false
-		}
-	}
-}
-
-func (s *Service) protectedDownlinkValidationRequired() bool {
-	if s == nil {
-		return false
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.protectedSMSPushRequiredLocked()
-}
-
-func (s *Service) portSFailoverValidationWait() time.Duration {
-	if s != nil && s.portSFailoverVerifyWait > 0 {
-		return s.portSFailoverVerifyWait
-	}
-	return defaultPortSDownlinkValidationWait
-}
-
-func (s *Service) signalDownlinkValidation() {
-	if s == nil || s.downlinkValidationWake == nil {
-		return
-	}
-	select {
-	case s.downlinkValidationWake <- struct{}{}:
-	default:
-	}
-}
-
-func (s *Service) rejectUnverifiedPortSRegistrar(registrar string, observedAt time.Time, reason string) {
-	if s.stopped() {
-		return
-	}
-	penalty := s.markVodafoneRegistrarFailure(registrar, "downlink_validation_timeout", nil)
-	s.requestFreshRuntimeAfterPortSReset(registrar, observedAt, penalty.deprioritizedUntil, reason)
-}
-
-func (s *Service) rejectFailedPortSRegistrar(registrar string, observedAt time.Time, err error) {
-	penalty := s.markVodafoneRegistrarFailure(registrar, "initial_registration_failed", err)
-	reason := fmt.Sprintf("initial registration failed: %v", err)
-	s.requestFreshRuntimeAfterPortSReset(registrar, observedAt, penalty.deprioritizedUntil, reason)
-}
-
-func (s *Service) failedRegisterUnavailableUntil(err error, now time.Time, failures uint32) time.Time {
-	if failures == 0 {
-		failures = 1
-	}
-	retryDelay := s.jitterPortSRecoveryDelay(rfc5626RecoveryUpperBound(failures, true))
-	if retryAfter, present := registerRetryAfterFromError(err); present && retryAfter > retryDelay {
-		retryDelay = retryAfter
-	}
-	return now.Add(retryDelay)
-}
-
-func (s *Service) confirmCurrentRegistrarDownlinkHealthy() {
-	if s == nil {
-		return
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	// port-s may open (or deliver a request) before the final REGISTER response.
-	// It proves a downlink, not a successful registration. Keep recovery active
-	// until both are true, so a subsequent rejection retains its retry policy.
-	if s.regState != regRegistered || s.stopped() {
-		return
-	}
-	if s.registrarRecoveryAttempt.registrar != strings.TrimSpace(s.registrar) {
-		return
-	}
-	// Compare under the penalty-store lock so a concurrent failure cannot be
-	// cleared by a REGISTER or downlink event from the rejected binding.
-	s.registrarPenalties.clearFailures(s.registrarRecoveryAttempt)
-}
-
-func (s *Service) requestFreshRuntimeAfterPortSReset(
-	registrar string,
-	observedAt, unavailableUntil time.Time,
-	reason string,
-) {
-	s.markPCSCFRegistrationUnboundForPortSReset(registrar)
-	err := fmt.Errorf("imscore: P-CSCF %s port-s recovery failed (%s); fresh runtime required", registrar, reason)
-	logging.WarnRate("ims-ports-reset-runtime-"+s.DeviceID(), 30*time.Second,
-		"IMS port-s reset recovery requires a fresh runtime",
-		"device", s.DeviceID(), "policy", vodafoneUKPortSResetRecoveryPolicy,
-		"pcscf", registrar, "reason", reason,
-		"reset_at", observedAt, "deprioritized_until", unavailableUntil)
-	s.reportRegistrationRuntimeError(err)
+	s.recoverPCSCFAfterPortSFailureLocked(failedRegistrar, portSFailoverCause{
+		reason: "port_s_peer_reset", observedAt: observedAt,
+	})
 }

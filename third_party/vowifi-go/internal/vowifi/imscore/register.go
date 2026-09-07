@@ -89,7 +89,7 @@ func (s *Service) registerLocked(ctx context.Context) error {
 		recoveryGeneration = s.registrarPenalties.recoveryGeneration()
 	}
 	s.regState = regRegistering
-	downlinkBaseline := s.inboundSIPHandledRequest.Load()
+	s.registerDownlinkBaseline = s.downlinkCheckpointLocked()
 	s.lastRegisterTraceID = common.TraceID(ctx)
 	s.lastRegisterAttemptAt = time.Now()
 	s.mu.Unlock()
@@ -181,9 +181,7 @@ func (s *Service) registerLocked(ctx context.Context) error {
 		s.trackSubscriptionRegistrationLocked(expires)
 	}
 	s.mu.Unlock()
-	if s.portSPushReady.Load() || s.inboundSIPHandledRequest.Load() > downlinkBaseline {
-		s.confirmCurrentRegistrarDownlinkHealthy()
-	}
+	s.confirmCurrentRegistrarDownlinkHealthy()
 	s.recordIMSRegistrationSucceeded()
 	logging.Info("IMS REGISTER succeeded",
 		"device", s.DeviceID(),
