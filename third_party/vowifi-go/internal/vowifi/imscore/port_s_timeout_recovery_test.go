@@ -140,7 +140,7 @@ func TestPortSTimeoutRecoveryCanceledByDownlinkOrLifecycle(t *testing.T) {
 			case "inbound SIP":
 				conn := newRecoveryCompletionPortS(t)
 				s.registrationTCP, s.registrationTCPProtected = conn, true
-				s.confirmPortSTimeoutDownlink(conn)
+				s.recordCurrentDownlinkRequest(conn, s.captureDownlinkCheckpoint())
 				if !s.SMSReadiness().Ready {
 					t.Fatal("current protected downlink did not restore SMS readiness")
 				}
@@ -165,8 +165,8 @@ func TestPortSTimeoutIgnoresDownlinkFromRetiredConnection(t *testing.T) {
 	s.markPortSLocalClose(old)
 	s.untrackProtectedConnection(old)
 	failPortSTimeoutValidation(t, s)
-	s.confirmPortSTimeoutDownlink(old)
-	s.confirmPortSTimeoutDownlink(nil)
+	s.recordCurrentDownlinkRequest(old, s.captureDownlinkCheckpoint())
+	s.recordCurrentDownlinkRequest(nil, s.captureDownlinkCheckpoint())
 	if s.pendingPortSTimeoutFailover().registrar == "" || s.portSTimeoutDownlinkProven() {
 		t.Fatal("retired connection canceled the new timeout recovery")
 	}

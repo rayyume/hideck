@@ -59,14 +59,20 @@ func (s *Service) captureInboundDownlink(peer net.Conn) (downlinkCheckpoint, boo
 func (s *Service) recordCurrentDownlinkRequest(peer net.Conn, checkpoint downlinkCheckpoint) {
 	s.mu.Lock()
 	current := !s.stopped() && checkpoint.samePath(s.downlinkCheckpointLocked()) && s.currentDownlinkPeerLocked(peer)
+	timeoutProven := false
 	if current {
 		s.downlinkRequests++
+		// Failover commits under mu too: it must not observe the request before
+		// the same request has canceled its pending timeout recovery.
+		timeoutProven = s.confirmPortSTimeoutDownlinkLocked(peer)
 	}
 	s.mu.Unlock()
 	if !current {
 		return
 	}
-	s.confirmPortSTimeoutDownlink(peer)
+	if timeoutProven {
+		s.notifyPortSTimeoutDownlink()
+	}
 	s.confirmCurrentRegistrarDownlinkHealthy()
 	s.signalDownlinkValidation()
 }

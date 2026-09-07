@@ -99,12 +99,13 @@ func (s *Service) portSTimeoutDownlinkProven() bool {
 // A successfully handled request on the current protected connection can also
 // prove reachability. Late traffic from detached connections must not cancel
 // recovery of their replacement. REGISTER responses never enter this path.
-func (s *Service) confirmPortSTimeoutDownlink(peer net.Conn) {
+// The caller holds mu across both request accounting and this state transition.
+func (s *Service) confirmPortSTimeoutDownlinkLocked(peer net.Conn) bool {
 	if peer == nil {
-		return
+		return false
 	}
-	s.mu.RLock()
 	s.portSSessionMu.Lock()
+	defer s.portSSessionMu.Unlock()
 	state := &s.portSSession.timeoutRecovery
 	connection, tracked := s.portSSession.connections[peer]
 	current := (peer == s.registrationTCP && s.registrationTCPProtected) ||
@@ -118,11 +119,11 @@ func (s *Service) confirmPortSTimeoutDownlink(peer net.Conn) {
 		s.portSReconnectWaiting.Store(false)
 		s.resetPortSRecoveryBackoff()
 	}
-	s.portSSessionMu.Unlock()
-	s.mu.RUnlock()
-	if !proven {
-		return
-	}
+	return proven
+}
+
+// Observers may reenter Service, so publish only after releasing its locks.
+func (s *Service) notifyPortSTimeoutDownlink() {
 	s.notifySMSReadiness()
 	logging.Info("IMS port-s timeout recovery validated by current inbound SIP request", "device", s.DeviceID())
 }
