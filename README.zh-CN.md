@@ -78,7 +78,7 @@ docker compose logs -f hideck
 
 | 命令 | 代理 |
 | --- | --- |
-| ![命令](docs/images/commands.jpg) | ![代理](docs/images/proxy.jpg) |
+| ![命令](docs/images/commands.jpg) | ![代理](docs/images/console-proxy.jpg) |
 
 ## 二进制
 

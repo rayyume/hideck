@@ -78,7 +78,7 @@ docker compose logs -f hideck
 
 | 명령 | 프록시 |
 | --- | --- |
-| ![명령](docs/images/commands.jpg) | ![프록시](docs/images/proxy.jpg) |
+| ![명령](docs/images/commands.jpg) | ![프록시](docs/images/console-proxy.jpg) |
 
 ## 바이너리 설치
 

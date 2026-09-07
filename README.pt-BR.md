@@ -78,7 +78,7 @@ docker compose logs -f hideck
 
 | Comandos | Proxy |
 | --- | --- |
-| ![Comandos](docs/images/commands.jpg) | ![Proxy](docs/images/proxy.jpg) |
+| ![Comandos](docs/images/commands.jpg) | ![Proxy](docs/images/console-proxy.jpg) |
 
 ## Instalação binária
 

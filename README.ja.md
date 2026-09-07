@@ -78,7 +78,7 @@ docker compose logs -f hideck
 
 | コマンド | プロキシ |
 | --- | --- |
-| ![コマンド](docs/images/commands.jpg) | ![プロキシ](docs/images/proxy.jpg) |
+| ![コマンド](docs/images/commands.jpg) | ![プロキシ](docs/images/console-proxy.jpg) |
 
 ## バイナリインストール
 

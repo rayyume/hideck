@@ -78,7 +78,7 @@ docker compose logs -f hideck
 
 | Команды | Прокси |
 | --- | --- |
-| ![Команды](docs/images/commands.jpg) | ![Прокси](docs/images/proxy.jpg) |
+| ![Команды](docs/images/commands.jpg) | ![Прокси](docs/images/console-proxy.jpg) |
 
 ## Установка бинарника
 
