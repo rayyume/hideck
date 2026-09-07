@@ -194,6 +194,14 @@ func (s *Service) sendByMode(operation outboundSendOperation) (*sipResponse, err
 		return nil, err
 	}
 	setOutboundDestination(built, operation.Mode)
+	if operation.Callbacks.onBeforeSend != nil {
+		if err := operation.Context.Err(); err != nil {
+			return nil, err
+		}
+		if err := operation.Callbacks.onBeforeSend(); err != nil {
+			return nil, err
+		}
+	}
 	if operation.Mode.Client != nil {
 		if operation.Callbacks.onLateFinal != nil {
 			return nil, errors.New("late SIP final retention is unavailable through sipgo client mode")

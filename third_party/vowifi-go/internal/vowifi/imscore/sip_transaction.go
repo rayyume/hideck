@@ -18,6 +18,9 @@ type sipTransactionKey struct {
 }
 
 type sipTransactionCallbacks struct {
+	// Runs once after queueing, just before starting the outbound transaction.
+	// Returning an error cancels this attempt without reporting a transport failure.
+	onBeforeSend            func() error
 	onProvisional           func(*sipResponse) error
 	onFinalRetransmit       func(*sipResponse) error
 	onLateFinal             func(*sipResponse) error

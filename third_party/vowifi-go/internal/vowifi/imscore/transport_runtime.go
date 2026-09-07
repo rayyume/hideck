@@ -107,10 +107,7 @@ func (s *Service) handleInboundSIPDispatch(
 	}
 	switch method {
 	case "NOTIFY":
-		response, err := buildSIPRequestResponse(dispatch.raw, 200)
-		return inboundSIPResult{response: response, afterReply: func() {
-			s.handleInboundNotification(dispatch.raw)
-		}}, err
+		return s.prepareInboundNotification(dispatch.raw)
 	case "OPTIONS":
 		response, err := s.buildInboundOPTIONSResponse(dispatch.raw)
 		return inboundSIPResult{response: response}, err

@@ -45,42 +45,59 @@ type regInfoStats struct {
 }
 
 func (s *Service) handleRegistrationNotification(raw string) {
+	notification, status := s.acceptSubscriptionNotification(raw)
+	if status == 200 && notification.version != 0 {
+		s.applyRegistrationNotification(notification)
+	}
+}
+
+func (s *Service) applyRegistrationNotification(notification subscriptionNotification) {
+	raw := notification.raw
 	event := rawSIPHeaderValue(raw, "Event")
 	logging.Info("IMS NOTIFY acknowledged", "event", event)
 	if !isRegistrationNotification(raw) {
 		return
-	}
-	s.learnSubscriptionDialogFromNotify(raw)
-	if subscriptionStateTerminated(raw) {
-		s.closeRegistrationSubscription()
 	}
 	body, err := rawSIPBody(raw)
 	if err != nil {
 		logging.WarnRate("ims-reginfo-body", "IMS reginfo body is invalid", "err", err)
 		return
 	}
+	if len(body) == 0 {
+		return // A final NOTIFY may carry no resource state.
+	}
 	document, err := parseReginfoXML(body)
 	if err != nil {
 		logging.WarnRate("ims-reginfo-xml", "IMS reginfo XML is invalid", "err", err)
 		return
 	}
+	s.applyCurrentReginfo(notification, document)
+}
+
+func (s *Service) applyCurrentReginfo(notification subscriptionNotification, document *regInfoDocument) {
+	s.mu.Lock()
+	if !s.notificationBodyCurrentLocked(notification) {
+		s.mu.Unlock()
+		return
+	}
 	aor := extractReginfoAORFromDocument(document)
 	if aor != "" {
-		s.mu.Lock()
 		s.reginfoAOR = aor
-		s.mu.Unlock()
 	}
-	s.logReginfoStats(document)
-	if s.requestRegistrationBindingCleanup(document) {
+	cleanup := s.requestRegistrationBindingCleanupLocked(document)
+	contactID, contactNeedle := s.registrationContactIdentityLocked()
+	active, terminated := matchingReginfoStates(document, contactID, contactNeedle)
+	if terminated && !active {
+		s.endSubscriptionRegistrationLocked(false)
+	}
+	if cleanup || (terminated && !active) {
 		s.reRegisterAfterDelay(reginfoReconnectDelay)
 	}
-	if s.myContactTerminated(document) {
-		s.mu.Lock()
-		s.endSubscriptionRegistrationLocked(false)
-		s.mu.Unlock()
+	s.mu.Unlock()
+	s.logReginfoStats(document)
+	if terminated && !active {
 		logging.WarnRate("ims-reginfo-terminated-"+s.DeviceID(),
 			"IMS registration binding terminated", "device", s.DeviceID(), "aor", aor)
-		s.reRegisterAfterDelay(reginfoReconnectDelay)
 	}
 }
 

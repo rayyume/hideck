@@ -57,6 +57,17 @@
 - `reg` 初始拒绝不随普通 REGISTER 刷新重试。403、超时或 5xx 不写入 MWI 的“不支持”记录；403 保留原有本地拒绝处理，超时和 5xx 保留原有重试处理。订阅结果带注册上下文校验，旧响应不得覆盖新对话状态。
 - 失败原因与跳过原因保留在诊断中；本项不改变 port-s 普通 EOF、2degrees 按需下行、VOXI RST/短信回执 488 或 P-CSCF 退避策略。回归入口：`subscription_lifecycle_test.go`、`subscription_registration_store_test.go`。
 
+### SUBSCRIBE / NOTIFY 状态与计时
+
+- `reg` / `message-summary` 的 NOTIFY 按注册上下文、Call-ID、双方 tag 和 Event usage 匹配；不匹配返回 481，不再修改当前订阅或处理其中的注册/语音信箱状态。其他 Event 的原有分发路径保持不变。待发送事务与实际发送状态分开，允许合法 NOTIFY 先于 SUBSCRIBE 200 到达。首个 NOTIFY 确认订阅对话，后到的其他分支响应不得覆盖它。
+- 新的对话内 SUBSCRIBE 在分派前保留递增 CSeq，失败也不复用；同一 SIP 事务重传仍使用原请求。电话 ACK/CANCEL 的序号处理不受影响，见 [RFC 3261 §12.2.1.1](https://www.rfc-editor.org/rfc/rfc3261.html#section-12.2.1.1)。
+- `active` / `pending` NOTIFY 的 `expires` 是有效期依据；后到的 200 不覆盖同次尝试已收到的 NOTIFY 有效期，0 不回退为正数。可恢复刷新失败保留原协商到期时间，订阅终止类响应则结束该 usage。
+- 初始、刷新和取消订阅在出队发送时启动 `Timer N = 64 × T1`，收到匹配 NOTIFY 后取消。定时器到期只结束订阅并记录错误，不清除 IMS/SMS 就绪状态、不触发 runtime 重建。主动取消后保留最终 NOTIFY 的接收窗口，不自动恢复该订阅。
+- `terminated;reason=deactivated/timeout` 可立即以新对话重订阅；`probation/giveup` 和其他原因遵守有效的 `retry-after`；`rejected/noresource/invariant` 不自动重订阅。MWI 405/489 的身份级拒绝记录仍优先，普通 REGISTER 刷新和 EOF 不能绕过。未给出重试时间时沿用原有订阅周期重试间隔，这是本地调度策略，不是 RFC 规定的固定重试时长。
+- 订阅本身终止与 reginfo 报告当前 Contact 注销是不同事件；后者在确认属于当前上下文后仍进入原来的 IMS 注册恢复流程。
+
+生命周期依据：[RFC 6665 §4.1](https://www.rfc-editor.org/rfc/rfc6665.html#section-4.1)。回归入口：`subscription_protocol_test.go`、`subscription_timer_protocol_test.go`、`subscription_wire_protocol_test.go`。本次未启用最终 IKE_AUTH 的全局严格认证校验；该兼容选项仍需单独验证，不能据本次订阅修复宣称全部 VoWiFi 协议已对齐。
+
 ## Vodafone UK / VOXI 的 P-CSCF 恢复策略
 
 此节是 `vodafone_uk_23415` 预设的经验性兼容策略，不是所有运营商必须采用的协议行为。明确 port-s RST 仍使用 5 秒宽限；RP 报告 488 仍触发换路径。普通 EOF 和其他运营商的恢复分支不因此改变。

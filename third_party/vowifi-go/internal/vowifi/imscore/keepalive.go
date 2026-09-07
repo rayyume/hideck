@@ -120,27 +120,21 @@ func (s *Service) waitForIMSMaintenance(wakeAt time.Time) bool {
 func (s *Service) computeNextWakeTime(now time.Time) time.Time {
 	s.mu.RLock()
 	registered := s.regState == regRegistered
-	subscriptionEligible := s.subscriptionEligibleLocked()
-	mwiEligible := s.mwiSubscriptionEligibleLocked()
 	refreshAt := s.registrationRefreshAt
-	subscribeAt := s.subscriptionRefreshAt
-	mwiAt := s.mwiSubscriptionRefreshAt
 	lastTrafficAt := s.lastPingAt
 	interval := s.keepaliveIntervalLocked()
+	nextSubscription := s.nextSubscriptionWakeLocked(now)
 	s.mu.RUnlock()
 
 	next := now.Add(imsMaintenancePollInterval)
 	if !registered {
 		return next
 	}
+	if nextSubscription.Before(next) {
+		next = nextSubscription
+	}
 	if !refreshAt.IsZero() && refreshAt.Before(next) {
 		next = refreshAt
-	}
-	if subscriptionEligible && !subscribeAt.IsZero() && subscribeAt.Before(next) {
-		next = subscribeAt
-	}
-	if mwiEligible && !mwiAt.IsZero() && mwiAt.Before(next) {
-		next = mwiAt
 	}
 	keepaliveAt := lastTrafficAt.Add(interval)
 	if lastTrafficAt.IsZero() {
@@ -160,20 +154,19 @@ func (s *Service) computeNextWakeTime(now time.Time) time.Time {
 }
 
 func (s *Service) nextIMSMaintenanceAction(now time.Time) imsMaintenanceAction {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.regState != regRegistered {
 		return imsMaintenanceIdle
 	}
+	s.expireSubscriptionTimersLocked(now)
 	if s.registrationRefreshAt.IsZero() || !now.Before(s.registrationRefreshAt) {
 		return imsMaintenanceRefresh
 	}
-	if s.subscriptionEligibleLocked() &&
-		(s.subscriptionRefreshAt.IsZero() || !now.Before(s.subscriptionRefreshAt)) {
+	if s.subscriptionDueLocked(false, now) {
 		return imsMaintenanceSubscribe
 	}
-	if s.mwiSubscriptionEligibleLocked() &&
-		!s.mwiSubscriptionRefreshAt.IsZero() && !now.Before(s.mwiSubscriptionRefreshAt) {
+	if s.subscriptionDueLocked(true, now) {
 		return imsMaintenanceSubscribeMWI
 	}
 	if s.lastPingAt.IsZero() || !now.Before(s.lastPingAt.Add(s.keepaliveIntervalLocked())) {

@@ -62,6 +62,7 @@ func TestBuildMWISubscriptionUsesMessageSummaryEvent(t *testing.T) {
 
 func TestMWINotifyUpdatesSummaryWithoutTouchingRegDialog(t *testing.T) {
 	service := newProtectedKeepaliveTestService(t)
+	primeSubscriptionNotifyDialog(service, true)
 	service.subscriptionDialog = registrationSubscriptionDialog{
 		callID: "reg-call", localTag: "reg-local", remoteTag: "reg-remote",
 	}

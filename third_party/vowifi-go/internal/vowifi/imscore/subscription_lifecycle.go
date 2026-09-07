@@ -21,6 +21,16 @@ type subscriptionLifecycle struct {
 	context        subscriptionContext
 	started        bool
 	rejectedStatus int
+	blockedReason  string
+	attemptKey     sipTransactionKey
+	sentAt         time.Time
+	notifyDeadline time.Time
+	expiresAt      time.Time
+	retryAt        time.Time
+	notifyExpires  bool
+	initial        bool
+	unsubscribing  bool
+	notifyVersion  uint64
 }
 
 type subscriptionResult struct {
@@ -71,6 +81,15 @@ func (s *Service) prepareSubscriptionStart(mwi bool) (bool, string) {
 	}
 	if lifecycle.rejectedStatus != 0 {
 		return false, fmt.Sprintf("subscription previously rejected with status %d", lifecycle.rejectedStatus)
+	}
+	if lifecycle.blockedReason != "" {
+		return false, lifecycle.blockedReason
+	}
+	if lifecycle.unsubscribing {
+		return false, "subscription is being removed"
+	}
+	if !lifecycle.retryAt.IsZero() && time.Now().Before(lifecycle.retryAt) {
+		return false, "subscription retry is not due"
 	}
 	closed := s.subscriptionClosed
 	if mwi {
@@ -128,6 +147,15 @@ func (s *Service) beginSubscriptionAttempt(mwi, unsubscribe bool) (subscriptionC
 	if !unsubscribe && status != 0 {
 		return current, fmt.Errorf("imscore: subscription previously rejected with status %d", status)
 	}
+	if !unsubscribe && lifecycle.blockedReason != "" {
+		return current, errors.New(lifecycle.blockedReason)
+	}
+	if !unsubscribe && lifecycle.unsubscribing {
+		return current, errors.New("imscore: subscription is being removed")
+	}
+	if !unsubscribe && !lifecycle.retryAt.IsZero() && time.Now().Before(lifecycle.retryAt) {
+		return current, errors.New("imscore: subscription retry is not due")
+	}
 	lifecycle.context, lifecycle.started = current, true
 	return current, nil
 }
@@ -152,6 +180,11 @@ func (s *Service) retrySubscriptionAfter481(result subscriptionResult, mwi bool)
 		return false
 	}
 	*dialog = registrationSubscriptionDialog{}
+	fields := s.subscriptionFieldsLocked(mwi)
+	fields.lifecycle.expiresAt = time.Time{}
+	fields.lifecycle.notifyDeadline = time.Time{}
+	*fields.expires = 0
+	*fields.refreshAt = time.Time{}
 	return true
 }
 

@@ -249,6 +249,7 @@ func TestRegistrationSubscriptionStopsWithService(t *testing.T) {
 
 func TestRegistrationNotifyRepliesThenParsesReginfo(t *testing.T) {
 	service := newProtectedKeepaliveTestService(t)
+	primeSubscriptionNotifyDialog(service, false)
 	body := `<?xml version="1.0"?><reginfo xmlns="urn:ietf:params:xml:ns:reginfo">` +
 		`<registration aor="sip:user@example"><contact id="registered-contact" state="terminated"><uri>sip:registered-contact@old.example</uri></contact></registration>` +
 		`<registration aor="sip:+447840844894@o2.co.uk"><contact id="registered-contact" state="active"><uri>sip:registered-contact@new.example</uri></contact></registration></reginfo>`
@@ -374,6 +375,7 @@ func isolateRegistrationCleanupAttempt(t *testing.T, service *Service) {
 
 func TestRegistrationNotifyDeduplicatesReRegistration(t *testing.T) {
 	service := newProtectedKeepaliveTestService(t)
+	primeSubscriptionNotifyDialog(service, false)
 	body := `<reginfo><registration aor="sip:+447840844894@o2.co.uk">` +
 		`<contact id="registered-contact" state="terminated"><uri>sip:registered-contact@old.example</uri></contact>` +
 		`</registration></reginfo>`
@@ -391,6 +393,7 @@ func TestRegistrationNotifyDeduplicatesReRegistration(t *testing.T) {
 
 func TestMalformedRegistrationNotifyIsAcknowledgedWithoutMutation(t *testing.T) {
 	service := newProtectedKeepaliveTestService(t)
+	primeSubscriptionNotifyDialog(service, false)
 	raw := registrationNotifyRequest(`<reginfo><registration`)
 	replied := make(chan string, 1)
 	if err := service.dispatchInboundSIP(raw, func(response string) error {
@@ -515,9 +518,7 @@ func TestUnsubscribeSkippedWithoutDialog(t *testing.T) {
 
 func TestNotifyLearnsSubscriptionDialogAndTerminatedClosesIt(t *testing.T) {
 	service := newProtectedKeepaliveTestService(t)
-	service.subscriptionDialog = registrationSubscriptionDialog{
-		callID: "notify-call", localTag: "client", cseq: 5,
-	}
+	primeSubscriptionNotifyDialog(service, false)
 	replied := make(chan string, 1)
 	active := registrationNotifyRequestWithState(
 		`<reginfo><registration aor="sip:+447840844894@o2.co.uk">`+
@@ -579,10 +580,12 @@ func TestSubscriptionStateTerminatedParsesHeader(t *testing.T) {
 	if got := rawSIPHeaderValue(raw, "Subscription-State"); got != "terminated;reason=timeout" {
 		t.Fatalf("Subscription-State = %q", got)
 	}
-	if !subscriptionStateTerminated(raw) {
+	state, err := parseSubscriptionNotifyState(raw)
+	if err != nil || state.state != "terminated" {
 		t.Fatal("terminated subscription-state was not recognized")
 	}
-	if subscriptionStateTerminated(registrationNotifyRequestWithState("<reginfo/>", "active;expires=3600")) {
+	state, err = parseSubscriptionNotifyState(registrationNotifyRequestWithState("<reginfo/>", "active;expires=3600"))
+	if err != nil || state.state != "active" {
 		t.Fatal("active subscription-state was treated as terminated")
 	}
 }
@@ -597,11 +600,11 @@ func TestSubscriptionRefreshDelayMatches3GPP(t *testing.T) {
 }
 
 func registrationNotifyRequest(body string) string {
-	return registrationNotifyRequestWithState(body, "")
+	return registrationNotifyRequestWithState(body, "active;expires=3600")
 }
 
 func registrationNotifyRequestWithState(body, subscriptionState string) string {
-	headers := "Event: reg;id=registration\r\nContent-Type: application/reginfo+xml;charset=UTF-8\r\n"
+	headers := "Event: reg\r\nContent-Type: application/reginfo+xml;charset=UTF-8\r\n"
 	if subscriptionState != "" {
 		headers += "Subscription-State: " + subscriptionState + "\r\n"
 	}
@@ -686,7 +689,7 @@ func TestRecordSubscriptionResultKeepsRetryOnTemporaryReject(t *testing.T) {
 	if err := service.recordSubscriptionAttempt(subscriptionResult{context: service.subscriptionContextLocked(), requestedExpires: time.Hour}); err != nil {
 		t.Fatal(err)
 	}
-	before := service.subscriptionRefreshAt
+	before := time.Now()
 	err := service.recordSubscriptionResult(subscriptionResult{
 		context:          service.subscriptionContextLocked(),
 		response:         &sip.Response{StatusCode: 503, Reason: "Service Unavailable"},
@@ -699,7 +702,7 @@ func TestRecordSubscriptionResultKeepsRetryOnTemporaryReject(t *testing.T) {
 	closed := service.subscriptionClosed
 	refresh := service.subscriptionRefreshAt
 	service.mu.RUnlock()
-	if closed || refresh.IsZero() || !refresh.Equal(before) {
+	if closed || refresh.IsZero() || !refresh.After(before) {
 		t.Fatalf("temporary reject closed=%t refresh=%v before=%v", closed, refresh, before)
 	}
 }

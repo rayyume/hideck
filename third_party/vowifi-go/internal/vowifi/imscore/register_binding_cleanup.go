@@ -54,9 +54,13 @@ func (s *Service) requestRegistrationBindingCleanup(document *regInfoDocument) b
 		return false
 	}
 	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.requestRegistrationBindingCleanupLocked(document)
+}
+
+func (s *Service) requestRegistrationBindingCleanupLocked(document *regInfoDocument) bool {
 	contactID, contactNeedle := s.registrationContactIdentityLocked()
 	cleanupKey := s.registrationBindingCleanupKeyLocked()
-	s.mu.RUnlock()
 	if cleanupKey == "" || !hasDuplicateActiveRegistration(document, contactID, contactNeedle) {
 		return false
 	}

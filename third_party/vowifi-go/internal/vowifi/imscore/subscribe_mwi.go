@@ -4,14 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/emiago/sipgo/sip"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/events"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/logging"
-	"github.com/iniwex5/vowifi-go/internal/vowifi/sipkit"
 )
 
 const (
@@ -46,11 +44,6 @@ func (s *Service) resetMWISubscriptionLocked() {
 	s.mwiSubscriptionRefreshAt = time.Time{}
 	s.mwiSubscriptionExpires = 0
 	s.mwiSubscriptionLastErr = ""
-}
-
-func (s *Service) mwiSubscriptionEligibleLocked() bool {
-	eligible, _ := s.subscriptionGateLocked()
-	return eligible && !s.mwiSubscriptionClosed
 }
 
 func (s *Service) reportMWISubscriptionRuntimeError(err error) {
@@ -174,215 +167,26 @@ func (s *Service) exchangeMWISubscription(
 	}
 	request := result.request
 	logging.Debug("IMS SUBSCRIBE(mwi) outbound", "device", s.DeviceID(), "sip", logging.RedactSIPRaw(request.String()))
-	response, _, err := s.dispatchOutboundRequest(
-		ctx, mwiSubscriptionFlow, request, mwiSubscriptionTimeout, true,
-	)
+	response, _, err := s.dispatchOutboundRequestWithCallbacks(outboundDispatchOptions{
+		Context: ctx, Flow: mwiSubscriptionFlow, Request: request, Timeout: mwiSubscriptionTimeout,
+		Callbacks: sipTransactionCallbacks{onBeforeSend: func() error { return s.subscriptionSent(result, true) }},
+	}, true)
 	if err != nil {
 		return nil, fmt.Errorf("SUBSCRIBE transaction: %w", err)
 	}
 	return response, nil
 }
 
-func (s *Service) buildMWISubscription(expires time.Duration) (*sip.Request, time.Duration, error) {
-	profile, dialog, err := s.reserveMWISubscriptionBuildContext()
-	if err != nil {
-		return nil, 0, fmt.Errorf("imscore: MWI subscription registered profile: %w", err)
-	}
-	aor, err := parseSubscriptionURI(profile.LocalURI)
-	if err != nil {
-		return nil, 0, err
-	}
-	contact, err := buildSubscribeContactHeader(profile.ContactHeader, profile.Transport, true)
-	if err != nil {
-		return nil, 0, err
-	}
-	recipient := aor
-	if dialog.ready() {
-		if target := strings.TrimSpace(dialog.remoteTarget); target != "" {
-			if parsed, parseErr := parseSubscriptionURI(target); parseErr == nil {
-				recipient = parsed
-			}
-		}
-	}
-	options := subscribeMWIHeaderOptions(subscribeRegRequestContext{
-		profile: profile, aor: aor, contact: contact, expires: expires, dialog: dialog,
-	})
-	request, err := sipkit.BuildIMSRequest(sip.SUBSCRIBE, recipient, options)
-	return request, expires, err
-}
-
-func subscribeMWIHeaderOptions(requestContext subscribeRegRequestContext) sipkit.IMSRequestOptions {
-	options := subscribeRegHeaderOptions(requestContext)
-	options.Headers = []sip.Header{
-		sip.NewHeader("Expires", strconv.FormatInt(int64(requestContext.expires/time.Second), 10)),
-		sip.NewHeader("Event", mwiEventPackage),
-		sip.NewHeader("Accept", mwiContentType),
-	}
-	return options
-}
-
-func (s *Service) reserveMWISubscriptionBuildContext() (SIPDialogProfile, registrationSubscriptionDialog, error) {
-	if s == nil || s.cfg == nil {
-		return SIPDialogProfile{}, registrationSubscriptionDialog{}, errors.New("service is not configured")
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.regState != regRegistered || s.regSession == nil {
-		return SIPDialogProfile{}, registrationSubscriptionDialog{}, errors.New("registered SIP session is unavailable")
-	}
-	route := s.registeredSIPRouteLocked()
-	if !route.live || route.clientAddress == "" || route.serverAddress == "" {
-		return SIPDialogProfile{}, registrationSubscriptionDialog{}, errors.New("registered SIP transport is unavailable")
-	}
-	if route.securityVerify == "" {
-		return SIPDialogProfile{}, registrationSubscriptionDialog{}, errors.New("protected registration security is unavailable")
-	}
-	localURI := firstNonBlank(s.regSession.publicID, s.reginfoAOR, primaryPublicIdentity(s.cfg))
-	registeredContactUser := firstNonBlank(s.regSession.contactUser, contactUser(s.cfg))
-	if localURI == "" || registeredContactUser == "" {
-		return SIPDialogProfile{}, registrationSubscriptionDialog{}, errors.New("registered subscription identity is unavailable")
-	}
-	dialog := s.mwiSubscriptionDialog
-	if !dialog.ready() {
-		minimum := s.regSession.cseq + 2
-		if s.nextSIPCSeq < minimum {
-			s.nextSIPCSeq = minimum
-		} else {
-			s.nextSIPCSeq++
-		}
-	}
-	contactURI, contactHeader := registeredVoiceContact(s.cfg, registeredContactUser, route.serverAddress)
-	return SIPDialogProfile{
-		LocalURI: localURI, FromTag: s.regSession.fromTag,
-		ContactURI: contactURI, ContactHeader: contactHeader,
-		LocalAddress: route.clientAddress, RemoteAddress: route.remoteAddress,
-		Transport: route.transport, ServiceRoute: route.serviceRoute,
-		SecurityVerify: route.securityVerify, PANI: s.GetPAccessNetworkInfo(),
-		UserAgent: strings.TrimSpace(s.cfg.UserAgent), InitialCSeq: s.nextSIPCSeq,
-	}, dialog, nil
-}
-
 func (s *Service) recordMWISubscriptionAttempt(result subscriptionResult) error {
-	s.mu.Lock()
-	if !s.subscriptionResultCurrentLocked(result) {
-		s.mu.Unlock()
-		return errSubscriptionContextChanged
-	}
-	at, expires := time.Now(), result.requestedExpires
-	s.mwiSubscriptionLastAttemptAt = at
-	s.mwiSubscriptionExpires = expires
-	s.mwiSubscriptionRefreshAt = at.Add(mwiSubscriptionRefreshDelay(expires))
-	s.mwiSubscriptionLastErr = ""
-	s.mu.Unlock()
-	s.signalIMSMaintenance()
-	return nil
+	return s.recordSubscriptionUsageAttempt(result, true)
 }
 
 func (s *Service) recordMWISubscriptionResult(result subscriptionResult) error {
-	response, requestedExpires, unsubscribe, resultErr := result.response, result.requestedExpires, result.unsubscribe, result.err
-	completedAt := time.Now()
-	s.mu.Lock()
-	if !s.subscriptionResultCurrentLocked(result) {
-		s.mu.Unlock()
-		return errors.Join(errSubscriptionContextChanged, result.err)
-	}
-	if resultErr != nil {
-		s.mwiSubscriptionLastErr = resultErr.Error()
-		if subscriptionPermanentlyRejected(response) {
-			s.mwiSubscriptionLifecycle.rejectedStatus = response.StatusCode
-			s.subscriptionRegistrations.rejectMWI(result.context.binding, response.StatusCode)
-			s.mwiSubscriptionClosed = true
-			s.mwiSubscriptionDialog = registrationSubscriptionDialog{}
-			s.mwiSubscriptionExpires = 0
-			s.mwiSubscriptionRefreshAt = time.Time{}
-		}
-		s.mu.Unlock()
-		return resultErr
-	}
-	s.learnMWISubscriptionDialogLocked(result.request, response)
-	s.mwiSubscriptionLastOKAt = completedAt
-	s.mwiSubscriptionLastErr = ""
-	if unsubscribe || requestedExpires <= 0 {
-		s.mwiSubscriptionClosed = true
-		s.mwiSubscriptionDialog = registrationSubscriptionDialog{}
-		s.mwiSubscriptionExpires = 0
-		s.mwiSubscriptionRefreshAt = time.Time{}
-		s.mu.Unlock()
-		return nil
-	}
-	expires := subscriptionExpires(response, requestedExpires)
-	s.mwiSubscriptionExpires = expires
-	s.mwiSubscriptionRefreshAt = completedAt.Add(mwiSubscriptionRefreshDelay(expires))
-	s.mu.Unlock()
-	s.signalIMSMaintenance()
-	return nil
+	return s.recordSubscriptionUsageResult(result, true)
 }
 
 func (s *Service) learnMWISubscriptionDialogLocked(request *sip.Request, response *sip.Response) {
-	if s == nil || request == nil {
-		return
-	}
-	dialog := s.mwiSubscriptionDialog
-	if request.CallID() != nil {
-		dialog.callID = request.CallID().Value()
-	}
-	if tag := fromHeaderTag(request.From()); tag != "" {
-		dialog.localTag = tag
-	}
-	if request.CSeq() != nil {
-		dialog.cseq = request.CSeq().SeqNo
-	}
-	if response != nil {
-		if tag := toHeaderTag(response.To()); tag != "" {
-			dialog.remoteTag = tag
-		}
-		if target := firstSIPHeaderURI(sipkit.FirstHeaderValue(response, "Contact", true)); target != "" {
-			dialog.remoteTarget = target
-		}
-		if routes := recordRouteSet(response); len(routes) > 0 {
-			dialog.routeSet = routes
-		}
-	}
-	s.mwiSubscriptionDialog = dialog
-}
-
-func (s *Service) closeMWISubscription() {
-	if s == nil {
-		return
-	}
-	s.mu.Lock()
-	s.mwiSubscriptionClosed = true
-	s.mwiSubscriptionDialog = registrationSubscriptionDialog{}
-	s.mwiSubscriptionRefreshAt = time.Time{}
-	s.mwiSubscriptionExpires = 0
-	s.mu.Unlock()
-}
-
-func (s *Service) learnMWISubscriptionDialogFromNotify(raw string) {
-	if s == nil || !isMWINotification(raw) {
-		return
-	}
-	callID := strings.TrimSpace(rawSIPHeaderValue(raw, "Call-ID"))
-	remoteTag := sipAddressTag(rawSIPHeaderValue(raw, "From"))
-	localTag := sipAddressTag(rawSIPHeaderValue(raw, "To"))
-	if callID == "" || remoteTag == "" {
-		return
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	dialog := s.mwiSubscriptionDialog
-	if dialog.callID != "" && !strings.EqualFold(dialog.callID, callID) {
-		return
-	}
-	dialog.callID = callID
-	if localTag != "" {
-		dialog.localTag = localTag
-	}
-	dialog.remoteTag = remoteTag
-	if target := firstSIPHeaderURI(rawSIPHeaderValue(raw, "Contact")); target != "" {
-		dialog.remoteTarget = target
-	}
-	s.mwiSubscriptionDialog = dialog
+	s.mwiSubscriptionDialog = learnSubscriptionDialog(s.mwiSubscriptionDialog, request, response)
 }
 
 func (s *Service) refreshMWISubscription() {
@@ -425,21 +229,32 @@ func isMWINotification(raw string) bool {
 }
 
 func (s *Service) handleMWINotification(raw string) {
+	notification, status := s.acceptSubscriptionNotification(raw)
+	if status == 200 && notification.version != 0 {
+		s.applyMWINotification(notification)
+	}
+}
+
+func (s *Service) applyMWINotification(notification subscriptionNotification) {
+	raw := notification.raw
 	logging.Info("IMS NOTIFY acknowledged", "event", mwiEventPackage)
 	if !isMWINotification(raw) {
 		return
-	}
-	s.learnMWISubscriptionDialogFromNotify(raw)
-	if subscriptionStateTerminated(raw) {
-		s.closeMWISubscription()
 	}
 	body, err := rawSIPBody(raw)
 	if err != nil {
 		logging.WarnRate("ims-mwi-body", "IMS MWI body is invalid", "err", err)
 		return
 	}
+	if len(body) == 0 {
+		return
+	}
 	summary := parseMWISummary(string(body))
 	s.mu.Lock()
+	if !s.notificationBodyCurrentLocked(notification) {
+		s.mu.Unlock()
+		return
+	}
 	s.mwiLastSummary = summary.raw
 	s.mwiMessagesWaiting = summary.waiting
 	deviceID := ""

@@ -46,11 +46,9 @@ func TestSubscriptionClosedWithoutRejectionCanStartAgain(t *testing.T) {
 		if start, reason := s.prepareSubscriptionStart(mwi); !start {
 			t.Fatal(reason)
 		}
-		if mwi {
-			s.closeMWISubscription()
-		} else {
-			s.closeRegistrationSubscription()
-		}
+		s.mu.Lock()
+		s.subscriptionFieldsLocked(mwi).terminate("")
+		s.mu.Unlock()
 		if start, reason := s.prepareSubscriptionStart(mwi); !start {
 			t.Fatalf("ordinary subscription termination became permanent: %s", reason)
 		}
