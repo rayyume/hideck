@@ -19,10 +19,12 @@ type subscriptionNotifyState struct {
 }
 
 type subscriptionNotification struct {
-	raw     string
-	context subscriptionContext
-	version uint64
-	mwi     bool
+	raw       string
+	context   subscriptionContext
+	version   uint64
+	mwi       bool
+	queue     *subscriptionNotificationQueue
+	replyDone bool // Protected by Service.mu, like the queue.
 }
 
 func parseSubscriptionNotifyState(raw string) (subscriptionNotifyState, error) {
@@ -67,12 +69,15 @@ func (s *Service) prepareInboundNotification(raw string) (inboundSIPResult, erro
 	result := inboundSIPResult{response: response}
 	if status == 200 && notification.version != 0 {
 		result.afterReply = func() { s.applySubscriptionNotificationBody(notification) }
+		// Failure to write the response does not invalidate an accepted update.
+		// Finish its queue entry as well; the transport still returns the error.
+		result.onReplyError = result.afterReply
 	}
 	return result, err
 }
 
-func (s *Service) acceptSubscriptionNotification(raw string) (subscriptionNotification, int) {
-	n := subscriptionNotification{raw: raw, mwi: sipEventPackage(raw) == mwiEventPackage}
+func (s *Service) acceptSubscriptionNotification(raw string) (*subscriptionNotification, int) {
+	n := &subscriptionNotification{raw: raw, mwi: sipEventPackage(raw) == mwiEventPackage}
 	message, parseErr := parseSIPMessage(raw)
 	request, isRequest := message.(*sip.Request)
 	if parseErr != nil || !isRequest || request.Method != sip.NOTIFY || request.CSeq() == nil {
@@ -118,6 +123,11 @@ func (s *Service) acceptSubscriptionNotification(raw string) (subscriptionNotifi
 		f.setExpiry(time.Now(), state.expires)
 	}
 	n.context, n.version = s.subscriptionContextLocked(), f.lifecycle.notifyVersion
+	if f.lifecycle.notifications == nil {
+		f.lifecycle.notifications = &subscriptionNotificationQueue{}
+	}
+	n.queue = f.lifecycle.notifications
+	n.queue.pending = append(n.queue.pending, n)
 	s.signalIMSMaintenance()
 	return n, 200
 }
@@ -161,15 +171,7 @@ func notificationRouteSet(request *sip.Request) []string {
 	return routes
 }
 
-func (s *Service) notificationBodyCurrentLocked(n subscriptionNotification) bool {
+func (s *Service) notificationBodyCurrentLocked(n *subscriptionNotification) bool {
 	f := s.subscriptionFieldsLocked(n.mwi)
-	return !s.stopped() && n.context == s.subscriptionContextLocked() && n.version == f.lifecycle.notifyVersion
-}
-
-func (s *Service) applySubscriptionNotificationBody(n subscriptionNotification) {
-	if n.mwi {
-		s.applyMWINotification(n)
-	} else {
-		s.applyRegistrationNotification(n)
-	}
+	return !s.stopped() && n.context == s.subscriptionContextLocked() && n.queue == f.lifecycle.notifications
 }

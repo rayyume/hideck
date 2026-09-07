@@ -31,6 +31,7 @@ type subscriptionLifecycle struct {
 	initial        bool
 	unsubscribing  bool
 	notifyVersion  uint64
+	notifications  *subscriptionNotificationQueue
 }
 
 type subscriptionResult struct {

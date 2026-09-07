@@ -231,13 +231,13 @@ func isMWINotification(raw string) bool {
 func (s *Service) handleMWINotification(raw string) {
 	notification, status := s.acceptSubscriptionNotification(raw)
 	if status == 200 && notification.version != 0 {
-		s.applyMWINotification(notification)
+		s.applySubscriptionNotificationBody(notification)
 	}
 }
 
-func (s *Service) applyMWINotification(notification subscriptionNotification) {
+func (s *Service) applyMWINotification(notification *subscriptionNotification) {
 	raw := notification.raw
-	logging.Info("IMS NOTIFY acknowledged", "event", mwiEventPackage)
+	logging.Info("IMS NOTIFY received", "event", mwiEventPackage)
 	if !isMWINotification(raw) {
 		return
 	}

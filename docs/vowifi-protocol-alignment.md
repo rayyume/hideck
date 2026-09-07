@@ -65,6 +65,7 @@
 - 初始、刷新和取消订阅在出队发送时启动 `Timer N = 64 × T1`，收到匹配 NOTIFY 后取消。定时器到期只结束订阅并记录错误，不清除 IMS/SMS 就绪状态、不触发 runtime 重建。主动取消后保留最终 NOTIFY 的接收窗口，不自动恢复该订阅。
 - `terminated;reason=deactivated/timeout` 可立即以新对话重订阅；`probation/giveup` 和其他原因遵守有效的 `retry-after`；`rejected/noresource/invariant` 不自动重订阅。MWI 405/489 的身份级拒绝记录仍优先，普通 REGISTER 刷新和 EOF 不能绕过。未给出重试时间时沿用原有订阅周期重试间隔，这是本地调度策略，不是 RFC 规定的固定重试时长。
 - 订阅本身终止与 reginfo 报告当前 Contact 注销是不同事件；后者在确认属于当前上下文后仍进入原来的 IMS 注册恢复流程。
+- 已接纳的 NOTIFY 正文按接收顺序处理，不能因后一条到达而丢弃前一条 reginfo 增量，见 [RFC 3680 §5.2](https://www.rfc-editor.org/rfc/rfc3680.html#section-5.2)。`reg` / MWI 队列独立，旧注册上下文的正文仍被隔离；重复通知和重复回调不重复应用。先尝试回复 SIP，再处理正文；回复写失败仍向调用方返回原错误，但不会丢弃已接纳的状态或阻塞后续通知。回归入口：`subscription_notify_queue_test.go`、`subscription_notify_reply_test.go`。
 
 生命周期依据：[RFC 6665 §4.1](https://www.rfc-editor.org/rfc/rfc6665.html#section-4.1)。回归入口：`subscription_protocol_test.go`、`subscription_timer_protocol_test.go`、`subscription_wire_protocol_test.go`。本次未启用最终 IKE_AUTH 的全局严格认证校验；该兼容选项仍需单独验证，不能据本次订阅修复宣称全部 VoWiFi 协议已对齐。
 

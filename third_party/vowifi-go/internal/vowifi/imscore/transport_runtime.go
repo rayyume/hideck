@@ -21,8 +21,9 @@ type SMSReceiverStatus struct {
 }
 
 type inboundSIPResult struct {
-	response   string
-	afterReply func()
+	response     string
+	afterReply   func()
+	onReplyError func()
 }
 
 type inboundSIPDispatch struct {
@@ -238,6 +239,8 @@ func (s *Service) dispatchInboundSIPRequest(
 	result, err := s.handleInboundSIPDispatch(context.Background(), inboundSIPDispatch{
 		raw: raw, reply: responseWriter, transaction: transaction, events: events, peerConn: peer,
 	})
+	callback := result.onReplyError
+	defer func() { s.scheduleInboundReplyCallback(callback) }()
 	if result.response == "" {
 		if err != nil && transaction != nil {
 			transaction.fail(err, true)
@@ -261,14 +264,19 @@ func (s *Service) dispatchInboundSIPRequest(
 	if responseErr != nil {
 		return responseErr
 	}
-	if result.afterReply != nil {
-		s.networkDone.Add(1)
-		go func() {
-			defer s.networkDone.Done()
-			result.afterReply()
-		}()
-	}
+	callback = result.afterReply
 	return err
+}
+
+func (s *Service) scheduleInboundReplyCallback(callback func()) {
+	if callback == nil {
+		return
+	}
+	s.networkDone.Add(1)
+	go func() {
+		defer s.networkDone.Done()
+		callback()
+	}()
 }
 
 func (s *Service) writeSIPStream(conn net.Conn, response string) error {

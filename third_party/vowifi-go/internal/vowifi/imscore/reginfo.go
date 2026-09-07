@@ -47,14 +47,14 @@ type regInfoStats struct {
 func (s *Service) handleRegistrationNotification(raw string) {
 	notification, status := s.acceptSubscriptionNotification(raw)
 	if status == 200 && notification.version != 0 {
-		s.applyRegistrationNotification(notification)
+		s.applySubscriptionNotificationBody(notification)
 	}
 }
 
-func (s *Service) applyRegistrationNotification(notification subscriptionNotification) {
+func (s *Service) applyRegistrationNotification(notification *subscriptionNotification) {
 	raw := notification.raw
 	event := rawSIPHeaderValue(raw, "Event")
-	logging.Info("IMS NOTIFY acknowledged", "event", event)
+	logging.Info("IMS NOTIFY received", "event", event)
 	if !isRegistrationNotification(raw) {
 		return
 	}
@@ -74,7 +74,7 @@ func (s *Service) applyRegistrationNotification(notification subscriptionNotific
 	s.applyCurrentReginfo(notification, document)
 }
 
-func (s *Service) applyCurrentReginfo(notification subscriptionNotification, document *regInfoDocument) {
+func (s *Service) applyCurrentReginfo(notification *subscriptionNotification, document *regInfoDocument) {
 	s.mu.Lock()
 	if !s.notificationBodyCurrentLocked(notification) {
 		s.mu.Unlock()
