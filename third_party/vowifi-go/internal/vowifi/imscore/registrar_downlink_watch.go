@@ -57,6 +57,17 @@ func (s *Service) cancelReplacementDownlinkWatchLocked() {
 	s.replacementDownlinkWatch = nil
 }
 
+// A dead current transport must be repaired, not held by a passive validation
+// cadence for a connection that no longer exists. Keep actual node deadlines.
+func (s *Service) abandonReplacementDownlinkWaitLocked() {
+	watch := s.replacementDownlinkWatch
+	if watch == nil || !watch.path.samePath(s.downlinkCheckpointLocked()) {
+		return
+	}
+	s.registrarPenalties.resetDownlinkRound(watch.path.registrar)
+	s.cancelReplacementDownlinkWatchLocked()
+}
+
 func (s *Service) replacementDownlinkWatchFired(watch *replacementDownlinkWatch) {
 	s.registerMu.Lock()
 	defer s.registerMu.Unlock()
@@ -65,6 +76,7 @@ func (s *Service) replacementDownlinkWatchFired(watch *replacementDownlinkWatch)
 		return
 	}
 	defer s.finishPCSCFRecovery()
+	s.logDownlinkDiagnostics("replacement_validation_expired")
 	if !plan.retryAt.IsZero() {
 		logging.Info("IMS downlink recovery round exhausted; keeping registration pending validation",
 			"device", s.DeviceID(), "pcscf", watch.path.registrar,

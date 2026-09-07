@@ -127,6 +127,8 @@ func (s *Service) captureStatusSnapshot() ServiceStatus {
 	}
 	lastSMSTrace, lastSMSAt, lastSMSErr := s.smsSendStatus()
 	inboundStats := s.captureInboundStats()
+	diagnostics := inboundStats.diagnostics()
+	diagnostics["network"] = s.networkDiagnostics()
 	portS := s.capturePortSSession()
 	eventBusStatus := s.getIMSEventBus().statusSnapshot()
 	s.receiverMu.Lock()
@@ -174,7 +176,7 @@ func (s *Service) captureStatusSnapshot() ServiceStatus {
 		LastSMSSendTraceID: lastSMSTrace, LastSMSSendAt: lastSMSAt,
 		LastSMSSendErr: lastSMSErr, FragmentAudit: s.fragmentAuditSnapshot(),
 		IMSEventBus: eventBusStatus,
-		Diagnostics: inboundStats.diagnostics(),
+		Diagnostics: diagnostics,
 		State:       s.state, RegState: s.regState, IMPUs: identities,
 	}
 	ready, reason := s.evaluateSignalingReadyLocked(status.Registered)

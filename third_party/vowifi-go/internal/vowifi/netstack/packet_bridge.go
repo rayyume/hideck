@@ -22,10 +22,15 @@ type PacketTransformer interface {
 }
 
 type PacketBridgeStats struct {
-	OutboundPackets uint64
-	InboundPackets  uint64
-	OutboundErrors  uint64
-	InboundErrors   uint64
+	OutboundPackets         uint64
+	InboundPackets          uint64
+	OutboundErrors          uint64
+	InboundErrors           uint64
+	InboundReadPackets      uint64
+	InboundReadErrors       uint64
+	InboundTransformErrors  uint64
+	OutboundTransformErrors uint64
+	OutboundWriteErrors     uint64
 }
 
 type Stats struct {
@@ -52,10 +57,15 @@ type PacketBridge struct {
 	parent    *Network
 	wg        sync.WaitGroup
 
-	outboundPackets atomic.Uint64
-	inboundPackets  atomic.Uint64
-	outboundErrors  atomic.Uint64
-	inboundErrors   atomic.Uint64
+	outboundPackets         atomic.Uint64
+	inboundPackets          atomic.Uint64
+	outboundErrors          atomic.Uint64
+	inboundErrors           atomic.Uint64
+	inboundReadPackets      atomic.Uint64
+	inboundReadErrors       atomic.Uint64
+	inboundTransformErrors  atomic.Uint64
+	outboundTransformErrors atomic.Uint64
+	outboundWriteErrors     atomic.Uint64
 }
 
 func NewPacketBridge(
@@ -95,10 +105,15 @@ func (b *PacketBridge) Stats() PacketBridgeStats {
 		return PacketBridgeStats{}
 	}
 	return PacketBridgeStats{
-		OutboundPackets: b.outboundPackets.Load(),
-		InboundPackets:  b.inboundPackets.Load(),
-		OutboundErrors:  b.outboundErrors.Load(),
-		InboundErrors:   b.inboundErrors.Load(),
+		OutboundPackets:         b.outboundPackets.Load(),
+		InboundPackets:          b.inboundPackets.Load(),
+		OutboundErrors:          b.outboundErrors.Load(),
+		InboundErrors:           b.inboundErrors.Load(),
+		InboundReadPackets:      b.inboundReadPackets.Load(),
+		InboundReadErrors:       b.inboundReadErrors.Load(),
+		InboundTransformErrors:  b.inboundTransformErrors.Load(),
+		OutboundTransformErrors: b.outboundTransformErrors.Load(),
+		OutboundWriteErrors:     b.outboundWriteErrors.Load(),
 	}
 }
 
@@ -142,10 +157,12 @@ func (b *PacketBridge) writeOutboundPacket(packet *stack.PacketBuffer) error {
 		var err error
 		data, _, err = transformer.TransformOutbound(data)
 		if err != nil {
+			b.outboundTransformErrors.Add(1)
 			return err
 		}
 	}
 	if err := b.endpoint.WritePacket(b.ctx, data); err != nil {
+		b.outboundWriteErrors.Add(1)
 		return err
 	}
 	b.outboundPackets.Add(1)
@@ -165,8 +182,10 @@ func (b *PacketBridge) inboundLoop() {
 				return
 			}
 			b.inboundErrors.Add(1)
+			b.inboundReadErrors.Add(1)
 			continue
 		}
+		b.inboundReadPackets.Add(1)
 		if err := b.injectInboundPacket(packet); err != nil {
 			b.inboundErrors.Add(1)
 		}
@@ -181,6 +200,7 @@ func (b *PacketBridge) injectInboundPacket(data []byte) error {
 		var err error
 		data, _, err = transformer.TransformInbound(data)
 		if err != nil {
+			b.inboundTransformErrors.Add(1)
 			return err
 		}
 	}

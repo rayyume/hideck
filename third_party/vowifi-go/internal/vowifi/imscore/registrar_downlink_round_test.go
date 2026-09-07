@@ -81,8 +81,8 @@ func TestDownlinkRoundRetriesAfterCooldownAndCanBeCanceled(t *testing.T) {
 	store.mu.Lock()
 	round, deadline := store.downlinkRound.number, store.downlinkRound.retryAt
 	store.mu.Unlock()
-	if round != 2 || time.Until(deadline) < 179*time.Second {
-		t.Fatalf("next round lost exponential scheduling: round=%d retry=%s", round, deadline)
+	if round != 2 || time.Until(deadline) < 89*time.Second || time.Until(deadline) > 91*time.Second {
+		t.Fatalf("passive validation inflated registration backoff: round=%d retry=%s", round, deadline)
 	}
 	replacement.trackProtectedConnection(newRecoveryCompletionPortS(t))
 	if store.recoveryInProgress() || replacement.replacementDownlinkWatch != nil {

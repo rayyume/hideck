@@ -113,8 +113,14 @@ func (s *Service) planDownlinkRound(candidates []string, current string) downlin
 	now := time.Now()
 	return s.registrarPenalties.planDownlinkRound(downlinkRoundInput{
 		candidates: candidates, current: current, now: now,
-		nextRetry: func(round uint32) time.Time {
-			upper := rfc5626RecoveryUpperBound(round, current == "")
+		nextRetry: func(_ uint32) time.Time {
+			// A passive validation round is not another registration failure.
+			// Reuse the initial recovery window without exponential escalation;
+			// actual failures and Retry-After remain per-candidate constraints.
+			upper := 2 * rfc5626RecoveryBaseFlowAlive
+			if current == "" {
+				upper = 2 * rfc5626RecoveryBaseAllFailed
+			}
 			return now.Add(s.jitterPortSRecoveryDelay(upper))
 		},
 	})

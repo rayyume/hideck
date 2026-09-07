@@ -238,6 +238,7 @@ func (s *Service) acceptProtectedSIP(listener net.Listener) {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
+			s.handleProtectedListenerFailure(listener, err)
 			return
 		}
 		logging.Info("IPSec portS accepted server push connection",
@@ -615,6 +616,9 @@ func (s *Service) clearClosedRegistrationTCP(conn net.Conn, readErr error) {
 	s.mu.Lock()
 	current := s.registrationTCP == conn
 	if current {
+		if !stopped {
+			s.abandonReplacementDownlinkWaitLocked()
+		}
 		s.registrationTCP = nil
 		s.registrationTCPProtected = false
 		if !stopped {
