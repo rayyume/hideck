@@ -153,7 +153,7 @@ curl -fsSL https://raw.githubusercontent.com/yibaiba/hideck/main/deploy-binary.s
 ```bash
 curl -fsSL https://raw.githubusercontent.com/yibaiba/hideck/main/deploy-binary.sh | \
   HIDECK_DIR=/opt/hideck \
-  HIDECK_VERSION=v2.1.14 \
+  HIDECK_VERSION=v2.1.15 \
   HIDECK_ARCH=linux_amd64 sh
 ```
 
@@ -163,12 +163,12 @@ curl -fsSL https://raw.githubusercontent.com/yibaiba/hideck/main/deploy-binary.s
 
 | 文件 | 适用平台 |
 | --- | --- |
-| `hideck_v2.1.14_linux_amd64` | x86_64 服务器、多数 NAS / 工控机（glibc + UPX） |
-| `hideck_v2.1.14_linux_arm64` | ARM64 板卡、树莓派 64 位 Debian/Raspberry Pi OS（glibc + UPX） |
-| `hideck_v2.1.14_linux_armv7` | 32 位 ARM（glibc + UPX） |
-| `hideck_v2.1.14_openwrt_amd64` | OpenWrt x86_64（musl 静态，不压 UPX） |
-| `hideck_v2.1.14_openwrt_arm64` | OpenWrt aarch64（树莓派 OpenWrt、多数 ARM 网关） |
-| `hideck_v2.1.14_openwrt_armv7` | OpenWrt 32 位 ARM |
+| `hideck_v2.1.15_linux_amd64` | x86_64 服务器、多数 NAS / 工控机（glibc + UPX） |
+| `hideck_v2.1.15_linux_arm64` | ARM64 板卡、树莓派 64 位 Debian/Raspberry Pi OS（glibc + UPX） |
+| `hideck_v2.1.15_linux_armv7` | 32 位 ARM（glibc + UPX） |
+| `hideck_v2.1.15_openwrt_amd64` | OpenWrt x86_64（musl 静态，不压 UPX） |
+| `hideck_v2.1.15_openwrt_arm64` | OpenWrt aarch64（树莓派 OpenWrt、多数 ARM 网关） |
+| `hideck_v2.1.15_openwrt_armv7` | OpenWrt 32 位 ARM |
 
 OpenWrt 不要下 `linux_*` 的 UPX 包。安装说明见 [packaging/openwrt/README.md](packaging/openwrt/README.md)。
 

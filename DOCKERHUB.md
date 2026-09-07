@@ -113,8 +113,8 @@ docker buildx build --builder hideck-release --allow network.host \
 每次发版：
 
 ```bash
-# 先 make / 本地编出 UPX 后的 dist/hideck_v2.1.14_linux_amd64 和 linux_arm64
-export HIDECK_VERSION=2.1.14
+# 先 make / 本地编出 UPX 后的 dist/hideck_v2.1.15_linux_amd64 和 linux_arm64
+export HIDECK_VERSION=2.1.15
 export HIDECK_MINOR_VERSION=2.1
 export HIDECK_REVISION="$(git rev-parse HEAD)"
 export HIDECK_BUILDTIME="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
@@ -128,7 +128,7 @@ docker buildx imagetools inspect "yibaiba/hideck:${HIDECK_VERSION}"
 从源码完整构建（更新依赖或不用预编译二进制）：
 
 ```bash
-export HIDECK_VERSION=2.1.14
+export HIDECK_VERSION=2.1.15
 export HIDECK_MINOR_VERSION=2.1
 export HIDECK_REVISION="$(git rev-parse HEAD)"
 export HIDECK_BUILDTIME="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
