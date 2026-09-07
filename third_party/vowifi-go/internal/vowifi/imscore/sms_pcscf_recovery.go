@@ -44,6 +44,7 @@ func (s *Service) requestFreshRuntimeAfterMTReportReject(
 			"deprioritized_until", unavailableUntil)
 		return
 	}
+	s.registrarPenalties.resetDownlinkRound(registrar)
 	reason := fmt.Sprintf("P-CSCF path %s rejected the MT SMS RP report with SIP %d", registrar, status)
 	s.markPCSCFRegistrationUnboundWithReason(reason, int32(status), SIPStatusText(status))
 	err := fmt.Errorf("imscore: %s; fresh runtime required", reason)

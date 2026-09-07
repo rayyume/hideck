@@ -53,7 +53,11 @@ func (store *RegistrarPenaltyStore) recordDeprioritizedFailure(registrar string,
 	}
 	store.mu.Lock()
 	defer store.mu.Unlock()
+	if !store.recovering || store.recoveryAttempts == nil {
+		store.recoveryAttempts = make(map[string]bool)
+	}
 	store.recovering = true
+	store.recoveryAttempts[registrar] = true
 	store.generation++
 	if store.entries == nil {
 		store.entries = make(map[string]registrarPenaltyEntry)
@@ -72,6 +76,9 @@ func (store *RegistrarPenaltyStore) recordDeprioritizedFailure(registrar string,
 	entry.deprioritizedUntil = laterRegistrarDeadline(entry.deprioritizedUntil, input.now.Add(vodafoneUKPCSCFDeprioritizedPeriod))
 	entry.reason = input.reason
 	store.entries[registrar] = entry
+	if store.downlinkRound != nil {
+		store.downlinkRound.attempted[registrar] = true
+	}
 	return entry
 }
 

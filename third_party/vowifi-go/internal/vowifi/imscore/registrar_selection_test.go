@@ -97,12 +97,10 @@ func TestRegistrarConcurrentReportsDoNotInflateRecoveryFailures(t *testing.T) {
 }
 
 func TestVodafoneUnverifiedCandidatesRetryBeforePreferenceExpires(t *testing.T) {
-	service := newPortSSessionTestService(t, vodafoneUKCarrierPresetID)
-	service.portSRecoveryJitter = func(upper time.Duration) time.Duration { return upper / 2 }
+	service := singleCandidateReplacement(t)
 	before := time.Now()
-	service.markVodafoneRegistrarFailure("pcscf-a.example:5060", "port_s_peer_reset", nil)
-	service.rejectUnverifiedPortSRegistrar("pcscf-b.example:5060", portSFailoverCause{observedAt: before}, "downlink validation timed out")
-	replacement, err := New(&IMSConfig{Registrar: "pcscf-a.example:5060;pcscf-b.example:5060", LocalAddr: "192.0.2.10", RegistrarPenalties: service.registrarPenalties})
+	service.replacementDownlinkWatchFired(expireReplacementWatchForTest(t, service))
+	replacement, err := New(&IMSConfig{Registrar: service.cfg.Registrar, LocalAddr: "192.0.2.10", CarrierPresetID: vodafoneUKCarrierPresetID, RegistrarPenalties: service.registrarPenalties})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +110,7 @@ func TestVodafoneUnverifiedCandidatesRetryBeforePreferenceExpires(t *testing.T) 
 	if !errors.As(err, &unavailable) {
 		t.Fatalf("missing retry schedule: %v", err)
 	}
-	if unavailable.RetryAt().Before(before.Add(30*time.Second)) || unavailable.RetryAt().After(time.Now().Add(time.Minute)) {
+	if unavailable.RetryAt().Before(before.Add(90*time.Second)) || unavailable.RetryAt().After(time.Now().Add(90*time.Second)) {
 		t.Fatalf("recovery waits for preference instead of backoff: %s", unavailable.RetryAt())
 	}
 	states := service.registrarPenalties.states(before.Add(time.Minute))

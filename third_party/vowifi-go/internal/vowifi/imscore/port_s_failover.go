@@ -53,6 +53,8 @@ func (s *Service) commitPortSFailover(failedRegistrar string, cause portSFailove
 	if cause.reason == portSTransportTimeoutFailure && !s.consumePortSTimeoutFailoverLocked(failedRegistrar, cause.generation) {
 		return "", time.Time{}, false
 	}
+	// A new, confirmed transport failure is not an idle validation timeout.
+	s.registrarPenalties.resetDownlinkRound(failedRegistrar)
 	penalty := s.markVodafoneRegistrarFailure(failedRegistrar, cause.reason, nil)
 	return s.advanceAvailableRegistrarLocked(), penalty.deprioritizedUntil, true
 }
@@ -81,7 +83,7 @@ func (s *Service) recoverPortSOnAlternate(failedRegistrar, next string, cause po
 		"registrar", next, "timeout", s.portSFailoverValidationWait())
 	validatedBy, ok := s.waitForPortSFailoverValidation(baseline)
 	if !ok {
-		s.rejectUnverifiedPortSRegistrar(next, cause, "downlink validation timed out")
+		s.watchReplacementDownlink(baseline, 0)
 		return
 	}
 	logging.Info("IMS port-s recovery completed",
@@ -136,15 +138,6 @@ func (s *Service) signalDownlinkValidation() {
 	case s.downlinkValidationWake <- struct{}{}:
 	default:
 	}
-}
-
-func (s *Service) rejectUnverifiedPortSRegistrar(registrar string, cause portSFailoverCause, reason string) {
-	if s.stopped() {
-		return
-	}
-	penalty := s.markVodafoneRegistrarFailure(registrar, "downlink_validation_timeout", nil)
-	cause.deprioritizedUntil = penalty.deprioritizedUntil
-	s.requestFreshRuntimeAfterPortSFailure(registrar, cause, reason)
 }
 
 func (s *Service) rejectFailedPortSRegistrar(registrar string, cause portSFailoverCause, err error) {

@@ -64,8 +64,8 @@ func TestReplacementRegisterWithoutDownlinkSchedulesRecovery(t *testing.T) {
 		t.Fatal("replacement without port-s never escalated recovery")
 	}
 	entry := s.registrarPenalties.states(time.Now())[s.currentPortSRecoveryRegistrar()]
-	if entry.reason != "downlink_validation_timeout" || !entry.retryNotBefore.After(time.Now()) {
-		t.Fatalf("failed replacement lost its retry schedule: %+v", entry)
+	if entry.reason != "downlink_unverified" || entry.consecutiveFailures != 1 {
+		t.Fatalf("unverified downlink was counted as another REGISTER failure: %+v", entry)
 	}
 }
 

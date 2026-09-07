@@ -9,11 +9,13 @@ import (
 // RegistrarPenaltyStore retains retry deadlines, selection preferences and
 // consecutive failures across service instances in one runtime reconnect loop.
 type RegistrarPenaltyStore struct {
-	mu             sync.Mutex
-	entries        map[string]registrarPenaltyEntry
-	lastCandidates []string
-	recovering     bool
-	generation     uint64
+	mu               sync.Mutex
+	entries          map[string]registrarPenaltyEntry
+	lastCandidates   []string
+	recovering       bool
+	generation       uint64
+	downlinkRound    *registrarDownlinkRound
+	recoveryAttempts map[string]bool
 }
 
 // A successful binding can confirm only failures observed before its attempt.
@@ -84,6 +86,8 @@ func (store *RegistrarPenaltyStore) clearFailures(attempt registrarRecoveryAttem
 		return
 	}
 	store.recovering = false
+	store.downlinkRound = nil
+	store.recoveryAttempts = nil
 	if !exists {
 		return
 	}
@@ -119,12 +123,16 @@ func (store *RegistrarPenaltyStore) snapshot(now time.Time) map[string]time.Time
 }
 
 func (store *RegistrarPenaltyStore) states(now time.Time) map[string]registrarPenaltyEntry {
-	result := make(map[string]registrarPenaltyEntry)
 	if store == nil {
-		return result
+		return map[string]registrarPenaltyEntry{}
 	}
 	store.mu.Lock()
 	defer store.mu.Unlock()
+	return store.statesLocked(now)
+}
+
+func (store *RegistrarPenaltyStore) statesLocked(now time.Time) map[string]registrarPenaltyEntry {
+	result := make(map[string]registrarPenaltyEntry)
 	for registrar, entry := range store.entries {
 		if !now.Before(entry.retryNotBefore) {
 			entry.retryNotBefore = time.Time{}

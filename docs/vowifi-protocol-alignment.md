@@ -77,15 +77,15 @@
 - **真实 TCP 超时后的升级恢复**：原节点经过 30 秒观察、REGISTER 成功、30 秒下行验证仍失败时，在现有恢复退避到期后替换 IMS/P-CSCF 路径，不再无限重复原节点刷新。两个 30 秒窗口是实现参数，不是 RFC 固定时限；不适用于本地读取期限到期、普通 EOF 或其他预设。gVisor 在网络适配层将传输超时和本地 deadline 分别暴露为 `ETIMEDOUT` / `os.ErrDeadlineExceeded`。
 - **取消与代次隔离**：下行验证或退避期间，新 port-s 或当前受保护连接上的有效下行请求会取消未执行的超时切换；REGISTER 响应和旧连接消息不算下行证明。切换提交前重新检查运营节点和 port-s 代次；停止、替换通道会使旧计划失效。迟到的刷新后重连不记录为按需重连能力。
 - **恢复任务交接**：并发的旧节点 488、503 或 RST 恢复任务退出时，会交还仍未完成的超时恢复和替代会话验证任务；交接保留原定期限，不重置退避，也不靠额外轮询重试。已有恢复任务占用执行权时，新的 port-s 关闭仍会记录并调度。
-- **完整重建后的验证**：故障恢复中新建的 Vodafone UK/VOXI runtime 在 REGISTER 成功后也会启动独立的 30 秒下行验证定时器，不依赖先发生一次 port-s 关闭。未验证则记录本节点失败并进入现有候选重试流程；普通冷启动和其他运营商不启用此专用定时器。周期 REGISTER 不推迟验证期限；当前连接证明恢复、通道替换或主动停止会取消旧定时器。
+- **完整重建后的验证**：故障恢复中新建的 Vodafone UK/VOXI runtime 在 REGISTER 成功后也会启动独立的 30 秒下行验证定时器，不依赖先发生一次 port-s 关闭。未验证记为 `downlink_unverified`，只降低选择优先级，不累计 REGISTER 失败次数。已尝试节点、轮次及下一轮期限跨 runtime 保存；无未尝试的合格候选时，保留仍可用的注册传输并等待整轮随机退避，不每隔 30 秒拆注册。到期可开启下一轮或重新获取节点；新的明确 RST/现有超时升级和当前路径 488 仍可触发对应恢复。普通冷启动和其他运营商不启用此专用策略。周期 REGISTER 不推迟验证期限；当前连接证明恢复、通道替换或主动停止会取消旧定时器。
 - **下行证据归属**：诊断用的全局 SIP 请求计数不再作为恢复依据。请求处理前后都校验来源连接、P-CSCF 和传输代次，旧连接迟到完成仍计入处理统计，但不能验证新路径或清零其失败历史。
 - **优先级与重试资格分离**：异常节点保留 30 分钟的 `deprioritizedUntil`，有其他合格节点时优先选择其他节点；该记录本身不禁止重试，也不因候选耗尽被删除。
 - **独立的 `retryNotBefore`**：替代路径建立失败使用 RFC 5626 §4.5 随机指数退避，Retry-After 只能延长等待。节点尚未到允许重试时间时，即使没有其他候选也不会提前使用。
 - **跨重建保留历史**：新隧道使用新下发的 P-CSCF 列表，同时保留重试时间与连续失败次数。没有可选节点时等待最早的重试时间，再进入新的连接尝试；不通过清空记录连续重建。替代 runtime 的初始 REGISTER 失败也参与该恢复计数。
-- **下行验证与成功注册分开**：REGISTER 成功并不直接表示 VOXI 短信下行已恢复；提前建立 port-s 也不能在 REGISTER 成功前结束恢复或清零失败次数。两项条件满足后才结束本轮恢复。REGISTER 失败的退避和 Retry-After 归属实际尝试的节点，不归属失败处理后选出的下一候选。验证超时不再导致固定禁止选择 30 分钟，而是保留低优先级并调度恢复退避。退避期内，同一退役路径的重复报告不会按短信数量累计恢复失败次数。其他节点的降权历史仍保留，不把历史记录当作下一次普通断开的恢复触发条件。
+- **下行验证与成功注册分开**：REGISTER 成功并不直接表示 VOXI 短信下行已恢复；提前建立 port-s 也不能在 REGISTER 成功前结束恢复或清零失败次数。两项条件满足后才结束本轮恢复。REGISTER 失败的退避和 Retry-After 归属实际尝试的节点，不归属失败处理后选出的下一候选。验证超时只保留低优先级并调度独立的下行恢复轮次；复用 RFC 5626 的随机指数算法属于本地经验策略，不声称“无下行请求”等价于规范中的注册失败。退避期内，同一退役路径的重复报告不会按短信数量累计恢复失败次数。其他节点的降权历史仍保留，不把历史记录当作下一次普通断开的恢复触发条件。
 - **诊断日志**：`IMS P-CSCF configuration from new tunnel` 记录下发的 IPv4/IPv6 列表；`IMS P-CSCF candidates resolved` 记录前后候选与来源；`IMS P-CSCF candidate eligibility`、`IMS P-CSCF recovery preference and retry scheduled` 分别记录选择结果、降权原因及允许重试时间。重新获取可能仍返回相同节点，不保证产生新的 P-CSCF。
 
-回归入口：`registrar_selection_test.go`、`registrar_recovery_completion_test.go`、`registrar_downlink_watch_test.go`、`downlink_evidence_test.go`、`pcscf_recovery_handoff_test.go`、`pcscf_recovery_test.go`、`port_s_session_test.go`、`port_s_timeout_recovery_test.go`、`gvisor_tcp_errors_test.go`、`runtimecore_test.go`。退避参考：[RFC 5626 §4.5](https://www.rfc-editor.org/rfc/rfc5626.html#section-4.5)。30 分钟偏好与 VOXI 下行验证仍属于实现策略，不应写成协议规定的黑名单期限。
+回归入口：`registrar_selection_test.go`、`registrar_recovery_completion_test.go`、`registrar_downlink_watch_test.go`、`registrar_downlink_round_test.go`、`registrar_downlink_round_state_test.go`、`downlink_evidence_test.go`、`pcscf_recovery_handoff_test.go`、`pcscf_recovery_test.go`、`port_s_session_test.go`、`port_s_timeout_recovery_test.go`、`gvisor_tcp_errors_test.go`、`runtimecore_test.go`。退避参考：[RFC 5626 §4.5](https://www.rfc-editor.org/rfc/rfc5626.html#section-4.5)。30 分钟偏好与 VOXI 下行验证仍属于实现策略，不应写成协议规定的黑名单期限。
 
 ## 验证边界
 
