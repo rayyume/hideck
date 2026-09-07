@@ -151,6 +151,7 @@ jobs:
   build-openwrt:
     name: Build OpenWrt ${{ matrix.artifact_arch }}
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: frontend
     strategy:
       fail-fast: false
@@ -207,7 +208,8 @@ jobs:
             arm) zig_target=arm-linux-musleabihf ;;
             *) echo "unsupported goarch ${{ matrix.goarch }}" >&2; exit 1 ;;
           esac
-          curl -fsSL --retry 3 "https://ziglang.org/download/0.13.0/zig-linux-x86_64-0.13.0.tar.xz" \
+          curl -fsSL --connect-timeout 20 --max-time 120 --retry 3 --retry-delay 2 \
+            "https://ziglang.org/download/0.13.0/zig-linux-x86_64-0.13.0.tar.xz" \
             | tar -C "$RUNNER_TEMP" -xJ
           echo "$RUNNER_TEMP/zig-linux-x86_64-0.13.0" >> "${GITHUB_PATH}"
           wrapper="$RUNNER_TEMP/musl-cc"
