@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.1.14 - 2026-09-07
+
+### 打包
+
+- 单独提供 OpenWrt 包：`hideck_*_openwrt_amd64` / `arm64` / `armv7`。musl 静态链接，不压 UPX。Debian / 树莓派 OS 仍用原来的 UPX `linux_*` 包。
+- `deploy-binary.sh` 在 OpenWrt 上会拉对应静态包，并用 procd 安装。
+
 ## 2.1.13 - 2026-09-07
 
 ### 短信

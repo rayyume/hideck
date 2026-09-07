@@ -42,12 +42,38 @@ detect_os() {
   esac
 }
 
+is_openwrt() {
+  [ -f /etc/openwrt_release ] && return 0
+  [ -f /etc/os-release ] && grep -qi '^ID=openwrt' /etc/os-release && return 0
+  return 1
+}
+
+cpu_arch() {
+  machine=$(uname -m)
+  case "$machine" in
+    x86_64|amd64) printf 'amd64\n' ;;
+    aarch64|arm64) printf 'arm64\n' ;;
+    armv7l|armv7|armhf) printf 'armv7\n' ;;
+    *)
+      printf '无法识别的 CPU 架构：%s\n请设置 HIDECK_ARCH=linux_amd64|linux_arm64|linux_armv7 或 openwrt_amd64|openwrt_arm64|openwrt_armv7\n' "$machine" >&2
+      exit 1
+      ;;
+  esac
+}
+
 detect_arch() {
   if [ -n "${HIDECK_ARCH:-}" ]; then
     case "$HIDECK_ARCH" in
-      linux_amd64|amd64|x86_64) printf 'linux_amd64\n' ;;
-      linux_arm64|arm64|aarch64) printf 'linux_arm64\n' ;;
-      linux_armv7|armv7|armv7l|armhf) printf 'linux_armv7\n' ;;
+      openwrt_amd64|openwrt_arm64|openwrt_armv7) printf '%s\n' "$HIDECK_ARCH" ;;
+      linux_amd64) printf 'linux_amd64\n' ;;
+      linux_arm64) printf 'linux_arm64\n' ;;
+      linux_armv7) printf 'linux_armv7\n' ;;
+      amd64|x86_64)
+        if is_openwrt; then printf 'openwrt_amd64\n'; else printf 'linux_amd64\n'; fi ;;
+      arm64|aarch64)
+        if is_openwrt; then printf 'openwrt_arm64\n'; else printf 'linux_arm64\n'; fi ;;
+      armv7|armv7l|armhf)
+        if is_openwrt; then printf 'openwrt_armv7\n'; else printf 'linux_armv7\n'; fi ;;
       *)
         printf '不支持的 HIDECK_ARCH：%s\n' "$HIDECK_ARCH" >&2
         exit 1
@@ -56,16 +82,12 @@ detect_arch() {
     return
   fi
 
-  machine=$(uname -m)
-  case "$machine" in
-    x86_64|amd64) printf 'linux_amd64\n' ;;
-    aarch64|arm64) printf 'linux_arm64\n' ;;
-    armv7l|armv7|armhf) printf 'linux_armv7\n' ;;
-    *)
-      printf '无法识别的 CPU 架构：%s\n请设置 HIDECK_ARCH=linux_amd64|linux_arm64|linux_armv7\n' "$machine" >&2
-      exit 1
-      ;;
-  esac
+  cpu=$(cpu_arch)
+  if is_openwrt; then
+    printf 'openwrt_%s\n' "$cpu"
+  else
+    printf 'linux_%s\n' "$cpu"
+  fi
 }
 
 curl_github() {
@@ -213,6 +235,65 @@ verify_checksum() {
   printf '校验通过：%s（%s）\n' "$asset_name" "$source_name"
 }
 
+write_procd_init() {
+  init_file=$1
+  binary_path=$2
+  config_file=$3
+  working_dir=$4
+
+  temporary_file=$(mktemp "${init_file}.tmp.XXXXXX")
+  cat >"$temporary_file" <<EOF
+#!/bin/sh /etc/rc.common
+
+START=99
+STOP=10
+USE_PROCD=1
+
+PROG=${binary_path}
+CONFIG=${config_file}
+WORKDIR=${working_dir}
+
+start_service() {
+	mkdir -p "\$WORKDIR/data" "\$WORKDIR/logs"
+
+	procd_open_instance
+	procd_set_param command "\$PROG" -c "\$CONFIG"
+	procd_set_param respawn 3600 5 5
+	procd_set_param stdout 1
+	procd_set_param stderr 1
+	procd_set_param file "\$CONFIG"
+	procd_set_param limits core="0"
+	procd_set_param env HOME="\$WORKDIR"
+	procd_set_param cwd "\$WORKDIR"
+	procd_close_instance
+}
+
+service_triggers() {
+	procd_add_reload_trigger hideck
+}
+EOF
+  chmod 755 "$temporary_file"
+  mv "$temporary_file" "$init_file"
+}
+
+install_openwrt_service() {
+  init_source=$1
+  if maybe_sudo install -m 755 "$init_source" /etc/init.d/hideck; then
+    maybe_sudo /etc/init.d/hideck enable || true
+    maybe_sudo /etc/init.d/hideck start || true
+    printf '已安装并启动 procd 服务：/etc/init.d/hideck\n'
+    return
+  fi
+  printf '没有写入 /etc/init.d 的权限。初始化脚本已生成：%s\n可用下面命令安装：\n  sudo cp %s /etc/init.d/hideck\n  sudo /etc/init.d/hideck enable\n  sudo /etc/init.d/hideck start\n或前台运行：\n  %s -c %s\n' \
+    "$init_source" "$init_source" "$BINARY_PATH" "$CONFIG_FILE"
+}
+
+install_openwrt_packages() {
+  command -v opkg >/dev/null 2>&1 || return 0
+  maybe_sudo opkg update || true
+  install_packages "maybe_sudo opkg install" libqmi kmod-usb-net-qmi-wwan kmod-usb-serial-option || true
+}
+
 write_systemd_unit() {
   unit_file=$1
   working_dir=$2
@@ -333,27 +414,43 @@ detect_os
 require_command curl
 require_command uname
 
-PROJECT_DIR=$(resolve_project_dir)
-mkdir -p "$PROJECT_DIR"
-PROJECT_DIR=$(CDPATH= cd -- "$PROJECT_DIR" && pwd)
-CONFIG_DIR="$PROJECT_DIR/config"
-CONFIG_FILE="$CONFIG_DIR/config.yaml"
-CONFIG_EXAMPLE="$CONFIG_DIR/config.example.yaml"
-BIN_DIR="$PROJECT_DIR"
-BINARY_PATH="$BIN_DIR/hideck"
-UNIT_FILE="$PROJECT_DIR/hideck.service"
-
 ARCH=$(detect_arch)
 VERSION=$(resolve_version)
 ASSET_NAME="hideck_${VERSION}_${ARCH}"
+
+if is_openwrt && [ -z "${HIDECK_DIR:-}" ]; then
+  PROJECT_DIR=/var/lib/hideck
+  CONFIG_DIR=/etc/hideck
+  CONFIG_FILE="$CONFIG_DIR/config.yaml"
+  CONFIG_EXAMPLE="$CONFIG_DIR/config.example.yaml"
+  BINARY_PATH=/usr/bin/hideck
+else
+  PROJECT_DIR=$(resolve_project_dir)
+fi
+mkdir -p "$PROJECT_DIR"
+PROJECT_DIR=$(CDPATH= cd -- "$PROJECT_DIR" && pwd)
+if [ -z "${CONFIG_DIR:-}" ]; then
+  CONFIG_DIR="$PROJECT_DIR/config"
+  CONFIG_FILE="$CONFIG_DIR/config.yaml"
+  CONFIG_EXAMPLE="$CONFIG_DIR/config.example.yaml"
+  BINARY_PATH="$PROJECT_DIR/hideck"
+fi
+UNIT_FILE="$PROJECT_DIR/hideck.service"
+INIT_FILE="$PROJECT_DIR/hideck.init"
 ASSET_URL="${RELEASES_DOWNLOAD_URL}/${VERSION}/${ASSET_NAME}"
 SUMS_URL="${RELEASES_DOWNLOAD_URL}/${VERSION}/SHA256SUMS"
 SIDECAR_URL="${RELEASES_DOWNLOAD_URL}/${VERSION}/${ASSET_NAME}.sha256"
 
 printf '部署目录：%s\n版本：%s\n架构：%s\n' "$PROJECT_DIR" "$VERSION" "$ARCH"
 
-mkdir -p "$CONFIG_DIR" "$PROJECT_DIR/data" "$PROJECT_DIR/logs"
-download_if_missing "$CONFIG_EXAMPLE" "$SOURCE_BASE_URL/config/config.example.yaml" 644
+mkdir -p "$PROJECT_DIR/data" "$PROJECT_DIR/logs" 2>/dev/null || maybe_sudo mkdir -p "$PROJECT_DIR/data" "$PROJECT_DIR/logs"
+mkdir -p "$CONFIG_DIR" 2>/dev/null || maybe_sudo mkdir -p "$CONFIG_DIR"
+if is_openwrt; then
+  EXAMPLE_URL="$SOURCE_BASE_URL/packaging/openwrt/hideck/files/config.yaml"
+else
+  EXAMPLE_URL="$SOURCE_BASE_URL/config/config.example.yaml"
+fi
+download_if_missing "$CONFIG_EXAMPLE" "$EXAMPLE_URL" 644
 if [ -f "$CONFIG_FILE" ]; then
   printf '保留现有配置：%s\n' "$CONFIG_FILE"
 else
@@ -364,7 +461,9 @@ else
   temporary_file=$(mktemp "$CONFIG_DIR/config.yaml.tmp.XXXXXX")
   cp "$CONFIG_EXAMPLE" "$temporary_file"
   chmod 600 "$temporary_file"
-  mv "$temporary_file" "$CONFIG_FILE"
+  if ! mv "$temporary_file" "$CONFIG_FILE" 2>/dev/null; then
+    maybe_sudo mv "$temporary_file" "$CONFIG_FILE"
+  fi
   printf '已创建配置：%s\n' "$CONFIG_FILE"
 fi
 
@@ -379,11 +478,19 @@ if ! try_download_file "$SUMS_URL" "$DOWNLOAD_DIR/SHA256SUMS" 644; then
 fi
 verify_checksum "$DOWNLOAD_DIR/SHA256SUMS" "$DOWNLOAD_DIR/${ASSET_NAME}.sha256" "$ASSET_NAME" "$DOWNLOAD_DIR/$ASSET_NAME"
 
-install -m 755 "$DOWNLOAD_DIR/$ASSET_NAME" "$BINARY_PATH"
+if ! install -m 755 "$DOWNLOAD_DIR/$ASSET_NAME" "$BINARY_PATH" 2>/dev/null; then
+  maybe_sudo install -m 755 "$DOWNLOAD_DIR/$ASSET_NAME" "$BINARY_PATH"
+fi
 printf '已安装二进制：%s\n' "$BINARY_PATH"
 install_recording_libraries || true
 
-write_systemd_unit "$UNIT_FILE" "$PROJECT_DIR" "$BINARY_PATH" "$CONFIG_FILE"
-install_systemd_service "$UNIT_FILE"
+if is_openwrt; then
+  install_openwrt_packages
+  write_procd_init "$INIT_FILE" "$BINARY_PATH" "$CONFIG_FILE" "$PROJECT_DIR"
+  install_openwrt_service "$INIT_FILE"
+else
+  write_systemd_unit "$UNIT_FILE" "$PROJECT_DIR" "$BINARY_PATH" "$CONFIG_FILE"
+  install_systemd_service "$UNIT_FILE"
+fi
 
 printf '\n浏览器打开：http://YOUR_IP:7575\n默认账号：admin / admin，首次登录后请立即改密。\n'

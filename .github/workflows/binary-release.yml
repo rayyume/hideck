@@ -148,10 +148,113 @@ jobs:
           path: out/*
           retention-days: 3
 
+  build-openwrt:
+    name: Build OpenWrt ${{ matrix.artifact_arch }}
+    runs-on: ubuntu-latest
+    needs: frontend
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goarch: amd64
+            goarm: ''
+            musl_triple: ''
+            artifact_arch: amd64
+          - goarch: arm64
+            goarm: ''
+            musl_triple: aarch64-linux-musl
+            artifact_arch: arm64
+          - goarch: arm
+            goarm: '7'
+            musl_triple: arm-linux-musleabihf
+            artifact_arch: armv7
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Prepare build vars
+        id: vars
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            VERSION="${GITHUB_REF_NAME}"
+          else
+            VERSION="${{ github.event.inputs.version || 'dev' }}"
+          fi
+          BUILDTIME="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "buildtime=${BUILDTIME}" >> "${GITHUB_OUTPUT}"
+
+      - name: Install musl toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+          triple="${{ matrix.musl_triple }}"
+          if [ -z "$triple" ]; then
+            echo "CC=musl-gcc" >> "${GITHUB_ENV}"
+            exit 0
+          fi
+          tarball="/tmp/${triple}-cross.tgz"
+          if ! curl -fsSL --retry 3 "https://more.musl.cc/11/x86_64-linux-musl/${triple}-cross.tgz" -o "$tarball"; then
+            curl -fsSL --retry 3 "https://musl.cc/${triple}-cross.tgz" -o "$tarball"
+          fi
+          sudo tar -C /opt -xzf "$tarball"
+          echo "/opt/${triple}-cross/bin" >> "${GITHUB_PATH}"
+          echo "CC=${triple}-gcc" >> "${GITHUB_ENV}"
+
+      - name: Download frontend dist
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+
+      - name: Sync frontend dist for embed
+        shell: bash
+        run: |
+          rm -rf internal/web/dist
+          mkdir -p internal/web
+          cp -R web/dist internal/web/dist
+
+      - name: Build OpenWrt static binary
+        shell: bash
+        run: |
+          VERSION="${{ steps.vars.outputs.version }}" \
+          BUILD_TIME="${{ steps.vars.outputs.buildtime }}" \
+          GOARCH="${{ matrix.goarch }}" \
+          GOARM="${{ matrix.goarm }}" \
+          OUT="dist/hideck" \
+          sh packaging/openwrt/build.sh
+
+      - name: Package artifact
+        shell: bash
+        run: |
+          OUT="hideck_${{ steps.vars.outputs.version }}_openwrt_${{ matrix.artifact_arch }}"
+          mkdir -p out
+          cp dist/hideck "out/${OUT}"
+          (cd out && sha256sum "${OUT}" > "${OUT}.sha256")
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries-openwrt-${{ matrix.artifact_arch }}
+          path: out/*
+          retention-days: 3
+
   release:
     name: Publish release assets
     runs-on: ubuntu-latest
-    needs: build
+    needs:
+      - build
+      - build-openwrt
     if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     steps:
       - name: Prepare release vars
