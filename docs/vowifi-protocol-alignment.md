@@ -23,8 +23,10 @@
 - 按 [RFC 7296 §2.21.2](https://www.rfc-editor.org/rfc/rfc7296.html#section-2.21.2) / [§3.15.4](https://www.rfc-editor.org/rfc/rfc7296.html#section-3.15.4)，地址分配失败不一定删除已完成认证的 IKE SA。本实现选择 Delete 后重新建立：仅最终受保护响应、已完成互相 EAP 认证的 36，在关闭本次候选隧道前发送 IKE Delete，并等待匹配的受保护空响应；不删除未建立的 CHILD_SA。严格 AUTH 校验开启时，未通过校验不发送该 Delete；关闭 EAP MAC 校验的诊断模式也不启用它。
 - Delete 交换复用现有 IKE 重传机制，另设本地 5 秒清理预算。写出失败、响应无效或超时与原始 36 一并上报；只有验证响应后才记录 `IKE address rejection cleanup acknowledged`。这不证明网侧地址池或所有历史会话已经恢复。
 - 仅结构化 36 的 runtime 重试使用独立的 **2～4 分钟随机等待**，且不缩短调用方更长的重试间隔或已有 `RetryAt` 期限；关闭/取消立即停止等待。RFC 建议等待数分钟，2～4 分钟与 5 秒均为本项目实现参数，不是规范固定值。
+- SOCKS5 主隧道遇到结构化 36 后，在上述等待结束的下一轮启动中重新解析 ePDG，优先选择本轮尚未返回 36 的 DNS 地址。历史由当前 runtime 持有，按身份、APN、ePDG 端点、DNS 和代理入口隔离，不写入 P-CSCF 降权表；成功建立隧道后清空。单地址或所有当前候选均返回 36 时，下次延迟重试开始新一轮，不永久拉黑、不立即遍历。DNS 顺序变化不会跳过尚未尝试的地址。
+- ePDG 候选轮换是本项目恢复策略，不是 RFC 对 Notify 36 的强制动作，也不保证网侧分配恢复。SOCKS5 使用选中的传输 IP，但保留原始 FQDN、APN 和认证参数；直连保留 SocketManager 自带的多地址发送/响应锁定行为，不被固定为单地址。未启用 `swu.Config.EPDGCandidates` 的独立 SWu 调用保持原选择行为。附加 XCAP PDN 不继承主隧道候选历史，重叠旧候选的迟到结果不能改写新尝试。
 - 不改变 VOXI RST/488、普通 EOF、2degrees 按需 port-s、SIP Retry-After/RFC 5626 退避。附加 XCAP PDN 或重叠重认证候选失败，不因此拆掉仍健康的主会话；候选 Delete 仅针对本次 IKE SA。
-- 回归：`session_auth_failure_test.go`、`manager_test.go`、`ike_address_retry_test.go`。本轮为本地协议/状态测试，尚未部署真卡验证，不能据此认定运营商侧 36 的根因已消除。
+- 回归：`session_auth_failure_test.go`、`epdg_candidates_test.go`、`session_epdg_candidate_test.go`、`session_epdg_socks_test.go`、`manager_test.go`、`ike_address_retry_test.go`、runtime 状态传递及 XCAP 隔离测试。本轮为本地协议/状态测试，尚未部署真卡验证，不能据此认定运营商侧 36 的根因已消除。
 
 ### 能力矩阵
 
