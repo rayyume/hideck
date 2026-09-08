@@ -123,9 +123,6 @@ func (store *RegistrarPenaltyStore) planDownlinkRound(input downlinkRoundInput) 
 	}
 	if index, ok := preferredRegistrarIndex(candidates, 0, states); ok {
 		round.beginNextIfDue(newRound)
-		if input.current == "" {
-			round.rediscoveryRequested = false
-		}
 		return downlinkRoundPlan{next: candidates[index], round: round.number}
 	}
 	// A successful REGISTER does not prove the reverse SMS path. Once every
@@ -165,14 +162,11 @@ func (s *Service) planDownlinkRound(candidates []string, current string) downlin
 	now := time.Now()
 	return s.registrarPenalties.planDownlinkRound(downlinkRoundInput{
 		candidates: candidates, current: current, now: now,
-		nextRetry: func(_ uint32) time.Time {
-			// A passive validation round is not another registration failure.
-			// Reuse the initial recovery window without exponential escalation;
-			// actual failures and Retry-After remain per-candidate constraints.
-			upper := 2 * rfc5626RecoveryBaseFlowAlive
-			if current == "" {
-				upper = 2 * rfc5626RecoveryBaseAllFailed
-			}
+		nextRetry: func(round uint32) time.Time {
+			// Every exhausted round failed to restore the protected downlink.
+			// Escalate the shared retry window instead of rebuilding tunnels at
+			// the initial cadence forever. Per-node Retry-After still extends it.
+			upper := rfc5626RecoveryUpperBound(round, current == "")
 			return now.Add(s.jitterPortSRecoveryDelay(upper))
 		},
 	})

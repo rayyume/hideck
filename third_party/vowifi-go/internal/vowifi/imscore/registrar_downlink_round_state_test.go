@@ -48,6 +48,52 @@ func TestDownlinkRoundFreshDiscoveryUsesANewCandidateImmediately(t *testing.T) {
 	}
 }
 
+func TestDownlinkRoundFreshDiscoveryOccursOncePerRound(t *testing.T) {
+	store := NewRegistrarPenaltyStore()
+	now := time.Now()
+	store.noteDownlinkAttempt("a:5060")
+	if plan := store.planDownlinkRound(downlinkRoundInput{
+		candidates: []string{"a:5060"}, current: "a:5060", now: now,
+		nextRetry: func(uint32) time.Time { return now.Add(time.Minute) },
+	}); !plan.rediscover {
+		t.Fatalf("first exhausted set did not request discovery: %+v", plan)
+	}
+
+	fresh := downlinkRoundInput{
+		candidates: []string{"c:5060", "d:5060"}, now: now.Add(time.Second),
+		nextRetry: func(uint32) time.Time { return now.Add(time.Minute) },
+	}
+	if plan := store.planDownlinkRound(fresh); plan.next != "c:5060" {
+		t.Fatalf("newly discovered candidate not selected: %+v", plan)
+	}
+	store.noteDownlinkAttempt("c:5060")
+	fresh.current = "c:5060"
+	if plan := store.planDownlinkRound(fresh); plan.next != "d:5060" {
+		t.Fatalf("fresh alternate not selected: %+v", plan)
+	}
+	store.noteDownlinkAttempt("d:5060")
+	fresh.current = "d:5060"
+	if plan := store.planDownlinkRound(fresh); plan.rediscover || !plan.retryAt.After(now) {
+		t.Fatalf("same round requested repeated discovery: %+v", plan)
+	}
+}
+
+func TestDownlinkRoundBackoffEscalatesByRound(t *testing.T) {
+	s := singleCandidateReplacement(t)
+	s.portSRecoveryJitter = func(upper time.Duration) time.Duration { return upper }
+	s.registrarPenalties.mu.Lock()
+	s.registrarPenalties.downlinkRound.number = 3
+	s.registrarPenalties.downlinkRound.rediscoveryRequested = true
+	s.registrarPenalties.mu.Unlock()
+
+	now := time.Now()
+	plan := s.planDownlinkRound([]string{s.cfg.Registrar}, s.cfg.Registrar)
+	want := rfc5626RecoveryUpperBound(3, false)
+	if delta := plan.retryAt.Sub(now); delta < want-time.Second || delta > want+time.Second {
+		t.Fatalf("round backoff = %s, want %s", delta, want)
+	}
+}
+
 func TestDownlinkRoundSameRediscoveredSetWaitsBeforeReuse(t *testing.T) {
 	store := NewRegistrarPenaltyStore()
 	store.noteDownlinkAttempt("a:5060")
