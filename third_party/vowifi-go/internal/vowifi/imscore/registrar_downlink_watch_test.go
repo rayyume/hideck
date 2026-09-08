@@ -57,13 +57,13 @@ func TestReplacementRegisterWithoutDownlinkSchedulesRecovery(t *testing.T) {
 	s.replacementDownlinkWatchFired(watch)
 	select {
 	case err := <-s.RegistrationErrors():
-		if !strings.Contains(err.Error(), "replacement registration did not establish a downlink") {
+		if !strings.Contains(err.Error(), "initial registration failed") {
 			t.Fatal(err)
 		}
 	default:
 		t.Fatal("replacement without port-s never escalated recovery")
 	}
-	entry := s.registrarPenalties.states(time.Now())[s.currentPortSRecoveryRegistrar()]
+	entry := s.registrarPenalties.states(time.Now())[watch.path.registrar]
 	if entry.reason != "downlink_unverified" || entry.consecutiveFailures != 1 {
 		t.Fatalf("unverified downlink was counted as another REGISTER failure: %+v", entry)
 	}
@@ -164,7 +164,7 @@ func TestReplacementValidationFailureRetainsRegisterRetryAfter(t *testing.T) {
 	s.completePortSRecovery(registerResponseErrorWithRetryAfter(t, "3600"), true)
 	watch := expireReplacementWatchForTest(t, s)
 	s.replacementDownlinkWatchFired(watch)
-	entry := s.registrarPenalties.states(time.Now())[s.currentPortSRecoveryRegistrar()]
+	entry := s.registrarPenalties.states(time.Now())[watch.path.registrar]
 	if entry.retryNotBefore.Before(before.Add(time.Hour)) {
 		t.Fatalf("validation failure lost REGISTER Retry-After: %+v", entry)
 	}

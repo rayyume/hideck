@@ -50,13 +50,17 @@ func (r *recordingPDNStarter) WaitSlot(_ context.Context, _, slot string, _ time
 }
 
 func TestCloneSWUConfigForPDNOmitsInitialContact(t *testing.T) {
-	base := &swu.Config{APN: "ims", TUNName: "ims0", LocalPort: 500, OmitInitialContact: false}
+	candidates := swu.NewEPDGCandidateStore(nil)
+	base := &swu.Config{APN: "ims", TUNName: "ims0", LocalPort: 500, OmitInitialContact: false, EPDGCandidates: candidates}
 	cfg := cloneSWUConfigForPDN(base, "xcap")
 	if cfg.APN != "xcap" || cfg.TUNName != "" || cfg.LocalPort != 0 || !cfg.OmitInitialContact {
 		t.Fatalf("xcap clone = %+v", cfg)
 	}
 	if base.APN != "ims" || base.TUNName != "ims0" || base.LocalPort != 500 || base.OmitInitialContact {
 		t.Fatalf("base mutated = %+v", base)
+	}
+	if cfg.EPDGCandidates != nil || base.EPDGCandidates != candidates {
+		t.Fatal("XCAP clone inherited or mutated the main ePDG candidate store")
 	}
 	empty := cloneSWUConfigForPDN(nil, "xcap")
 	if empty.APN != "xcap" || !empty.OmitInitialContact {

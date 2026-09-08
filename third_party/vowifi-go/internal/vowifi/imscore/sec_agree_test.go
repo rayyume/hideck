@@ -21,6 +21,12 @@ type captureIPSecNetwork struct {
 	installed bool
 }
 
+// This test network models the kernel/IPsec boundary; crypto is tested in
+// ipsec3gpp and the packet bridge rather than on these plaintext loopback sockets.
+func (n *captureIPSecNetwork) ListenProtectedUDP(addr *net.UDPAddr) (net.PacketConn, error) {
+	return n.ListenPacket("udp", addr)
+}
+
 func (n *captureIPSecNetwork) InstallIPSec3GPP(policy ipsec3gpp.Policy) error {
 	validated, err := ipsec3gpp.NewPolicy(policy)
 	if err != nil {

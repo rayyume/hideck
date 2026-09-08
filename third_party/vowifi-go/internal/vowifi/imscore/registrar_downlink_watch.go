@@ -15,6 +15,7 @@ type replacementDownlinkWatch struct {
 	timer          *time.Timer
 	retryNotBefore time.Time
 	unverified     bool
+	sharedAttempt  uint64
 }
 
 func (s *Service) startReplacementDownlinkWatch(baseline downlinkCheckpoint) {
@@ -37,7 +38,7 @@ func (s *Service) watchReplacementDownlink(baseline downlinkCheckpoint, delay ti
 	watch := &replacementDownlinkWatch{
 		path: path, baseline: baseline, deadline: time.Now().Add(delay),
 	}
-	s.registrarPenalties.noteDownlinkAttempt(path.registrar)
+	watch.sharedAttempt = s.registrarPenalties.noteDownlinkAttempt(path.registrar)
 	s.replacementDownlinkWatch = watch
 	s.armReplacementDownlinkWatchLocked(watch)
 	logging.Info("IMS replacement registered; awaiting downlink validation",
@@ -64,7 +65,7 @@ func (s *Service) abandonReplacementDownlinkWaitLocked() {
 	if watch == nil || !watch.path.samePath(s.downlinkCheckpointLocked()) {
 		return
 	}
-	s.registrarPenalties.resetDownlinkRound(watch.path.registrar)
+	s.registrarPenalties.abandonDownlinkAttempt(watch.path.registrar, watch.sharedAttempt)
 	s.cancelReplacementDownlinkWatchLocked()
 }
 
@@ -86,9 +87,15 @@ func (s *Service) replacementDownlinkWatchFired(watch *replacementDownlinkWatch)
 	logging.Info("IMS downlink recovery continuing candidate round",
 		"device", s.DeviceID(), "pcscf", watch.path.registrar, "next", plan.next, "round", plan.round)
 	penalty := s.registrarPenalties.states(time.Now())[watch.path.registrar]
-	s.requestFreshRuntimeAfterPortSFailure(watch.path.registrar, portSFailoverCause{
+	cause := portSFailoverCause{
 		reason: "downlink_validation_timeout", observedAt: time.Now(), deprioritizedUntil: penalty.deprioritizedUntil,
-	}, "replacement registration did not establish a downlink")
+	}
+	if plan.reuseTunnel {
+		s.recoverPortSOnAlternate(watch.path.registrar, plan.next, cause)
+		return
+	}
+	s.requestFreshRuntimeAfterPortSFailure(watch.path.registrar, cause,
+		"replacement registration did not establish a downlink; rediscovery or transport repair required")
 }
 
 func (s *Service) retainReplacementRegisterRetryAfter(err error) {
@@ -133,9 +140,23 @@ func (s *Service) claimReplacementDownlinkRecovery(watch *replacementDownlinkWat
 		// finishPCSCFRecovery rearms this same watch without resetting the round.
 		return plan, true
 	}
+	plan.reuseTunnel = s.selectDownlinkAlternateLocked(plan.next)
 	// This is the commit point. A peer accepted afterwards belongs to the
 	// rejected path and cannot clear its failure before runtime teardown.
 	s.regState = regFailed
 	s.replacementDownlinkWatch = nil
 	return plan, true
+}
+
+func (s *Service) selectDownlinkAlternateLocked(next string) bool {
+	if next == "" || next == s.registrar || !s.registeredSIPTransportReadyLocked() {
+		return false
+	}
+	for index, candidate := range s.registrarCandidates {
+		if candidate == next {
+			s.registrar, s.registrarIndex = candidate, index
+			return true
+		}
+	}
+	return false
 }

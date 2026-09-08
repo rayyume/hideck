@@ -128,6 +128,7 @@ type SessionConfig struct {
 	OnTunnelReady         func(*SessionResult)
 	OmitInitialContact    bool
 	RegistrarPenalties    *imscore.RegistrarPenaltyStore
+	EPDGCandidates        *swu.EPDGCandidateStore
 
 	SubscriptionRegistrations *imscore.SubscriptionRegistrationStore
 }
@@ -185,6 +186,7 @@ type RuntimeStartRequest struct {
 	fastReauth          *FastReauthStore
 	omitInitialContact  bool
 	registrarPenalties  *imscore.RegistrarPenaltyStore
+	epdgCandidates      *swu.EPDGCandidateStore
 
 	subscriptionRegistrations *imscore.SubscriptionRegistrationStore
 }

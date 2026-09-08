@@ -3,6 +3,7 @@ package imscore
 import (
 	"net"
 	"strings"
+	"time"
 )
 
 // Transport generations, unlike REGISTER CSeq, survive periodic refreshes and
@@ -31,6 +32,9 @@ func (checkpoint downlinkCheckpoint) samePath(other downlinkCheckpoint) bool {
 }
 
 func (s *Service) currentDownlinkPeerLocked(peer net.Conn) bool {
+	if datagram, ok := peer.(*protectedUDPPeer); ok {
+		return s.currentProtectedUDPPeerLocked(datagram)
+	}
 	if peer == nil {
 		return s.externalTransport || s.registrationIO != nil
 	}
@@ -62,6 +66,14 @@ func (s *Service) recordCurrentDownlinkRequest(peer net.Conn, checkpoint downlin
 	timeoutProven := false
 	if current {
 		s.downlinkRequests++
+		if _, datagram := peer.(*protectedUDPPeer); datagram {
+			s.clearPortSResetRecovery(checkpoint.registrar)
+			s.udpDownlinkProven.Store(true)
+			s.portSRecoveryAwaitingFlow.Store(false)
+			s.portSReconnectWaiting.Store(false)
+			s.resetPortSRecoveryBackoff()
+			s.recordPortSInbound(time.Now())
+		}
 		// Failover commits under mu too: it must not observe the request before
 		// the same request has canceled its pending timeout recovery.
 		timeoutProven = s.confirmPortSTimeoutDownlinkLocked(peer)
@@ -75,6 +87,9 @@ func (s *Service) recordCurrentDownlinkRequest(peer net.Conn, checkpoint downlin
 	}
 	s.confirmCurrentRegistrarDownlinkHealthy()
 	s.signalDownlinkValidation()
+	if _, datagram := peer.(*protectedUDPPeer); datagram {
+		s.notifySMSReadiness()
+	}
 }
 
 func (s *Service) downlinkEvidenceSinceLocked(baseline downlinkCheckpoint) string {

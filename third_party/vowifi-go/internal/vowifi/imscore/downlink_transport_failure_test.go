@@ -57,3 +57,36 @@ func TestListenerFailureCancelsPassiveButPreservesServerDeadline(t *testing.T) {
 		t.Fatal("listener recovery did not separate passive cadence from server backoff")
 	}
 }
+
+func TestOldServiceFailurePreservesOverlappingReplacementRound(t *testing.T) {
+	old := newRecoveryCompletionTestService(t)
+	startProtectedReplacementForTest(t, old)
+	replacement := replacementUsingStore(t, old.registrarPenalties)
+	if _, err := replacement.selectRegistrarCandidate(context.Background(), "tcp"); err != nil {
+		t.Fatal(err)
+	}
+	startProtectedReplacementForTest(t, replacement)
+	replacement.replacementDownlinkWatchFired(expireReplacementWatchForTest(t, replacement))
+	store := old.registrarPenalties
+	store.mu.Lock()
+	round, deadline := store.downlinkRound, store.downlinkRound.retryAt
+	store.mu.Unlock()
+	if deadline.IsZero() {
+		t.Fatal("replacement did not enter the shared passive wait")
+	}
+	old.clearClosedRegistrationTCP(old.registrationTCP, io.EOF)
+	store.mu.Lock()
+	preserved := store.downlinkRound == round && round.retryAt.Equal(deadline)
+	store.mu.Unlock()
+	if !preserved || old.replacementDownlinkWatch != nil {
+		t.Fatal("old service failure reset the overlapping replacement's recovery round")
+	}
+	// The replacement still owns the round and can cancel it on its own failure.
+	replacement.clearClosedRegistrationTCP(replacement.registrationTCP, io.EOF)
+	store.mu.Lock()
+	canceled := store.downlinkRound == nil
+	store.mu.Unlock()
+	if !canceled {
+		t.Fatal("current replacement could not release its passive wait")
+	}
+}

@@ -1,6 +1,7 @@
 package swu
 
 import (
+	"context"
 	"net"
 	"testing"
 )
@@ -16,7 +17,7 @@ func TestBuildTransportBindsLocalIPWithEphemeralPort(t *testing.T) {
 		EPDGAddr: remote.LocalAddr().String(),
 		LocalIP:  net.ParseIP("127.0.0.1"),
 	})
-	if err := session.buildTransport(); err != nil {
+	if err := session.buildTransport(context.Background()); err != nil {
 		t.Fatalf("buildTransport: %v", err)
 	}
 	defer session.stopTransport()

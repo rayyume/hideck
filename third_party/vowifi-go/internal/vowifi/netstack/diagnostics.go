@@ -14,7 +14,11 @@ func (n *Network) IMSNetworkDiagnostics() map[string]any {
 		"inner_endpoint":  n.bridge.endpoint.Snapshot(),
 		"ipsec_installed": false,
 	}
-	if transport, ok := n.bridge.currentTransformer().(*ipsec3gpp.Transport); ok {
+	n.bridge.mu.RLock()
+	defer n.bridge.mu.RUnlock()
+	result["ipsec_generation"] = n.bridge.ipsecGeneration
+	result["previous_ipsec"] = n.bridge.previousIPSec
+	if transport, ok := n.bridge.transform.(*ipsec3gpp.Transport); ok {
 		result["ipsec_installed"] = true
 		result["ipsec"] = transport.Diagnostics()
 	}

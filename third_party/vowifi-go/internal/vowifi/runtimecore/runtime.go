@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/iniwex5/vowifi-go/engine/ipsec"
 	"github.com/iniwex5/vowifi-go/engine/swu"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/imscore"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/profile"
@@ -27,6 +28,9 @@ func (Runtime) Start(
 	}
 	if req.registrarPenalties == nil {
 		req.registrarPenalties = imscore.NewRegistrarPenaltyStore()
+	}
+	if req.epdgCandidates == nil {
+		req.epdgCandidates = swu.NewEPDGCandidateStore(ipsec.ResolveUDPAddrAllContext)
 	}
 	if req.fastReauth == nil {
 		req.fastReauth = &FastReauthStore{}
@@ -177,6 +181,7 @@ func sessionConfigFromRequest(
 		},
 		OnProgress: req.OnProgress, OmitInitialContact: req.omitInitialContact,
 		RegistrarPenalties:        req.registrarPenalties,
+		EPDGCandidates:            req.epdgCandidates,
 		SubscriptionRegistrations: req.subscriptionRegistrations,
 	}
 	req.fastReauth.Apply(&config)

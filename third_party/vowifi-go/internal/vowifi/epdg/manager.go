@@ -4,6 +4,7 @@ package epdg
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/iniwex5/vowifi-go/engine/swu"
@@ -113,15 +114,16 @@ func (m *Manager) waitResult(deviceID string) (swu.SessionSnapshot, bool, error)
 }
 
 func (m *Manager) waitResultSlot(deviceID, slot string) (swu.SessionSnapshot, bool, error) {
-	snapshot, exists := m.SnapshotSlot(deviceID, slot)
-	if !exists {
+	session, exists := m.mgr.GetSlot(deviceID, slot)
+	if !exists || session == nil {
 		return swu.SessionSnapshot{}, false, nil
 	}
+	snapshot := session.Snapshot()
 	if snapshot.Established {
 		return snapshot, true, nil
 	}
-	if snapshot.LastError != "" {
-		return swu.SessionSnapshot{}, true, errors.New("ePDG 会话失败: " + snapshot.LastError)
+	if err := session.TerminalError(); err != nil {
+		return swu.SessionSnapshot{}, true, fmt.Errorf("ePDG 会话失败: %w", err)
 	}
 	return swu.SessionSnapshot{}, false, nil
 }

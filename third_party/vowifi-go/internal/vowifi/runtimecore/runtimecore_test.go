@@ -198,11 +198,16 @@ func TestBuildSWUConfigCarriesRuntimeState(t *testing.T) {
 		},
 	}
 	ticket := []byte{1, 2}
+	candidates := swu.NewEPDGCandidateStore(nil)
 	config := BuildSWUConfig(SessionConfig{
 		DeviceID: "dev-1", Prepared: prepared, SIM: testSIMAdapter{aka: provider},
 		DataplaneMode: swu.DataplaneModeUserspace,
 		ResumeTicket:  ticket, FastReauthID: "reauth@example", FastReauthMK: []byte{3, 4},
+		EPDGCandidates: candidates,
 	})
+	if config.EPDGCandidates != candidates {
+		t.Fatal("BuildSWUConfig dropped the runtime-owned ePDG candidate store")
+	}
 	if config.AKAProvider != provider || config.EPDGAddr != "epdg.example.com" || config.EpDGPort != 4500 {
 		t.Fatalf("SWu config missing production fields: %+v", config)
 	}
@@ -421,12 +426,14 @@ func TestRuntimeStartKeepsScheduledRegistrarRetryInCurrentLoop(t *testing.T) {
 	req.Reconnect = true
 	var firstStore *imscore.RegistrarPenaltyStore
 	var subscriptions *imscore.SubscriptionRegistrationStore
+	var candidates *swu.EPDGCandidateStore
 	attempts := 0
 	req.SessionStarter = func(_ context.Context, config SessionConfig) (*SessionResult, error) {
 		attempts++
 		if attempts == 1 {
 			firstStore = config.RegistrarPenalties
 			subscriptions = config.SubscriptionRegistrations
+			candidates = config.EPDGCandidates
 			return nil, scheduledRetryTestError{retryAt: time.Now().Add(10 * time.Millisecond)}
 		}
 		if config.RegistrarPenalties != firstStore {
@@ -434,6 +441,9 @@ func TestRuntimeStartKeepsScheduledRegistrarRetryInCurrentLoop(t *testing.T) {
 		}
 		if subscriptions == nil || config.SubscriptionRegistrations != subscriptions {
 			t.Fatal("runtime reconnect replaced subscription registration state")
+		}
+		if candidates == nil || config.EPDGCandidates != candidates {
+			t.Fatal("runtime reconnect replaced the ePDG candidate store")
 		}
 		cancel()
 		return nil, context.Canceled
@@ -830,6 +840,38 @@ func TestInstallerIMSNetworkReplacesAndCleansPolicies(t *testing.T) {
 	}
 	if installer.cleanups != 2 {
 		t.Fatalf("idempotent close cleanups=%d, want 2", installer.cleanups)
+	}
+}
+
+type protectedUDPRecordingNetwork struct {
+	imscore.IMSNetwork
+	requested *net.UDPAddr
+}
+
+func (network *protectedUDPRecordingNetwork) ListenProtectedUDP(address *net.UDPAddr) (net.PacketConn, error) {
+	network.requested = address
+	return nil, nil
+}
+
+func TestInstallerIMSNetworkPreservesProtectedUDPCapability(t *testing.T) {
+	base := &protectedUDPRecordingNetwork{
+		IMSNetwork: imscore.NewSystemIMSNetwork(net.IPv4(10, 0, 0, 2)),
+	}
+	managed := newInstallerIMSNetwork(base, nil)
+	protected, ok := managed.(protectedUDPNetwork)
+	if !ok {
+		t.Fatal("installer wrapper dropped protected UDP capability")
+	}
+	address := &net.UDPAddr{IP: net.IPv4(10, 0, 0, 2), Port: 41001}
+	if _, err := protected.ListenProtectedUDP(address); err != nil {
+		t.Fatal(err)
+	}
+	if base.requested != address {
+		t.Fatal("protected UDP request did not reach the underlying network")
+	}
+	plain := newInstallerIMSNetwork(imscore.NewSystemIMSNetwork(address.IP), nil)
+	if _, ok := plain.(protectedUDPNetwork); ok {
+		t.Fatal("wrapper advertised protected UDP for an unsupported network")
 	}
 }
 

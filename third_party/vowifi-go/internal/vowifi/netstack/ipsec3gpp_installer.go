@@ -27,6 +27,7 @@ func (n *Network) InstallIPSec3GPP(
 		// replacement installed by the current IMS security association.
 		n.bridge.mu.Lock()
 		if n.bridge.transform == transport {
+			n.bridge.rememberIPSecLocked()
 			n.bridge.transform = nil
 		}
 		n.bridge.mu.Unlock()

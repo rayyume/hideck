@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/iniwex5/vowifi-go/engine/ikev2"
 	"github.com/iniwex5/vowifi-go/engine/swu"
 	"go.uber.org/zap"
 )
@@ -42,6 +43,27 @@ func TestManagerWaitReturnsSessionFailure(t *testing.T) {
 	_, err := manager.Wait(context.Background(), "broken", 2*time.Second)
 	if err == nil || !strings.HasPrefix(err.Error(), "ePDG 会话失败: ") {
 		t.Fatalf("Wait error = %v", err)
+	}
+}
+
+func TestManagerWaitPreservesIKEAuthNotify(t *testing.T) {
+	manager := newTestManager(t)
+	cause := &swu.IKEAuthError{NotifyType: ikev2.INTERNAL_ADDRESS_FAILURE}
+	_, err := manager.Start(context.Background(), "address-failure", &swu.Config{
+		EPDGAddr:         "192.0.2.1:500",
+		TransportFactory: func(_, _ string) (swu.Transport, error) { return nil, cause },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { manager.Stop("address-failure") })
+	_, err = manager.Wait(context.Background(), "address-failure", 2*time.Second)
+	var rejection *swu.IKEAuthError
+	if !errors.Is(err, cause) || !errors.As(err, &rejection) || rejection.NotifyType != ikev2.INTERNAL_ADDRESS_FAILURE {
+		t.Fatalf("Wait lost IKE_AUTH cause: %v", err)
+	}
+	if ShouldRetryFreshTunnel(context.Background(), err) {
+		t.Fatal("address failure must not immediately retry as an establishment timeout")
 	}
 }
 

@@ -242,6 +242,10 @@ func (s *Service) installNegotiatedIPSec(ctx context.Context, session *registerS
 		"auth", policy.FlowC.AuthAlg, "encryption", policy.FlowC.EncAlg,
 		"local_client_port", policy.LocalPortC, "local_server_port", policy.LocalPortS,
 		"remote_client_port", policy.RemotePortC, "remote_server_port", policy.RemotePortS)
+	logging.Info("IMS security association identifiers", "device", s.DeviceID(),
+		"local_ip", policy.LocalIP.String(), "remote_ip", policy.RemoteIP.String(),
+		"inbound_spi_c", client.SPIC, "inbound_spi_s", client.SPIS,
+		"outbound_spi_c", server.SPIS, "outbound_spi_s", server.SPIC)
 	previousRemote := s.currentRegistrationRemote()
 	if err := s.setProtectedRegistrarEndpoint(remoteIP, server.PortS); err != nil {
 		return s.rollbackInstalledIPSec(err, previousRemote)
@@ -262,6 +266,9 @@ func (s *Service) installNegotiatedIPSec(ctx context.Context, session *registerS
 		}
 	}
 	s.recordSecurityAgreement(session, server, verify)
+	if err := s.startProtectedUDP(client, *server); err != nil {
+		return s.rollbackInstalledIPSec(err, previousRemote)
+	}
 	s.recordSecurityMode(decision.mode, "", false)
 	return nil
 }
