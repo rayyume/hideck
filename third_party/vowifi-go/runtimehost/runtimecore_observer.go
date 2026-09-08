@@ -82,6 +82,7 @@ func (observer *instanceObserver) applyEvent(
 	case "sms_ready":
 		state.Phase = "sms_ready"
 		state.SMSReady = true
+		state.SMSMOReady = true
 		state.SMSHealthReady = true
 		clearRecoveredFailure(state)
 	case "interrupted":
@@ -136,6 +137,7 @@ func markIMSUnavailable(state *State, status string) {
 	state.IMSState = status
 	state.IMSReady = false
 	state.SMSReady = false
+	state.SMSMOReady = false
 	state.SMSHealthReady = false
 	state.SMSReadyReason = ""
 	state.RegStatus = 0

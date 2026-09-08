@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/iniwex5/vowifi-go/runtimehost"
 	"github.com/iniwex5/vowifi-go/runtimehost/voicehost"
 	"github.com/yibaiba/hideck/internal/automation"
 	"github.com/yibaiba/hideck/internal/db"
@@ -303,7 +304,7 @@ func waitForVoWiFiReady(ctx context.Context, pool *device.Pool, deviceID string,
 	defer ticker.Stop()
 	for {
 		state, ok := pool.GetVoWiFiRuntimeState(deviceID)
-		if ok && state.IMSReady && (!requireSMS || state.SMSReady) {
+		if ok && voWiFiReadyForTask(state, requireSMS) {
 			return nil
 		}
 		if ok && state.LastError != "" && (state.IMSState == "failed" || state.SessionState == "error") {
@@ -315,6 +316,10 @@ func waitForVoWiFiReady(ctx context.Context, pool *device.Pool, deviceID string,
 		case <-ticker.C:
 		}
 	}
+}
+
+func voWiFiReadyForTask(state runtimehost.State, requireSMS bool) bool {
+	return state.IMSReady && (!requireSMS || state.SMSMOReady || state.SMSReady)
 }
 
 func reportAutomationProgress(progress func(string) error, value string) error {

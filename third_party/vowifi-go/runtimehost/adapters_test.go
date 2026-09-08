@@ -120,6 +120,9 @@ func TestServiceAdapterStatus(t *testing.T) {
 	if !st.State.SMSReady {
 		t.Errorf("SMSReady should be true: %s", st.State.SMSReadyReason)
 	}
+	if !st.State.SMSMOReady {
+		t.Errorf("SMSMOReady should be true: %s", st.State.SMSReadyReason)
+	}
 	if st.State.DeviceID != "dev-1" {
 		t.Errorf("device = %q", st.State.DeviceID)
 	}
@@ -166,6 +169,24 @@ func TestAdaptSMSSendOutcomePreservesIdentity(t *testing.T) {
 	}
 	if out.DeliveryState != "failed" || out.Err != nil || out.SIPCode != 503 || !out.RecommendCSFallback {
 		t.Fatalf("delivery failure = %+v", out)
+	}
+}
+
+func TestAdaptSMSReadinessPreservesMOSendWithoutMTReceiver(t *testing.T) {
+	readiness := adaptSMSReadiness(imscore.SMSReadiness{
+		Registered: true, ProfileReady: true, TransportReady: true,
+		SMSCPresent: true, MOReady: true, Reason: "IMS SMS receiver is not ready",
+	})
+	instance := &Instance{}
+	instance.setState(State{IMSReady: true})
+	instance.updateSMSReadiness(readiness)
+
+	state := instance.State()
+	if !state.SMSMOReady {
+		t.Fatalf("MO SMS readiness was lost across runtime adapters: %+v", state)
+	}
+	if state.SMSReady {
+		t.Fatalf("MT SMS readiness was incorrectly enabled: %+v", state)
 	}
 }
 
