@@ -9,6 +9,7 @@ import (
 // These are packet metadata only. Never retain plaintext, keys or SIP bodies.
 type FlowPacketDiagnostics struct {
 	Packets            uint64    `json:"packets"`
+	UDP                uint64    `json:"udp"`
 	SYN                uint64    `json:"syn"`
 	SYNACK             uint64    `json:"syn_ack"`
 	ACK                uint64    `json:"ack"`
@@ -29,16 +30,36 @@ type FlowDiagnostics struct {
 }
 
 type TransportDiagnostics struct {
-	LocalIP           string          `json:"local_ip"`
-	RemoteIP          string          `json:"remote_ip"`
-	Stats             TransportStats  `json:"stats"`
-	UnknownInboundSPI uint64          `json:"unknown_inbound_spi"`
-	FlowC             FlowDiagnostics `json:"flow_c"`
-	FlowS             FlowDiagnostics `json:"flow_s"`
+	LocalIP            string                `json:"local_ip"`
+	RemoteIP           string                `json:"remote_ip"`
+	Stats              TransportStats        `json:"stats"`
+	UnknownInboundSPI  uint64                `json:"unknown_inbound_spi"`
+	LastUnknownInbound *UnknownESPDiagnostic `json:"last_unknown_inbound,omitempty"`
+	FlowC              FlowDiagnostics       `json:"flow_c"`
+	FlowS              FlowDiagnostics       `json:"flow_s"`
+}
+
+// Header observations are unverified, not evidence of successful decryption.
+// Keep only the latest observation, never packet contents or security keys.
+type UnknownESPDiagnostic struct {
+	Source      string    `json:"source"`
+	Destination string    `json:"destination"`
+	SPI         uint32    `json:"spi"`
+	Sequence    uint32    `json:"sequence"`
+	ObservedAt  time.Time `json:"observed_at"`
+}
+
+func (transport *Transport) recordUnknownESP(packet ipPacket) {
+	transport.lastUnknownInbound.Store(&UnknownESPDiagnostic{
+		Source: packet.source.String(), Destination: packet.destination.String(),
+		SPI:      binary.BigEndian.Uint32(packet.payload[:4]),
+		Sequence: binary.BigEndian.Uint32(packet.payload[4:8]), ObservedAt: time.Now(),
+	})
 }
 
 type flowPacketCounters struct {
 	packets, syn, synACK, ack, rst atomic.Uint64
+	udp                            atomic.Uint64
 	transformErrors, replay        atomic.Uint64
 	selectorMismatches             atomic.Uint64
 	lastPacketAt                   atomic.Int64
@@ -61,6 +82,8 @@ func (flow *transportFlow) observePacket(protocol byte, payload []byte, inbound 
 	flow.observePorts(payload, inbound)
 	if protocol == protocolTCP {
 		d.observeTCPFlags(payload)
+	} else {
+		d.udp.Add(1)
 	}
 }
 
@@ -103,6 +126,7 @@ func (d *flowPacketCounters) observeTCPFlags(payload []byte) {
 func (d *flowPacketCounters) snapshot() FlowPacketDiagnostics {
 	result := FlowPacketDiagnostics{
 		Packets: d.packets.Load(), SYN: d.syn.Load(), SYNACK: d.synACK.Load(),
+		UDP: d.udp.Load(),
 		ACK: d.ack.Load(), RST: d.rst.Load(), TransformErrors: d.transformErrors.Load(),
 		ReplayRejected: d.replay.Load(), SelectorMismatches: d.selectorMismatches.Load(),
 	}
@@ -116,8 +140,9 @@ func (transport *Transport) Diagnostics() TransportDiagnostics {
 	return TransportDiagnostics{
 		LocalIP: transport.policy.LocalIP.String(), RemoteIP: transport.policy.RemoteIP.String(),
 		Stats: transport.Stats(), UnknownInboundSPI: transport.unknownInboundSPI.Load(),
-		FlowC: transport.flowDiagnostics(transport.policy.FlowC),
-		FlowS: transport.flowDiagnostics(transport.policy.FlowS),
+		LastUnknownInbound: transport.lastUnknownInbound.Load(),
+		FlowC:              transport.flowDiagnostics(transport.policy.FlowC),
+		FlowS:              transport.flowDiagnostics(transport.policy.FlowS),
 	}
 }
 

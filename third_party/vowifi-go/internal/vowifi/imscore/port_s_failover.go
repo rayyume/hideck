@@ -50,6 +50,9 @@ func (s *Service) commitPortSFailover(failedRegistrar string, cause portSFailove
 	if s.stopped() || strings.TrimSpace(s.registrar) != strings.TrimSpace(failedRegistrar) {
 		return "", time.Time{}, false
 	}
+	if s.udpDownlinkProven.Load() {
+		return "", time.Time{}, false
+	}
 	if cause.reason == portSTransportTimeoutFailure && !s.consumePortSTimeoutFailoverLocked(failedRegistrar, cause.generation) {
 		return "", time.Time{}, false
 	}

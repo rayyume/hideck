@@ -4,14 +4,14 @@
 
 **Qualcomm 4G / LTE / 5G モデム向けセルフホストコンソール**
 
-[English](README.md) · [简体中文](README.zh-CN.md) · **日本語** · [한국어](README.ko.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português](README.pt-BR.md) · [Русский](README.ru.md)
+[English](../README.md) · [简体中文](README.zh-CN.md) · **日本語** · [한국어](README.ko.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português](README.pt-BR.md) · [Русский](README.ru.md)
 
 <p>
   <a href="https://github.com/yibaiba/hideck/releases/latest"><img src="https://img.shields.io/github/v/release/yibaiba/hideck" alt="Release"></a>
   <a href="https://hub.docker.com/r/yibaiba/hideck"><img src="https://img.shields.io/badge/docker-yibaiba%2Fhideck-2496ED?logo=docker&logoColor=white" alt="Docker"></a>
-  <a href="go.mod"><img src="https://img.shields.io/badge/Go-1.26.4%2B-00ADD8?logo=go" alt="Go"></a>
-  <a href="web/package.json"><img src="https://img.shields.io/badge/Vue-3-42b883?logo=vue.js" alt="Vue 3"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/static/v1?label=License&message=PolyForm%20NC%201.0.0&color=blue" alt="License: PolyForm Noncommercial 1.0.0"></a>
+  <a href="../go.mod"><img src="https://img.shields.io/badge/Go-1.26.4%2B-00ADD8?logo=go" alt="Go"></a>
+  <a href="../web/package.json"><img src="https://img.shields.io/badge/Vue-3-42b883?logo=vue.js" alt="Vue 3"></a>
+  <a href="../LICENSE"><img src="https://img.shields.io/static/v1?label=License&message=PolyForm%20NC%201.0.0&color=blue" alt="License: PolyForm Noncommercial 1.0.0"></a>
 </p>
 
 </div>
@@ -35,7 +35,7 @@ USB モデム、セルラープロキシ、SMS、WiFi calling / IMS 音声、eSI
 - **eSIM** — ダウンロード、有効化、無効化、名前変更、削除。アクティベーションコードまたは QR / PDF
 - **自動化と通知** — スケジュールタスク。Telegram、メール、Bark、Feishu、WeCom、WeChat、QQ
 
-プロトコル：[VoWiFi](docs/vowifi-protocol-alignment.md) · [VoLTE](docs/volte-native.md) · [事業者](docs/operator-notes.md) · [ハードウェア](docs/modem-hardware.md)
+プロトコル：[VoWiFi](../docs/vowifi-protocol-alignment.md) · [VoLTE](../docs/volte-native.md) · [事業者](../docs/operator-notes.md) · [ハードウェア](../docs/modem-hardware.md)
 
 ## クイックスタート
 
@@ -59,7 +59,7 @@ curl -fsSL https://raw.githubusercontent.com/yibaiba/hideck/main/deploy.sh | \
   HIDECK_DIR=/opt/hideck sh
 ```
 
-イメージ：`yibaiba/hideck:latest`。Compose は `network_mode: host`、`privileged: true`、`/dev` を使い、`config/`、`data/`、`logs/` を永続化します。[DOCKERHUB.md](DOCKERHUB.md) と [HTTPS / WebRTC](docs/https-webrtc.md) を参照してください。
+イメージ：`yibaiba/hideck:latest`。Compose は `network_mode: host`、`privileged: true`、`/dev` を使い、`config/`、`data/`、`logs/` を永続化します。[DOCKERHUB.md](../DOCKERHUB.md) と [HTTPS / WebRTC](../docs/https-webrtc.md) を参照してください。
 
 ```bash
 docker compose ps
@@ -68,17 +68,17 @@ docker compose logs -f hideck
 
 ## スクリーンショット
 
-![ログイン](docs/images/login.jpg)
+![ログイン](../docs/images/login.jpg)
 
-![ダッシュボード](docs/images/dashboard.jpg)
+![ダッシュボード](../docs/images/dashboard.jpg)
 
 | デバイス | 電話 |
 | --- | --- |
-| ![デバイス](docs/images/devices.jpg) | ![電話](docs/images/phone.jpg) |
+| ![デバイス](../docs/images/devices.jpg) | ![電話](../docs/images/phone.jpg) |
 
 | コマンド | プロキシ |
 | --- | --- |
-| ![コマンド](docs/images/commands.jpg) | ![プロキシ](docs/images/proxy.jpg) |
+| ![コマンド](../docs/images/commands.jpg) | ![プロキシ](../docs/images/console-proxy.jpg) |
 
 ## バイナリインストール
 
@@ -102,11 +102,11 @@ curl -fsSL https://raw.githubusercontent.com/yibaiba/hideck/main/deploy-binary.s
 | `hideck_v2.1.15_openwrt_arm64` | OpenWrt aarch64 |
 | `hideck_v2.1.15_openwrt_armv7` | OpenWrt 32-bit ARM |
 
-OpenWrt では `openwrt_*` のみを使ってください。[packaging/openwrt/README.md](packaging/openwrt/README.md) を参照。
+OpenWrt では `openwrt_*` のみを使ってください。[packaging/openwrt/README.md](../packaging/openwrt/README.md) を参照。
 
 ## 設定
 
-[config/config.example.yaml](config/config.example.yaml) を `config/config.yaml` にコピーします。
+[config/config.example.yaml](../config/config.example.yaml) を `config/config.yaml` にコピーします。
 
 | キー | デフォルト | 説明 |
 | --- | --- | --- |
@@ -147,6 +147,6 @@ go test -timeout=60s ./cmd/... ./internal/... ./pkg/...
 
 個人の学習、研究、テスト向けです。本番の電話基盤ではありません。Quectel、Qualcomm、通信事業者とは無関係です。現地の法令と契約に従ってください。
 
-[PolyForm Noncommercial 1.0.0](LICENSE)。`third_party/vowifi-go` は AGPL-3.0 です。バイナリやイメージを配布する前に [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) を読んでください。
+[PolyForm Noncommercial 1.0.0](../LICENSE)。`third_party/vowifi-go` は AGPL-3.0 です。バイナリやイメージを配布する前に [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) を読んでください。
 
 Thanks: [LINUX DO](https://linux.do/) · [iniwex5/vohive-release](https://github.com/iniwex5/vohive-release) · [boa-z/vowifi-go](https://github.com/boa-z/vowifi-go)

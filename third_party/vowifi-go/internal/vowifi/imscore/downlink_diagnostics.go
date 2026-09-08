@@ -18,12 +18,17 @@ func (s *Service) logDownlinkDiagnostics(event string) {
 	s.mu.RLock()
 	registrar := s.registrar
 	listener := s.securityServerIO
+	udp := s.protectedUDP
 	s.mu.RUnlock()
 	local := ""
 	if listener != nil {
 		local = listener.Addr().String()
 	}
+	udpLocal := ""
+	if udp != nil {
+		udpLocal = udp.server.LocalAddr().String()
+	}
 	logging.Info("IMS downlink path diagnostics",
 		"device", s.DeviceID(), "event", event, "pcscf", registrar,
-		"port_s_listener", local, "network", s.networkDiagnostics())
+		"port_s_listener", local, "port_s_udp_listener", udpLocal, "network", s.networkDiagnostics())
 }

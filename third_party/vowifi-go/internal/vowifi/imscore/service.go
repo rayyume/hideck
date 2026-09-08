@@ -422,6 +422,7 @@ func (s *Service) StopCurrent() {
 		close(s.stop)
 	}
 	s.stopInboundStatsLogger()
+	s.closeProtectedUDP()
 	s.cancelPortSReconnectWatch()
 	s.clearPendingSMS()
 	s.getIMSEventBus().close()

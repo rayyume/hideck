@@ -74,7 +74,13 @@ func (s *Service) reserveProtectedTCPPorts() (net.Listener, net.Listener, error)
 		_ = server.Close()
 		return nil, nil, fmt.Errorf("imscore: reserve protected client port: %w", err)
 	}
-	return server, client, nil
+	reserved, err := s.reserveProtectedUDPPorts(server, client)
+	if err != nil {
+		_ = server.Close()
+		_ = client.Close()
+		return nil, nil, err
+	}
+	return reserved, client, nil
 }
 
 func tcpPort(address net.Addr) int {
@@ -232,13 +238,21 @@ func (s *Service) handleRegistrationPacketReadError(conn net.PacketConn, readErr
 }
 
 func (s *Service) acceptProtectedSIP(listener net.Listener) {
-	defer s.networkDone.Done()
+	var acceptErr error
+	defer func() {
+		// StopCurrent may be waiting for receivers while REGISTER owns its
+		// lock. Retire this receiver before entering serialized recovery.
+		s.networkDone.Done()
+		if acceptErr != nil {
+			s.handleProtectedListenerFailure(listener, acceptErr)
+		}
+	}()
 	s.receiverStarted()
 	defer s.receiverStopped()
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			s.handleProtectedListenerFailure(listener, err)
+			acceptErr = err
 			return
 		}
 		logging.Info("IPSec portS accepted server push connection",
@@ -530,6 +544,7 @@ func (s *Service) resetPortSRecoveryKnowledge() {
 	s.mu.Lock()
 	s.downlinkGeneration++
 	s.downlinkRequests = 0
+	s.udpDownlinkProven.Store(false)
 	s.cancelReplacementDownlinkWatchLocked()
 	s.mu.Unlock()
 	s.resetPortSRecoveryBackoff()

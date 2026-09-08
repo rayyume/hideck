@@ -3,6 +3,7 @@ package runtimecore
 import (
 	"context"
 	"errors"
+	"net"
 	"sync"
 	"time"
 
@@ -212,11 +213,36 @@ type installerIMSNetwork struct {
 	cleanup   func() error
 }
 
+type managedIMSNetwork interface {
+	imscore.IMSNetwork
+	InstallIPSec3GPP(ipsec3gpp.Policy) error
+	RemoveIPSec3GPP() error
+	IMSNetworkDiagnostics() map[string]any
+	Close() error
+}
+
+type protectedUDPNetwork interface {
+	ListenProtectedUDP(*net.UDPAddr) (net.PacketConn, error)
+}
+
+type protectedUDPInstallerIMSNetwork struct {
+	*installerIMSNetwork
+	protectedUDPNetwork
+}
+
 func newInstallerIMSNetwork(
 	network imscore.IMSNetwork,
 	installer imscore.IPSec3GPPInstaller,
-) *installerIMSNetwork {
-	return &installerIMSNetwork{IMSNetwork: network, installer: installer}
+) managedIMSNetwork {
+	managed := &installerIMSNetwork{IMSNetwork: network, installer: installer}
+	protected, ok := network.(protectedUDPNetwork)
+	if !ok {
+		return managed
+	}
+	return &protectedUDPInstallerIMSNetwork{
+		installerIMSNetwork: managed,
+		protectedUDPNetwork: protected,
+	}
 }
 
 func (network *installerIMSNetwork) InstallIPSec3GPP(value ipsec3gpp.Policy) error {

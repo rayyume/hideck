@@ -15,6 +15,7 @@ type RegistrarPenaltyStore struct {
 	recovering       bool
 	generation       uint64
 	downlinkRound    *registrarDownlinkRound
+	downlinkAttempt  uint64
 	recoveryAttempts map[string]bool
 }
 

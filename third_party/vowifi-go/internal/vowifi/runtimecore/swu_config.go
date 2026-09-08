@@ -25,6 +25,7 @@ func BuildSWUConfig(cfg SessionConfig) *swu.Config {
 	result := &swu.Config{
 		DeviceID:                  strings.TrimSpace(cfg.DeviceID),
 		DNSServer:                 dnsServer,
+		EPDGCandidates:            cfg.EPDGCandidates,
 		EPDGAddr:                  strings.TrimSpace(prepared.EPDGAddr),
 		EpDGAddr:                  strings.TrimSpace(prepared.EPDGAddr),
 		EpDGPort:                  plan.EPDG.Port,

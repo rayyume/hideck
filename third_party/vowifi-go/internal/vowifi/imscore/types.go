@@ -175,6 +175,8 @@ type Service struct {
 	registrationTCPProtected  bool
 	registrationTransport     string
 	securityServerIO          net.Listener
+	protectedUDP              *protectedUDPTransport
+	udpDownlinkProven         atomic.Bool
 	clientPortReserve         net.Listener
 	registrationRemote        *net.UDPAddr
 	protectedClientPort       int

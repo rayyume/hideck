@@ -112,12 +112,8 @@ func (a *IMSNetworkAdapter) ListenPacket(network string, addr *net.UDPAddr) (net
 func (a *IMSNetworkAdapter) InstallIPSec3GPP(policy ipsec3gpp.Policy) error {
 	a.ipsecMu.Lock()
 	defer a.ipsecMu.Unlock()
-	if a.ipsecCleanup != nil {
-		if err := a.ipsecCleanup(); err != nil {
-			return err
-		}
-		a.ipsecCleanup = nil
-	}
+	// Prepare first, then atomically replace. A failed installation must leave
+	// the existing association installed, not create an unprotected gap.
 	cleanup, err := a.network.InstallIPSec3GPP(context.Background(), policy)
 	if err != nil {
 		return err

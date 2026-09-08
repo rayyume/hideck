@@ -8,6 +8,11 @@ import (
 )
 
 func (s *Service) handleProtectedListenerFailure(listener net.Listener, cause error) {
+	_ = listener.Close()
+	// Closing may overlap a P-CSCF replacement. Recheck ownership afterwards,
+	// and serialize failure publication with REGISTER finalization.
+	s.registerMu.Lock()
+	defer s.registerMu.Unlock()
 	err := fmt.Errorf("imscore: protected port-s listener failed: %w", cause)
 	s.mu.Lock()
 	// Normal teardown detaches the listener before closing it. A late Accept
@@ -23,7 +28,6 @@ func (s *Service) handleProtectedListenerFailure(listener net.Listener, cause er
 	s.lastError = err.Error()
 	s.abandonReplacementDownlinkWaitLocked()
 	s.mu.Unlock()
-	_ = listener.Close()
 	logging.Info("IMS protected port-s listener failed; requesting runtime recovery",
 		"device", s.DeviceID(), "local", listener.Addr(), "err", err)
 	s.transitionRegStatus(registrationRejectedTemporary)

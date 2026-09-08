@@ -286,6 +286,9 @@ func cloneSWUConfigForPDN(base *swu.Config, apn string) *swu.Config {
 		return &swu.Config{APN: strings.TrimSpace(apn), OmitInitialContact: true}
 	}
 	cfg := *base
+	// Additional PDNs retain their own existing connection policy. An XCAP
+	// address rejection must not advance the main tunnel's candidate round.
+	cfg.EPDGCandidates = nil
 	cfg.APN = strings.TrimSpace(apn)
 	cfg.TUNName = ""
 	cfg.LocalPort = 0

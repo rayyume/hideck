@@ -4,7 +4,7 @@
 
 **Self-hosted console for Qualcomm 4G / LTE / 5G modems**
 
-**English** · [简体中文](README.zh-CN.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português](README.pt-BR.md) · [Русский](README.ru.md)
+**English** · [简体中文](i18n/README.zh-CN.md) · [日本語](i18n/README.ja.md) · [한국어](i18n/README.ko.md) · [Español](i18n/README.es.md) · [Français](i18n/README.fr.md) · [Deutsch](i18n/README.de.md) · [Português](i18n/README.pt-BR.md) · [Русский](i18n/README.ru.md)
 
 <p>
   <a href="https://github.com/yibaiba/hideck/releases/latest"><img src="https://img.shields.io/github/v/release/yibaiba/hideck" alt="Release"></a>
@@ -78,7 +78,7 @@ docker compose logs -f hideck
 
 | Commands | Proxy |
 | --- | --- |
-| ![Commands](docs/images/commands.jpg) | ![Proxy](docs/images/proxy.jpg) |
+| ![Commands](docs/images/commands.jpg) | ![Proxy](docs/images/console-proxy.jpg) |
 
 ## Binary install
 
