@@ -508,6 +508,33 @@ type fragmentOnlyDeliveryStore struct {
 	fragments messaging.InboundFragmentStore
 }
 
+type subscriptionRejectionDeliveryStore struct {
+	messaging.DeliveryStore
+	status    int
+	expiresAt time.Time
+}
+
+func (store *subscriptionRejectionDeliveryStore) LoadIMSSubscriptionRejection(
+	_, _ string,
+	_ time.Time,
+) (int, time.Time, error) {
+	return store.status, store.expiresAt, nil
+}
+
+func (store *subscriptionRejectionDeliveryStore) SaveIMSSubscriptionRejection(
+	_, _ string,
+	status int,
+	expiresAt time.Time,
+) error {
+	store.status, store.expiresAt = status, expiresAt
+	return nil
+}
+
+func (store *subscriptionRejectionDeliveryStore) DeleteIMSSubscriptionRejections(string) error {
+	store.status, store.expiresAt = 0, time.Time{}
+	return nil
+}
+
 func (store fragmentOnlyDeliveryStore) LoadInboundFragments(
 	owner messaging.InboundFragmentOwner,
 ) ([]messaging.StoredInboundFragment, error) {
@@ -656,6 +683,26 @@ func TestRuntimeCoreDeliveryStorePreservesOptionalSIPResults(t *testing.T) {
 	}
 	if err := lifecycle.MarkInboundFragmentsDegraded(smsdelivery.InboundFragmentScope{}, time.Now()); err != nil || !store.degraded {
 		t.Fatalf("MarkInboundFragmentsDegraded err=%v degraded=%v", err, store.degraded)
+	}
+}
+
+func TestRuntimeCoreAdapterPreservesSubscriptionRejectionStore(t *testing.T) {
+	store := &subscriptionRejectionDeliveryStore{DeliveryStore: &memDeliveryStore{}}
+	persistence := runtimeCoreSubscriptionRejectionStore(store)
+	if persistence == nil {
+		t.Fatal("subscription rejection store was dropped")
+	}
+	expiresAt := time.Now().Add(time.Hour)
+	if err := persistence.SaveIMSSubscriptionRejection(
+		"identity", "reg", 489, expiresAt,
+	); err != nil {
+		t.Fatal(err)
+	}
+	status, loadedExpiry, err := persistence.LoadIMSSubscriptionRejection(
+		"identity", "reg", time.Now(),
+	)
+	if err != nil || status != 489 || !loadedExpiry.Equal(expiresAt) {
+		t.Fatalf("status=%d expiry=%s err=%v", status, loadedExpiry, err)
 	}
 }
 

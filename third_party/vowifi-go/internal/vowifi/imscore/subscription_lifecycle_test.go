@@ -113,7 +113,7 @@ func TestRegisteredSubscriptionDialogSurvivesRegisterRefresh(t *testing.T) {
 	}
 }
 
-func TestSubscriptionNewContactRetriesRegButPreservesMWIRejection(t *testing.T) {
+func TestSubscriptionNewContactPreservesExplicitRejections(t *testing.T) {
 	store := NewSubscriptionRegistrationStore()
 	s := newSubscriptionLifecycleTestService(t, store)
 	rejectSubscriptionForTest(t, s, false)
@@ -123,15 +123,17 @@ func TestSubscriptionNewContactRetriesRegButPreservesMWIRejection(t *testing.T) 
 	s.subscriptionGeneration++
 	s.trackSubscriptionRegistrationLocked(time.Hour)
 	s.mu.Unlock()
-	if start, _ := s.prepareSubscriptionStart(false); !start {
-		t.Fatal("new Contact did not initiate reg subscription")
+	if start, _ := s.prepareSubscriptionStart(false); start {
+		t.Fatal("new Contact cleared registration event rejection")
 	}
 	if start, _ := s.prepareSubscriptionStart(true); start {
 		t.Fatal("new Contact cleared MWI rejection")
 	}
 	replacement := newSubscriptionLifecycleTestService(t, store)
-	if start, _ := replacement.prepareSubscriptionStart(true); start {
-		t.Fatal("Service rebuild cleared MWI rejection")
+	for _, mwi := range []bool{false, true} {
+		if start, _ := replacement.prepareSubscriptionStart(mwi); start {
+			t.Fatalf("Service rebuild cleared rejection for mwi=%t", mwi)
+		}
 	}
 }
 
@@ -200,7 +202,7 @@ func TestSubscriptionDeregistrationAllowsNewMWIAttempt(t *testing.T) {
 }
 
 func storeMWIRejection(s *Service) int {
-	return s.subscriptionRegistrations.mwiRejected(s.subscriptionBinding)
+	return s.subscriptionRegistrations.rejected(s.subscriptionBinding, mwiEventPackage)
 }
 
 func Test2degreesMWIRejectionDoesNotChangeOnDemandSMSReadiness(t *testing.T) {

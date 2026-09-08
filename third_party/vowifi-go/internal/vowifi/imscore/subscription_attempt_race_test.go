@@ -109,7 +109,7 @@ func TestSubscriptionLateResponseCannotChangeReopenedUsage(t *testing.T) {
 				if !reflect.DeepEqual(*f.lifecycle, lifecycle) || !reflect.DeepEqual(*f.dialog, dialog) || *f.lastErr != lastErr || *f.closed {
 					t.Fatal("stale response changed the new usage")
 				}
-				if s.subscriptionRegistrations.mwiRejected(s.subscriptionBinding) != 0 {
+				if s.subscriptionRegistrations.rejected(s.subscriptionBinding, subscriptionEventPackage(mwi)) != 0 {
 					t.Fatal("retired response marked the current identity unsupported")
 				}
 				completeProtocolSubscription(t, s, mwi, next)
@@ -208,7 +208,7 @@ func TestMWISharedRejectionBlocksAlreadyBuiltAttempt(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			s.subscriptionRegistrations.rejectMWI(s.subscriptionBinding, status)
+			s.subscriptionRegistrations.reject(s.subscriptionBinding, mwiEventPackage, status)
 			if queued {
 				attempt.err = s.subscriptionSent(attempt, true)
 			} else {

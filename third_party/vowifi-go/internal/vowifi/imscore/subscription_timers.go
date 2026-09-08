@@ -13,7 +13,7 @@ func (s *Service) subscriptionDueLocked(mwi bool, now time.Time) bool {
 	if !eligible || f.retryBlocked() || !f.lifecycle.notifyDeadline.IsZero() {
 		return false
 	}
-	if mwi && s.subscriptionRegistrations.mwiRejected(s.subscriptionBinding) != 0 {
+	if s.subscriptionRegistrations.rejected(s.subscriptionBinding, subscriptionEventPackage(mwi)) != 0 {
 		return false
 	}
 	if (mwi && s.mwiSubscriptionInFlight.Load()) || (!mwi && s.subscriptionInFlight.Load()) {

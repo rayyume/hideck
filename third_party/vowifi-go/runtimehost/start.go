@@ -491,6 +491,9 @@ func imscoreFromPrepared(req StartRequest, tunnel Tunnel) (*imscore.Service, err
 	}
 	if req.DeliveryStore != nil {
 		cfg.DeliveryStore = newDeliveryStoreAdapter(req.DeliveryStore)
+		cfg.SubscriptionRegistrations = imscore.NewPersistentSubscriptionRegistrationStore(
+			runtimeCoreSubscriptionRejectionStore(req.DeliveryStore),
+		)
 	}
 	svc, err := imscore.New(cfg)
 	if err != nil {

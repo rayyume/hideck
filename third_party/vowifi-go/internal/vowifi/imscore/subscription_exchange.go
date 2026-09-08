@@ -123,9 +123,11 @@ func (s *Service) failSubscriptionUsageLocked(f subscriptionFields, result subsc
 	if subscriptionPermanentlyRejected(result.response) {
 		f.terminate(result.err.Error())
 		f.lifecycle.rejectedStatus = result.response.StatusCode
-		if f.mwi {
-			s.subscriptionRegistrations.rejectMWI(result.context.binding, result.response.StatusCode)
-		}
+		s.subscriptionRegistrations.reject(
+			result.context.binding,
+			subscriptionEventPackage(f.mwi),
+			result.response.StatusCode,
+		)
 		return result.err
 	}
 	if *f.closed {

@@ -12,6 +12,7 @@ import (
 
 var _ messaging.InboundFragmentStore = vowifiDeliveryStore{}
 var _ messaging.InboundFragmentLifecycleStore = vowifiDeliveryStore{}
+var _ messaging.SubscriptionRejectionStore = vowifiDeliveryStore{}
 
 func TestVoWiFiDeliveryStoreReportsMatchedPart(t *testing.T) {
 	previousDB := db.DB

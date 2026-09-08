@@ -4,12 +4,31 @@ import (
 	"errors"
 	"time"
 
-	"github.com/yibaiba/hideck/internal/db"
 	"github.com/iniwex5/vowifi-go/runtimehost/messaging"
+	"github.com/yibaiba/hideck/internal/db"
 	"gorm.io/gorm"
 )
 
 type vowifiDeliveryStore struct{}
+
+func (vowifiDeliveryStore) LoadIMSSubscriptionRejection(
+	identity, eventPackage string,
+	now time.Time,
+) (int, time.Time, error) {
+	return db.LoadIMSSubscriptionRejection(identity, eventPackage, now)
+}
+
+func (vowifiDeliveryStore) SaveIMSSubscriptionRejection(
+	identity, eventPackage string,
+	status int,
+	expiresAt time.Time,
+) error {
+	return db.SaveIMSSubscriptionRejection(identity, eventPackage, status, expiresAt)
+}
+
+func (vowifiDeliveryStore) DeleteIMSSubscriptionRejections(identity string) error {
+	return db.DeleteIMSSubscriptionRejections(identity)
+}
 
 func (vowifiDeliveryStore) CreateSMSDelivery(messageID, imsi, deviceID, peer, content string, partsTotal int, at time.Time) error {
 	return db.CreateSMSDelivery(messageID, imsi, deviceID, peer, content, partsTotal, at)
