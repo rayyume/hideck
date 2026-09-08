@@ -64,11 +64,12 @@ func TestApplyLifecycleToListItemDerivesRadioRegistered(t *testing.T) {
 	}
 }
 
-func TestVoWiFiRuntimeDTOExportsSIMReadyOnly(t *testing.T) {
+func TestVoWiFiRuntimeDTOExportsReadinessFields(t *testing.T) {
 	dto := runtimeStateToDTO(runtimehost.State{
 		Phase:      runtimehost.PhaseSIMReady,
 		DeviceID:   "dev1",
 		SIMReady:   true,
+		SMSMOReady: true,
 		LastReason: "sim_ready",
 	}, modem.DeviceStatus{IMSI: "001010123456789"})
 
@@ -82,6 +83,9 @@ func TestVoWiFiRuntimeDTOExportsSIMReadyOnly(t *testing.T) {
 	raw := string(body)
 	if !strings.Contains(raw, `"sim_ready":true`) {
 		t.Fatalf("json=%s, want sim_ready=true", raw)
+	}
+	if !strings.Contains(raw, `"sms_mo_ready":true`) {
+		t.Fatalf("json=%s, want sms_mo_ready=true", raw)
 	}
 	if strings.Contains(raw, "radio_ready") {
 		t.Fatalf("json=%s should not contain radio_ready", raw)

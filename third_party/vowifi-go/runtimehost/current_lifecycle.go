@@ -62,7 +62,7 @@ func (adapter lifecycleServiceAdapter) Status() map[string]interface{} {
 	state := adapter.lifecycle.Status().State
 	return map[string]interface{}{
 		"device_id": state.DeviceID, "phase": state.Phase,
-		"ims_ready": state.IMSReady, "sms_ready": state.SMSReady,
+		"ims_ready": state.IMSReady, "sms_ready": state.SMSReady, "sms_mo_ready": state.SMSMOReady,
 	}
 }
 

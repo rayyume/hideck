@@ -61,6 +61,23 @@ test('conversation context exposes only backend readiness facts', () => {
   assert.equal(unknown.imsLabel, 'IMS 状态未提供')
 })
 
+test('conversation context reports outbound SMS ready when only the IMS receiver is unavailable', () => {
+  const runtime = {
+    ims_ready: true,
+    sms_ready: false,
+    sms_mo_ready: true,
+    sms_ready_reason: 'IMS SMS receiver is not ready'
+  }
+  const context = createSmsConversationContext({
+    selectedDeviceId: 'wwan0',
+    thread: null,
+    devices: [device({ vowifi_runtime: runtime })]
+  })
+
+  assert.equal(context.smsLabel, 'VoWiFi · SMS 可发送')
+  assert.equal(context.smsTone, 'success')
+})
+
 test('unread badges and initials are explicit and bounded', () => {
   assert.equal(smsUnreadBadge(3), 3)
   assert.equal(smsUnreadBadge(-2), 0)

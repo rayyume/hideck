@@ -64,6 +64,33 @@ func TestCoreSMSReadinessUpdatesRuntimeState(t *testing.T) {
 	}
 }
 
+func TestCoreReplaysMOSMSReadinessAfterIMSRegistration(t *testing.T) {
+	instance := &Instance{}
+	instance.setState(State{DeviceID: "wwan0", Phase: "ipsec_up"})
+	observer := &instanceObserver{inst: instance, deviceID: "wwan0"}
+	request := runtimecore.RuntimeStartRequest{}
+	chainSMSReadinessHook(&request, observer)
+
+	request.Hooks.OnSMSReadinessChanged(context.Background(), imscore.SMSReadiness{
+		Registered: true, ProfileReady: true, TransportReady: true,
+		SMSCPresent: true, MOReady: true, Reason: "IMS SMS receiver is not ready",
+	})
+	if state := instance.State(); state.SMSMOReady {
+		t.Fatalf("MO readiness published before IMS registration: %+v", state)
+	}
+
+	observer.OnRuntimeEvent(context.Background(), runtimecore.RuntimeEvent[*runtimecore.SessionResult]{
+		Kind: "ims_registered", DeviceID: "wwan0",
+	})
+	state := instance.State()
+	if !state.IMSReady || !state.SMSMOReady {
+		t.Fatalf("MO readiness lost after IMS registration: %+v", state)
+	}
+	if state.SMSReady || state.SMSReadyReason != "IMS SMS receiver is not ready" {
+		t.Fatalf("MT readiness changed after IMS registration: %+v", state)
+	}
+}
+
 func TestCoreSMSHealthReadinessIsRecordedBeforeSessionPublication(t *testing.T) {
 	instance := &Instance{}
 	instance.setState(State{DeviceID: "wwan0", Phase: "ipsec_up"})
