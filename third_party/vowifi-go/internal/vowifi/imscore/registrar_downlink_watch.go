@@ -15,6 +15,7 @@ type replacementDownlinkWatch struct {
 	timer          *time.Timer
 	retryNotBefore time.Time
 	unverified     bool
+	sharedAttempt  uint64
 }
 
 func (s *Service) startReplacementDownlinkWatch(baseline downlinkCheckpoint) {
@@ -37,7 +38,7 @@ func (s *Service) watchReplacementDownlink(baseline downlinkCheckpoint, delay ti
 	watch := &replacementDownlinkWatch{
 		path: path, baseline: baseline, deadline: time.Now().Add(delay),
 	}
-	s.registrarPenalties.noteDownlinkAttempt(path.registrar)
+	watch.sharedAttempt = s.registrarPenalties.noteDownlinkAttempt(path.registrar)
 	s.replacementDownlinkWatch = watch
 	s.armReplacementDownlinkWatchLocked(watch)
 	logging.Info("IMS replacement registered; awaiting downlink validation",
@@ -64,7 +65,7 @@ func (s *Service) abandonReplacementDownlinkWaitLocked() {
 	if watch == nil || !watch.path.samePath(s.downlinkCheckpointLocked()) {
 		return
 	}
-	s.registrarPenalties.resetDownlinkRound(watch.path.registrar)
+	s.registrarPenalties.abandonDownlinkAttempt(watch.path.registrar, watch.sharedAttempt)
 	s.cancelReplacementDownlinkWatchLocked()
 }
 

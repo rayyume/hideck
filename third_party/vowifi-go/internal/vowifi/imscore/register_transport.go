@@ -232,13 +232,21 @@ func (s *Service) handleRegistrationPacketReadError(conn net.PacketConn, readErr
 }
 
 func (s *Service) acceptProtectedSIP(listener net.Listener) {
-	defer s.networkDone.Done()
+	var acceptErr error
+	defer func() {
+		// StopCurrent may be waiting for receivers while REGISTER owns its
+		// lock. Retire this receiver before entering serialized recovery.
+		s.networkDone.Done()
+		if acceptErr != nil {
+			s.handleProtectedListenerFailure(listener, acceptErr)
+		}
+	}()
 	s.receiverStarted()
 	defer s.receiverStopped()
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			s.handleProtectedListenerFailure(listener, err)
+			acceptErr = err
 			return
 		}
 		logging.Info("IPSec portS accepted server push connection",

@@ -89,6 +89,6 @@
 
 ## 验证边界
 
-下行资源生命周期回归：`port_s_listener_test.go`、`downlink_transport_failure_test.go`、`ipsec_lifecycle_test.go`。当前监听器异常会显式触发恢复，退役监听器与旧 IPsec 清理回调不得破坏新路径；取消失效连接的被动观察等待不清除真实节点退避。握手诊断回归：`transport_diagnostics_test.go`、`diagnostics_test.go`、`network_diagnostics_test.go`，覆盖 IPv4/IPv6、双安全流、解密/重放拒绝、写出失败及适配层透传。诊断不改变 SIP/IPsec 报文，不以生成 SYN-ACK 或 REGISTER 200 代替短信接收验收；这些修复不等于已定位运营商侧没有下行的根因。
+下行资源生命周期回归：`port_s_listener_test.go`、`downlink_transport_failure_test.go`、`registrar_downlink_round_state_test.go`、`ipsec_lifecycle_test.go`。当前监听器异常会显式触发恢复，退役监听器与旧 IPsec 清理回调不得破坏新路径；监听器清理与 REGISTER 并发完成、持有注册锁时关闭接收器均有回归覆盖。取消失效连接的被动观察等待不清除真实节点退避，也不能取消重叠重鉴权中新尝试拥有的等待。握手诊断回归：`transport_diagnostics_test.go`、`diagnostics_test.go`、`network_diagnostics_test.go`，覆盖 IPv4/IPv6、双安全流、解密/重放拒绝、写出失败及适配层透传。诊断不改变 SIP/IPsec 报文，不以生成 SYN-ACK 或 REGISTER 200 代替短信接收验收；这些修复不等于已定位运营商侧没有下行的根因。
 
 自动化测试验证消息构造、事务时序、状态迁移和主要失败路径。真实网络还需要分别验证运营商策略、P-CSCF 行为、NAT、IPv4/IPv6、媒体编码和超时参数。只有完成目标运营商的实验室一致性用例后，才能声明通过该运营商认证。

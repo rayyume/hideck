@@ -59,3 +59,29 @@ func TestDownlinkRoundDoesNotSeedUnrelatedHistoricalFailures(t *testing.T) {
 		t.Fatalf("a previous incident consumed an attempt in the current round: %+v", plan)
 	}
 }
+
+func TestDownlinkRoundAbandonIsAttemptScopedOnSameRegistrar(t *testing.T) {
+	store := NewRegistrarPenaltyStore()
+	old := store.noteDownlinkAttempt("a:5060")
+	current := store.noteDownlinkAttempt("a:5060")
+	deadline := time.Now().Add(time.Hour)
+	store.mark("a:5060", deadline)
+	store.abandonDownlinkAttempt("a:5060", old)
+	if store.downlinkRound == nil {
+		t.Fatal("old attempt cleared a newer path using the same registrar")
+	}
+	store.abandonDownlinkAttempt("a:5060", current)
+	if store.downlinkRound != nil || !store.states(time.Now())["a:5060"].retryNotBefore.Equal(deadline) {
+		t.Fatal("current attempt did not cancel only its passive wait")
+	}
+}
+
+func TestDownlinkRoundAbandonCannotReviveCompletedRecovery(t *testing.T) {
+	store := NewRegistrarPenaltyStore()
+	attempt := store.noteDownlinkAttempt("a:5060")
+	store.clearFailures(registrarRecoveryAttempt{registrar: "a:5060"})
+	store.abandonDownlinkAttempt("a:5060", attempt)
+	if store.downlinkRound != nil || len(store.recoveryAttempts) != 0 {
+		t.Fatal("late transport failure restored attempts from a completed incident")
+	}
+}

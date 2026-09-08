@@ -26,7 +26,7 @@ type downlinkRoundPlan struct {
 	round   uint32
 }
 
-func (store *RegistrarPenaltyStore) noteDownlinkAttempt(registrar string) {
+func (store *RegistrarPenaltyStore) noteDownlinkAttempt(registrar string) uint64 {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	if store.downlinkRound == nil {
@@ -38,13 +38,31 @@ func (store *RegistrarPenaltyStore) noteDownlinkAttempt(registrar string) {
 		}
 	}
 	store.downlinkRound.attempted[strings.TrimSpace(registrar)] = true
+	store.downlinkAttempt++
+	return store.downlinkAttempt
 }
 
 func (store *RegistrarPenaltyStore) resetDownlinkRound(registrar string) {
 	store.mu.Lock()
+	defer store.mu.Unlock()
+	store.resetDownlinkRoundLocked(registrar)
+}
+
+// Overlapping IKE reauth shares this store. Only the newest watched path can
+// abandon the shared wait; an old service still cancels its own local timer.
+func (store *RegistrarPenaltyStore) abandonDownlinkAttempt(registrar string, attempt uint64) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if store.downlinkRound == nil || store.downlinkAttempt != attempt {
+		return
+	}
+	store.resetDownlinkRoundLocked(registrar)
+}
+
+func (store *RegistrarPenaltyStore) resetDownlinkRoundLocked(registrar string) {
 	store.downlinkRound = nil
+	store.downlinkAttempt++
 	store.recoveryAttempts = map[string]bool{registrar: true}
-	store.mu.Unlock()
 }
 
 // An unverified delivery path only changes preference. It must not manufacture
