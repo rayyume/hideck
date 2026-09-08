@@ -10,10 +10,13 @@ import (
 )
 
 type instanceObserver struct {
-	inst      *Instance
-	deviceID  string
-	ready     chan struct{}
-	readyOnce sync.Once
+	inst               *Instance
+	deviceID           string
+	ready              chan struct{}
+	readyOnce          sync.Once
+	smsReadinessMu     sync.Mutex
+	latestSMSReadiness SMSReadiness
+	hasSMSReadiness    bool
 }
 
 func (observer *instanceObserver) OnRuntimeEvent(
@@ -36,6 +39,9 @@ func (observer *instanceObserver) OnRuntimeEvent(
 	}
 	observer.applyEvent(kind, event, &state)
 	state.LastEvent = kind
+	if kind == "ims_registered" {
+		observer.applyLatestSMSReadiness(&state)
+	}
 	state.UpdatedAt = time.Now()
 	observer.inst.setState(state)
 	observer.inst.publish(ctx, Event{
@@ -44,6 +50,24 @@ func (observer *instanceObserver) OnRuntimeEvent(
 		RedirectEPDG: event.RedirectEPDG, State: state,
 		Type: kind, Detail: event.Reason, Session: observer.inst,
 	})
+}
+
+func (observer *instanceObserver) updateSMSReadiness(readiness SMSReadiness) {
+	observer.smsReadinessMu.Lock()
+	observer.latestSMSReadiness = readiness
+	observer.hasSMSReadiness = true
+	observer.smsReadinessMu.Unlock()
+	observer.inst.updateSMSReadiness(readiness)
+}
+
+func (observer *instanceObserver) applyLatestSMSReadiness(state *State) {
+	observer.smsReadinessMu.Lock()
+	readiness := observer.latestSMSReadiness
+	ok := observer.hasSMSReadiness
+	observer.smsReadinessMu.Unlock()
+	if ok {
+		applySMSReadiness(state, readiness)
+	}
 }
 
 func (observer *instanceObserver) applyEvent(

@@ -138,7 +138,7 @@ func chainSMSReadinessHook(
 		if previous != nil {
 			previous(ctx, readiness)
 		}
-		observer.inst.updateSMSReadiness(adaptSMSReadiness(readiness))
+		observer.updateSMSReadiness(adaptSMSReadiness(readiness))
 	}
 }
 
