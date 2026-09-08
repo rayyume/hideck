@@ -245,21 +245,25 @@ func (i *Instance) markIMSRegistered() {
 
 func (i *Instance) updateSMSReadiness(readiness SMSReadiness) {
 	i.updateState(func(state *State) {
-		state.SMSReady = state.IMSReady && readiness.Ready
-		state.SMSMOReady = state.IMSReady && readiness.MOReady
-		state.SMSHealthReady = readiness.Registered && (readiness.Ready || readiness.HealthReady)
-		state.SMSReadyReason = readiness.Reason
-		if state.SMSReady {
-			state.Phase = "sms_ready"
-			state.LastEvent = "sms_ready"
-			clearRecoveredFailure(state)
-			return
-		}
-		if state.IMSReady {
-			state.Phase = "ims_ready"
-			state.LastEvent = "sms_unavailable"
-		}
+		applySMSReadiness(state, readiness)
 	})
+}
+
+func applySMSReadiness(state *State, readiness SMSReadiness) {
+	state.SMSReady = state.IMSReady && readiness.Ready
+	state.SMSMOReady = state.IMSReady && readiness.MOReady
+	state.SMSHealthReady = readiness.Registered && (readiness.Ready || readiness.HealthReady)
+	state.SMSReadyReason = readiness.Reason
+	if state.SMSReady {
+		state.Phase = "sms_ready"
+		state.LastEvent = "sms_ready"
+		clearRecoveredFailure(state)
+		return
+	}
+	if state.IMSReady {
+		state.Phase = "ims_ready"
+		state.LastEvent = "sms_unavailable"
+	}
 }
 
 func (i *Instance) setStartFailure(err error) {
