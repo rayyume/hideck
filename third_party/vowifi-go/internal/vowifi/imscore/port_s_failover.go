@@ -88,6 +88,12 @@ func (s *Service) recoverPortSOnAlternate(failedRegistrar, next string, cause po
 		s.rejectFailedPortSRegistrar(next, cause, err)
 		return
 	}
+	if cause.reason == vodafoneUKMTReportFailure {
+		s.settleMTReportRecoveryAfterRegister()
+		logging.Info("IMS MT report recovery switched P-CSCF; awaiting SMSC redelivery",
+			"device", s.DeviceID(), "policy", cause.policy(), "registrar", next)
+		return
+	}
 	logging.Info("IMS port-s recovery registered; awaiting downlink validation",
 		"device", s.DeviceID(), "policy", cause.policy(),
 		"registrar", next, "timeout", s.portSFailoverValidationWait())

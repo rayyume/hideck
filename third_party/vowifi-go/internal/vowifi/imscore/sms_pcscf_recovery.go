@@ -13,6 +13,16 @@ const (
 	vodafoneUKMTReportRecoveryPolicy = "vodafone_uk_mt_report_488"
 )
 
+func (s *Service) settleMTReportRecoveryAfterRegister() bool {
+	if s == nil || s.registrarPenalties == nil {
+		return false
+	}
+	s.mu.RLock()
+	attempt := s.registrarRecoveryAttempt
+	s.mu.RUnlock()
+	return s.registrarPenalties.settleMTReportRecoveryAfterRegister(attempt)
+}
+
 func (s *Service) triggerMTReportPCSCFRecovery(reportErr error) {
 	status := rpReportRejectStatus(reportErr)
 	registrar := rpReportRejectRegistrar(reportErr)

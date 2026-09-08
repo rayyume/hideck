@@ -57,6 +57,77 @@ func TestVodafoneUKMTReport488TriesTunnelAlternateBeforeRuntime(t *testing.T) {
 	}
 }
 
+func TestVodafoneUKMTReport488WaitsForRedeliveryOnReplacement(t *testing.T) {
+	first, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Close()
+	second, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer second.Close()
+	firstSeen, secondSeen := make(chan string, 1), make(chan string, 1)
+	go serveRegisterStatus(first, 200, firstSeen)
+	go serveRegisterStatus(second, 200, secondSeen)
+
+	config := registerTransportTestConfig("udp", first.LocalAddr().String()+";"+second.LocalAddr().String())
+	config.CarrierPresetID = vodafoneUKCarrierPresetID
+	service, err := New(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer service.StopCurrent()
+	service.portSFailoverVerifyWait = 10 * time.Millisecond
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := service.Register(ctx); err != nil {
+		t.Fatal(err)
+	}
+	<-firstSeen
+	service.triggerMTReportPCSCFRecovery(&rpReportRejectError{
+		Status: 488, Registrar: first.LocalAddr().String(),
+	})
+	select {
+	case <-secondSeen:
+	case <-ctx.Done():
+		t.Fatal("488 did not register on the replacement P-CSCF")
+	}
+	waitForPCSCFRecoveryToFinish(t, service)
+	time.Sleep(3 * service.portSFailoverVerifyWait)
+
+	service.mu.RLock()
+	watch := service.replacementDownlinkWatch
+	service.mu.RUnlock()
+	if service.RegState() != regRegistered || service.registrarPenalties.recoveryInProgress() || watch != nil {
+		t.Fatal("replacement REGISTER did not settle into passive redelivery wait")
+	}
+	states := service.registrarPenalties.states(time.Now())
+	if states[first.LocalAddr().String()].reason != vodafoneUKMTReportFailure {
+		t.Fatal("488 penalty on the rejected P-CSCF was lost")
+	}
+	if states[second.LocalAddr().String()].reason == "downlink_unverified" {
+		t.Fatal("silent replacement P-CSCF was treated as a failed downlink")
+	}
+	select {
+	case recoveryErr := <-service.RegistrationErrors():
+		t.Fatalf("silent replacement requested another recovery: %v", recoveryErr)
+	default:
+	}
+}
+
+func waitForPCSCFRecoveryToFinish(t *testing.T, service *Service) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for service.pcscfRecoveryPending.Load() && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if service.pcscfRecoveryPending.Load() {
+		t.Fatal("P-CSCF recovery did not finish")
+	}
+}
+
 func TestVodafoneUKRepeatedMTReport488ExhaustsAssignedCandidates(t *testing.T) {
 	service := newPortSSessionTestService(t, vodafoneUKCarrierPresetID)
 	service.mu.Lock()
@@ -78,6 +149,37 @@ func TestVodafoneUKRepeatedMTReport488ExhaustsAssignedCandidates(t *testing.T) {
 	service.registrarPenalties.mu.Unlock()
 	if !exhausted {
 		t.Fatal("repeated 488 did not exhaust the assigned P-CSCF set")
+	}
+}
+
+func TestVodafoneUKMTReport488AfterPassiveWaitSkipsEarlierRejectedPath(t *testing.T) {
+	service := newPortSSessionTestService(t, vodafoneUKCarrierPresetID)
+	service.mu.Lock()
+	service.registrar = "pcscf-b.example:5060"
+	service.registrarCandidates = []string{
+		"pcscf-a.example:5060", "pcscf-b.example:5060", "pcscf-c.example:5060",
+	}
+	service.externalTransport = true
+	service.regState = regRegistered
+	service.mu.Unlock()
+	service.markVodafoneRegistrarFailure("pcscf-a.example:5060", vodafoneUKMTReportFailure, nil)
+	service.mu.Lock()
+	service.registrarRecoveryAttempt = registrarRecoveryAttempt{
+		registrar: service.registrar, generation: service.registrarPenalties.recoveryGeneration(),
+	}
+	service.mu.Unlock()
+	if !service.settleMTReportRecoveryAfterRegister() {
+		t.Fatal("replacement REGISTER did not enter passive redelivery wait")
+	}
+
+	service.markVodafoneRegistrarFailure("pcscf-b.example:5060", vodafoneUKMTReportFailure, nil)
+	if next := service.selectMTReportAlternate("pcscf-b.example:5060"); next != "pcscf-c.example:5060" {
+		t.Fatalf("second 488 selected %q instead of the untried P-CSCF", next)
+	}
+	states := service.registrarPenalties.states(time.Now())
+	if states["pcscf-a.example:5060"].reason != vodafoneUKMTReportFailure ||
+		states["pcscf-b.example:5060"].reason != vodafoneUKMTReportFailure {
+		t.Fatal("passive wait lost an earlier actual 488 penalty")
 	}
 }
 

@@ -53,10 +53,12 @@ func (store *RegistrarPenaltyStore) recordDeprioritizedFailure(registrar string,
 	}
 	store.mu.Lock()
 	defer store.mu.Unlock()
+	wasRecovering := store.recovering
 	if !store.recovering || store.recoveryAttempts == nil {
 		store.recoveryAttempts = make(map[string]bool)
 	}
 	store.recovering = true
+	store.updateRecoveryModeLocked(input.reason, wasRecovering)
 	store.recoveryAttempts[registrar] = true
 	store.generation++
 	if store.entries == nil {
@@ -80,6 +82,19 @@ func (store *RegistrarPenaltyStore) recordDeprioritizedFailure(registrar string,
 		store.downlinkRound.attempted[registrar] = true
 	}
 	return entry
+}
+
+func (store *RegistrarPenaltyStore) updateRecoveryModeLocked(reason string, wasRecovering bool) {
+	switch reason {
+	case vodafoneUKMTReportFailure:
+		store.recoveryMode = registrarRecoveryModeMTReportRedelivery
+	case "initial_registration_failed":
+		if !wasRecovering || store.recoveryMode == registrarRecoveryModeNone {
+			store.recoveryMode = registrarRecoveryModeDownlinkValidation
+		}
+	default:
+		store.recoveryMode = registrarRecoveryModeDownlinkValidation
+	}
 }
 
 func laterRegistrarDeadline(current, next time.Time) time.Time {

@@ -69,6 +69,35 @@ func TestReplacementRegisterWithoutDownlinkSchedulesRecovery(t *testing.T) {
 	}
 }
 
+func TestFreshRuntimeAfterMTReport488WaitsForRedeliveryWithoutWatch(t *testing.T) {
+	store := NewRegistrarPenaltyStore()
+	now := time.Now()
+	store.recordDeprioritizedFailure("pcscf-a.example:5060", registrarRecoveryInput{
+		now: now, reason: vodafoneUKMTReportFailure,
+		nextRetry: func(uint32) time.Time { return now.Add(time.Minute) },
+	})
+	s := replacementUsingStore(t, store)
+	s.mu.Lock()
+	s.registrar = "pcscf-b.example:5060"
+	s.registrarCandidates = []string{s.registrar}
+	s.mu.Unlock()
+	startProtectedReplacementForTest(t, s)
+
+	s.mu.RLock()
+	watch := s.replacementDownlinkWatch
+	registrar := s.registrar
+	s.mu.RUnlock()
+	if registrar != "pcscf-b.example:5060" {
+		t.Fatalf("replacement registrar = %s", registrar)
+	}
+	if store.recoveryInProgress() || watch != nil {
+		t.Fatal("fresh runtime started an idle downlink validation loop after MT report 488")
+	}
+	if store.states(time.Now())["pcscf-a.example:5060"].reason != vodafoneUKMTReportFailure {
+		t.Fatal("fresh runtime erased the rejected P-CSCF penalty")
+	}
+}
+
 func TestReplacementDownlinkWatchSurvivesBusyRecoveryOwner(t *testing.T) {
 	s := newRecoveryCompletionTestService(t)
 	startProtectedReplacementForTest(t, s)

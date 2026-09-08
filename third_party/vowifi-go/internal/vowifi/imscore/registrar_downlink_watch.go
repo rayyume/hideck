@@ -26,7 +26,7 @@ func (s *Service) watchReplacementDownlink(baseline downlinkCheckpoint, delay ti
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.stopped() || s.regState != regRegistered || !usesVodafoneUKPortSResetRecovery(s.cfg) ||
-		!s.registrarPenalties.recoveryInProgress() || !s.protectedSMSPushRequiredLocked() ||
+		!s.registrarPenalties.recoveryNeedsDownlinkValidation() || !s.protectedSMSPushRequiredLocked() ||
 		s.downlinkEvidenceSinceLocked(baseline) != "" {
 		return
 	}
