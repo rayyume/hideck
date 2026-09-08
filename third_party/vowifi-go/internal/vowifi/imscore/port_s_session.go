@@ -59,6 +59,13 @@ func (s *Service) recordPortSOpened(conn net.Conn, now time.Time) {
 	}
 	registrar := s.currentPortSRecoveryRegistrar()
 	s.portSSessionMu.Lock()
+	generation := s.recordPortSOpenedLocked(conn, now, registrar)
+	s.portSSessionMu.Unlock()
+	s.logPortSOpened(conn, registrar, generation)
+}
+
+// The caller owns portSSessionMu.
+func (s *Service) recordPortSOpenedLocked(conn net.Conn, now time.Time, registrar string) uint64 {
 	if s.portSSession.connections == nil {
 		s.portSSession.connections = make(map[net.Conn]portSConnectionState)
 	}
@@ -67,8 +74,10 @@ func (s *Service) recordPortSOpened(conn net.Conn, now time.Time) {
 		generation: s.portSSession.generation, openedAt: now, registrar: registrar,
 	}
 	s.portSSession.openedAt = now
-	generation := s.portSSession.generation
-	s.portSSessionMu.Unlock()
+	return s.portSSession.generation
+}
+
+func (s *Service) logPortSOpened(conn net.Conn, registrar string, generation uint64) {
 	logging.Info("IMS port-s lifecycle",
 		"device", s.DeviceID(), "event", "opened", "generation", generation,
 		"pcscf", registrar, "inner_ip", s.cfg.LocalAddr,
@@ -146,6 +155,20 @@ func (s *Service) recordPortSClosed(conn net.Conn, err error, now time.Time) boo
 func (s *Service) hasLivePortSConnectionLocked(registrar string) bool {
 	for _, connection := range s.portSSession.connections {
 		if !connection.localClosing && strings.EqualFold(connection.registrar, registrar) {
+			return true
+		}
+	}
+	return false
+}
+
+// The caller owns protectedConnMu. Intersect both registries because a closed
+// reader is removed from the port-s session before protected cleanup finishes.
+func (s *Service) hasCurrentTrackedPortSLocked(registrar string) bool {
+	s.portSSessionMu.Lock()
+	defer s.portSSessionMu.Unlock()
+	for conn := range s.protectedConns {
+		state, tracked := s.portSSession.connections[conn]
+		if tracked && !state.localClosing && strings.EqualFold(state.registrar, registrar) {
 			return true
 		}
 	}

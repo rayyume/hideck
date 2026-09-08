@@ -57,6 +57,30 @@ func TestVodafoneUKMTReport488TriesTunnelAlternateBeforeRuntime(t *testing.T) {
 	}
 }
 
+func TestVodafoneUKRepeatedMTReport488ExhaustsAssignedCandidates(t *testing.T) {
+	service := newPortSSessionTestService(t, vodafoneUKCarrierPresetID)
+	service.mu.Lock()
+	service.externalTransport = true
+	service.regState = regRegistered
+	service.mu.Unlock()
+
+	service.markVodafoneRegistrarFailure("pcscf-a.example:5060", vodafoneUKMTReportFailure, nil)
+	if next := service.selectMTReportAlternate("pcscf-a.example:5060"); next != "pcscf-b.example:5060" {
+		t.Fatalf("first 488 alternate = %q", next)
+	}
+	service.markVodafoneRegistrarFailure("pcscf-b.example:5060", vodafoneUKMTReportFailure, nil)
+	if next := service.selectMTReportAlternate("pcscf-b.example:5060"); next != "" {
+		t.Fatalf("reused rejected P-CSCF before fresh discovery: %q", next)
+	}
+	service.registrarPenalties.mu.Lock()
+	round := service.registrarPenalties.downlinkRound
+	exhausted := round != nil && round.rediscoveryRequested
+	service.registrarPenalties.mu.Unlock()
+	if !exhausted {
+		t.Fatal("repeated 488 did not exhaust the assigned P-CSCF set")
+	}
+}
+
 func TestVodafoneUKMTReport488RequestsFreshPCSCFPath(t *testing.T) {
 	service, _, _ := newInboundSMSTestService(t)
 	service.cfg.CarrierPresetID = vodafoneUKCarrierPresetID

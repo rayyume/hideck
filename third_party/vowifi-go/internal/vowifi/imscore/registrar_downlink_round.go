@@ -32,6 +32,23 @@ type downlinkRoundPlan struct {
 func (store *RegistrarPenaltyStore) noteDownlinkAttempt(registrar string) uint64 {
 	store.mu.Lock()
 	defer store.mu.Unlock()
+	store.ensureDownlinkRoundLocked()
+	return store.noteDownlinkAttemptLocked(registrar)
+}
+
+func (store *RegistrarPenaltyStore) noteMTReportFailureAttempt(registrar string, now time.Time) uint64 {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	store.ensureDownlinkRoundLocked()
+	for candidate, entry := range store.entries {
+		if entry.reason == vodafoneUKMTReportFailure && now.Before(entry.deprioritizedUntil) {
+			store.downlinkRound.attempted[candidate] = true
+		}
+	}
+	return store.noteDownlinkAttemptLocked(registrar)
+}
+
+func (store *RegistrarPenaltyStore) ensureDownlinkRoundLocked() {
 	if store.downlinkRound == nil {
 		store.downlinkRound = &registrarDownlinkRound{number: 1, attempted: make(map[string]bool)}
 		// Do not revisit paths already rejected by an actual failure in this
@@ -40,6 +57,9 @@ func (store *RegistrarPenaltyStore) noteDownlinkAttempt(registrar string) uint64
 			store.downlinkRound.attempted[candidate] = true
 		}
 	}
+}
+
+func (store *RegistrarPenaltyStore) noteDownlinkAttemptLocked(registrar string) uint64 {
 	store.downlinkRound.attempted[strings.TrimSpace(registrar)] = true
 	store.downlinkAttempt++
 	return store.downlinkAttempt

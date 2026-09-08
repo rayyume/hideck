@@ -10,23 +10,36 @@ import (
 
 const portSTransportTimeoutFailure = "port_s_transport_timeout"
 
-// Protected by portSSessionMu. A timeout alone never requests a proxy switch:
-// the original REGISTER must succeed and its downlink validation must fail.
+// Protected by portSSessionMu. A timeout or first peer reset never requests a
+// proxy switch by itself: REGISTER must succeed and downlink validation fail.
 type portSTimeoutRecoveryState struct {
 	registrar        string
 	generation       uint64
 	observedAt       time.Time
+	failure          string
 	validationFailed bool
 	downlinkProven   bool
 }
 
 func (s *Service) recordPortSTimeoutLocked(registrar, kind string) {
 	s.portSSession.timeoutRecovery = portSTimeoutRecoveryState{}
-	if kind == portSCloseTimeout && usesVodafoneUKPortSResetRecovery(s.cfg) {
+	failure := portSValidationFailure(kind)
+	if failure != "" && usesVodafoneUKPortSResetRecovery(s.cfg) {
 		s.portSSession.timeoutRecovery = portSTimeoutRecoveryState{
 			registrar: registrar, generation: s.portSSession.generation,
-			observedAt: s.portSSession.closedAt,
+			observedAt: s.portSSession.closedAt, failure: failure,
 		}
+	}
+}
+
+func portSValidationFailure(kind string) string {
+	switch kind {
+	case portSCloseTimeout:
+		return portSTransportTimeoutFailure
+	case portSClosePeerReset:
+		return portSPeerResetFailure
+	default:
+		return ""
 	}
 }
 
@@ -61,21 +74,26 @@ func (s *Service) recoverTimedOutPortSLocked() bool {
 		return true
 	}
 	defer s.finishPCSCFRecovery()
+	failure := state.failure
+	if failure == "" {
+		failure = portSTransportTimeoutFailure
+	}
 	s.recoverPCSCFAfterPortSFailureLocked(state.registrar, portSFailoverCause{
-		reason: portSTransportTimeoutFailure, observedAt: state.observedAt,
+		reason: failure, observedAt: state.observedAt,
 		generation: state.generation,
 	})
 	return true
 }
 
 // Called with mu held immediately before committing the proxy switch.
-func (s *Service) consumePortSTimeoutFailoverLocked(registrar string, generation uint64) bool {
+func (s *Service) consumePortSTimeoutFailoverLocked(registrar string, generation uint64, failure string) bool {
 	s.portSSessionMu.Lock()
 	defer s.portSSessionMu.Unlock()
 	state := s.portSSession.timeoutRecovery
 	if state.registrar != registrar || state.generation != generation ||
-		!state.validationFailed || state.downlinkProven || s.udpDownlinkProven.Load() || s.portSPushReady.Load() ||
-		s.portSSession.generation != generation || s.portSSession.lastCloseKind != portSCloseTimeout {
+		state.failure != failure ||
+		!state.validationFailed || state.downlinkProven || s.udpDownlinkProven.Load() ||
+		s.portSSession.generation != generation || portSValidationFailure(s.portSSession.lastCloseKind) != failure {
 		return false
 	}
 	s.portSSession.timeoutRecovery = portSTimeoutRecoveryState{}
@@ -131,5 +149,5 @@ func (s *Service) confirmPortSTimeoutDownlinkLocked(peer net.Conn) bool {
 // Observers may reenter Service, so publish only after releasing its locks.
 func (s *Service) notifyPortSTimeoutDownlink() {
 	s.notifySMSReadiness()
-	logging.Info("IMS port-s timeout recovery validated by current inbound SIP request", "device", s.DeviceID())
+	logging.Info("IMS port-s recovery validated by current inbound SIP request", "device", s.DeviceID())
 }

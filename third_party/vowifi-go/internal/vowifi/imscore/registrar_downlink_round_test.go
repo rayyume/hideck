@@ -101,7 +101,7 @@ func TestDownlinkRoundRetryDoesNotShortenRetryAfter(t *testing.T) {
 	}
 }
 
-func TestMTReport488StillReplacesDeferredDownlink(t *testing.T) {
+func TestMTReport488ReplacesDeferredDownlinkAndKeepsAttemptHistory(t *testing.T) {
 	s := singleCandidateReplacement(t)
 	s.triggerMTReportPCSCFRecovery(&rpReportRejectError{Status: 488, Registrar: s.cfg.Registrar})
 	select {
@@ -110,10 +110,11 @@ func TestMTReport488StillReplacesDeferredDownlink(t *testing.T) {
 		t.Fatal("488 recovery was blocked by the idle downlink round")
 	}
 	s.registrarPenalties.mu.Lock()
-	pending := s.registrarPenalties.downlinkRound != nil
+	round := s.registrarPenalties.downlinkRound
+	preserved := round != nil && round.rediscoveryRequested && round.attempted[s.cfg.Registrar]
 	s.registrarPenalties.mu.Unlock()
-	if pending {
-		t.Fatal("488 carried the previous validation round into replacement")
+	if !preserved {
+		t.Fatal("488 replacement discarded the rejected P-CSCF attempt history")
 	}
 }
 

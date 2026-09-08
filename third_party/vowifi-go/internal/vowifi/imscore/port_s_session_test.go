@@ -243,6 +243,46 @@ func TestVodafoneUKCurrentDownlinkClearsResetIncident(t *testing.T) {
 	}
 }
 
+func TestRecoveredPortSPreventsPendingResetFailover(t *testing.T) {
+	service := newPortSSessionTestService(t, vodafoneUKCarrierPresetID)
+	client, server := net.Pipe()
+	t.Cleanup(func() {
+		_ = client.Close()
+		_ = server.Close()
+	})
+	if !service.trackProtectedPortSConnection(client, time.Now()) {
+		t.Fatal("track recovered port-s")
+	}
+	_, _, changed := service.commitPortSFailover(
+		"pcscf-a.example:5060",
+		portSFailoverCause{reason: portSPeerResetFailure},
+	)
+	if changed || len(service.registrarPenalties.states(time.Now())) != 0 {
+		t.Fatal("pending reset replaced or penalized a recovered TCP port-s")
+	}
+}
+
+func TestClosedPortSDoesNotCancelPendingResetFailover(t *testing.T) {
+	service := newPortSSessionTestService(t, vodafoneUKCarrierPresetID)
+	client, server := net.Pipe()
+	t.Cleanup(func() {
+		_ = client.Close()
+		_ = server.Close()
+	})
+	service.recordPortSOpened(client, time.Now())
+	if !service.trackProtectedConnection(client) {
+		t.Fatal("track port-s")
+	}
+	service.recordPortSClosed(client, io.EOF, time.Now())
+	_, _, changed := service.commitPortSFailover(
+		"pcscf-a.example:5060",
+		portSFailoverCause{reason: portSPeerResetFailure},
+	)
+	if !changed {
+		t.Fatal("closed connection was mistaken for a recovered TCP port-s")
+	}
+}
+
 func TestLocalPortSCloseIsNotTreatedAsPeerReset(t *testing.T) {
 	service := newPortSSessionTestService(t, vodafoneUKCarrierPresetID)
 	client, server := net.Pipe()

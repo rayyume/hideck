@@ -8,7 +8,10 @@ import (
 	"github.com/iniwex5/vowifi-go/internal/vowifi/logging"
 )
 
-const vodafoneUKMTReportRecoveryPolicy = "vodafone_uk_mt_report_488"
+const (
+	vodafoneUKMTReportFailure        = "mt_report_488"
+	vodafoneUKMTReportRecoveryPolicy = "vodafone_uk_mt_report_488"
+)
 
 func (s *Service) triggerMTReportPCSCFRecovery(reportErr error) {
 	status := rpReportRejectStatus(reportErr)
@@ -17,7 +20,7 @@ func (s *Service) triggerMTReportPCSCFRecovery(reportErr error) {
 		!usesVodafoneUKPortSResetRecovery(s.cfg) || s.stopped() {
 		return
 	}
-	penalty := s.markVodafoneRegistrarFailure(registrar, "mt_report_488", nil)
+	penalty := s.markVodafoneRegistrarFailure(registrar, vodafoneUKMTReportFailure, nil)
 	if !s.pcscfRecoveryPending.CompareAndSwap(false, true) {
 		return
 	}
@@ -43,12 +46,9 @@ func (s *Service) recoverPCSCFAfterMTReportReject(
 			"deprioritized_until", unavailableUntil)
 		return
 	}
-	s.registrarPenalties.resetDownlinkRound(registrar)
-	s.mu.Lock()
-	next := s.advanceAvailableRegistrarLocked()
-	s.mu.Unlock()
+	next := s.selectMTReportAlternate(registrar)
 	cause := portSFailoverCause{
-		reason: "mt_report_488", observedAt: time.Now(), deprioritizedUntil: unavailableUntil,
+		reason: vodafoneUKMTReportFailure, observedAt: time.Now(), deprioritizedUntil: unavailableUntil,
 	}
 	if next != "" {
 		s.recoverPortSOnAlternate(registrar, next, cause)
@@ -63,4 +63,24 @@ func (s *Service) recoverPCSCFAfterMTReportReject(
 		"pcscf", registrar, "status", status,
 		"deprioritized_until", unavailableUntil)
 	s.reportRegistrationRuntimeError(err)
+}
+
+// Keep hard report rejections in the shared downlink round so a later 488 on
+// another node cannot select an earlier rejected P-CSCF before rediscovery.
+func (s *Service) selectMTReportAlternate(registrar string) string {
+	s.registrarPenalties.noteMTReportFailureAttempt(registrar, time.Now())
+	s.mu.RLock()
+	candidates := append([]string(nil), s.registrarCandidates...)
+	s.mu.RUnlock()
+	plan := s.planDownlinkRound(candidates, registrar)
+	if plan.next == "" {
+		return ""
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !strings.EqualFold(strings.TrimSpace(s.registrar), strings.TrimSpace(registrar)) ||
+		!s.selectDownlinkAlternateLocked(plan.next) {
+		return ""
+	}
+	return plan.next
 }

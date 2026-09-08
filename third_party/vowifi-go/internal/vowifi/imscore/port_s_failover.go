@@ -22,7 +22,7 @@ func (cause portSFailoverCause) policy() string {
 		return "vodafone_uk_downlink_validation"
 	case portSTransportTimeoutFailure:
 		return "vodafone_uk_port_s_timeout"
-	case "mt_report_488":
+	case vodafoneUKMTReportFailure:
 		return vodafoneUKMTReportRecoveryPolicy
 	default:
 		return vodafoneUKPortSResetRecoveryPolicy
@@ -56,7 +56,11 @@ func (s *Service) commitPortSFailover(failedRegistrar string, cause portSFailove
 	if s.udpDownlinkProven.Load() {
 		return "", time.Time{}, false
 	}
-	if cause.reason == portSTransportTimeoutFailure && !s.consumePortSTimeoutFailoverLocked(failedRegistrar, cause.generation) {
+	if s.hasCurrentTrackedPortSLocked(failedRegistrar) {
+		return "", time.Time{}, false
+	}
+	if cause.generation != 0 &&
+		!s.consumePortSTimeoutFailoverLocked(failedRegistrar, cause.generation, cause.reason) {
 		return "", time.Time{}, false
 	}
 	// A new, confirmed transport failure is not an idle validation timeout.

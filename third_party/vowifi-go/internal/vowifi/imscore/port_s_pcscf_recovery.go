@@ -8,6 +8,7 @@ import (
 const (
 	vodafoneUKCarrierPresetID          = "vodafone_uk_23415"
 	vodafoneUKPortSResetRecoveryPolicy = "vodafone_uk_port_s_reset"
+	portSPeerResetFailure              = "port_s_peer_reset"
 	vodafoneUKPortSResetReconnectGrace = 5 * time.Second
 	vodafoneUKPortSReconnectGrace      = 30 * time.Second
 	vodafoneUKPCSCFDeprioritizedPeriod = 30 * time.Minute
@@ -128,6 +129,6 @@ func (s *Service) recoverPCSCFAfterPortSReset(failedRegistrar string, observedAt
 	s.registerMu.Lock()
 	defer s.registerMu.Unlock()
 	s.recoverPCSCFAfterPortSFailureLocked(failedRegistrar, portSFailoverCause{
-		reason: "port_s_peer_reset", observedAt: observedAt,
+		reason: portSPeerResetFailure, observedAt: observedAt,
 	})
 }
