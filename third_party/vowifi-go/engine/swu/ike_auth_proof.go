@@ -248,7 +248,7 @@ func ikeAuthenticationError(payloads []ikev2.Payload) error {
 			return errors.New("swu: malformed IKE_AUTH Notify payload")
 		}
 		if notifyType < 16384 {
-			return fmt.Errorf("swu: IKE_AUTH rejected with %s (%d)", ikev2.NotifyTypeToString(notifyType), notifyType)
+			return &IKEAuthError{NotifyType: notifyType}
 		}
 	}
 	return nil

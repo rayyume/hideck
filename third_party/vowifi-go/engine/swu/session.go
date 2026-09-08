@@ -598,6 +598,11 @@ func (s *Session) finishConnectFailure(err error) {
 	s.setTerminalError(err)
 	s.cancel()
 	preserveResume := errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+	var rejection *IKEAuthError
+	if errors.As(err, &rejection) && rejection.NotifyType == ikev2.INTERNAL_ADDRESS_FAILURE {
+		// A cleanup timeout does not turn a rejected handshake into a resumable one.
+		preserveResume = false
+	}
 	s.cleanupResources(preserveResume)
 }
 
@@ -653,8 +658,7 @@ func (s *Session) connectOnce(ctx context.Context) (err error) {
 	}
 	defer func() {
 		if err != nil {
-			err = errors.Join(err, s.stopDataPlane(), s.stopIKEControl())
-			s.stopTransport()
+			err = s.cleanupConnectAttempt(ctx, err)
 		}
 	}()
 

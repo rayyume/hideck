@@ -566,6 +566,7 @@ func (s *Session) handleIKEAuthFinalPacket(resp *ikev2.IKEPacket) error {
 	// The encrypted response is integrity-protected by the IKE SA. Surface a
 	// responder rejection before requiring AUTH, because error responses omit it.
 	if err := ikeAuthenticationError(payloads); err != nil {
+		s.markRejectedIKEForDelete(err, payloads)
 		return err
 	}
 	// The original engine accepted the final encrypted response after mutual

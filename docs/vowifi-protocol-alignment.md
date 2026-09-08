@@ -17,6 +17,17 @@
 
 ## 追踪矩阵
 
+### ePDG 内部地址分配失败
+
+- `INTERNAL_ADDRESS_FAILURE (36)` 保留为结构化错误，经 ePDG 等待层传给 runtime 重连循环，不再靠错误字符串判断。
+- 按 [RFC 7296 §2.21.2](https://www.rfc-editor.org/rfc/rfc7296.html#section-2.21.2) / [§3.15.4](https://www.rfc-editor.org/rfc/rfc7296.html#section-3.15.4)，地址分配失败不一定删除已完成认证的 IKE SA。本实现选择 Delete 后重新建立：仅最终受保护响应、已完成互相 EAP 认证的 36，在关闭本次候选隧道前发送 IKE Delete，并等待匹配的受保护空响应；不删除未建立的 CHILD_SA。严格 AUTH 校验开启时，未通过校验不发送该 Delete；关闭 EAP MAC 校验的诊断模式也不启用它。
+- Delete 交换复用现有 IKE 重传机制，另设本地 5 秒清理预算。写出失败、响应无效或超时与原始 36 一并上报；只有验证响应后才记录 `IKE address rejection cleanup acknowledged`。这不证明网侧地址池或所有历史会话已经恢复。
+- 仅结构化 36 的 runtime 重试使用独立的 **2～4 分钟随机等待**，且不缩短调用方更长的重试间隔或已有 `RetryAt` 期限；关闭/取消立即停止等待。RFC 建议等待数分钟，2～4 分钟与 5 秒均为本项目实现参数，不是规范固定值。
+- 不改变 VOXI RST/488、普通 EOF、2degrees 按需 port-s、SIP Retry-After/RFC 5626 退避。附加 XCAP PDN 或重叠重认证候选失败，不因此拆掉仍健康的主会话；候选 Delete 仅针对本次 IKE SA。
+- 回归：`session_auth_failure_test.go`、`manager_test.go`、`ike_address_retry_test.go`。本轮为本地协议/状态测试，尚未部署真卡验证，不能据此认定运营商侧 36 的根因已消除。
+
+### 能力矩阵
+
 | 能力 | 规范依据 | 实现入口 | 自动化证据 | 状态 |
 | --- | --- | --- | --- | --- |
 | ePDG 发现与非 3GPP 接入 | TS 24.302、IR.51 | `startup.SelectEmergencyEPDG`、preset FQDN、A/AAAA | 对应包测试 | **部分实现**：preset 或 override 的 FQDN 加 A/AAAA，没有 DNS NAPTR 动态发现。`internal/vowifi/dns` 只服务 IMS Registrar。AAAA-only ePDG 加 IPv4-only SOCKS5 代理不可达，属已知约束。 |
