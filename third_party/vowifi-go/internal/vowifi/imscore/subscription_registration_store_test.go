@@ -76,6 +76,21 @@ func TestMWIRejectionExpiresWithLastKnownRegistration(t *testing.T) {
 	}
 }
 
+func TestSubscriptionRejectionExpiresWhileRegistrationIsRefreshed(t *testing.T) {
+	store := NewSubscriptionRegistrationStore()
+	ref := store.registered(subscriptionRegistration{identity: "sim/user", contact: "contact"}, time.Now().Add(time.Hour))
+	store.reject(ref, registrationEventPackage, 489)
+	store.mu.Lock()
+	store.identities[ref.identity].rejections[registrationEventPackage] = subscriptionRejection{
+		status: 489, expiresAt: time.Now().Add(-time.Second),
+	}
+	store.identities[ref.identity].bindings[ref.contact] = time.Now().Add(time.Hour)
+	store.mu.Unlock()
+	if got := store.rejected(ref, registrationEventPackage); got != 0 {
+		t.Fatalf("expired rejection survived live registration refresh: %d", got)
+	}
+}
+
 func TestMWITransientFailuresAreNotUnsupported(t *testing.T) {
 	store := NewSubscriptionRegistrationStore()
 	ref := store.registered(subscriptionRegistration{identity: "sim/user", contact: "contact"}, time.Now().Add(time.Hour))
@@ -87,7 +102,7 @@ func TestMWITransientFailuresAreNotUnsupported(t *testing.T) {
 	}
 }
 
-func TestExplicitRejectionsSurviveProcessStoreReplacement(t *testing.T) {
+func TestBadEventRejectionsSurviveProcessWithoutExtendingExpiry(t *testing.T) {
 	persistence := &memorySubscriptionRejectionStore{
 		values: make(map[string]persistedSubscriptionRejection),
 	}
@@ -98,7 +113,8 @@ func TestExplicitRejectionsSurviveProcessStoreReplacement(t *testing.T) {
 		identity: identity, contact: "first",
 	}, expiresAt)
 	firstStore.reject(first, registrationEventPackage, 489)
-	firstStore.reject(first, mwiEventPackage, 405)
+	firstStore.reject(first, mwiEventPackage, 489)
+	firstStore.registered(first, expiresAt.Add(time.Hour))
 
 	restartedStore := NewPersistentSubscriptionRegistrationStore(persistence)
 	restarted := restartedStore.registered(subscriptionRegistration{
@@ -107,14 +123,40 @@ func TestExplicitRejectionsSurviveProcessStoreReplacement(t *testing.T) {
 	if got := restartedStore.rejected(restarted, registrationEventPackage); got != 489 {
 		t.Fatalf("registration rejection after restart = %d", got)
 	}
-	if got := restartedStore.rejected(restarted, mwiEventPackage); got != 405 {
+	if got := restartedStore.rejected(restarted, mwiEventPackage); got != 489 {
 		t.Fatalf("MWI rejection after restart = %d", got)
 	}
 	for _, eventPackage := range []string{registrationEventPackage, mwiEventPackage} {
 		value := persistence.values[identity+"\x00"+eventPackage]
-		if !value.expiresAt.Equal(expiresAt.Add(time.Hour)) {
-			t.Fatalf("%s expiration was not extended: %s", eventPackage, value.expiresAt)
+		if !value.expiresAt.Equal(expiresAt) {
+			t.Fatalf("%s expiration changed during REGISTER refresh: %s", eventPackage, value.expiresAt)
 		}
+	}
+}
+
+func TestMethodNotAllowedRejectionDoesNotSurviveProcess(t *testing.T) {
+	persistence := &memorySubscriptionRejectionStore{
+		values: make(map[string]persistedSubscriptionRejection),
+	}
+	identity := "device\x00impi\x00domain\x00impu"
+	firstStore := NewPersistentSubscriptionRegistrationStore(persistence)
+	first := firstStore.registered(subscriptionRegistration{
+		identity: identity, contact: "first",
+	}, time.Now().Add(time.Hour))
+	firstStore.reject(first, mwiEventPackage, 405)
+	if got := firstStore.rejected(first, mwiEventPackage); got != 405 {
+		t.Fatalf("current registration lost 405 rejection: %d", got)
+	}
+	if len(persistence.values) != 0 {
+		t.Fatalf("405 rejection was persisted: %#v", persistence.values)
+	}
+
+	restartedStore := NewPersistentSubscriptionRegistrationStore(persistence)
+	restarted := restartedStore.registered(subscriptionRegistration{
+		identity: identity, contact: "replacement",
+	}, time.Now().Add(time.Hour))
+	if got := restartedStore.rejected(restarted, mwiEventPackage); got != 0 {
+		t.Fatalf("405 rejection survived process replacement: %d", got)
 	}
 }
 
@@ -126,7 +168,7 @@ func TestExplicitDeregistrationClearsPersistedRejections(t *testing.T) {
 	binding := store.registered(subscriptionRegistration{
 		identity: "sim/user", contact: "contact",
 	}, time.Now().Add(time.Hour))
-	store.reject(binding, mwiEventPackage, 405)
+	store.reject(binding, mwiEventPackage, 489)
 	store.deregistered(binding, false)
 	if len(persistence.values) != 0 {
 		t.Fatalf("deregistration left persisted rejections: %#v", persistence.values)

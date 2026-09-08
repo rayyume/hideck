@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -88,6 +89,26 @@ func TestSubscriptionRejectionsSurviveOrdinaryRegisterRefresh(t *testing.T) {
 	}
 	if s.subscriptionLastErr == "" || s.mwiSubscriptionLastErr == "" {
 		t.Fatal("rejection diagnostics erased")
+	}
+}
+
+func TestSubscriptionRejectionExpiryAllowsRetryWithoutServiceRestart(t *testing.T) {
+	service := newSubscriptionLifecycleTestService(t, nil)
+	rejectSubscriptionForTest(t, service, true)
+	service.subscriptionRegistrations.mu.Lock()
+	entry := service.subscriptionRegistrations.identities[service.subscriptionBinding.identity]
+	entry.rejections[mwiEventPackage] = subscriptionRejection{
+		status: 405, expiresAt: time.Now().Add(-time.Second),
+	}
+	service.subscriptionRegistrations.mu.Unlock()
+	service.mu.Lock()
+	due := service.subscriptionDueLocked(true, time.Now())
+	service.mu.Unlock()
+	if !due {
+		t.Fatal("expired rejection did not schedule an automatic MWI retry")
+	}
+	if start, reason := service.prepareSubscriptionStart(true); !start {
+		t.Fatalf("expired rejection still blocked MWI: %s", reason)
 	}
 }
 
@@ -230,5 +251,49 @@ func Test2degreesMWIRejectionDoesNotChangeOnDemandSMSReadiness(t *testing.T) {
 	case err := <-s.RegistrationErrors():
 		t.Fatalf("subscription rejection requested IMS rebuild: %v", err)
 	default:
+	}
+}
+
+func TestSelfRoutedMWI405IsNotPersistedAsNetworkCapability(t *testing.T) {
+	persistence := &memorySubscriptionRejectionStore{
+		values: make(map[string]persistedSubscriptionRejection),
+	}
+	registrations := NewPersistentSubscriptionRegistrationStore(persistence)
+	service := newSubscriptionLifecycleTestService(t, registrations)
+	attempt, err := service.beginSubscriptionAttempt(true, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, requestedExpires, err := service.buildMWISubscription(time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := subscriptionResult{
+		context: attempt, request: request, requestedExpires: requestedExpires,
+	}
+	if err := service.recordMWISubscriptionAttempt(result); err != nil {
+		t.Fatal(err)
+	}
+	service.markSelfRoutedSubscription(request)
+	result.response = &sip.Response{StatusCode: 405, Reason: "Method Not Allowed"}
+	result.err = errors.New("SUBSCRIBE rejected with status 405")
+	if err := service.recordMWISubscriptionResult(result); err == nil {
+		t.Fatal("self-routed rejection was hidden")
+	}
+	if got := registrations.rejected(service.subscriptionBinding, mwiEventPackage); got != 0 {
+		t.Fatalf("self-routed 405 became network rejection: %d", got)
+	}
+	if len(persistence.values) != 0 {
+		t.Fatalf("self-routed 405 was persisted: %#v", persistence.values)
+	}
+	if start, reason := service.prepareSubscriptionStart(true); start || !strings.Contains(reason, "routed back") {
+		t.Fatalf("current context retried self-routed MWI: start=%t reason=%q", start, reason)
+	}
+	service.mu.Lock()
+	service.subscriptionGeneration++
+	service.trackSubscriptionRegistrationLocked(time.Hour)
+	service.mu.Unlock()
+	if start, reason := service.prepareSubscriptionStart(true); !start {
+		t.Fatalf("new registration context retained self-route result: %s", reason)
 	}
 }

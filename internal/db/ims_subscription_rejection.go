@@ -45,6 +45,12 @@ func LoadIMSSubscriptionRejection(
 		err = DB.Delete(&row).Error
 		return 0, time.Time{}, err
 	}
+	if row.StatusCode == 405 {
+		if err := DB.Delete(&row).Error; err != nil {
+			return 0, time.Time{}, err
+		}
+		return 0, time.Time{}, nil
+	}
 	if !validPersistentSubscriptionStatus(row.StatusCode) {
 		return 0, time.Time{}, fmt.Errorf("invalid persisted IMS subscription status %d", row.StatusCode)
 	}
@@ -122,5 +128,5 @@ func normalizeIMSSubscriptionRejectionKey(identity, eventPackage string) (string
 }
 
 func validPersistentSubscriptionStatus(status int) bool {
-	return status == 405 || status == 489
+	return status == 489
 }

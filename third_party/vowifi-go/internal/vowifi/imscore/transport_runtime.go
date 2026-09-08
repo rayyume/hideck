@@ -225,6 +225,7 @@ func (s *Service) dispatchInboundSIPRequest(
 	peer net.Conn,
 ) error {
 	s.logInboundSIPRequest(request)
+	s.markSelfRoutedSubscription(request)
 	s.transport.DeliverRequest(raw)
 	transaction, handled, err := s.acceptServerRequest(request, raw, reply)
 	if handled || err != nil {

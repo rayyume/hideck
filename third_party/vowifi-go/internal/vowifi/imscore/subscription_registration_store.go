@@ -7,9 +7,9 @@ import (
 	"github.com/iniwex5/vowifi-go/internal/vowifi/logging"
 )
 
-// SubscriptionRejectionPersistence stores only explicit, durable event-package
-// rejections. Transport failures and timeouts must never implement this interface
-// as negative capability evidence.
+// SubscriptionRejectionPersistence stores explicit 489 Bad Event responses.
+// Ambiguous 405 responses, transport failures, and timeouts are scoped to the
+// current registration and are not durable negative capability evidence.
 type SubscriptionRejectionPersistence interface {
 	LoadIMSSubscriptionRejection(identity, eventPackage string, now time.Time) (status int, expiresAt time.Time, err error)
 	SaveIMSSubscriptionRejection(identity, eventPackage string, status int, expiresAt time.Time) error
@@ -28,7 +28,12 @@ type SubscriptionRegistrationStore struct {
 type subscriptionRegistrationEntry struct {
 	epoch      uint64
 	bindings   map[string]time.Time
-	rejections map[string]int
+	rejections map[string]subscriptionRejection
+}
+
+type subscriptionRejection struct {
+	status    int
+	expiresAt time.Time
 }
 
 type subscriptionRegistration struct {
@@ -61,7 +66,6 @@ func (store *SubscriptionRegistrationStore) registered(binding subscriptionRegis
 		store.identities[binding.identity] = entry
 	}
 	entry.bindings[binding.contact] = expiresAt
-	store.extendRejectionsLocked(binding.identity, entry, expiresAt)
 	binding.epoch = entry.epoch
 	return binding
 }
@@ -72,12 +76,13 @@ func (store *SubscriptionRegistrationStore) newEntryLocked(
 ) *subscriptionRegistrationEntry {
 	store.nextEpoch++
 	entry := &subscriptionRegistrationEntry{
-		epoch: store.nextEpoch, bindings: make(map[string]time.Time), rejections: make(map[string]int),
+		epoch: store.nextEpoch, bindings: make(map[string]time.Time),
+		rejections: make(map[string]subscriptionRejection),
 	}
 	for _, eventPackage := range []string{registrationEventPackage, mwiEventPackage} {
 		status, expiresAt, err := store.loadRejectionLocked(identity, eventPackage, now)
 		if err == nil && now.Before(expiresAt) && persistentSubscriptionRejection(status) {
-			entry.rejections[eventPackage] = status
+			entry.rejections[eventPackage] = subscriptionRejection{status: status, expiresAt: expiresAt}
 		}
 	}
 	return entry
@@ -120,15 +125,18 @@ func (store *SubscriptionRegistrationStore) reject(
 	eventPackage string,
 	status int,
 ) {
-	if !persistentSubscriptionRejection(status) {
+	if !identityScopedSubscriptionRejection(status) {
 		return
 	}
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	entry := store.activeLocked(binding.identity, time.Now())
 	if entry != nil && entry.epoch == binding.epoch {
-		entry.rejections[eventPackage] = status
-		store.saveRejectionLocked(binding.identity, eventPackage, status, latestBindingExpiry(entry))
+		expiresAt := latestBindingExpiry(entry)
+		entry.rejections[eventPackage] = subscriptionRejection{status: status, expiresAt: expiresAt}
+		if persistentSubscriptionRejection(status) {
+			store.saveRejectionLocked(binding.identity, eventPackage, status, expiresAt)
+		}
 	}
 }
 
@@ -142,7 +150,15 @@ func (store *SubscriptionRegistrationStore) rejected(
 	if entry == nil || entry.epoch != binding.epoch {
 		return 0
 	}
-	return entry.rejections[eventPackage]
+	rejection := entry.rejections[eventPackage]
+	if rejection.status == 0 {
+		return 0
+	}
+	if !time.Now().Before(rejection.expiresAt) {
+		delete(entry.rejections, eventPackage)
+		return 0
+	}
+	return rejection.status
 }
 
 func (store *SubscriptionRegistrationStore) deregistered(binding subscriptionRegistration, all bool) {
@@ -156,16 +172,6 @@ func (store *SubscriptionRegistrationStore) deregistered(binding subscriptionReg
 	if all || len(entry.bindings) == 0 {
 		delete(store.identities, binding.identity)
 		store.deleteRejectionsLocked(binding.identity)
-	}
-}
-
-func (store *SubscriptionRegistrationStore) extendRejectionsLocked(
-	identity string,
-	entry *subscriptionRegistrationEntry,
-	expiresAt time.Time,
-) {
-	for eventPackage, status := range entry.rejections {
-		store.saveRejectionLocked(identity, eventPackage, status, expiresAt)
 	}
 }
 
@@ -204,7 +210,11 @@ func latestBindingExpiry(entry *subscriptionRegistrationEntry) time.Time {
 }
 
 func persistentSubscriptionRejection(status int) bool {
-	return status == 405 || status == 489
+	return status == 489
+}
+
+func identityScopedSubscriptionRejection(status int) bool {
+	return status == 405 || persistentSubscriptionRejection(status)
 }
 
 func subscriptionEventPackage(mwi bool) string {

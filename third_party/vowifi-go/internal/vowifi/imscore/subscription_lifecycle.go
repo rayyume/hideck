@@ -33,6 +33,7 @@ type subscriptionLifecycle struct {
 	notifyVersion   uint64
 	notifications   *subscriptionNotificationQueue
 	usageGeneration uint64
+	selfRouted      bool
 }
 
 type subscriptionAttemptContext struct {

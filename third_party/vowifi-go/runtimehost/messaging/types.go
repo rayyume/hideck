@@ -151,8 +151,8 @@ type DeliveryStore interface {
 	GetSMSDeliveryStatus(messageID string) (*DeliveryStatus, error)
 }
 
-// SubscriptionRejectionStore persists explicit IMS event-package rejections
-// across runtime and process restarts. Expiration follows the associated IMS
+// SubscriptionRejectionStore persists explicit 489 Bad Event responses across
+// runtime and process restarts. Expiration follows the associated IMS
 // registration lifetime so a genuinely new registration may probe again.
 type SubscriptionRejectionStore interface {
 	LoadIMSSubscriptionRejection(identity, eventPackage string, now time.Time) (status int, expiresAt time.Time, err error)
