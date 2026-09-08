@@ -48,6 +48,7 @@ const DebugPanel = defineAsyncComponent(() => import('../components/DebugPanel.v
 
 const { locale, setLocale } = useLocale()
 const localeHint = computed(() => (locale.value === 'en' ? t('locale.switchToZh') : t('locale.switchToEn')))
+const localeMark = computed(() => (locale.value === 'en' ? '中' : 'EN'))
 function toggleLocale() {
   setLocale(nextLocale(locale.value))
 }
@@ -181,7 +182,7 @@ const activeMenuItem = computed(() => menuItems.value.find((item) => item.index 
       <div v-if="effectiveCollapsed" class="sidebar-account-compact">
         <el-tooltip :content="localeHint" placement="right">
           <button type="button" :aria-label="localeHint" @click="toggleLocale">
-            <el-icon><Settings24Regular /></el-icon>
+            <span class="sidebar-locale-mark">{{ localeMark }}</span>
           </button>
         </el-tooltip>
         <el-tooltip :content="t('nav.logout')" placement="right">
@@ -193,7 +194,7 @@ const activeMenuItem = computed(() => menuItems.value.find((item) => item.index 
       <div v-else class="sidebar-account-expanded">
         <div class="sidebar-account flex items-center gap-3">
           <button type="button" class="sidebar-account-icon" :aria-label="localeHint" :title="localeHint" @click="toggleLocale">
-            <el-icon><Settings24Regular /></el-icon>
+            <span class="sidebar-locale-mark">{{ localeMark }}</span>
           </button>
           <div class="flex-1 min-w-0">
             <div class="text-sm font-semibold truncate text-[var(--ui-nav-text)]">{{ t('nav.admin') }}</div>
@@ -232,7 +233,7 @@ const activeMenuItem = computed(() => menuItems.value.find((item) => item.index 
         <div class="absolute bottom-3 w-full px-3">
           <div class="sidebar-account flex items-center gap-3">
             <button type="button" class="sidebar-account-icon" :aria-label="localeHint" :title="localeHint" @click="toggleLocale">
-              <el-icon><Settings24Regular /></el-icon>
+              <span class="sidebar-locale-mark">{{ localeMark }}</span>
             </button>
             <div class="flex-1 min-w-0">
               <div class="text-sm font-semibold truncate text-[var(--ui-nav-text)]">{{ t('nav.admin') }}</div>
@@ -567,6 +568,17 @@ const activeMenuItem = computed(() => menuItems.value.find((item) => item.index 
 .sidebar-account-icon:focus-visible {
   color: var(--ui-nav-active);
   background: color-mix(in srgb, var(--ui-accent) 20%, transparent);
+}
+
+.sidebar-locale-mark {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+
+.sidebar-account-compact .sidebar-locale-mark {
+  font-size: 13px;
 }
 
 .sidebar-account-role {
