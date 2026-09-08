@@ -14,6 +14,7 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 
 	"github.com/iniwex5/vowifi-go/engine/swu"
+	"github.com/iniwex5/vowifi-go/internal/vowifi/ipsec3gpp"
 )
 
 type PacketTransformer interface {
@@ -48,14 +49,17 @@ type BridgeStats = PacketBridgeStats
 type NetworkStats = Stats
 
 type PacketBridge struct {
-	ctx       context.Context
-	cancel    context.CancelFunc
-	link      *channel.Endpoint
-	endpoint  swu.InnerPacketEndpoint
-	mu        sync.RWMutex
-	transform PacketTransformer
-	parent    *Network
-	wg        sync.WaitGroup
+	ctx               context.Context
+	cancel            context.CancelFunc
+	link              *channel.Endpoint
+	endpoint          swu.InnerPacketEndpoint
+	mu                sync.RWMutex
+	transform         PacketTransformer
+	ipsecGeneration   uint64
+	previousIPSec     *ipsec3gpp.TransportDiagnostics
+	protectedUDPPorts map[string]int
+	parent            *Network
+	wg                sync.WaitGroup
 
 	outboundPackets         atomic.Uint64
 	inboundPackets          atomic.Uint64
@@ -122,8 +126,17 @@ func (b *PacketBridge) SetTransformer(transformer PacketTransformer) {
 		return
 	}
 	b.mu.Lock()
+	b.rememberIPSecLocked()
+	b.ipsecGeneration++
 	b.transform = transformer
 	b.mu.Unlock()
+}
+
+func (b *PacketBridge) rememberIPSecLocked() {
+	if transport, ok := b.transform.(*ipsec3gpp.Transport); ok {
+		previous := transport.Diagnostics()
+		b.previousIPSec = &previous
+	}
 }
 
 func (b *PacketBridge) currentTransformer() PacketTransformer {
@@ -195,6 +208,10 @@ func (b *PacketBridge) inboundLoop() {
 func (b *PacketBridge) injectInboundPacket(data []byte) error {
 	if len(data) == 0 {
 		return errors.New("netstack: empty inbound packet")
+	}
+	if b.rejectsPlaintextUDP(data) {
+		b.inboundTransformErrors.Add(1)
+		return errors.New("netstack: unprotected datagram on reserved IMS UDP port")
 	}
 	if transformer := b.currentTransformer(); transformer != nil {
 		var err error

@@ -203,6 +203,7 @@ func (s *Service) closeInitialRegistrationTransport() {
 
 func (s *Service) resetRegistrationTransportForRegistrarRetry() {
 	s.resetPortSRecoveryKnowledge()
+	s.closeProtectedUDP()
 	s.closeInitialRegistrationTransport()
 	s.mu.Lock()
 	server := s.securityServerIO

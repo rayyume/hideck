@@ -33,10 +33,11 @@ func replacementUsingStore(t *testing.T, store *RegistrarPenaltyStore) *Service 
 func TestDownlinkRoundSurvivesReplacementServices(t *testing.T) {
 	first := newRecoveryCompletionTestService(t)
 	startProtectedReplacementForTest(t, first)
-	first.replacementDownlinkWatchFired(expireReplacementWatchForTest(t, first))
-	if len(first.RegistrationErrors()) != 1 {
-		t.Fatal("untried alternate did not trigger replacement")
+	plan, claimed := first.claimReplacementDownlinkRecovery(expireReplacementWatchForTest(t, first))
+	if !claimed || !plan.reuseTunnel || plan.next != "pcscf-b.example:5060" {
+		t.Fatal("untried alternate did not trigger IMS-only replacement")
 	}
+	// An independent tunnel interruption can still replace the service here.
 	second := replacementUsingStore(t, first.registrarPenalties)
 	// Even if B has lower historical preference, A has already been tried.
 	first.registrarPenalties.noteUnverifiedDownlink("pcscf-b.example:5060", time.Now().Add(time.Minute), time.Time{})

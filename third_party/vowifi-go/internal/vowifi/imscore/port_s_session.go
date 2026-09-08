@@ -90,7 +90,9 @@ func (s *Service) recordPortSClosed(conn net.Conn, err error, now time.Time) boo
 	if s == nil || conn == nil {
 		return false
 	}
-	currentRegistrar := s.currentPortSRecoveryRegistrar()
+	// Order close evidence against accepted UDP requests and failover commits.
+	s.mu.Lock()
+	currentRegistrar := strings.TrimSpace(s.registrar)
 	s.portSSessionMu.Lock()
 	connection, tracked := s.portSSession.connections[conn]
 	delete(s.portSSession.connections, conn)
@@ -109,6 +111,9 @@ func (s *Service) recordPortSClosed(conn net.Conn, err error, now time.Time) boo
 		(connection.generation == s.portSSession.generation ||
 			(kind != portSCloseLocal && !s.hasLivePortSConnectionLocked(currentRegistrar)))
 	if current {
+		if kind != portSCloseLocal {
+			s.udpDownlinkProven.Store(false)
+		}
 		s.portSSession.closedAt = now
 		s.portSSession.lastCloseKind = kind
 		s.portSSession.lastCloseReason = errorText(err)
@@ -122,6 +127,7 @@ func (s *Service) recordPortSClosed(conn net.Conn, err error, now time.Time) boo
 	generation := connection.generation
 	lastInboundAt := s.portSSession.lastInboundAt
 	s.portSSessionMu.Unlock()
+	s.mu.Unlock()
 	logging.Info("IMS port-s lifecycle",
 		"device", s.DeviceID(), "event", "closed", "generation", generation,
 		"pcscf", registrar, "inner_ip", s.cfg.LocalAddr,

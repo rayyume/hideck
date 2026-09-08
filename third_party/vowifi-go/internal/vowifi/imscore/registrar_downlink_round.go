@@ -21,9 +21,10 @@ type downlinkRoundInput struct {
 }
 
 type downlinkRoundPlan struct {
-	next    string
-	retryAt time.Time
-	round   uint32
+	next        string
+	retryAt     time.Time
+	round       uint32
+	reuseTunnel bool
 }
 
 func (store *RegistrarPenaltyStore) noteDownlinkAttempt(registrar string) uint64 {

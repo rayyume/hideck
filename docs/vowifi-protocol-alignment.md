@@ -100,6 +100,15 @@
 
 回归入口：`registrar_selection_test.go`、`registrar_recovery_completion_test.go`、`registrar_downlink_watch_test.go`、`registrar_downlink_round_test.go`、`registrar_downlink_round_state_test.go`、`downlink_evidence_test.go`、`pcscf_recovery_handoff_test.go`、`pcscf_recovery_test.go`、`port_s_session_test.go`、`port_s_timeout_recovery_test.go`、`gvisor_tcp_errors_test.go`、`runtimecore_test.go`。退避参考：[RFC 5626 §4.5](https://www.rfc-editor.org/rfc/rfc5626.html#section-4.5)。30 分钟偏好与 VOXI 下行验证仍属于实现策略，不应写成协议规定的黑名单期限。
 
+## 受保护 UDP 下行与分层恢复
+
+- Vodafone UK/VOXI 的替代注册下行验证超时后，若注册传输仍可用且本轮还有另一合格 P-CSCF，只替换 IMS 连接、监听器及 IMS 安全关联，复用现有 ePDG 隧道与 inner IP。注册传输失效、下一轮仅有原节点需要重新发现，以及替代注册实际失败，仍保留已有 runtime 恢复路径；候选遍历、节点退避与 Retry-After 不重置。此调整不改变普通 EOF、2degrees 按需 port-s、VOXI 明确 RST 的 5 秒宽限及 488 恢复策略。
+- 受保护端口同时预留 TCP/UDP，防止初始 REGISTER 的 UDP socket 占用通告的 port-c/port-s。仅 IPsec 协商成功后启动 UDP 接收：从协商的 P-CSCF port-c 接收，在本地 port-c 向 P-CSCF port-s 返回 SIP 响应和独立 RP 报告；RP 报告的 Via/传输声明与实际 UDP 路径一致。沿用 SIP 事务和短信去重。参见 [TS 24.229 §3.1、§5.1.1.2.2](https://www.etsi.org/deliver/etsi_ts/124200_124299/124229/18.10.00_60/ts_124229v181000p.pdf)。
+- UDP 端口的明文过滤在绑定前安装，覆盖初始分片，不能让预鉴权排队数据绕过安全校验；未知 SPI、完整性失败、重放和不匹配的 UDP 安全关联选择器仍被拒绝。网络适配器通过 `ListenProtectedUDP` 提供该保障；不能提供保障时不启动受保护 UDP 并显式报错，不降级为明文接收。禁用 IPsec 的原有明文模式不受此扩展影响。
+- 有效 UDP 下行请求同样可证明当前代次的下行已可用；仅绑定 UDP 端口或收到 REGISTER 响应不算证明。关闭、替换、超时切换提交与下行证据按代次隔离；退役 socket 的迟到数据或错误不可验证、破坏新路径。
+- `ipsec_generation`、`previous_ipsec` 和 `last_unknown_inbound` 记录当前/上一套安全关联的标识及最后一个未知 ESP 包的来源、目标、SPI、序号和时间；跨 runtime 可通过 `IMS security association identifiers` 日志关联。未知 SPI 的头部只是未验证观测，不代表短信到达。诊断不保存密钥或短信正文，安装失败保留原有安全关联，成功安装原子替换。
+- 回归入口：`protected_udp_test.go`、`registrar_downlink_tunnel_test.go`、`udp_security_test.go`、`ipsec_lifecycle_test.go`。本次没有真卡部署验收，不能据此认定本次 VOXI 故障一定由 UDP 或旧 SPI 引起。
+
 ## 验证边界
 
 下行资源生命周期回归：`port_s_listener_test.go`、`downlink_transport_failure_test.go`、`registrar_downlink_round_state_test.go`、`ipsec_lifecycle_test.go`。当前监听器异常会显式触发恢复，退役监听器与旧 IPsec 清理回调不得破坏新路径；监听器清理与 REGISTER 并发完成、持有注册锁时关闭接收器均有回归覆盖。取消失效连接的被动观察等待不清除真实节点退避，也不能取消重叠重鉴权中新尝试拥有的等待。握手诊断回归：`transport_diagnostics_test.go`、`diagnostics_test.go`、`network_diagnostics_test.go`，覆盖 IPv4/IPv6、双安全流、解密/重放拒绝、写出失败及适配层透传。诊断不改变 SIP/IPsec 报文，不以生成 SYN-ACK 或 REGISTER 200 代替短信接收验收；这些修复不等于已定位运营商侧没有下行的根因。

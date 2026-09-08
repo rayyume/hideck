@@ -74,7 +74,7 @@ func (s *Service) consumePortSTimeoutFailoverLocked(registrar string, generation
 	defer s.portSSessionMu.Unlock()
 	state := s.portSSession.timeoutRecovery
 	if state.registrar != registrar || state.generation != generation ||
-		!state.validationFailed || state.downlinkProven || s.portSPushReady.Load() ||
+		!state.validationFailed || state.downlinkProven || s.udpDownlinkProven.Load() || s.portSPushReady.Load() ||
 		s.portSSession.generation != generation || s.portSSession.lastCloseKind != portSCloseTimeout {
 		return false
 	}
@@ -91,6 +91,9 @@ func (s *Service) clearPortSTimeoutRecovery() portSTimeoutRecoveryState {
 }
 
 func (s *Service) portSTimeoutDownlinkProven() bool {
+	if s.udpDownlinkProven.Load() {
+		return true
+	}
 	s.portSSessionMu.Lock()
 	defer s.portSSessionMu.Unlock()
 	return s.portSSession.timeoutRecovery.downlinkProven
@@ -110,6 +113,9 @@ func (s *Service) confirmPortSTimeoutDownlinkLocked(peer net.Conn) bool {
 	connection, tracked := s.portSSession.connections[peer]
 	current := (peer == s.registrationTCP && s.registrationTCPProtected) ||
 		(tracked && !connection.localClosing && connection.registrar == s.registrar)
+	if datagram, ok := peer.(*protectedUDPPeer); ok {
+		current = s.currentProtectedUDPPeerLocked(datagram)
+	}
 	proven := state.registrar != "" && !state.downlinkProven &&
 		state.registrar == strings.TrimSpace(s.registrar) && current && !s.stopped()
 	if proven {

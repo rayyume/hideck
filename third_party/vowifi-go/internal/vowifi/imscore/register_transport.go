@@ -74,7 +74,13 @@ func (s *Service) reserveProtectedTCPPorts() (net.Listener, net.Listener, error)
 		_ = server.Close()
 		return nil, nil, fmt.Errorf("imscore: reserve protected client port: %w", err)
 	}
-	return server, client, nil
+	reserved, err := s.reserveProtectedUDPPorts(server, client)
+	if err != nil {
+		_ = server.Close()
+		_ = client.Close()
+		return nil, nil, err
+	}
+	return reserved, client, nil
 }
 
 func tcpPort(address net.Addr) int {
@@ -538,6 +544,7 @@ func (s *Service) resetPortSRecoveryKnowledge() {
 	s.mu.Lock()
 	s.downlinkGeneration++
 	s.downlinkRequests = 0
+	s.udpDownlinkProven.Store(false)
 	s.cancelReplacementDownlinkWatchLocked()
 	s.mu.Unlock()
 	s.resetPortSRecoveryBackoff()
