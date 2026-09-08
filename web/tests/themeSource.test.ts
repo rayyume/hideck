@@ -210,6 +210,8 @@ test('login, logs, and AT terminal no longer leak the old teal palette', () => {
   assert.doesNotMatch(login, /login-landing|WorkspacePreviewCard|信号日历|选择模组/)
   assert.doesNotMatch(login, /linear-gradient\(145deg, var\(--ui-nav\)/)
   assert.match(logs, /background: var\(--ui-console\);/)
+  assert.match(logs, /\.log-console-header strong \{\s*color: var\(--ui-console-text\);/)
+  assert.match(logs, /\.log-console-header span \{\s*color: var\(--ui-console-muted\);/)
   assert.match(atTerminal, /background: var\(--ui-console\);/)
   assert.match(shell, /background: var\(--ui-nav-surface\);/)
   assert.doesNotMatch(shell, /text-white/)
