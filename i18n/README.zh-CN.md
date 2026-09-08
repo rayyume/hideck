@@ -4,14 +4,14 @@
 
 **面向高通 4G / LTE / 5G 模组的自托管控制台**
 
-[English](README.md) · **简体中文** · [日本語](README.ja.md) · [한국어](README.ko.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português](README.pt-BR.md) · [Русский](README.ru.md)
+[English](../README.md) · **简体中文** · [日本語](README.ja.md) · [한국어](README.ko.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português](README.pt-BR.md) · [Русский](README.ru.md)
 
 <p>
   <a href="https://github.com/yibaiba/hideck/releases/latest"><img src="https://img.shields.io/github/v/release/yibaiba/hideck" alt="Release"></a>
   <a href="https://hub.docker.com/r/yibaiba/hideck"><img src="https://img.shields.io/badge/docker-yibaiba%2Fhideck-2496ED?logo=docker&logoColor=white" alt="Docker"></a>
-  <a href="go.mod"><img src="https://img.shields.io/badge/Go-1.26.4%2B-00ADD8?logo=go" alt="Go"></a>
-  <a href="web/package.json"><img src="https://img.shields.io/badge/Vue-3-42b883?logo=vue.js" alt="Vue 3"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/static/v1?label=License&message=PolyForm%20NC%201.0.0&color=blue" alt="License: PolyForm Noncommercial 1.0.0"></a>
+  <a href="../go.mod"><img src="https://img.shields.io/badge/Go-1.26.4%2B-00ADD8?logo=go" alt="Go"></a>
+  <a href="../web/package.json"><img src="https://img.shields.io/badge/Vue-3-42b883?logo=vue.js" alt="Vue 3"></a>
+  <a href="../LICENSE"><img src="https://img.shields.io/static/v1?label=License&message=PolyForm%20NC%201.0.0&color=blue" alt="License: PolyForm Noncommercial 1.0.0"></a>
 </p>
 
 </div>
@@ -35,7 +35,7 @@
 - **eSIM** — 下载、启用、停用、重命名、删除；激活码或二维码 / PDF
 - **自动任务与通知** — 按计划执行；Telegram、邮件、Bark、飞书、企微、微信、QQ
 
-协议说明：[VoWiFi](docs/vowifi-protocol-alignment.md) · [VoLTE](docs/volte-native.md) · [运营商](docs/operator-notes.md) · [硬件](docs/modem-hardware.md)
+协议说明：[VoWiFi](../docs/vowifi-protocol-alignment.md) · [VoLTE](../docs/volte-native.md) · [运营商](../docs/operator-notes.md) · [硬件](../docs/modem-hardware.md)
 
 ## 快速开始
 
@@ -59,7 +59,7 @@ curl -fsSL https://raw.githubusercontent.com/yibaiba/hideck/main/deploy.sh | \
   HIDECK_DIR=/opt/hideck sh
 ```
 
-镜像：`yibaiba/hideck:latest`。Compose 使用 `network_mode: host`、`privileged: true`、`/dev`，数据在 `config/`、`data/`、`logs/`。见 [DOCKERHUB.md](DOCKERHUB.md) 和 [HTTPS / WebRTC](docs/https-webrtc.md)。
+镜像：`yibaiba/hideck:latest`。Compose 使用 `network_mode: host`、`privileged: true`、`/dev`，数据在 `config/`、`data/`、`logs/`。见 [DOCKERHUB.md](../DOCKERHUB.md) 和 [HTTPS / WebRTC](../docs/https-webrtc.md)。
 
 ```bash
 docker compose ps
@@ -68,17 +68,17 @@ docker compose logs -f hideck
 
 ## 截图
 
-![登录](docs/images/login.jpg)
+![登录](../docs/images/login.jpg)
 
-![仪表盘](docs/images/dashboard.jpg)
+![仪表盘](../docs/images/dashboard.jpg)
 
 | 设备 | 电话 |
 | --- | --- |
-| ![设备](docs/images/devices.jpg) | ![电话](docs/images/phone.jpg) |
+| ![设备](../docs/images/devices.jpg) | ![电话](../docs/images/phone.jpg) |
 
 | 命令 | 代理 |
 | --- | --- |
-| ![命令](docs/images/commands.jpg) | ![代理](docs/images/console-proxy.jpg) |
+| ![命令](../docs/images/commands.jpg) | ![代理](../docs/images/console-proxy.jpg) |
 
 ## 二进制
 
@@ -102,11 +102,11 @@ curl -fsSL https://raw.githubusercontent.com/yibaiba/hideck/main/deploy-binary.s
 | `hideck_v2.1.15_openwrt_arm64` | OpenWrt aarch64 |
 | `hideck_v2.1.15_openwrt_armv7` | OpenWrt 32 位 ARM |
 
-OpenWrt 只用 `openwrt_*`。见 [packaging/openwrt/README.md](packaging/openwrt/README.md)。
+OpenWrt 只用 `openwrt_*`。见 [packaging/openwrt/README.md](../packaging/openwrt/README.md)。
 
 ## 配置
 
-复制 [config/config.example.yaml](config/config.example.yaml) 为 `config/config.yaml`。
+复制 [config/config.example.yaml](../config/config.example.yaml) 为 `config/config.yaml`。
 
 | 项 | 默认 | 说明 |
 | --- | --- | --- |
@@ -147,6 +147,6 @@ go test -timeout=60s ./cmd/... ./internal/... ./pkg/...
 
 仅供个人学习、研究和测试，不是生产话务平台。与 Quectel、高通、运营商无官方关系。遵守当地法律和运营商条款。
 
-[PolyForm Noncommercial 1.0.0](LICENSE)。`third_party/vowifi-go` 为 AGPL-3.0。分发二进制或镜像前阅读 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+[PolyForm Noncommercial 1.0.0](../LICENSE)。`third_party/vowifi-go` 为 AGPL-3.0。分发二进制或镜像前阅读 [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)。
 
 感谢：[LINUX DO](https://linux.do/) · [iniwex5/vohive-release](https://github.com/iniwex5/vohive-release) · [boa-z/vowifi-go](https://github.com/boa-z/vowifi-go)

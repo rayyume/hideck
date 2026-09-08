@@ -4,14 +4,14 @@
 
 **Consola autoalojada para módems Qualcomm 4G / LTE / 5G**
 
-[English](README.md) · [简体中文](README.zh-CN.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · **Español** · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português](README.pt-BR.md) · [Русский](README.ru.md)
+[English](../README.md) · [简体中文](README.zh-CN.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · **Español** · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português](README.pt-BR.md) · [Русский](README.ru.md)
 
 <p>
   <a href="https://github.com/yibaiba/hideck/releases/latest"><img src="https://img.shields.io/github/v/release/yibaiba/hideck" alt="Release"></a>
   <a href="https://hub.docker.com/r/yibaiba/hideck"><img src="https://img.shields.io/badge/docker-yibaiba%2Fhideck-2496ED?logo=docker&logoColor=white" alt="Docker"></a>
-  <a href="go.mod"><img src="https://img.shields.io/badge/Go-1.26.4%2B-00ADD8?logo=go" alt="Go"></a>
-  <a href="web/package.json"><img src="https://img.shields.io/badge/Vue-3-42b883?logo=vue.js" alt="Vue 3"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/static/v1?label=License&message=PolyForm%20NC%201.0.0&color=blue" alt="License: PolyForm Noncommercial 1.0.0"></a>
+  <a href="../go.mod"><img src="https://img.shields.io/badge/Go-1.26.4%2B-00ADD8?logo=go" alt="Go"></a>
+  <a href="../web/package.json"><img src="https://img.shields.io/badge/Vue-3-42b883?logo=vue.js" alt="Vue 3"></a>
+  <a href="../LICENSE"><img src="https://img.shields.io/static/v1?label=License&message=PolyForm%20NC%201.0.0&color=blue" alt="License: PolyForm Noncommercial 1.0.0"></a>
 </p>
 
 </div>
@@ -35,7 +35,7 @@ Gestiona módems USB, proxy celular, SMS, WiFi calling / voz IMS, eSIM y tareas 
 - **eSIM** — descargar, activar, desactivar, renombrar, borrar; código de activación o QR / PDF
 - **Automatización y avisos** — tareas programadas; Telegram, correo, Bark, Feishu, WeCom, WeChat, QQ
 
-Notas de protocolo: [VoWiFi](docs/vowifi-protocol-alignment.md) · [VoLTE](docs/volte-native.md) · [operadores](docs/operator-notes.md) · [hardware](docs/modem-hardware.md)
+Notas de protocolo: [VoWiFi](../docs/vowifi-protocol-alignment.md) · [VoLTE](../docs/volte-native.md) · [operadores](../docs/operator-notes.md) · [hardware](../docs/modem-hardware.md)
 
 ## Inicio rápido
 
@@ -59,7 +59,7 @@ curl -fsSL https://raw.githubusercontent.com/yibaiba/hideck/main/deploy.sh | \
   HIDECK_DIR=/opt/hideck sh
 ```
 
-Imagen: `yibaiba/hideck:latest`. Compose usa `network_mode: host`, `privileged: true`, `/dev`, y persiste `config/`, `data/`, `logs/`. Ver [DOCKERHUB.md](DOCKERHUB.md) y [HTTPS / WebRTC](docs/https-webrtc.md).
+Imagen: `yibaiba/hideck:latest`. Compose usa `network_mode: host`, `privileged: true`, `/dev`, y persiste `config/`, `data/`, `logs/`. Ver [DOCKERHUB.md](../DOCKERHUB.md) y [HTTPS / WebRTC](../docs/https-webrtc.md).
 
 ```bash
 docker compose ps
@@ -68,17 +68,17 @@ docker compose logs -f hideck
 
 ## Capturas
 
-![Inicio de sesión](docs/images/login.jpg)
+![Inicio de sesión](../docs/images/login.jpg)
 
-![Panel](docs/images/dashboard.jpg)
+![Panel](../docs/images/dashboard.jpg)
 
 | Dispositivos | Teléfono |
 | --- | --- |
-| ![Dispositivos](docs/images/devices.jpg) | ![Teléfono](docs/images/phone.jpg) |
+| ![Dispositivos](../docs/images/devices.jpg) | ![Teléfono](../docs/images/phone.jpg) |
 
 | Comandos | Proxy |
 | --- | --- |
-| ![Comandos](docs/images/commands.jpg) | ![Proxy](docs/images/console-proxy.jpg) |
+| ![Comandos](../docs/images/commands.jpg) | ![Proxy](../docs/images/console-proxy.jpg) |
 
 ## Instalación binaria
 
@@ -102,11 +102,11 @@ curl -fsSL https://raw.githubusercontent.com/yibaiba/hideck/main/deploy-binary.s
 | `hideck_v2.1.15_openwrt_arm64` | OpenWrt aarch64 |
 | `hideck_v2.1.15_openwrt_armv7` | OpenWrt ARM 32-bit |
 
-En OpenWrt usa solo `openwrt_*`. Ver [packaging/openwrt/README.md](packaging/openwrt/README.md).
+En OpenWrt usa solo `openwrt_*`. Ver [packaging/openwrt/README.md](../packaging/openwrt/README.md).
 
 ## Configuración
 
-Copia [config/config.example.yaml](config/config.example.yaml) a `config/config.yaml`.
+Copia [config/config.example.yaml](../config/config.example.yaml) a `config/config.yaml`.
 
 | Clave | Por defecto | Notas |
 | --- | --- | --- |
@@ -147,6 +147,6 @@ Proxy de desarrollo: `VITE_API_PROXY_TARGET=http://127.0.0.1:7575` en `web/.env.
 
 Aprendizaje, investigación y pruebas personales. No es una centralita de producción. Independiente de Quectel, Qualcomm y los operadores. Cumple la ley local y las condiciones de tu operador.
 
-[PolyForm Noncommercial 1.0.0](LICENSE). `third_party/vowifi-go` es AGPL-3.0. Lee [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) antes de distribuir binarios o imágenes.
+[PolyForm Noncommercial 1.0.0](../LICENSE). `third_party/vowifi-go` es AGPL-3.0. Lee [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) antes de distribuir binarios o imágenes.
 
 Thanks: [LINUX DO](https://linux.do/) · [iniwex5/vohive-release](https://github.com/iniwex5/vohive-release) · [boa-z/vowifi-go](https://github.com/boa-z/vowifi-go)
