@@ -80,6 +80,10 @@ func TestOverviewStreamEmitVersionTracksRuntimeBusinessState(t *testing.T) {
 			item: deviceMgmtOverviewLiteItem{VoWiFiActive: true, VoWiFiRuntime: &voWiFiRuntimeDTO{Phase: "registering", TunnelReady: true, SMSReady: true}},
 		},
 		{
+			name: "sms mo changed",
+			item: deviceMgmtOverviewLiteItem{VoWiFiActive: true, VoWiFiRuntime: &voWiFiRuntimeDTO{Phase: "registering", TunnelReady: true, SMSMOReady: true}},
+		},
+		{
 			name: "last error class changed",
 			item: deviceMgmtOverviewLiteItem{VoWiFiActive: true, VoWiFiRuntime: &voWiFiRuntimeDTO{Phase: "registering", TunnelReady: true, LastErrorClass: "ims_register_failed"}},
 		},

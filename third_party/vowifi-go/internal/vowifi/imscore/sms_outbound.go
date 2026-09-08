@@ -84,7 +84,7 @@ func (s *Service) prepareSendEnv(
 		return nil, errors.New("imscore: service not configured")
 	}
 	readiness := s.SMSReadiness()
-	if !readiness.Ready {
+	if !readiness.MOReady {
 		return nil, fmt.Errorf("imscore: %w: %s", smsdelivery.ErrSMSNotReady, readiness.Reason)
 	}
 	destination, err := parseSMSDestination(to)
