@@ -65,6 +65,7 @@ export type VoWiFiRuntimeState = {
   tunnel_ready?: boolean
   ims_ready?: boolean
   sms_ready?: boolean
+  sms_mo_ready?: boolean
   sms_ready_reason?: string
   reg_status?: number
   reg_status_text?: string
