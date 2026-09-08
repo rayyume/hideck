@@ -11,6 +11,14 @@ import (
 // ResolveUDPAddrAll resolves the legacy host:port input and returns both the
 // preferred endpoint and every distinct address for IKE failover.
 func ResolveUDPAddrAll(addr, dnsServer string) (*net.UDPAddr, []net.IP, error) {
+	return ResolveUDPAddrAllContext(context.Background(), addr, dnsServer)
+}
+
+// ResolveUDPAddrAllContext lets a canceled runtime stop staged DNS resolution.
+func ResolveUDPAddrAllContext(ctx context.Context, addr, dnsServer string) (*net.UDPAddr, []net.IP, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
 	host, portName, err := net.SplitHostPort(strings.TrimSpace(addr))
 	if err != nil {
 		return nil, nil, err
@@ -23,7 +31,7 @@ func ResolveUDPAddrAll(addr, dnsServer string) (*net.UDPAddr, []net.IP, error) {
 		ip = ipv4Compat(ip)
 		return &net.UDPAddr{IP: ip, Port: port}, []net.IP{ip}, nil
 	}
-	ips, err := vowifidns.LookupHostIPStaged(context.Background(), host, dnsServer)
+	ips, err := vowifidns.LookupHostIPStaged(ctx, host, dnsServer)
 	if err != nil {
 		return nil, nil, err
 	}

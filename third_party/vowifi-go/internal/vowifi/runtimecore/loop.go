@@ -33,7 +33,9 @@ func RunLoop(
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return ctxErr
 		}
-		if errors.Is(err, context.Canceled) {
+		// A rejected candidate may cancel its own Delete exchange. The parent
+		// context above owns stopping the runtime; cleanup cannot hide Notify 36.
+		if errors.Is(err, context.Canceled) && !isIKEAddressFailure(err) {
 			return err
 		}
 		if isTerminalRuntimeError(err) {
@@ -64,6 +66,15 @@ func retryDecision(err error, attempt int, delayFn func(int) int64) (int64, int)
 	redirect, ok := err.(*ErrRedirect)
 	if ok {
 		return redirect.Delay, 0
+	}
+	if delay, addressFailure := ikeAddressRetryDelay(err); addressFailure {
+		if scheduled, ok := retryDelayUntil(err, time.Now()); ok {
+			delay = max(delay, scheduled)
+		}
+		if delayFn != nil {
+			delay = max(delay, delayFn(attempt))
+		}
+		return delay, attempt + 1
 	}
 	if delay, scheduled := retryDelayUntil(err, time.Now()); scheduled {
 		return delay, 0

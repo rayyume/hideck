@@ -61,6 +61,7 @@ func (s *Service) detachDeadSignaling(err error, expectedPacket net.PacketConn) 
 	}
 	packet := s.registrationIO
 	stream := s.registrationTCP
+	s.abandonReplacementDownlinkWaitLocked()
 	s.registrationIO = nil
 	s.registrationTCP = nil
 	s.registrationTCPProtected = false

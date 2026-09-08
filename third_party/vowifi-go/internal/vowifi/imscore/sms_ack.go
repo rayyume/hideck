@@ -86,6 +86,7 @@ func (s *Service) sendRPReport(report rpReportRequest) error {
 		s.mtAckSendErr.Add(1)
 		return resolveErr
 	}
+	request = rpReportForTransport(request, modeCtx)
 	traceID := common.NewTraceID()
 	audit := mtAckAudit{
 		traceID: traceID, target: request.Recipient.String(), destination: destinationFromContext(modeCtx),
@@ -114,6 +115,21 @@ func (s *Service) sendRPReport(report rpReportRequest) error {
 	s.mtAckSendOK.Add(1)
 	s.recordMTAckAudit(audit, nil)
 	return nil
+}
+
+func rpReportForTransport(request *sip.Request, mode outboundModeContext) *sip.Request {
+	if !mode.InboundPeer || mode.Mode != "udp" {
+		return request
+	}
+	request = request.Clone()
+	request.SetTransport("UDP")
+	if via := request.Via(); via != nil {
+		via.Transport, via.Host, via.Port = "UDP", mode.LocalIP, mode.LocalPortS
+	}
+	if contact := request.Contact(); contact != nil {
+		contact.Address.UriParams.Add("transport", "udp")
+	}
+	return request
 }
 
 func rpReportTransactionError(status int, dispatchErr error) error {

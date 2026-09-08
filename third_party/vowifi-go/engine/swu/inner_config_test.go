@@ -140,4 +140,7 @@ func TestIKEAuthenticationErrorReportsAddressFailure(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "INTERNAL_ADDRESS_FAILURE (36)") {
 		t.Fatalf("ikeAuthenticationError = %v", err)
 	}
+	if rejection, ok := err.(*IKEAuthError); !ok || rejection.NotifyType != ikev2.INTERNAL_ADDRESS_FAILURE {
+		t.Fatalf("IKE_AUTH Notify lost its type: %T %v", err, err)
+	}
 }

@@ -14,6 +14,7 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 
 	"github.com/iniwex5/vowifi-go/engine/swu"
+	"github.com/iniwex5/vowifi-go/internal/vowifi/ipsec3gpp"
 )
 
 type PacketTransformer interface {
@@ -22,10 +23,15 @@ type PacketTransformer interface {
 }
 
 type PacketBridgeStats struct {
-	OutboundPackets uint64
-	InboundPackets  uint64
-	OutboundErrors  uint64
-	InboundErrors   uint64
+	OutboundPackets         uint64
+	InboundPackets          uint64
+	OutboundErrors          uint64
+	InboundErrors           uint64
+	InboundReadPackets      uint64
+	InboundReadErrors       uint64
+	InboundTransformErrors  uint64
+	OutboundTransformErrors uint64
+	OutboundWriteErrors     uint64
 }
 
 type Stats struct {
@@ -43,19 +49,27 @@ type BridgeStats = PacketBridgeStats
 type NetworkStats = Stats
 
 type PacketBridge struct {
-	ctx       context.Context
-	cancel    context.CancelFunc
-	link      *channel.Endpoint
-	endpoint  swu.InnerPacketEndpoint
-	mu        sync.RWMutex
-	transform PacketTransformer
-	parent    *Network
-	wg        sync.WaitGroup
+	ctx               context.Context
+	cancel            context.CancelFunc
+	link              *channel.Endpoint
+	endpoint          swu.InnerPacketEndpoint
+	mu                sync.RWMutex
+	transform         PacketTransformer
+	ipsecGeneration   uint64
+	previousIPSec     *ipsec3gpp.TransportDiagnostics
+	protectedUDPPorts map[string]int
+	parent            *Network
+	wg                sync.WaitGroup
 
-	outboundPackets atomic.Uint64
-	inboundPackets  atomic.Uint64
-	outboundErrors  atomic.Uint64
-	inboundErrors   atomic.Uint64
+	outboundPackets         atomic.Uint64
+	inboundPackets          atomic.Uint64
+	outboundErrors          atomic.Uint64
+	inboundErrors           atomic.Uint64
+	inboundReadPackets      atomic.Uint64
+	inboundReadErrors       atomic.Uint64
+	inboundTransformErrors  atomic.Uint64
+	outboundTransformErrors atomic.Uint64
+	outboundWriteErrors     atomic.Uint64
 }
 
 func NewPacketBridge(
@@ -95,10 +109,15 @@ func (b *PacketBridge) Stats() PacketBridgeStats {
 		return PacketBridgeStats{}
 	}
 	return PacketBridgeStats{
-		OutboundPackets: b.outboundPackets.Load(),
-		InboundPackets:  b.inboundPackets.Load(),
-		OutboundErrors:  b.outboundErrors.Load(),
-		InboundErrors:   b.inboundErrors.Load(),
+		OutboundPackets:         b.outboundPackets.Load(),
+		InboundPackets:          b.inboundPackets.Load(),
+		OutboundErrors:          b.outboundErrors.Load(),
+		InboundErrors:           b.inboundErrors.Load(),
+		InboundReadPackets:      b.inboundReadPackets.Load(),
+		InboundReadErrors:       b.inboundReadErrors.Load(),
+		InboundTransformErrors:  b.inboundTransformErrors.Load(),
+		OutboundTransformErrors: b.outboundTransformErrors.Load(),
+		OutboundWriteErrors:     b.outboundWriteErrors.Load(),
 	}
 }
 
@@ -107,8 +126,17 @@ func (b *PacketBridge) SetTransformer(transformer PacketTransformer) {
 		return
 	}
 	b.mu.Lock()
+	b.rememberIPSecLocked()
+	b.ipsecGeneration++
 	b.transform = transformer
 	b.mu.Unlock()
+}
+
+func (b *PacketBridge) rememberIPSecLocked() {
+	if transport, ok := b.transform.(*ipsec3gpp.Transport); ok {
+		previous := transport.Diagnostics()
+		b.previousIPSec = &previous
+	}
 }
 
 func (b *PacketBridge) currentTransformer() PacketTransformer {
@@ -142,10 +170,12 @@ func (b *PacketBridge) writeOutboundPacket(packet *stack.PacketBuffer) error {
 		var err error
 		data, _, err = transformer.TransformOutbound(data)
 		if err != nil {
+			b.outboundTransformErrors.Add(1)
 			return err
 		}
 	}
 	if err := b.endpoint.WritePacket(b.ctx, data); err != nil {
+		b.outboundWriteErrors.Add(1)
 		return err
 	}
 	b.outboundPackets.Add(1)
@@ -165,8 +195,10 @@ func (b *PacketBridge) inboundLoop() {
 				return
 			}
 			b.inboundErrors.Add(1)
+			b.inboundReadErrors.Add(1)
 			continue
 		}
+		b.inboundReadPackets.Add(1)
 		if err := b.injectInboundPacket(packet); err != nil {
 			b.inboundErrors.Add(1)
 		}
@@ -177,10 +209,15 @@ func (b *PacketBridge) injectInboundPacket(data []byte) error {
 	if len(data) == 0 {
 		return errors.New("netstack: empty inbound packet")
 	}
+	if b.rejectsPlaintextUDP(data) {
+		b.inboundTransformErrors.Add(1)
+		return errors.New("netstack: unprotected datagram on reserved IMS UDP port")
+	}
 	if transformer := b.currentTransformer(); transformer != nil {
 		var err error
 		data, _, err = transformer.TransformInbound(data)
 		if err != nil {
+			b.inboundTransformErrors.Add(1)
 			return err
 		}
 	}

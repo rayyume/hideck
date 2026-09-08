@@ -194,6 +194,7 @@ func (s *Service) registerLocked(ctx context.Context) error {
 		"protected_tcp", protectedTCP,
 		"sec_agree", secAgree,
 		"public_id", loggablePublicID(publicID))
+	s.logDownlinkDiagnostics("registered")
 	s.transitionRegStatus(registrationRegistered)
 	s.regFailCount.Store(0)
 	s.reRegisterPending.Store(false)

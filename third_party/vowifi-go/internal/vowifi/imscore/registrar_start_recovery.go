@@ -58,5 +58,8 @@ func (s *Service) scheduleInitialRecoveryFailure(err error) error {
 	if _, available := preferredRegistrarIndex(candidates, 0, states); !available {
 		retryAt = earliestRegistrarAvailability(candidates, states)
 	}
+	if plan := s.planDownlinkRound(candidates, ""); !plan.retryAt.IsZero() {
+		retryAt = plan.retryAt
+	}
 	return &registrarRecoveryRetryError{err: err, retryAt: retryAt}
 }

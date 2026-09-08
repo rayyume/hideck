@@ -10,9 +10,10 @@ import (
 )
 
 type transportFlow struct {
-	flow   Flow
-	sa     *engineipsec.SecurityAssociation
-	replay *ReplayWindow
+	flow        Flow
+	sa          *engineipsec.SecurityAssociation
+	replay      *ReplayWindow
+	diagnostics *flowPacketCounters
 }
 
 type Transport struct {
@@ -23,6 +24,8 @@ type Transport struct {
 	inboundPackets     atomic.Uint64
 	passthroughPackets atomic.Uint64
 	transformErrors    atomic.Uint64
+	unknownInboundSPI  atomic.Uint64
+	lastUnknownInbound atomic.Pointer[UnknownESPDiagnostic]
 }
 
 type TransportStats struct {
@@ -72,7 +75,7 @@ func newTransportFlow(flow Flow, inbound bool) (transportFlow, error) {
 	if err != nil {
 		return transportFlow{}, err
 	}
-	result := transportFlow{flow: cloneFlow(flow), sa: sa}
+	result := transportFlow{flow: cloneFlow(flow), sa: sa, diagnostics: &flowPacketCounters{}}
 	if inbound {
 		result.replay = NewReplayWindow(32)
 	}
@@ -145,6 +148,7 @@ func (transport *Transport) TransformOutbound(packet []byte) ([]byte, bool, erro
 	}
 	espPayload, err := engineipsec.EncapsulateWithNextHeaderInto(nil, parsed.payload, parsed.protocol, flow.sa)
 	if err != nil {
+		flow.diagnostics.transformErrors.Add(1)
 		transport.transformErrors.Add(1)
 		return nil, true, err
 	}
@@ -154,6 +158,7 @@ func (transport *Transport) TransformOutbound(packet []byte) ([]byte, bool, erro
 		return nil, true, err
 	}
 	transport.outboundPackets.Add(1)
+	flow.observePacket(parsed.protocol, parsed.payload, false)
 	return out, true, nil
 }
 
@@ -164,6 +169,9 @@ func (transport *Transport) TransformInbound(packet []byte) ([]byte, bool, error
 		return nil, false, err
 	}
 	if !transport.matchesInboundPacket(parsed) {
+		if transport.isUnprotectedServerUDP(parsed, packet) {
+			return transport.inboundError(errors.New("ipsec3gpp: unprotected UDP on negotiated server port"))
+		}
 		transport.passthroughPackets.Add(1)
 		return append([]byte(nil), packet...), false, nil
 	}
@@ -172,20 +180,29 @@ func (transport *Transport) TransformInbound(packet []byte) ([]byte, bool, error
 	}
 	flow := transport.inbound[readSPI(parsed.payload)]
 	if flow == nil {
+		transport.unknownInboundSPI.Add(1)
+		transport.recordUnknownESP(parsed)
 		return transport.inboundError(errors.New("ipsec3gpp: unknown inbound ESP SPI"))
 	}
 	plaintext, nextHeader, sequence, err := engineipsec.DecapsulateWithSequenceInto(nil, parsed.payload, flow.sa)
 	if err != nil {
+		flow.diagnostics.transformErrors.Add(1)
 		return transport.inboundError(err)
 	}
 	if !flow.replay.Accept(sequence) {
+		flow.diagnostics.replay.Add(1)
 		return nil, true, errors.New("ipsec3gpp: replay packet rejected")
+	}
+	if nextHeader == protocolUDP && !flow.matchesInboundUDP(plaintext) {
+		flow.diagnostics.selectorMismatches.Add(1)
+		return transport.inboundError(errors.New("ipsec3gpp: protected UDP selector mismatch"))
 	}
 	out, err := replaceIPPayload(payloadReplacement{packet: packet, parsed: parsed, protocol: nextHeader, payload: plaintext})
 	if err != nil {
 		return transport.inboundError(err)
 	}
 	transport.inboundPackets.Add(1)
+	flow.observePacket(nextHeader, plaintext, true)
 	return out, true, nil
 }
 

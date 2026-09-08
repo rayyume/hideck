@@ -22,10 +22,15 @@ func (n *Network) InstallIPSec3GPP(
 		return nil, err
 	}
 	n.bridge.SetTransformer(transport)
-	n.ipsecPolicyInstalled.Store(true)
 	return func() error {
-		n.bridge.SetTransformer(nil)
-		n.ipsecPolicyInstalled.Store(false)
+		// Remove only this installation: an earlier cleanup can race with a
+		// replacement installed by the current IMS security association.
+		n.bridge.mu.Lock()
+		if n.bridge.transform == transport {
+			n.bridge.rememberIPSecLocked()
+			n.bridge.transform = nil
+		}
+		n.bridge.mu.Unlock()
 		return nil
 	}, nil
 }

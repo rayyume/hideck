@@ -14,9 +14,15 @@ type replacementDownlinkWatch struct {
 	deadline       time.Time
 	timer          *time.Timer
 	retryNotBefore time.Time
+	unverified     bool
+	sharedAttempt  uint64
 }
 
 func (s *Service) startReplacementDownlinkWatch(baseline downlinkCheckpoint) {
+	s.watchReplacementDownlink(baseline, s.portSFailoverValidationWait())
+}
+
+func (s *Service) watchReplacementDownlink(baseline downlinkCheckpoint, delay time.Duration) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.stopped() || s.regState != regRegistered || !usesVodafoneUKPortSResetRecovery(s.cfg) ||
@@ -30,8 +36,9 @@ func (s *Service) startReplacementDownlinkWatch(baseline downlinkCheckpoint) {
 	}
 	s.cancelReplacementDownlinkWatchLocked()
 	watch := &replacementDownlinkWatch{
-		path: path, baseline: baseline, deadline: time.Now().Add(s.portSFailoverValidationWait()),
+		path: path, baseline: baseline, deadline: time.Now().Add(delay),
 	}
+	watch.sharedAttempt = s.registrarPenalties.noteDownlinkAttempt(path.registrar)
 	s.replacementDownlinkWatch = watch
 	s.armReplacementDownlinkWatchLocked(watch)
 	logging.Info("IMS replacement registered; awaiting downlink validation",
@@ -51,19 +58,44 @@ func (s *Service) cancelReplacementDownlinkWatchLocked() {
 	s.replacementDownlinkWatch = nil
 }
 
+// A dead current transport must be repaired, not held by a passive validation
+// cadence for a connection that no longer exists. Keep actual node deadlines.
+func (s *Service) abandonReplacementDownlinkWaitLocked() {
+	watch := s.replacementDownlinkWatch
+	if watch == nil || !watch.path.samePath(s.downlinkCheckpointLocked()) {
+		return
+	}
+	s.registrarPenalties.abandonDownlinkAttempt(watch.path.registrar, watch.sharedAttempt)
+	s.cancelReplacementDownlinkWatchLocked()
+}
+
 func (s *Service) replacementDownlinkWatchFired(watch *replacementDownlinkWatch) {
 	s.registerMu.Lock()
 	defer s.registerMu.Unlock()
-	if !s.claimReplacementDownlinkFailure(watch) {
+	plan, claimed := s.claimReplacementDownlinkRecovery(watch)
+	if !claimed {
 		return
 	}
 	defer s.finishPCSCFRecovery()
-	penalty := s.recordVodafoneRegistrarFailure(watch.path.registrar, registrarFailureOptions{
-		reason: "downlink_validation_timeout", minimumRetryAt: watch.retryNotBefore,
-	})
-	s.requestFreshRuntimeAfterPortSFailure(watch.path.registrar, portSFailoverCause{
-		reason: "downlink_validation_timeout", observedAt: watch.deadline, deprioritizedUntil: penalty.deprioritizedUntil,
-	}, "replacement registration did not establish a downlink")
+	s.logDownlinkDiagnostics("replacement_validation_expired")
+	if !plan.retryAt.IsZero() {
+		logging.Info("IMS downlink recovery round exhausted; keeping registration pending validation",
+			"device", s.DeviceID(), "pcscf", watch.path.registrar,
+			"round", plan.round, "retry_at", plan.retryAt)
+		return
+	}
+	logging.Info("IMS downlink recovery continuing candidate round",
+		"device", s.DeviceID(), "pcscf", watch.path.registrar, "next", plan.next, "round", plan.round)
+	penalty := s.registrarPenalties.states(time.Now())[watch.path.registrar]
+	cause := portSFailoverCause{
+		reason: "downlink_validation_timeout", observedAt: time.Now(), deprioritizedUntil: penalty.deprioritizedUntil,
+	}
+	if plan.reuseTunnel {
+		s.recoverPortSOnAlternate(watch.path.registrar, plan.next, cause)
+		return
+	}
+	s.requestFreshRuntimeAfterPortSFailure(watch.path.registrar, cause,
+		"replacement registration did not establish a downlink; rediscovery or transport repair required")
 }
 
 func (s *Service) retainReplacementRegisterRetryAfter(err error) {
@@ -76,27 +108,55 @@ func (s *Service) retainReplacementRegisterRetryAfter(err error) {
 	watch := s.replacementDownlinkWatch
 	if watch != nil && watch.path.samePath(s.downlinkCheckpointLocked()) {
 		watch.retryNotBefore = laterRegistrarDeadline(watch.retryNotBefore, time.Now().Add(delay))
+		s.registrarPenalties.mark(watch.path.registrar, watch.retryNotBefore)
 	}
 }
 
-func (s *Service) claimReplacementDownlinkFailure(watch *replacementDownlinkWatch) bool {
+func (s *Service) claimReplacementDownlinkRecovery(watch *replacementDownlinkWatch) (downlinkRoundPlan, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.replacementDownlinkWatch != watch {
-		return false
+	if s.replacementDownlinkWatch != watch || time.Now().Before(watch.deadline) {
+		return downlinkRoundPlan{}, false
 	}
 	watch.timer = nil
 	if s.stopped() || s.regState != regRegistered || !watch.path.samePath(s.downlinkCheckpointLocked()) ||
 		s.downlinkEvidenceSinceLocked(watch.baseline) != "" {
 		s.cancelReplacementDownlinkWatchLocked()
-		return false
+		return downlinkRoundPlan{}, false
 	}
 	if !s.pcscfRecoveryPending.CompareAndSwap(false, true) {
-		return false
+		return downlinkRoundPlan{}, false
 	}
+	if !watch.unverified {
+		s.registrarPenalties.noteUnverifiedDownlink(watch.path.registrar, time.Now(), watch.retryNotBefore)
+		watch.unverified = true
+	}
+	plan := downlinkRoundPlan{next: watch.path.registrar}
+	if s.registeredSIPTransportReadyLocked() {
+		plan = s.planDownlinkRound(s.registrarCandidates, watch.path.registrar)
+	}
+	if !plan.retryAt.IsZero() {
+		watch.deadline = plan.retryAt
+		// finishPCSCFRecovery rearms this same watch without resetting the round.
+		return plan, true
+	}
+	plan.reuseTunnel = s.selectDownlinkAlternateLocked(plan.next)
 	// This is the commit point. A peer accepted afterwards belongs to the
 	// rejected path and cannot clear its failure before runtime teardown.
 	s.regState = regFailed
 	s.replacementDownlinkWatch = nil
-	return true
+	return plan, true
+}
+
+func (s *Service) selectDownlinkAlternateLocked(next string) bool {
+	if next == "" || next == s.registrar || !s.registeredSIPTransportReadyLocked() {
+		return false
+	}
+	for index, candidate := range s.registrarCandidates {
+		if candidate == next {
+			s.registrar, s.registrarIndex = candidate, index
+			return true
+		}
+	}
+	return false
 }

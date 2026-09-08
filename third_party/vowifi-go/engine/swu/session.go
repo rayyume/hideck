@@ -53,6 +53,9 @@ type Config struct {
 	DeviceID string
 	// DNSServer optionally selects the resolver used for ePDG lookup.
 	DNSServer string
+	// EPDGCandidates optionally rotates SOCKS5/injected transport candidates after address rejection.
+	// The runtime owns its lifetime; nil retains legacy endpoint selection.
+	EPDGCandidates *EPDGCandidateStore
 	// EPDGAddr is the ePDG host (FQDN or IP) and optional port.
 	EPDGAddr string
 	// EpDGAddr/EpDGPort are the original endpoint fields.
@@ -267,8 +270,9 @@ type Session struct {
 	cfg *Config
 
 	// --- transport ---
-	transportMu sync.RWMutex
-	socket      ipsec.Transport
+	transportMu   sync.RWMutex
+	socket        ipsec.Transport
+	epdgCandidate *epdgCandidateAttempt
 
 	// --- IKE_AUTH state ---
 	stage                  ikeAuthStage
@@ -598,6 +602,11 @@ func (s *Session) finishConnectFailure(err error) {
 	s.setTerminalError(err)
 	s.cancel()
 	preserveResume := errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+	var rejection *IKEAuthError
+	if errors.As(err, &rejection) && rejection.NotifyType == ikev2.INTERNAL_ADDRESS_FAILURE {
+		// A cleanup timeout does not turn a rejected handshake into a resumable one.
+		preserveResume = false
+	}
 	s.cleanupResources(preserveResume)
 }
 
@@ -652,14 +661,14 @@ func (s *Session) connectOnce(ctx context.Context) (err error) {
 		return errors.New("swu: no ePDG address configured")
 	}
 	defer func() {
+		s.finishEPDGCandidate(err)
 		if err != nil {
-			err = errors.Join(err, s.stopDataPlane(), s.stopIKEControl())
-			s.stopTransport()
+			err = s.cleanupConnectAttempt(ctx, err)
 		}
 	}()
 
 	// Resolve the ePDG and build the IKE/ESP transport.
-	if err := s.buildTransport(); err != nil {
+	if err := s.buildTransport(ctx); err != nil {
 		return fmt.Errorf("build transport: %w", err)
 	}
 	s.startSessionStats()
@@ -755,13 +764,21 @@ func (s *Session) runIKESAInit(ctx context.Context) error {
 }
 
 // buildTransport resolves the ePDG and opens the IKE/ESP socket.
-func (s *Session) buildTransport() error {
+func (s *Session) buildTransport(ctx context.Context) error {
 	endpoint := configuredEPDGAddress(s.cfg)
 	host, port := endpoint, "500"
 	if h, p, err := net.SplitHostPort(endpoint); err == nil {
 		host, port = h, p
 	} else if s.cfg.EpDGPort != 0 {
 		port = fmt.Sprintf("%d", s.cfg.EpDGPort)
+	}
+	target, err := s.selectEPDGTransportEndpoint(ctx, net.JoinHostPort(host, port))
+	if err != nil {
+		return err
+	}
+	host, port, err = net.SplitHostPort(target)
+	if err != nil {
+		return err
 	}
 	if s.cfg.TransportFactory != nil {
 		localIP := configuredLocalIP(s.cfg)

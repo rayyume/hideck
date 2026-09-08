@@ -17,6 +17,19 @@
 
 ## 追踪矩阵
 
+### ePDG 内部地址分配失败
+
+- `INTERNAL_ADDRESS_FAILURE (36)` 保留为结构化错误，经 ePDG 等待层传给 runtime 重连循环，不再靠错误字符串判断。
+- 按 [RFC 7296 §2.21.2](https://www.rfc-editor.org/rfc/rfc7296.html#section-2.21.2) / [§3.15.4](https://www.rfc-editor.org/rfc/rfc7296.html#section-3.15.4)，地址分配失败不一定删除已完成认证的 IKE SA。本实现选择 Delete 后重新建立：仅最终受保护响应、已完成互相 EAP 认证的 36，在关闭本次候选隧道前发送 IKE Delete，并等待匹配的受保护空响应；不删除未建立的 CHILD_SA。严格 AUTH 校验开启时，未通过校验不发送该 Delete；关闭 EAP MAC 校验的诊断模式也不启用它。
+- Delete 交换复用现有 IKE 重传机制，另设本地 5 秒清理预算。写出失败、响应无效或超时与原始 36 一并上报；只有验证响应后才记录 `IKE address rejection cleanup acknowledged`。这不证明网侧地址池或所有历史会话已经恢复。
+- 仅结构化 36 的 runtime 重试使用独立的 **2～4 分钟随机等待**，且不缩短调用方更长的重试间隔或已有 `RetryAt` 期限；关闭/取消立即停止等待。RFC 建议等待数分钟，2～4 分钟与 5 秒均为本项目实现参数，不是规范固定值。
+- SOCKS5 主隧道遇到结构化 36 后，在上述等待结束的下一轮启动中重新解析 ePDG，优先选择本轮尚未返回 36 的 DNS 地址。历史由当前 runtime 持有，按身份、APN、ePDG 端点、DNS 和代理入口隔离，不写入 P-CSCF 降权表；成功建立隧道后清空。单地址或所有当前候选均返回 36 时，下次延迟重试开始新一轮，不永久拉黑、不立即遍历。DNS 顺序变化不会跳过尚未尝试的地址。
+- ePDG 候选轮换是本项目恢复策略，不是 RFC 对 Notify 36 的强制动作，也不保证网侧分配恢复。SOCKS5 使用选中的传输 IP，但保留原始 FQDN、APN 和认证参数；直连保留 SocketManager 自带的多地址发送/响应锁定行为，不被固定为单地址。未启用 `swu.Config.EPDGCandidates` 的独立 SWu 调用保持原选择行为。附加 XCAP PDN 不继承主隧道候选历史，重叠旧候选的迟到结果不能改写新尝试。
+- 不改变 VOXI RST/488、普通 EOF、2degrees 按需 port-s、SIP Retry-After/RFC 5626 退避。附加 XCAP PDN 或重叠重认证候选失败，不因此拆掉仍健康的主会话；候选 Delete 仅针对本次 IKE SA。
+- 回归：`session_auth_failure_test.go`、`epdg_candidates_test.go`、`session_epdg_candidate_test.go`、`session_epdg_socks_test.go`、`manager_test.go`、`ike_address_retry_test.go`、runtime 状态传递及 XCAP 隔离测试。本轮为本地协议/状态测试，尚未部署真卡验证，不能据此认定运营商侧 36 的根因已消除。
+
+### 能力矩阵
+
 | 能力 | 规范依据 | 实现入口 | 自动化证据 | 状态 |
 | --- | --- | --- | --- | --- |
 | ePDG 发现与非 3GPP 接入 | TS 24.302、IR.51 | `startup.SelectEmergencyEPDG`、preset FQDN、A/AAAA | 对应包测试 | **部分实现**：preset 或 override 的 FQDN 加 A/AAAA，没有 DNS NAPTR 动态发现。`internal/vowifi/dns` 只服务 IMS Registrar。AAAA-only ePDG 加 IPv4-only SOCKS5 代理不可达，属已知约束。 |
@@ -77,16 +90,27 @@
 - **真实 TCP 超时后的升级恢复**：原节点经过 30 秒观察、REGISTER 成功、30 秒下行验证仍失败时，在现有恢复退避到期后替换 IMS/P-CSCF 路径，不再无限重复原节点刷新。两个 30 秒窗口是实现参数，不是 RFC 固定时限；不适用于本地读取期限到期、普通 EOF 或其他预设。gVisor 在网络适配层将传输超时和本地 deadline 分别暴露为 `ETIMEDOUT` / `os.ErrDeadlineExceeded`。
 - **取消与代次隔离**：下行验证或退避期间，新 port-s 或当前受保护连接上的有效下行请求会取消未执行的超时切换；REGISTER 响应和旧连接消息不算下行证明。切换提交前重新检查运营节点和 port-s 代次；停止、替换通道会使旧计划失效。迟到的刷新后重连不记录为按需重连能力。
 - **恢复任务交接**：并发的旧节点 488、503 或 RST 恢复任务退出时，会交还仍未完成的超时恢复和替代会话验证任务；交接保留原定期限，不重置退避，也不靠额外轮询重试。已有恢复任务占用执行权时，新的 port-s 关闭仍会记录并调度。
-- **完整重建后的验证**：故障恢复中新建的 Vodafone UK/VOXI runtime 在 REGISTER 成功后也会启动独立的 30 秒下行验证定时器，不依赖先发生一次 port-s 关闭。未验证则记录本节点失败并进入现有候选重试流程；普通冷启动和其他运营商不启用此专用定时器。周期 REGISTER 不推迟验证期限；当前连接证明恢复、通道替换或主动停止会取消旧定时器。
+- **完整重建后的验证**：故障恢复中新建的 Vodafone UK/VOXI runtime 在 REGISTER 成功后也会启动独立的 30 秒下行验证定时器，不依赖先发生一次 port-s 关闭。未验证记为 `downlink_unverified`，只降低选择优先级，不累计 REGISTER 失败次数。已尝试节点、轮次及下一轮期限跨 runtime 保存；无未尝试的合格候选时，保留仍可用的注册传输并等待整轮随机退避，不每隔 30 秒拆注册。到期可开启下一轮或重新获取节点；新的明确 RST/现有超时升级和当前路径 488 仍可触发对应恢复。普通冷启动和其他运营商不启用此专用策略。周期 REGISTER 不推迟验证期限；当前连接证明恢复、通道替换或主动停止会取消旧定时器。
 - **下行证据归属**：诊断用的全局 SIP 请求计数不再作为恢复依据。请求处理前后都校验来源连接、P-CSCF 和传输代次，旧连接迟到完成仍计入处理统计，但不能验证新路径或清零其失败历史。
 - **优先级与重试资格分离**：异常节点保留 30 分钟的 `deprioritizedUntil`，有其他合格节点时优先选择其他节点；该记录本身不禁止重试，也不因候选耗尽被删除。
 - **独立的 `retryNotBefore`**：替代路径建立失败使用 RFC 5626 §4.5 随机指数退避，Retry-After 只能延长等待。节点尚未到允许重试时间时，即使没有其他候选也不会提前使用。
 - **跨重建保留历史**：新隧道使用新下发的 P-CSCF 列表，同时保留重试时间与连续失败次数。没有可选节点时等待最早的重试时间，再进入新的连接尝试；不通过清空记录连续重建。替代 runtime 的初始 REGISTER 失败也参与该恢复计数。
-- **下行验证与成功注册分开**：REGISTER 成功并不直接表示 VOXI 短信下行已恢复；提前建立 port-s 也不能在 REGISTER 成功前结束恢复或清零失败次数。两项条件满足后才结束本轮恢复。REGISTER 失败的退避和 Retry-After 归属实际尝试的节点，不归属失败处理后选出的下一候选。验证超时不再导致固定禁止选择 30 分钟，而是保留低优先级并调度恢复退避。退避期内，同一退役路径的重复报告不会按短信数量累计恢复失败次数。其他节点的降权历史仍保留，不把历史记录当作下一次普通断开的恢复触发条件。
+- **下行验证与成功注册分开**：REGISTER 成功并不直接表示 VOXI 短信下行已恢复；提前建立 port-s 也不能在 REGISTER 成功前结束恢复或清零失败次数。两项条件满足后才结束本轮恢复。REGISTER 失败的退避和 Retry-After 归属实际尝试的节点，不归属失败处理后选出的下一候选。验证超时只保留低优先级并调度独立的下行恢复轮次；观察调度沿用首轮随机窗口，不把观察轮次作为 RFC 5626 注册失败次数，不因被动观察而指数延长。实际失败仍按随机指数退避及 Retry-After 处理。退避期内，同一退役路径的重复报告不会按短信数量累计恢复失败次数。其他节点的降权历史仍保留，不把历史记录当作下一次普通断开的恢复触发条件。
 - **诊断日志**：`IMS P-CSCF configuration from new tunnel` 记录下发的 IPv4/IPv6 列表；`IMS P-CSCF candidates resolved` 记录前后候选与来源；`IMS P-CSCF candidate eligibility`、`IMS P-CSCF recovery preference and retry scheduled` 分别记录选择结果、降权原因及允许重试时间。重新获取可能仍返回相同节点，不保证产生新的 P-CSCF。
 
-回归入口：`registrar_selection_test.go`、`registrar_recovery_completion_test.go`、`registrar_downlink_watch_test.go`、`downlink_evidence_test.go`、`pcscf_recovery_handoff_test.go`、`pcscf_recovery_test.go`、`port_s_session_test.go`、`port_s_timeout_recovery_test.go`、`gvisor_tcp_errors_test.go`、`runtimecore_test.go`。退避参考：[RFC 5626 §4.5](https://www.rfc-editor.org/rfc/rfc5626.html#section-4.5)。30 分钟偏好与 VOXI 下行验证仍属于实现策略，不应写成协议规定的黑名单期限。
+回归入口：`registrar_selection_test.go`、`registrar_recovery_completion_test.go`、`registrar_downlink_watch_test.go`、`registrar_downlink_round_test.go`、`registrar_downlink_round_state_test.go`、`downlink_evidence_test.go`、`pcscf_recovery_handoff_test.go`、`pcscf_recovery_test.go`、`port_s_session_test.go`、`port_s_timeout_recovery_test.go`、`gvisor_tcp_errors_test.go`、`runtimecore_test.go`。退避参考：[RFC 5626 §4.5](https://www.rfc-editor.org/rfc/rfc5626.html#section-4.5)。30 分钟偏好与 VOXI 下行验证仍属于实现策略，不应写成协议规定的黑名单期限。
+
+## 受保护 UDP 下行与分层恢复
+
+- Vodafone UK/VOXI 的替代注册下行验证超时后，若注册传输仍可用且本轮还有另一合格 P-CSCF，只替换 IMS 连接、监听器及 IMS 安全关联，复用现有 ePDG 隧道与 inner IP。注册传输失效、下一轮仅有原节点需要重新发现，以及替代注册实际失败，仍保留已有 runtime 恢复路径；候选遍历、节点退避与 Retry-After 不重置。此调整不改变普通 EOF、2degrees 按需 port-s、VOXI 明确 RST 的 5 秒宽限及 488 恢复策略。
+- 受保护端口同时预留 TCP/UDP，防止初始 REGISTER 的 UDP socket 占用通告的 port-c/port-s。仅 IPsec 协商成功后启动 UDP 接收：从协商的 P-CSCF port-c 接收，在本地 port-c 向 P-CSCF port-s 返回 SIP 响应和独立 RP 报告；RP 报告的 Via/传输声明与实际 UDP 路径一致。沿用 SIP 事务和短信去重。参见 [TS 24.229 §3.1、§5.1.1.2.2](https://www.etsi.org/deliver/etsi_ts/124200_124299/124229/18.10.00_60/ts_124229v181000p.pdf)。
+- UDP 端口的明文过滤在绑定前安装，覆盖初始分片，不能让预鉴权排队数据绕过安全校验；未知 SPI、完整性失败、重放和不匹配的 UDP 安全关联选择器仍被拒绝。网络适配器通过 `ListenProtectedUDP` 提供该保障；不能提供保障时不启动受保护 UDP 并显式报错，不降级为明文接收。禁用 IPsec 的原有明文模式不受此扩展影响。
+- 有效 UDP 下行请求同样可证明当前代次的下行已可用；仅绑定 UDP 端口或收到 REGISTER 响应不算证明。关闭、替换、超时切换提交与下行证据按代次隔离；退役 socket 的迟到数据或错误不可验证、破坏新路径。
+- `ipsec_generation`、`previous_ipsec` 和 `last_unknown_inbound` 记录当前/上一套安全关联的标识及最后一个未知 ESP 包的来源、目标、SPI、序号和时间；跨 runtime 可通过 `IMS security association identifiers` 日志关联。未知 SPI 的头部只是未验证观测，不代表短信到达。诊断不保存密钥或短信正文，安装失败保留原有安全关联，成功安装原子替换。
+- 回归入口：`protected_udp_test.go`、`registrar_downlink_tunnel_test.go`、`udp_security_test.go`、`ipsec_lifecycle_test.go`。本次没有真卡部署验收，不能据此认定本次 VOXI 故障一定由 UDP 或旧 SPI 引起。
 
 ## 验证边界
+
+下行资源生命周期回归：`port_s_listener_test.go`、`downlink_transport_failure_test.go`、`registrar_downlink_round_state_test.go`、`ipsec_lifecycle_test.go`。当前监听器异常会显式触发恢复，退役监听器与旧 IPsec 清理回调不得破坏新路径；监听器清理与 REGISTER 并发完成、持有注册锁时关闭接收器均有回归覆盖。取消失效连接的被动观察等待不清除真实节点退避，也不能取消重叠重鉴权中新尝试拥有的等待。握手诊断回归：`transport_diagnostics_test.go`、`diagnostics_test.go`、`network_diagnostics_test.go`，覆盖 IPv4/IPv6、双安全流、解密/重放拒绝、写出失败及适配层透传。诊断不改变 SIP/IPsec 报文，不以生成 SYN-ACK 或 REGISTER 200 代替短信接收验收；这些修复不等于已定位运营商侧没有下行的根因。
 
 自动化测试验证消息构造、事务时序、状态迁移和主要失败路径。真实网络还需要分别验证运营商策略、P-CSCF 行为、NAT、IPv4/IPv6、媒体编码和超时参数。只有完成目标运营商的实验室一致性用例后，才能声明通过该运营商认证。

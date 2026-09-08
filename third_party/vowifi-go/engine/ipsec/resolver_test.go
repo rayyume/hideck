@@ -1,12 +1,24 @@
 package ipsec
 
 import (
+	"context"
 	"encoding/binary"
+	"errors"
 	"net"
 	"testing"
 
 	vowifidns "github.com/iniwex5/vowifi-go/internal/vowifi/dns"
 )
+
+func TestResolveUDPAddrAllContextStopsOnCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	for _, endpoint := range []string{"epdg.test:500", "192.0.2.1:500"} {
+		if _, _, err := ResolveUDPAddrAllContext(ctx, endpoint, ""); !errors.Is(err, context.Canceled) {
+			t.Fatalf("canceled resolution for %s: %v", endpoint, err)
+		}
+	}
+}
 
 func TestResolveUDPAddrAllUsesConfiguredDNSServer(t *testing.T) {
 	vowifidns.ClearHostIPCache()

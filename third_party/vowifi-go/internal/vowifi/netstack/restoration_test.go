@@ -138,6 +138,9 @@ func TestPacketBridgeContinuesAfterInboundErrorAndIgnoresBoolean(t *testing.T) {
 		stats := network.Stats()
 		return stats.Bridge.InboundErrors == 1 && stats.InboundPackets == 1
 	})
+	if stats := network.bridge.Stats(); stats.InboundReadPackets != 2 || stats.InboundTransformErrors != 1 || stats.InboundReadErrors != 0 {
+		t.Fatalf("inbound error stage lost: %+v", stats)
+	}
 
 	conn, err := network.DialContext(
 		context.Background(), "udp", nil, "10.0.0.1:5060", imscore.DialOptions{},
@@ -165,6 +168,9 @@ func TestPacketBridgeContinuesAfterInboundErrorAndIgnoresBoolean(t *testing.T) {
 		return stats.OutboundPackets == 1 && stats.Bridge.OutboundPackets == 1 &&
 			stats.Bridge.OutboundErrors == 1
 	})
+	if stats := network.bridge.Stats(); stats.OutboundTransformErrors != 1 || stats.OutboundWriteErrors != 0 {
+		t.Fatalf("outbound error stage lost: %+v", stats)
+	}
 }
 
 func TestInstallIPSec3GPPCleanupRemovesTransformer(t *testing.T) {

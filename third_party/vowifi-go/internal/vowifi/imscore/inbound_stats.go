@@ -92,7 +92,8 @@ func (s *Service) logInboundStatsSnapshot(stats inboundStatsSnapshot) {
 		"sip_parsed_messages", stats.SIPParsedMessages,
 		"sip_parsed_requests", stats.SIPParsedRequests,
 		"sip_parsed_responses", stats.SIPParsedResponses,
-		"ports_since_last_read", s.portSSinceLastRead())
+		"ports_since_last_read", s.portSSinceLastRead(),
+		"network", s.networkDiagnostics())
 }
 
 func (s *Service) captureInboundStats() inboundStatsSnapshot {

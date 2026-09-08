@@ -161,6 +161,7 @@ func (s *Service) removeInstalledIPSec3GPP() error {
 }
 
 func (s *Service) removeIPSec3GPPPolicy() error {
+	s.closeProtectedUDP()
 	remover, ok := s.cfg.IMSNetwork.(interface{ RemoveIPSec3GPP() error })
 	if !ok {
 		return errors.New("imscore: IMS network cannot remove installed 3GPP IPsec policy")

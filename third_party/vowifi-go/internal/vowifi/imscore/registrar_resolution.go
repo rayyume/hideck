@@ -14,12 +14,16 @@ import (
 )
 
 type allRegistrarCandidatesUnavailableError struct {
-	retryAt time.Time
+	retryAt       time.Time
+	downlinkRound uint32
 }
 
 func (err *allRegistrarCandidatesUnavailableError) Error() string {
 	if err == nil || err.retryAt.IsZero() {
 		return "all resolved P-CSCF candidates are temporarily unavailable"
+	}
+	if err.downlinkRound != 0 {
+		return fmt.Sprintf("P-CSCF downlink recovery round %d is waiting until %s", err.downlinkRound, err.retryAt.Format(time.RFC3339))
 	}
 	return fmt.Sprintf("all resolved P-CSCF candidates are temporarily unavailable until %s", err.retryAt.Format(time.RFC3339))
 }
@@ -171,9 +175,23 @@ func (s *Service) selectRegistrarCandidate(ctx context.Context, transport string
 	if err != nil {
 		return "", err
 	}
+	plan := s.planDownlinkRound(candidates, "")
+	if !plan.retryAt.IsZero() {
+		return "", &allRegistrarCandidatesUnavailableError{retryAt: plan.retryAt, downlinkRound: plan.round}
+	}
 	now := time.Now()
 	penalties := s.registrarPenalties.states(now)
 	index, ok := preferredRegistrarIndex(candidates, index, penalties)
+	if plan.next != "" {
+		for i, candidate := range candidates {
+			if candidate == plan.next {
+				// The round planner selected eligibility and the attempted set
+				// together under the store lock; do not rerank visited nodes.
+				index, ok = i, true
+				break
+			}
+		}
+	}
 	if !ok {
 		s.logRegistrarEligibility(candidates, penalties, "")
 		return "", &allRegistrarCandidatesUnavailableError{

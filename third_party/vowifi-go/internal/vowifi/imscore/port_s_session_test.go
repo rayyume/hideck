@@ -343,7 +343,7 @@ func TestVodafoneUKFailoverValidationRequiresProvenDownlink(t *testing.T) {
 }
 
 func TestVodafoneUKUnverifiedFailoverPreservesCandidatePenalties(t *testing.T) {
-	service := newPortSSessionTestService(t, vodafoneUKCarrierPresetID)
+	service := newRecoveryCompletionTestService(t)
 	service.mu.Lock()
 	service.registrar = "pcscf-b.example:5060"
 	service.registrarIndex = 1
@@ -352,7 +352,8 @@ func TestVodafoneUKUnverifiedFailoverPreservesCandidatePenalties(t *testing.T) {
 	firstUntil := time.Now().Add(vodafoneUKPCSCFDeprioritizedPeriod)
 	service.registrarPenalties.mark("pcscf-a.example:5060", firstUntil)
 
-	service.rejectUnverifiedPortSRegistrar("pcscf-b.example:5060", portSFailoverCause{observedAt: time.Now()}, "downlink validation timed out")
+	startProtectedReplacementForTest(t, service)
+	service.replacementDownlinkWatchFired(expireReplacementWatchForTest(t, service))
 	status := service.StatusCurrent()
 	if len(status.DeprioritizedPCSCF) != 2 {
 		t.Fatalf("deprioritized P-CSCFs = %v, want one complete candidate round", status.DeprioritizedPCSCF)
@@ -360,13 +361,8 @@ func TestVodafoneUKUnverifiedFailoverPreservesCandidatePenalties(t *testing.T) {
 	if status.DeprioritizedPCSCF["pcscf-a.example:5060"].Before(firstUntil) {
 		t.Fatal("existing P-CSCF penalty was shortened")
 	}
-	select {
-	case err := <-service.RegistrationErrors():
-		if err == nil || !strings.Contains(err.Error(), "fresh runtime required") {
-			t.Fatalf("runtime recovery error = %v", err)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("missing runtime recovery request")
+	if service.RegState() != regRegistered || len(service.RegistrationErrors()) != 0 {
+		t.Fatal("unverified replacement was torn down although all alternatives were unavailable")
 	}
 }
 

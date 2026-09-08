@@ -73,6 +73,9 @@ func (s *Service) resolveOutboundModeContextForPeer(
 		)
 	}
 	modeCtx := s.outboundModeSnapshotLocked(flow, req, pani)
+	if datagram, ok := peer.(*protectedUDPPeer); ok && !s.currentProtectedUDPPeerLocked(datagram) {
+		return outboundModeContext{}, net.ErrClosed
+	}
 	modeCtx.useInboundPeer(peer)
 	if peerRegistrar != "" {
 		modeCtx.Registrar = peerRegistrar
@@ -107,6 +110,11 @@ func (modeCtx *outboundModeContext) useInboundPeer(peer net.Conn) {
 	modeCtx.Client = nil
 	modeCtx.InboundPeer = true
 	modeCtx.RemoteIP, modeCtx.RemotePortS = splitOutboundAddress(peer.RemoteAddr())
+	if datagram, ok := peer.(*protectedUDPPeer); ok {
+		modeCtx.Mode, modeCtx.Transport = "udp", "UDP"
+		modeCtx.TCPConn, modeCtx.UDPConn = nil, datagram.path.client
+		modeCtx.Registrar = datagram.path.registrar
+	}
 }
 
 func (s *Service) outboundModeSnapshotLocked(
@@ -179,7 +187,13 @@ func (s *Service) outboundSenderLocked(modeCtx *outboundModeContext) func(contex
 	}
 	if modeCtx.UDPConn != nil && s.registrationRemote != nil {
 		snapshot := *modeCtx
-		return func(ctx context.Context, raw string) error { return sendDirectWrite(ctx, snapshot, raw) }
+		return func(ctx context.Context, raw string) error {
+			if snapshot.InboundPeer {
+				s.sipWriteMu.Lock()
+				defer s.sipWriteMu.Unlock()
+			}
+			return sendDirectWrite(ctx, snapshot, raw)
+		}
 	}
 	s.transport.mu.Lock()
 	sender := s.transport.sendFn

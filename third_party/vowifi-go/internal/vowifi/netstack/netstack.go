@@ -39,11 +39,10 @@ type Network struct {
 	dns    []net.IP
 	bridge *PacketBridge
 
-	outboundPackets      atomic.Uint64
-	inboundPackets       atomic.Uint64
-	ipsecPolicyInstalled atomic.Bool
-	outboundBytes        atomic.Uint64
-	inboundBytes         atomic.Uint64
+	outboundPackets atomic.Uint64
+	inboundPackets  atomic.Uint64
+	outboundBytes   atomic.Uint64
+	inboundBytes    atomic.Uint64
 }
 
 // PacketIO is the additive packet boundary retained for current host callers.
@@ -174,7 +173,11 @@ func (n *Network) HasLocalIP(ip net.IP) bool {
 }
 
 func (n *Network) IPSec3GPPPolicyInstalled() bool {
-	return n != nil && n.ipsecPolicyInstalled.Load()
+	if n == nil || n.bridge == nil {
+		return false
+	}
+	_, installed := n.bridge.currentTransformer().(*ipsec3gpp.Transport)
+	return installed
 }
 
 func (n *Network) Stats() Stats {
