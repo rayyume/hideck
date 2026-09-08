@@ -75,7 +75,7 @@ func TestReplacementDownlinkWatchSurvivesBusyRecoveryOwner(t *testing.T) {
 	watch := expireReplacementWatchForTest(t, s)
 	s.pcscfRecoveryPending.Store(true)
 	s.replacementDownlinkWatchFired(watch)
-	s.requestFreshRuntimeAfterMTReportReject("retired.example:5060", 488, time.Now().Add(time.Minute))
+	s.recoverPCSCFAfterMTReportReject("retired.example:5060", 488, time.Now().Add(time.Minute))
 	select {
 	case <-s.RegistrationErrors():
 	case <-time.After(time.Second):

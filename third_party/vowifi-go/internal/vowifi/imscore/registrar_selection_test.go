@@ -105,15 +105,16 @@ func TestVodafoneUnverifiedCandidatesRetryBeforePreferenceExpires(t *testing.T) 
 		t.Fatal(err)
 	}
 	t.Cleanup(replacement.StopCurrent)
+	replacement.portSRecoveryJitter = func(upper time.Duration) time.Duration { return upper / 2 }
 	_, err = replacement.selectRegistrarCandidate(context.Background(), "udp")
 	var unavailable *allRegistrarCandidatesUnavailableError
 	if !errors.As(err, &unavailable) {
 		t.Fatalf("missing retry schedule: %v", err)
 	}
-	if unavailable.RetryAt().Before(before.Add(90*time.Second)) || unavailable.RetryAt().After(time.Now().Add(90*time.Second)) {
+	if unavailable.RetryAt().Before(before.Add(29*time.Second)) || unavailable.RetryAt().After(time.Now().Add(31*time.Second)) {
 		t.Fatalf("recovery waits for preference instead of backoff: %s", unavailable.RetryAt())
 	}
-	states := service.registrarPenalties.states(before.Add(time.Minute))
+	states := service.registrarPenalties.states(before.Add(31 * time.Second))
 	index, ok := preferredRegistrarIndex(splitRegistrarCandidates(replacement.cfg.Registrar), 0, states)
 	if !ok || index != 0 {
 		t.Fatalf("retry remained blocked after cooldown: index=%d ok=%t", index, ok)

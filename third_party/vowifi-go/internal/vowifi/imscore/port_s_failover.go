@@ -17,13 +17,16 @@ type portSFailoverCause struct {
 }
 
 func (cause portSFailoverCause) policy() string {
-	if cause.reason == "downlink_validation_timeout" {
+	switch cause.reason {
+	case "downlink_validation_timeout":
 		return "vodafone_uk_downlink_validation"
-	}
-	if cause.reason == portSTransportTimeoutFailure {
+	case portSTransportTimeoutFailure:
 		return "vodafone_uk_port_s_timeout"
+	case "mt_report_488":
+		return vodafoneUKMTReportRecoveryPolicy
+	default:
+		return vodafoneUKPortSResetRecoveryPolicy
 	}
-	return vodafoneUKPortSResetRecoveryPolicy
 }
 
 // The caller owns registerMu and has validated the failure against the current

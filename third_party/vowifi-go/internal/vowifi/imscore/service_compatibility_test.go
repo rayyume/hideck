@@ -96,4 +96,3 @@ func TestRecoveredListenPacketHonorsCanceledContext(t *testing.T) {
 		t.Fatalf("ListenPacket error = %v, want context canceled", err)
 	}
 }
-

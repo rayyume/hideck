@@ -151,12 +151,15 @@ func TestVodafoneUKPeerResetKeepsWatchdogAfterOnDemandReconnect(t *testing.T) {
 	}
 }
 
-func TestVodafoneUKEstablishedPeerResetArmsFailoverAfterRecovery(t *testing.T) {
+func TestVodafoneUKEstablishedPeerResetNeedsASecondResetAfterRecovery(t *testing.T) {
 	service := newPortSSessionTestService(t, vodafoneUKCarrierPresetID)
 	client, server := net.Pipe()
+	recoveredClient, recoveredServer := net.Pipe()
 	t.Cleanup(func() {
 		_ = client.Close()
 		_ = server.Close()
+		_ = recoveredClient.Close()
+		_ = recoveredServer.Close()
 	})
 
 	now := time.Now()
@@ -170,9 +173,17 @@ func TestVodafoneUKEstablishedPeerResetArmsFailoverAfterRecovery(t *testing.T) {
 		t.Fatal("established reset armed failover before recovery succeeded")
 	}
 	service.markPortSResetRecoverySucceeded("pcscf-a.example:5060")
-	registrar, observedAt, pending := service.pendingPortSResetFailover()
-	if !pending || registrar != "pcscf-a.example:5060" || !observedAt.Equal(now) {
-		t.Fatalf("failover = (%q, %s, %t), want recovered established reset", registrar, observedAt, pending)
+	if _, _, pending := service.pendingPortSResetFailover(); pending {
+		t.Fatal("successful REGISTER refresh switched a P-CSCF without downlink failure evidence")
+	}
+	reopenedAt := time.Now().Add(time.Millisecond)
+	service.recordPortSOpened(recoveredClient, reopenedAt)
+	service.pcscfRecoveryPending.Store(true)
+	service.recordPortSClosed(recoveredClient, syscallConnectionReset(), reopenedAt.Add(time.Second))
+	registrar, _, pending := service.pendingPortSResetFailover()
+	service.pcscfRecoveryPending.Store(false)
+	if !pending || registrar != "pcscf-a.example:5060" {
+		t.Fatalf("second reset failover = (%q, %t), want confirmed failed replacement", registrar, pending)
 	}
 }
 
@@ -198,6 +209,37 @@ func TestVodafoneUKEstablishedResetOnDemandReconnectCancelsFailover(t *testing.T
 	service.markPortSResetRecoverySucceeded("pcscf-a.example:5060")
 	if _, _, pending := service.pendingPortSResetFailover(); pending {
 		t.Fatal("on-demand port-s reconnect kept established-reset failover")
+	}
+}
+
+func TestVodafoneUKCurrentDownlinkClearsResetIncident(t *testing.T) {
+	service := newPortSSessionTestService(t, vodafoneUKCarrierPresetID)
+	failed, failedPeer := net.Pipe()
+	recovered, recoveredPeer := net.Pipe()
+	t.Cleanup(func() {
+		_ = failed.Close()
+		_ = failedPeer.Close()
+		_ = recovered.Close()
+		_ = recoveredPeer.Close()
+	})
+
+	now := time.Now()
+	service.recordPortSOpened(failed, now.Add(-9*time.Minute))
+	service.recordPortSClosed(failed, syscallConnectionReset(), now)
+	service.markPortSResetRecoveryAttempt("pcscf-a.example:5060")
+	service.markPortSResetRecoverySucceeded("pcscf-a.example:5060")
+	service.recordPortSOpened(recovered, time.Now())
+	if !service.trackProtectedConnection(recovered) {
+		t.Fatal("track recovered port-s")
+	}
+	service.recordCurrentDownlinkRequest(recovered, service.captureDownlinkCheckpoint())
+	service.untrackProtectedConnection(recovered)
+	service.pcscfRecoveryPending.Store(true)
+	service.recordPortSClosed(recovered, syscallConnectionReset(), time.Now())
+	_, _, pending := service.pendingPortSResetFailover()
+	service.pcscfRecoveryPending.Store(false)
+	if pending {
+		t.Fatal("a proven healthy downlink carried a stale reset incident forward")
 	}
 }
 
@@ -361,8 +403,8 @@ func TestVodafoneUKUnverifiedFailoverPreservesCandidatePenalties(t *testing.T) {
 	if status.DeprioritizedPCSCF["pcscf-a.example:5060"].Before(firstUntil) {
 		t.Fatal("existing P-CSCF penalty was shortened")
 	}
-	if service.RegState() != regRegistered || len(service.RegistrationErrors()) != 0 {
-		t.Fatal("unverified replacement was torn down although all alternatives were unavailable")
+	if service.RegState() != regFailed || len(service.RegistrationErrors()) != 1 {
+		t.Fatal("exhausted assigned P-CSCF set did not request fresh discovery")
 	}
 }
 

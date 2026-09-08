@@ -8,9 +8,10 @@ import (
 // This is a Vodafone delivery-validation policy, not a REGISTER failure count.
 // The owning penalty store outlives individual IMS services and tunnels.
 type registrarDownlinkRound struct {
-	number    uint32
-	attempted map[string]bool
-	retryAt   time.Time
+	number               uint32
+	attempted            map[string]bool
+	retryAt              time.Time
+	rediscoveryRequested bool
 }
 
 type downlinkRoundInput struct {
@@ -25,6 +26,7 @@ type downlinkRoundPlan struct {
 	retryAt     time.Time
 	round       uint32
 	reuseTunnel bool
+	rediscover  bool
 }
 
 func (store *RegistrarPenaltyStore) noteDownlinkAttempt(registrar string) uint64 {
@@ -101,7 +103,17 @@ func (store *RegistrarPenaltyStore) planDownlinkRound(input downlinkRoundInput) 
 	}
 	if index, ok := preferredRegistrarIndex(candidates, 0, states); ok {
 		round.beginNextIfDue(newRound)
+		if input.current == "" {
+			round.rediscoveryRequested = false
+		}
 		return downlinkRoundPlan{next: candidates[index], round: round.number}
+	}
+	// A successful REGISTER does not prove the reverse SMS path. Once every
+	// candidate assigned to this tunnel has been tried, obtain a fresh P-CSCF
+	// set instead of cycling the same addresses in another local round.
+	if !newRound && input.current != "" && !round.rediscoveryRequested {
+		round.rediscoveryRequested = true
+		return downlinkRoundPlan{round: round.number, rediscover: true}
 	}
 	// A single-candidate recovery can rediscover/recreate its path once the
 	// whole-round delay expires, never on every 30-second validation timeout.
@@ -123,6 +135,7 @@ func (round *registrarDownlinkRound) beginNextIfDue(due bool) {
 	round.number++
 	round.attempted = make(map[string]bool)
 	round.retryAt = time.Time{}
+	round.rediscoveryRequested = false
 }
 
 func (s *Service) planDownlinkRound(candidates []string, current string) downlinkRoundPlan {

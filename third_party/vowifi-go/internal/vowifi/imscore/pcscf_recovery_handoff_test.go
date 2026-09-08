@@ -13,7 +13,7 @@ func TestPortSTimeoutWatchSurvivesStaleRecoveryOwner(t *testing.T) {
 	// A stale report handler has claimed ownership, but is queued on registerMu.
 	s.pcscfRecoveryPending.Store(true)
 	expirePortSTimeoutBackoff(t, s)
-	s.requestFreshRuntimeAfterMTReportReject("retired.example:5060", 488, time.Now().Add(time.Minute))
+	s.recoverPCSCFAfterMTReportReject("retired.example:5060", 488, time.Now().Add(time.Minute))
 	select {
 	case err := <-s.RegistrationErrors():
 		if !strings.Contains(err.Error(), "fresh runtime required") {

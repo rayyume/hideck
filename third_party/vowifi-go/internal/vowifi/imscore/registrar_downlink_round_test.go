@@ -47,8 +47,8 @@ func TestDownlinkRoundSurvivesReplacementServices(t *testing.T) {
 	}
 	startProtectedReplacementForTest(t, second)
 	second.replacementDownlinkWatchFired(expireReplacementWatchForTest(t, second))
-	if second.RegState() != regRegistered || len(second.RegistrationErrors()) != 0 {
-		t.Fatal("completed round tore down its last successful registration")
+	if second.RegState() != regFailed || len(second.RegistrationErrors()) != 1 {
+		t.Fatal("completed candidate set did not request fresh P-CSCF discovery")
 	}
 	third := replacementUsingStore(t, first.registrarPenalties)
 	_, err = third.selectRegistrarCandidate(context.Background(), "tcp")
@@ -65,26 +65,25 @@ func TestDownlinkRoundRetriesAfterCooldownAndCanBeCanceled(t *testing.T) {
 	s := singleCandidateReplacement(t)
 	s.replacementDownlinkWatchFired(expireReplacementWatchForTest(t, s))
 	store := s.registrarPenalties
+	if len(s.RegistrationErrors()) != 1 {
+		t.Fatal("candidate exhaustion did not request fresh discovery")
+	}
+	waiting := replacementUsingStore(t, store)
+	waiting.cfg.Registrar = s.cfg.Registrar
+	_, err := waiting.selectRegistrarCandidate(context.Background(), "tcp")
+	var unavailable *allRegistrarCandidatesUnavailableError
+	if !errors.As(err, &unavailable) || !unavailable.RetryAt().After(time.Now()) {
+		t.Fatalf("same rediscovered set did not enter cooldown: %v", err)
+	}
 	store.mu.Lock()
 	store.downlinkRound.retryAt = time.Now().Add(-time.Second)
 	store.mu.Unlock()
-	s.replacementDownlinkWatchFired(expireReplacementWatchForTest(t, s))
-	if len(s.RegistrationErrors()) != 1 {
-		t.Fatal("round exhaustion permanently disabled automatic recovery")
-	}
 	replacement := replacementUsingStore(t, store)
 	replacement.cfg.Registrar = s.cfg.Registrar
 	if selected, err := replacement.selectRegistrarCandidate(context.Background(), "tcp"); err != nil || selected != s.cfg.Registrar {
 		t.Fatalf("new round did not allow rediscovery/re-registration: %s, %v", selected, err)
 	}
 	startProtectedReplacementForTest(t, replacement)
-	replacement.replacementDownlinkWatchFired(expireReplacementWatchForTest(t, replacement))
-	store.mu.Lock()
-	round, deadline := store.downlinkRound.number, store.downlinkRound.retryAt
-	store.mu.Unlock()
-	if round != 2 || time.Until(deadline) < 89*time.Second || time.Until(deadline) > 91*time.Second {
-		t.Fatalf("passive validation inflated registration backoff: round=%d retry=%s", round, deadline)
-	}
 	replacement.trackProtectedConnection(newRecoveryCompletionPortS(t))
 	if store.recoveryInProgress() || replacement.replacementDownlinkWatch != nil {
 		t.Fatal("proven replacement did not end the incident")
@@ -96,22 +95,14 @@ func TestDownlinkRoundRetryDoesNotShortenRetryAfter(t *testing.T) {
 	before := time.Now()
 	s.retainReplacementRegisterRetryAfter(registerResponseErrorWithRetryAfter(t, "3600"))
 	s.replacementDownlinkWatchFired(expireReplacementWatchForTest(t, s))
-	s.mu.RLock()
-	deadline := s.replacementDownlinkWatch.deadline
-	s.mu.RUnlock()
-	if deadline.Before(before.Add(time.Hour)) || s.RegState() != regRegistered {
-		t.Fatalf("Retry-After lost or binding torn down: %s", deadline)
-	}
-	// An old timer firing again cannot reschedule, consume another round or tear down.
-	s.replacementDownlinkWatchFired(s.replacementDownlinkWatch)
-	if s.RegState() != regRegistered || len(s.RegistrationErrors()) != 0 {
-		t.Fatal("stale timer bypassed the shared retry deadline")
+	deadline := s.registrarPenalties.states(time.Now())[s.cfg.Registrar].retryNotBefore
+	if deadline.Before(before.Add(time.Hour)) || s.RegState() != regFailed || len(s.RegistrationErrors()) != 1 {
+		t.Fatalf("Retry-After lost during rediscovery: %s", deadline)
 	}
 }
 
 func TestMTReport488StillReplacesDeferredDownlink(t *testing.T) {
 	s := singleCandidateReplacement(t)
-	s.replacementDownlinkWatchFired(expireReplacementWatchForTest(t, s))
 	s.triggerMTReportPCSCFRecovery(&rpReportRejectError{Status: 488, Registrar: s.cfg.Registrar})
 	select {
 	case <-s.RegistrationErrors():
@@ -128,7 +119,6 @@ func TestMTReport488StillReplacesDeferredDownlink(t *testing.T) {
 
 func TestConfirmedResetStillReplacesDeferredDownlink(t *testing.T) {
 	s := singleCandidateReplacement(t)
-	s.replacementDownlinkWatchFired(expireReplacementWatchForTest(t, s))
 	s.pcscfRecoveryPending.Store(true)
 	s.recoverPCSCFAfterPortSReset(s.cfg.Registrar, time.Now())
 	if s.RegState() == regRegistered || len(s.RegistrationErrors()) != 1 {
@@ -138,12 +128,11 @@ func TestConfirmedResetStillReplacesDeferredDownlink(t *testing.T) {
 
 func TestStale488DoesNotRestartDeferredDownlinkRound(t *testing.T) {
 	s := singleCandidateReplacement(t)
-	s.replacementDownlinkWatchFired(expireReplacementWatchForTest(t, s))
 	s.mu.RLock()
 	watch, deadline := s.replacementDownlinkWatch, s.replacementDownlinkWatch.deadline
 	s.mu.RUnlock()
 	s.pcscfRecoveryPending.Store(true)
-	s.requestFreshRuntimeAfterMTReportReject("old.example:5060", 488, time.Now().Add(time.Minute))
+	s.recoverPCSCFAfterMTReportReject("old.example:5060", 488, time.Now().Add(time.Minute))
 	s.mu.RLock()
 	unchanged := s.replacementDownlinkWatch == watch && watch.deadline.Equal(deadline)
 	s.mu.RUnlock()
@@ -154,7 +143,6 @@ func TestStale488DoesNotRestartDeferredDownlinkRound(t *testing.T) {
 
 func TestOtherCarriersDoNotUseVodafoneDownlinkRounds(t *testing.T) {
 	s := singleCandidateReplacement(t)
-	s.replacementDownlinkWatchFired(expireReplacementWatchForTest(t, s))
 	for _, carrier := range []string{"2degrees_nz", "ctexcel", ""} {
 		replacement := replacementUsingStore(t, s.registrarPenalties)
 		replacement.cfg.CarrierPresetID = carrier
@@ -164,22 +152,12 @@ func TestOtherCarriersDoNotUseVodafoneDownlinkRounds(t *testing.T) {
 	}
 }
 
-func TestReplacementSingleCandidateKeepsRegisteredTransport(t *testing.T) {
+func TestReplacementSingleCandidateRequestsFreshDiscovery(t *testing.T) {
 	s := singleCandidateReplacement(t)
-	peer := s.registrationTCP
 	watch := expireReplacementWatchForTest(t, s)
 	s.replacementDownlinkWatchFired(watch)
-	if s.RegState() != regRegistered || s.registrationTCP != peer || len(s.RegistrationErrors()) != 0 {
-		t.Fatal("missing downlink tore down a successful registration with no alternate")
-	}
-	s.mu.RLock()
-	pending := s.replacementDownlinkWatch
-	s.mu.RUnlock()
-	if pending == nil || !pending.deadline.After(time.Now()) {
-		t.Fatal("retained registration has no scheduled recovery")
-	}
-	if s.SMSReadiness().Ready {
-		t.Fatal("unverified downlink was reported ready")
+	if s.RegState() != regFailed || len(s.RegistrationErrors()) != 1 {
+		t.Fatal("single assigned P-CSCF was retried without fresh discovery")
 	}
 }
 
@@ -195,9 +173,10 @@ func TestReplacementValidationDoesNotInflateRegistrationFailures(t *testing.T) {
 
 func TestReplacementLateDownlinkCancelsRoundRetry(t *testing.T) {
 	s := singleCandidateReplacement(t)
-	s.replacementDownlinkWatchFired(expireReplacementWatchForTest(t, s))
+	watch := expireReplacementWatchForTest(t, s)
 	peer := s.registrationTCP
 	s.recordCurrentDownlinkRequest(peer, s.captureDownlinkCheckpoint())
+	s.replacementDownlinkWatchFired(watch)
 	s.mu.RLock()
 	pending := s.replacementDownlinkWatch
 	s.mu.RUnlock()

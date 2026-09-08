@@ -2,6 +2,7 @@ package imscore
 
 import (
 	"bufio"
+	"context"
 	"net"
 	"strings"
 	"testing"
@@ -9,6 +10,52 @@ import (
 
 	"github.com/iniwex5/vowifi-go/internal/smscodec"
 )
+
+func TestVodafoneUKMTReport488TriesTunnelAlternateBeforeRuntime(t *testing.T) {
+	first, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Close()
+	second, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer second.Close()
+	firstSeen, secondSeen := make(chan string, 1), make(chan string, 1)
+	go serveRegisterStatus(first, 200, firstSeen)
+	go serveRegisterStatus(second, 200, secondSeen)
+
+	config := registerTransportTestConfig("udp", first.LocalAddr().String()+";"+second.LocalAddr().String())
+	config.CarrierPresetID = vodafoneUKCarrierPresetID
+	service, err := New(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer service.StopCurrent()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := service.Register(ctx); err != nil {
+		t.Fatal(err)
+	}
+	<-firstSeen
+	service.triggerMTReportPCSCFRecovery(&rpReportRejectError{
+		Status: 488, Registrar: first.LocalAddr().String(),
+	})
+	select {
+	case <-secondSeen:
+	case <-ctx.Done():
+		t.Fatal("488 did not try the unattempted P-CSCF in the current tunnel")
+	}
+	if got := service.StatusCurrent().Registrar; got != second.LocalAddr().String() {
+		t.Fatalf("registrar = %s, want %s", got, second.LocalAddr())
+	}
+	select {
+	case err := <-service.RegistrationErrors():
+		t.Fatalf("alternate registration requested a full runtime: %v", err)
+	default:
+	}
+}
 
 func TestVodafoneUKMTReport488RequestsFreshPCSCFPath(t *testing.T) {
 	service, _, _ := newInboundSMSTestService(t)
@@ -33,7 +80,7 @@ func TestVodafoneUKMTReport488RequestsFreshPCSCFPath(t *testing.T) {
 
 	select {
 	case err := <-service.RegistrationErrors():
-		if err == nil || !strings.Contains(err.Error(), "MT SMS RP report") ||
+		if err == nil || !strings.Contains(err.Error(), "pcscf-b.example:5060") ||
 			!strings.Contains(err.Error(), "fresh runtime required") {
 			t.Fatalf("runtime recovery error = %v", err)
 		}
@@ -45,7 +92,7 @@ func TestVodafoneUKMTReport488RequestsFreshPCSCFPath(t *testing.T) {
 	if until.Before(time.Now().Add(29 * time.Minute)) {
 		t.Fatalf("rejected P-CSCF penalty expires too early: %s", until)
 	}
-	if status.LastSIPCode != 488 || service.RegState() == regRegistered {
+	if service.RegState() == regRegistered || !strings.Contains(status.SignalingFailureReason, "mt_report_488") {
 		t.Fatalf("rejected P-CSCF state = %+v", status)
 	}
 }
