@@ -23,10 +23,13 @@ import {
 } from '@vicons/fluent'
 import { formatDeviceDateTime } from '../utils/deviceTime'
 import { useTheme } from '../composables/useTheme'
+import { t, useLocale } from '../i18n'
+import type { AppLocale } from '../utils/locale'
 
 const settingsStore = useSettingsStore()
 const authStore = useAuthStore()
 const { isClassic, applyClassic, restoreNavyTheme } = useTheme()
+const { locale, setLocale } = useLocale()
 const { systemInfo, loadingNotifications, savingNotifications, testingWebhook, testingBark, testingEmail, testingWeCom, changingPassword, passwordForm, telegramForm, feishuForm, qqForm, weixinForm, weComBotForm, webhookSettings, barkSettings, emailForm, pushplusForm, weComSettings } = storeToRefs(settingsStore)
 const activeNotifyTab = ref('telegram')
 const openWRTDynamicInterfaces = ref(false)
@@ -578,12 +581,26 @@ onMounted(() => {
             </div>
             <div class="border-t border-[var(--ui-border)] pt-4 flex items-center justify-between gap-4">
               <div class="min-w-0">
-                <div class="text-sm font-bold text-[var(--ui-text)]">经典主题</div>
-                <div class="text-xs text-[var(--ui-muted)]">旧版深色外观。顶栏太阳按钮只切换海军浅色 / 夜间</div>
+                <div class="text-sm font-bold text-[var(--ui-text)]">{{ t('settings.classic') }}</div>
+                <div class="text-xs text-[var(--ui-muted)]">{{ t('settings.classicHint') }}</div>
               </div>
               <el-switch
                 :model-value="isClassic"
                 @change="applyClassicTheme"
+              />
+            </div>
+            <div class="border-t border-[var(--ui-border)] pt-4 flex items-center justify-between gap-4">
+              <div class="min-w-0">
+                <div class="text-sm font-bold text-[var(--ui-text)]">{{ t('locale.label') }}</div>
+                <div class="text-xs text-[var(--ui-muted)]">{{ t('locale.hint') }}</div>
+              </div>
+              <el-segmented
+                :model-value="locale"
+                :options="[
+                  { label: t('locale.zh'), value: 'zh-CN' },
+                  { label: t('locale.en'), value: 'en' }
+                ]"
+                @change="(value: string | number | boolean) => setLocale(String(value) as AppLocale)"
               />
             </div>
             <div class="border-t border-[var(--ui-border)] pt-4 flex items-center justify-between gap-4">

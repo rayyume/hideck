@@ -12,6 +12,8 @@
       const dark = theme === 'dark' || theme === 'navy-night' || theme === 'classic'
       document.documentElement.classList.toggle('dark', dark)
       document.documentElement.classList.toggle('classic', theme === 'classic')
+      const locale = localStorage.getItem('hideck_locale')
+      document.documentElement.lang = locale === 'en' || locale === 'en-US' || locale === 'en-GB' ? 'en' : 'zh-CN'
     } catch { }
   </script>
   <style>

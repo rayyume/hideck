@@ -6,6 +6,7 @@ import StatusLight from './StatusLight.vue'
 import type { DeviceMgmtListItem } from '../types/api'
 import { isControlOnline, isRadioRegistered, lifecycleStatusLabel, primaryLifecycleStatus } from '../utils/deviceLifecycle'
 import { isWifiCallingEnabled } from '../utils/phoneMode'
+import { t } from '../i18n'
 
 const props = defineProps<{
   loading: boolean
@@ -57,22 +58,22 @@ const registrationText = (d: DeviceMgmtListItem) => {
   if (isRadioRegistered(d)) {
     return `${d?.modem?.operator || '--'} · ${[d?.modem?.network_duplex, d?.modem?.network_mode].filter(Boolean).join(' ') || '--'}`
   }
-  if (!isControlOnline(d)) return '控制面恢复中'
-  if (d.registration_state_label === 'searching') return '搜索网络中'
-  if (d.registration_state_label === 'denied') return '驻网被拒'
-  return '未驻网'
+  if (!isControlOnline(d)) return t('devices.recoveringControl')
+  if (d.registration_state_label === 'searching') return t('devices.searchingNetwork')
+  if (d.registration_state_label === 'denied') return t('devices.denied')
+  return t('devices.notCamped')
 }
 
 const softwarePhoneText = (d: DeviceMgmtListItem) => {
   if (!d?.vowifi_enabled) return ''
   if (d.phone_mode === 'volte') return 'VoLTE'
-  return d.phone_mode === 'cellular' ? '蜂窝电话' : 'WiFi calling'
+  return d.phone_mode === 'cellular' ? t('devices.cellularPhone') : 'WiFi calling'
 }
 
 const dataNetworkText = (d: DeviceMgmtListItem) => {
   if (isWifiCallingEnabled(d?.phone_mode, d?.vowifi_enabled)) return ''
-  if (!d?.network_enabled) return '数据未开启'
-  if (!d?.network_connected) return '数据网络未连接'
+  if (!d?.network_enabled) return t('devices.dataOff')
+  if (!d?.network_connected) return t('devices.dataDisconnected')
   return ''
 }
 
@@ -86,41 +87,41 @@ const secondaryStatus = (d: DeviceMgmtListItem) => {
     <header class="device-rail-header">
       <div>
         <span>DEVICE RAIL</span>
-        <h2>设备轨道</h2>
+        <h2>{{ t('devices.railTitle') }}</h2>
       </div>
       <strong>{{ filteredDevices.length }}<small> / {{ deviceCount }}</small></strong>
     </header>
 
     <div class="device-rail-search">
-      <el-input v-model="modelQuery" placeholder="搜索设备、ICCID 或接口" clearable />
+      <el-input v-model="modelQuery" :placeholder="t('devices.searchPlaceholder')" clearable />
     </div>
 
     <div class="device-rail-filters">
       <el-select v-model="modelStatusFilter" size="small" placeholder="在线">
-        <el-option label="全部状态" value="all" />
-        <el-option label="仅在线" value="online" />
-        <el-option label="仅离线" value="offline" />
+        <el-option :label="t('devices.allStatus')" value="all" />
+        <el-option :label="t('devices.onlineOnly')" value="online" />
+        <el-option :label="t('devices.offlineOnly')" value="offline" />
       </el-select>
 
       <el-select v-model="modelSortKey" size="small" placeholder="排序">
-        <el-option label="排序：名称" value="name" />
-        <el-option label="排序：信号" value="signal" />
+        <el-option :label="t('devices.sortName')" value="name" />
+        <el-option :label="t('devices.sortSignal')" value="signal" />
       </el-select>
       <el-select v-model="modelSortDir" size="small" placeholder="方向" class="device-sort-direction">
-        <el-option label="升序" value="asc" />
-        <el-option label="降序" value="desc" />
+        <el-option :label="t('devices.sortAsc')" value="asc" />
+        <el-option :label="t('devices.sortDesc')" value="desc" />
       </el-select>
     </div>
 
     <div v-if="deviceLimit > 0" class="device-quota" :class="{ 'is-full': deviceCount >= deviceLimit }">
-      <span>设备配额</span>
+      <span>{{ t('devices.quota') }}</span>
       <strong>{{ deviceCount }} / {{ deviceLimit }}</strong>
     </div>
 
     <div class="device-rail-list">
       <ListSkeleton v-if="loading && filteredDevices.length === 0" :rows="8" />
 
-      <EmptyState v-else-if="filteredDevices.length === 0" title="暂无设备" subtitle="点击右上角“添加设备”开始接管" />
+      <EmptyState v-else-if="filteredDevices.length === 0" :title="t('devices.empty')" :subtitle="t('devices.emptyHint')" />
 
       <div v-else class="device-list-scroll">
         <div class="device-list-grid">

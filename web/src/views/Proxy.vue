@@ -4,6 +4,7 @@ import { storeToRefs } from 'pinia'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import ErrorState from '../components/ErrorState.vue'
 import PageHeader from '../components/PageHeader.vue'
+import { t } from '../i18n'
 import ProxyCountryRuleDrawer from '../components/proxy/ProxyCountryRuleDrawer.vue'
 import ProxyInstanceEditorDrawer from '../components/proxy/ProxyInstanceEditorDrawer.vue'
 import ProxyModeSwitch from '../components/proxy/ProxyModeSwitch.vue'
@@ -516,7 +517,7 @@ usePollingScheduler(() => fetchUpstream({ silent: true }), 10000, {
 
 <template>
   <div class="app-page proxy-page">
-    <PageHeader title="代理管理" subtitle="配置 VoWiFi 漫游路由与绑定物理网络接口的本地出口" />
+    <PageHeader :title="t('proxy.title')" :subtitle="t('proxy.subtitle')" />
 
     <section class="proxy-workspace ui-card ui-workspace-glow">
       <ProxyModeSwitch

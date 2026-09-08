@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import type { DeviceOverviewItem, NativeVoLTEStatus } from '../types/api'
 import {
   createDashboardStages,
@@ -31,7 +32,7 @@ export type OverviewConnectionPresentation = Readonly<{
   metrics: readonly OverviewConnectionMetric[]
 }>
 
-const UNAVAILABLE = '不可用'
+
 
 export function createOverviewConnectionPresentation(
   device: DeviceOverviewItem | null
@@ -55,12 +56,12 @@ function createVoLTEPresentation(device: DeviceOverviewItem): OverviewConnection
     pathIsFlowing: device.healthy === true && volteRegistered(status) && state.tone !== 'is-failed',
     stages,
     metrics: Object.freeze([
-      metric('接入方式', 'VoLTE'),
+      metric(t('overview.access'), 'VoLTE'),
       metric('PLMN', status?.plmn),
       metric('MBN', status?.mbn_name),
-      metric('IMS PDN', status ? (status.ims_pdn_active ? '已激活' : '未激活') : UNAVAILABLE),
-      metric('协议', device.backend_mode?.toUpperCase()),
-      metric('接口', device.interface)
+      metric('IMS PDN', status ? (status.ims_pdn_active ? t('overview.imsPdnOn') : t('overview.imsPdnOff')) : t('common.unavailable')),
+      metric(t('devices.protocol'), device.backend_mode?.toUpperCase()),
+      metric(t('devices.iface'), device.interface)
     ])
   })
 }
@@ -73,21 +74,21 @@ function createVoWiFiOrCellularPresentation(
   const hasReadyStage = stages.some((stage) => stage.ready === true)
   const allStagesReady = stages.every((stage) => stage.ready === true)
   const runtimeReason = device?.vowifi_runtime?.sms_ready_reason || device?.vowifi_runtime?.last_reason || ''
-  const protocol = metric('协议', device?.backend_mode?.toUpperCase())
-  const deviceInterface = metric('接口', device?.interface)
+  const protocol = metric(t('devices.protocol'), device?.backend_mode?.toUpperCase())
+  const deviceInterface = metric(t('devices.iface'), device?.interface)
 
   if (!device?.vowifi_enabled) {
     if (!phoneModeCampsOnCell(device?.phone_mode)) {
       return Object.freeze({
         kind: 'wifi',
         eyebrow: 'WI-FI CALLING',
-        title: 'WiFi calling 未开启',
-        detail: '打开启动开关后才会注册',
+        title: t('overview.wifiOff'),
+        detail: t('overview.wifiOffHint'),
         tone: 'is-idle',
         pathIsFlowing: false,
         stages,
         metrics: Object.freeze([
-          metric('接入方式', 'Wi-Fi Calling', 'Wi-Fi Calling'),
+          metric(t('overview.access'), 'Wi-Fi Calling', 'Wi-Fi Calling'),
           protocol,
           deviceInterface
         ])
@@ -97,39 +98,39 @@ function createVoWiFiOrCellularPresentation(
     return Object.freeze({
       kind: 'cellular',
       eyebrow: 'CELLULAR',
-      title: '软件电话未开启',
-      detail: '设备在蜂窝驻网。打开软件电话后才能拨号',
+      title: t('overview.softphoneOff'),
+      detail: t('overview.softphoneOffHint'),
       tone: 'is-idle',
       pathIsFlowing: false,
       stages,
       metrics: Object.freeze([
         {
-          label: '蜂窝信号',
+          label: t('overview.cellularSignal'),
           value: formatDashboardSignal(device?.modem?.signal_dbm, device?.modem?.signal_rsrp),
           hint: hasDashboardSignal(signal) ? signalQuality(signal) : ''
         },
-        metric('公网 IPv4', device?.public_ip, '未分配'),
-        metric('公网 IPv6', device?.public_ipv6, '未分配'),
+        metric(t('dashboard.publicV4'), device?.public_ip, t('common.unassigned')),
+        metric(t('dashboard.publicV6'), device?.public_ipv6, t('common.unassigned')),
         deviceInterface
       ])
     })
   }
 
   let tone: OverviewConnectionPresentation['tone'] = 'is-idle'
-  let title = 'VoWiFi 等待连接'
-  let detail = runtimeReason || '尚未收到链路状态'
+  let title = t('overview.vowifiWait')
+  let detail = runtimeReason || t('overview.noLink')
   if (hasFailedStage) {
     tone = 'is-failed'
-    title = 'VoWiFi 链路异常'
-    detail = runtimeReason || '请检查失败阶段'
+    title = t('overview.vowifiFailed')
+    detail = runtimeReason || t('overview.checkFailed')
   } else if (device.vowifi_active && allStagesReady) {
     tone = 'is-ready'
-    title = 'VoWiFi 已连接'
-    detail = '通过 Wi-Fi 建立安全隧道并注册 IMS'
+    title = t('overview.vowifiConnected')
+    detail = t('overview.vowifiConnectedHint')
   } else if (hasReadyStage) {
     tone = 'is-pending'
-    title = 'VoWiFi 正在建立'
-    detail = runtimeReason || '等待剩余阶段就绪'
+    title = t('overview.vowifiBuilding')
+    detail = runtimeReason || t('overview.waitStages')
   }
 
   const runtime = device.vowifi_runtime
@@ -142,12 +143,12 @@ function createVoWiFiOrCellularPresentation(
     pathIsFlowing: device.healthy === true && device.vowifi_active === true && !hasFailedStage,
     stages,
     metrics: Object.freeze([
-      metric('接入方式', 'Wi-Fi Calling', 'Wi-Fi Calling'),
-      metric('数据平面', runtime?.dataplane_mode),
+      metric(t('overview.access'), 'Wi-Fi Calling', 'Wi-Fi Calling'),
+      metric(t('overview.dataplane'), runtime?.dataplane_mode),
       protocol,
       deviceInterface,
-      metric('最后原因', runtime?.last_reason || runtime?.sms_ready_reason, '无'),
-      metric('错误分类', runtime?.last_error_class, '无')
+      metric(t('overview.lastReason'), runtime?.last_reason || runtime?.sms_ready_reason, t('common.none')),
+      metric(t('overview.errorClass'), runtime?.last_error_class, t('common.none'))
     ])
   })
 }
@@ -228,12 +229,12 @@ function volteServiceState(
 function volteReadyDetail(status?: NativeVoLTEStatus): string {
   const parts = [status?.plmn, status?.mbn_name].map((value) => String(value || '').trim()).filter(Boolean)
   if (parts.length) return parts.join(' · ')
-  return '模组原生 IMS 已注册，可打电话'
+  return t('overview.volteRegistered')
 }
 
-function metric(label: string, value?: string | null, empty = UNAVAILABLE): OverviewConnectionMetric {
+function metric(label: string, value?: string | null, empty?: string): OverviewConnectionMetric {
   const text = String(value || '').trim()
-  return Object.freeze({ label, value: text || empty, hint: '' })
+  return Object.freeze({ label, value: text || empty || t('common.unavailable'), hint: '' })
 }
 
 function signalQuality(value: number): string {

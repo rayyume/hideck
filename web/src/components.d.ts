@@ -111,6 +111,7 @@ declare module 'vue' {
     SmsThreadListPane: typeof import('./components/sms/SmsThreadListPane.vue')['default']
     StatusLight: typeof import('./components/StatusLight.vue')['default']
     SwitchDark: typeof import('./components/SwitchDark.vue')['default']
+    SwitchLocale: typeof import('./components/SwitchLocale.vue')['default']
     TelegramNotificationTab: typeof import('./components/settings/TelegramNotificationTab.vue')['default']
     TrafficAnalysisPanel: typeof import('./components/TrafficAnalysisPanel.vue')['default']
     WeComBotNotificationTab: typeof import('./components/settings/WeComBotNotificationTab.vue')['default']

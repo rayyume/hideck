@@ -1,8 +1,13 @@
 <script setup lang="ts">
-defineProps({
-  title: { type: String, default: '正在加载…' },
-  subtitle: { type: String, default: '正在读取设备与服务状态' }
+import { computed } from 'vue'
+import { t } from '../i18n'
+
+const props = defineProps({
+  title: { type: String, default: '' },
+  subtitle: { type: String, default: '' }
 })
+const titleText = computed(() => props.title || t('common.loading'))
+const subtitleText = computed(() => props.subtitle || t('common.loadingHint'))
 </script>
 
 <template>
@@ -13,8 +18,8 @@ defineProps({
         <span>HIDECK CONTROL PLANE</span>
       </div>
       <div class="loading-copy">
-        <strong>{{ title }}</strong>
-        <span>{{ subtitle }}</span>
+        <strong>{{ titleText }}</strong>
+        <span>{{ subtitleText }}</span>
       </div>
       <span class="loading-line" aria-hidden="true" />
     </div>

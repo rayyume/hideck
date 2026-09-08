@@ -28,6 +28,9 @@ import { createDeviceRequestScope } from '../utils/deviceRequestScope'
 import { getMccMncIndex, lookupMccMncRow, mccMncCountryCode, type MccMncRow } from '../utils/mcc-mnc'
 import type { CardPolicy, CarrierWebsheetInfo, DeviceConfigDTO, DeviceMgmtListItem, DeviceOverviewItem, DiscoveredDevice, ModemStatus, PNNRecord, RealtimeTrafficSnapshot } from '../types/api'
 import type { AppError } from '../types/domain'
+import { t, useLocale } from '../i18n'
+
+useLocale()
 import { toAppError } from '../services/http'
 import { devicesService } from '../services/devices'
 import { cardsService } from '../services/cards'
@@ -1334,17 +1337,17 @@ usePollingScheduler(async () => {
     <div class="device-action-row">
       <div class="device-page-heading">
         <span>DEVICE MANAGEMENT</span>
-        <h1>设备管理</h1>
+        <h1>{{ t('devices.title') }}</h1>
       </div>
       <div class="device-global-actions">
         <RefreshButton :loading="loading" @click="fetchAll" />
         <el-button @click="rescanDevices" :loading="rescanning" class="ui-glass-border !border-0">
           <el-icon><ArrowSync24Regular /></el-icon>
-          重新扫描
+          {{ t('devices.rescan') }}
         </el-button>
         <el-button type="primary" @click="openAddDialog" class="!border-0">
           <el-icon><Add24Regular /></el-icon>
-          添加设备
+          {{ t('devices.add') }}
         </el-button>
       </div>
     </div>
@@ -1352,13 +1355,13 @@ usePollingScheduler(async () => {
     <ErrorState
       v-if="loadError"
       class="mb-6"
-      title="设备数据加载失败"
+      :title="t('devices.loadFailed')"
       :message="loadError.message"
       :status-code="loadError.status"
       :request-method="loadError.method"
       :request-url="loadError.url"
       :last-success-at="loadLastOkAt"
-      retry-text="重试"
+      :retry-text="t('common.retry')"
       @retry="fetchAll"
     />
 
@@ -1396,7 +1399,7 @@ usePollingScheduler(async () => {
           />
           <div class="device-workspace-surface">
             <el-tabs v-model="activeTab" class="device-detail-tabs">
-              <el-tab-pane label="概览" name="overview">
+              <el-tab-pane :label="t('devices.overview')" name="overview">
               <div class="space-y-6">
                 <DeviceOverviewTab
                   :device="selectedDevice"
@@ -1425,10 +1428,10 @@ usePollingScheduler(async () => {
                 />
               </div>
             </el-tab-pane>
-            <el-tab-pane label="eSIM" name="esim" lazy>
+            <el-tab-pane :label="t('devices.esim')" name="esim" lazy>
               <DeviceEsimTab :device-id="selectedDevice.id" :device-imei="selectedDevice.modem?.imei || ''" :is-active="activeTab === 'esim'" :device-online="selectedDevice.running === true" />
             </el-tab-pane>
-            <el-tab-pane label="AT 终端" name="at" lazy>
+            <el-tab-pane :label="t('devices.at')" name="at" lazy>
               <DeviceAtTab
                 :device-id="selectedDevice.id"
                 :backend-mode="selectedDevice.backend_mode"
@@ -1436,10 +1439,10 @@ usePollingScheduler(async () => {
                 :running="selectedDevice.running"
               />
             </el-tab-pane>
-            <el-tab-pane label="USSD 终端" name="ussd" lazy>
+            <el-tab-pane :label="t('devices.ussd')" name="ussd" lazy>
               <DeviceUssdTab :device-id="selectedDevice.id" />
             </el-tab-pane>
-            <el-tab-pane label="卡策略" name="card" lazy>
+            <el-tab-pane :label="t('devices.policy')" name="card" lazy>
               <div v-if="cardPolicyLoading" class="tab-loading-state ui-panel-muted">
                 <el-skeleton :rows="4" animated />
               </div>
@@ -1463,7 +1466,7 @@ usePollingScheduler(async () => {
                 @policy-changed="onCardPolicyChanged"
               />
             </el-tab-pane>
-            <el-tab-pane label="配置" name="config" lazy>
+            <el-tab-pane :label="t('devices.config')" name="config" lazy>
               <div v-if="configLoading" class="tab-loading-state ui-panel-muted">
                 <el-skeleton :rows="5" animated />
               </div>

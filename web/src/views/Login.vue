@@ -4,6 +4,7 @@ import { useAuthStore } from '../stores/auth'
 import { useRoute, useRouter } from 'vue-router'
 import { Person24Regular, LockClosed24Regular, ArrowRight24Regular } from '@vicons/fluent'
 import { systemService } from '../services/system'
+import { t } from '../i18n'
 import type { PasswordCredentialStatus } from '../types/credentials'
 
 const auth = useAuthStore()
@@ -20,7 +21,7 @@ const passwordChangeForm = ref({ old_password: '', new_password: '', confirm_pas
 async function handleLogin() {
   const { ElMessage } = await import('element-plus')
   if (!form.value.username || !form.value.password) {
-    ElMessage.warning('请输入用户名和密码')
+    ElMessage.warning(t('login.needCredentials'))
     return
   }
 
@@ -28,14 +29,14 @@ async function handleLogin() {
   const result = await auth.login(form.value.username, form.value.password)
   loading.value = false
   if (!result.ok) {
-    ElMessage.error('登录失败，请检查凭证')
+    ElMessage.error(t('login.failed'))
     return
   }
 
   if (await startPasswordRemediation(result.credential)) {
     return
   }
-  await completeLogin('欢迎回来')
+  await completeLogin(t('login.welcome'))
 }
 
 async function startPasswordRemediation(status: PasswordCredentialStatus): Promise<boolean> {
@@ -44,9 +45,9 @@ async function startPasswordRemediation(status: PasswordCredentialStatus): Promi
   if (status.management === 'environment') {
     const variable = status.environment_variable || 'PROXY_WEB_PASSWORD'
     await ElMessageBox.alert(
-      `当前登录密码强度不足，并由环境变量 ${variable} 管理。控制台不会覆盖环境变量，请在部署环境中修改后重启 HiDeck。`,
-      '请更换弱密码',
-      { confirmButtonText: '我知道了', showClose: false, closeOnClickModal: false, closeOnPressEscape: false, type: 'warning' }
+      t('login.weakPasswordEnv', { variable }),
+      t('login.weakPasswordTitle'),
+      { confirmButtonText: t('login.weakPasswordAck'), showClose: false, closeOnClickModal: false, closeOnPressEscape: false, type: 'warning' }
     )
     return false
   }
@@ -73,7 +74,7 @@ async function submitPasswordChange() {
     return
   }
   auth.applyToken(result.data.token)
-  await completeLogin('密码已更新')
+  await completeLogin(t('login.passwordUpdated'))
 }
 
 function validatePasswordChange(): string {
@@ -121,7 +122,7 @@ async function redirectAfterLogin() {
 
 <template>
   <main class="login-page">
-    <section class="login-identity" aria-label="HiDeck 产品信息">
+    <section class="login-identity" :aria-label="t('login.productAria')">
       <div class="network-map" aria-hidden="true">
         <span class="network-line line-a" />
         <span class="network-line line-b" />
@@ -146,11 +147,11 @@ async function redirectAfterLogin() {
 
       <div class="identity-copy">
         <span class="identity-kicker">TELECOM OPERATIONS</span>
-        <h1>通信模组控制台</h1>
-        <p>设备、网络、短信与 VoWiFi 状态集中管理。</p>
+        <h1>{{ t('login.headline') }}</h1>
+        <p>{{ t('login.lede') }}</p>
       </div>
 
-      <div class="signal-panel" aria-label="控制台状态">
+      <div class="signal-panel" :aria-label="t('login.statusAria')">
         <div class="signal-bars" aria-hidden="true">
           <i /><i /><i /><i />
         </div>
@@ -166,12 +167,12 @@ async function redirectAfterLogin() {
       <div class="login-form-wrap">
         <header>
           <span class="form-kicker">SECURE ACCESS</span>
-          <h2>登录 HiDeck</h2>
-          <p>使用管理账户进入控制台</p>
+          <h2>{{ t('login.title') }}</h2>
+          <p>{{ t('login.subtitle') }}</p>
         </header>
 
         <form @submit.prevent="handleLogin">
-          <label for="login-username">用户名</label>
+          <label for="login-username">{{ t('login.username') }}</label>
           <div class="field-shell">
             <Person24Regular aria-hidden="true" />
             <input
@@ -180,11 +181,11 @@ async function redirectAfterLogin() {
               type="text"
               name="username"
               autocomplete="username"
-              placeholder="请输入用户名"
+              :placeholder="t('login.usernamePlaceholder')"
             />
           </div>
 
-          <label for="login-password">密码</label>
+          <label for="login-password">{{ t('login.password') }}</label>
           <div class="field-shell">
             <LockClosed24Regular aria-hidden="true" />
             <input
@@ -193,13 +194,13 @@ async function redirectAfterLogin() {
               type="password"
               name="password"
               autocomplete="current-password"
-              placeholder="请输入密码"
+              :placeholder="t('login.passwordPlaceholder')"
             />
           </div>
 
           <button type="submit" :disabled="loading">
             <span v-if="loading" class="login-spinner" aria-hidden="true" />
-            <span>{{ loading ? '正在验证' : '登录' }}</span>
+            <span>{{ loading ? t('login.verifying') : t('login.submit') }}</span>
             <ArrowRight24Regular v-if="!loading" aria-hidden="true" />
           </button>
         </form>
@@ -210,7 +211,7 @@ async function redirectAfterLogin() {
 
     <el-dialog
       v-model="passwordChangeOpen"
-      title="修改登录密码"
+      :title="t('login.changePassword')"
       width="min(440px, calc(100vw - 32px))"
       :show-close="false"
       :close-on-click-modal="false"

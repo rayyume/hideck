@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import type { DashboardDevice, VoWiFiRuntimeState } from '../types/api'
 import { displaySignalDbm, hasValidSignalDbm } from './signalPresentation'
 
@@ -20,7 +21,7 @@ export type DashboardDevicePresentation = Readonly<{
   showsCellularFacts: boolean
   signal: string
   stages: readonly DashboardConnectionStage[]
-  statusLabel: '在线' | '离线'
+  statusLabel: string
 }>
 
 export type DashboardDeviceFilter = Readonly<{
@@ -47,7 +48,7 @@ export function formatDashboardNetworkType(device: DashboardDevice): string {
   const parts = [device.network_duplex, device.network_mode]
     .map((value) => String(value || '').trim())
     .filter(Boolean)
-  return parts.join(' ') || DASHBOARD_UNAVAILABLE
+  return parts.join(' ') || t('common.unavailable')
 }
 
 export function formatDashboardSignal(value: unknown, rsrp?: unknown): string {
@@ -55,7 +56,7 @@ export function formatDashboardSignal(value: unknown, rsrp?: unknown): string {
     typeof value === 'number' ? value : undefined,
     typeof rsrp === 'number' ? rsrp : undefined
   )
-  return dbm === undefined ? DASHBOARD_UNAVAILABLE : `${dbm} dBm`
+  return dbm === undefined ? t('common.unavailable') : `${dbm} dBm`
 }
 
 export function createDashboardStages(
@@ -132,7 +133,7 @@ export function createDashboardDevicePresentation(
     showsCellularFacts: !isVoWiFi,
     signal: formatDashboardSignal(device.signal_dbm),
     stages: createDashboardStages(device.vowifi_runtime),
-    statusLabel: isOnline ? '在线' : '离线'
+    statusLabel: isOnline ? t('common.online') : t('common.offline')
   })
 }
 
@@ -141,9 +142,9 @@ function getConnectionState(
   isVoWiFi: boolean,
   connectionType: string
 ): string {
-  if (!isOnline) return '当前设备不可用'
-  if (isVoWiFi) return '已连接'
-  return connectionType === DASHBOARD_UNAVAILABLE ? '控制面在线' : connectionType
+  if (!isOnline) return t('dashboard.deviceUnavailable')
+  if (isVoWiFi) return t('common.connected')
+  return connectionType === t('common.unavailable') ? t('dashboard.controlOnline') : connectionType
 }
 
 function getConnectionTitle(
@@ -151,15 +152,15 @@ function getConnectionTitle(
   isOnline: boolean,
   isVoWiFi: boolean
 ): string {
-  if (!isOnline) return '设备离线'
-  if (isVoWiFi) return 'Wi-Fi Calling'
-  return normalizeFact(device.operator, '网络检测中')
+  if (!isOnline) return t('dashboard.deviceOfflineShort')
+  if (isVoWiFi) return t('dashboard.wifiCalling')
+  return normalizeFact(device.operator, t('dashboard.detectingNetwork'))
 }
 
 function normalizeAddress(value: unknown): string {
-  return String(value || '').trim() || DASHBOARD_UNASSIGNED
+  return String(value || '').trim() || t('common.unassigned')
 }
 
-function normalizeFact(value: unknown, fallback = DASHBOARD_UNAVAILABLE): string {
+function normalizeFact(value: unknown, fallback = t('common.unavailable')): string {
   return String(value || '').trim() || fallback
 }

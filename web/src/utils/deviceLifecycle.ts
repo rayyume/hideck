@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import type { DeviceLifecyclePhase, DeviceMgmtListItem, DeviceOverviewItem } from '../types/api'
 
 type DeviceLike = Pick<
@@ -28,23 +29,23 @@ export function isRadioRegistered(device: DeviceLike | null | undefined) {
 export function lifecycleStatusLabel(phase?: DeviceLifecyclePhase) {
   switch (phase) {
     case 'rebooting':
-      return '重启中'
+      return t('lifecycle.rebooting')
     case 'usb_wait':
-      return '等待设备重新枚举'
+      return t('lifecycle.usbWait')
     case 'worker_starting':
-      return '设备启动中'
+      return t('lifecycle.workerStarting')
     case 'qmi_starting':
-      return 'QMI 启动中'
+      return t('lifecycle.qmiStarting')
     case 'recovering':
-      return '控制面恢复中'
+      return t('lifecycle.recovering')
     case 'degraded':
-      return '控制面不稳定'
+      return t('lifecycle.degraded')
     case 'evicting':
-      return '重新接管中'
+      return t('lifecycle.evicting')
     case 'online':
-      return '在线'
+      return t('lifecycle.online')
     case 'offline':
-      return '离线'
+      return t('lifecycle.offline')
     default:
       return ''
   }
@@ -53,16 +54,16 @@ export function lifecycleStatusLabel(phase?: DeviceLifecyclePhase) {
 export function primaryLifecycleStatus(device: DeviceLike | null | undefined) {
   const phase = device?.lifecycle_phase
   if (isRecoveryPhase(phase)) {
-    return { label: lifecycleStatusLabel(phase) || '恢复中', tag: 'warning' as const, tone: 'warning' as const, animated: true }
+    return { label: lifecycleStatusLabel(phase) || t('lifecycle.recoveringShort'), tag: 'warning' as const, tone: 'warning' as const, animated: true }
   }
   if (phase === 'degraded') {
-    return { label: '不稳定', tag: 'warning' as const, tone: 'warning' as const, animated: true }
+    return { label: t('lifecycle.unstable'), tag: 'warning' as const, tone: 'warning' as const, animated: true }
   }
   if (!device?.running) {
-    return { label: '离线', tag: 'danger' as const, tone: 'danger' as const, animated: false }
+    return { label: t('lifecycle.offline'), tag: 'danger' as const, tone: 'danger' as const, animated: false }
   }
   if (!isControlOnline(device)) {
-    return { label: '恢复中', tag: 'warning' as const, tone: 'warning' as const, animated: true }
+    return { label: t('lifecycle.recoveringShort'), tag: 'warning' as const, tone: 'warning' as const, animated: true }
   }
-  return { label: '在线', tag: 'success' as const, tone: 'success' as const, animated: true }
+  return { label: t('lifecycle.online'), tag: 'success' as const, tone: 'success' as const, animated: true }
 }

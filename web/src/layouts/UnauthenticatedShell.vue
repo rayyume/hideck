@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import LoadingScreen from '../components/LoadingScreen.vue'
 import SwitchDark from '../components/SwitchDark.vue'
+import SwitchLocale from '../components/SwitchLocale.vue'
 
 defineProps({
   isDark: {
@@ -14,7 +15,8 @@ const emit = defineEmits(['toggle-theme'])
 
 <template>
   <div class="unauthenticated-shell h-screen flex items-center justify-center transition-colors duration-300">
-    <div class="absolute top-4 right-4 z-50">
+    <div class="absolute top-4 right-4 z-50 flex items-center gap-2">
+      <SwitchLocale />
       <SwitchDark :is-dark="isDark" @toggle="(e) => emit('toggle-theme', e)" />
     </div>
     <router-view v-slot="{ Component }">

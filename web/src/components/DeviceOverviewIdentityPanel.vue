@@ -5,6 +5,7 @@ import type { DeviceOverviewItem } from '../types/api'
 import { useSensitiveVisibility } from '../composables/useSensitiveVisibility'
 import { copyToClipboard } from '../utils/clipboard'
 import { activeEsimProfileDisplayName } from './deviceOverviewActiveEsim'
+import { t } from '../i18n'
 
 type IdentityFact = Readonly<{
   key: string
@@ -52,15 +53,15 @@ const identityFacts = computed<readonly IdentityFact[]>(() => {
     createFact({ key: 'imei', label: 'IMEI', value: props.device?.modem?.imei, sensitive: true, copyable: true }),
     createFact({ key: 'iccid', label: 'ICCID', value: props.device?.modem?.iccid, sensitive: true, copyable: true }),
     createFact({ key: 'imsi', label: 'IMSI', value: props.device?.modem?.imsi, sensitive: true, copyable: true }),
-    createFact({ key: 'phone', label: '本机号码', value: props.device?.local_phone, sensitive: true, copyable: true }),
-    createFact({ key: 'operator', label: '原运营商', value: props.simOperatorDisplay, copyable: true }),
-    createFact({ key: 'firmware', label: '固件版本', value: props.device?.modem?.firmware, copyable: true })
+    createFact({ key: 'phone', label: t('devices.localNumber'), value: props.device?.local_phone, sensitive: true, copyable: true }),
+    createFact({ key: 'operator', label: t('devices.homeOperator'), value: props.simOperatorDisplay, copyable: true }),
+    createFact({ key: 'firmware', label: t('devices.firmware'), value: props.device?.modem?.firmware, copyable: true })
   ]
   const esimName = activeEsimProfileDisplayName(props.device)
-  if (esimName) facts.push(createFact({ key: 'esim', label: '当前 eSIM', value: esimName, copyable: true }))
+  if (esimName) facts.push(createFact({ key: 'esim', label: t('devices.currentEsim'), value: esimName, copyable: true }))
   facts.push(
-    createFact({ key: 'flight', label: '飞行模式', value: flightModeEnabled.value ? '已开启' : '未开启', tone: 'status' }),
-    createFact({ key: 'backend', label: '运行模式', value: backendLabel.value, tone: 'status' })
+    createFact({ key: 'flight', label: t('devices.flightMode'), value: flightModeEnabled.value ? t('devices.on') : t('devices.off'), tone: 'status' }),
+    createFact({ key: 'backend', label: t('devices.backend'), value: backendLabel.value, tone: 'status' })
   )
   return Object.freeze(facts)
 })
@@ -69,13 +70,13 @@ function createFact({ key, label, value, ...options }: IdentityFactInput): Ident
   return Object.freeze({
     key,
     label,
-    value: String(value ?? '').trim() || '不可用',
+    value: String(value ?? '').trim() || t('common.unavailable'),
     ...options
   })
 }
 
 function copyFact(fact: IdentityFact) {
-  if (!fact.copyable || fact.value === '不可用') return
+  if (!fact.copyable || fact.value === t('common.unavailable')) return
   void copyToClipboard(fact.value, `已复制${fact.label}`)
 }
 </script>
@@ -85,15 +86,15 @@ function copyFact(fact: IdentityFact) {
     <header class="identity-header">
       <div>
         <span>DEVICE IDENTITY</span>
-        <h3>身份与设备</h3>
-        <p>SIM 身份、设备固件与当前运行配置</p>
+        <h3>{{ t('devices.identity') }}</h3>
+        <p>{{ t('devices.identityHint') }}</p>
       </div>
       <button
         type="button"
         class="identity-visibility"
-        :aria-label="showSensitive ? '隐藏敏感信息' : '显示敏感信息'"
+        :aria-label="showSensitive ? t('devices.hideSensitive') : t('devices.showSensitive')"
         :aria-pressed="showSensitive"
-        :title="showSensitive ? '隐藏敏感信息' : '显示敏感信息'"
+        :title="showSensitive ? t('devices.hideSensitive') : t('devices.showSensitive')"
         @click="showSensitive = !showSensitive"
       >
         <Eye24Regular v-if="showSensitive" aria-hidden="true" />

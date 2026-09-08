@@ -10,6 +10,7 @@ import { automationService } from '../services/automation'
 import { devicesService } from '../services/devices'
 import type { DeviceMgmtListItem } from '../types/api'
 import type { AutomaticTask, AutomaticTaskInput } from '../types/automation'
+import { t } from '../i18n'
 
 const TASK_REFRESH_INTERVAL_MS = 10_000
 
@@ -185,7 +186,7 @@ function taskToInput(task: AutomaticTask, overrides: Partial<AutomaticTaskInput>
     <header class="page-heading">
       <div>
         <span>HIDECK / AUTOMATION</span>
-        <h1>自动任务</h1>
+        <h1>{{ t('tasks.title') }}</h1>
         <p>定时执行短信、通话与公网 IP 任务</p>
       </div>
       <div class="heading-actions">

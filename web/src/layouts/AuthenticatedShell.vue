@@ -7,6 +7,8 @@ import { Expand, Fold } from '@element-plus/icons-vue'
 import LoadingScreen from '../components/LoadingScreen.vue'
 import ErrorBoundary from '../components/ErrorBoundary.vue'
 import SwitchDark from '../components/SwitchDark.vue'
+import { t, useLocale } from '../i18n'
+import { nextLocale } from '../utils/locale'
 import PhoneCallBar from '../components/PhoneCallBar.vue'
 import SmsNotificationCenter from '../components/sms/SmsNotificationCenter.vue'
 import { debugCollector } from '../debug/collector'
@@ -44,26 +46,31 @@ const drawerOpen = ref(false)
 const debugOpen = ref(false)
 const DebugPanel = defineAsyncComponent(() => import('../components/DebugPanel.vue'))
 
-const menuItems = [
-  { index: '/', label: '仪表盘', icon: Board24Regular },
-  { index: '/devices', label: '设备管理', icon: Phone24Regular },
-  { index: '/phone', label: '电话', icon: Dialpad24Regular },
-  { index: '/proxy', label: '代理管理', icon: Globe24Regular },
-  { index: '/sms', label: '短信中心', icon: Mail24Regular },
-  { index: '/commands', label: '命令中心', icon: Chat24Regular },
-  { index: '/automatic-tasks', label: '自动任务', icon: CalendarClock24Regular },
-  { index: '/logs', label: '实时日志', icon: DocumentText24Regular },
-  { index: '/settings', label: '系统设置', icon: Settings24Regular }
-]
-const mobileMenuItems = menuItems.filter((item) => ['/', '/phone', '/devices', '/sms', '/commands'].includes(item.index))
+const { locale, setLocale } = useLocale()
+const localeHint = computed(() => (locale.value === 'en' ? t('locale.switchToZh') : t('locale.switchToEn')))
+function toggleLocale() {
+  setLocale(nextLocale(locale.value))
+}
+const menuItems = computed(() => [
+  { index: '/', label: t('nav.dashboard'), icon: Board24Regular },
+  { index: '/devices', label: t('nav.devices'), icon: Phone24Regular },
+  { index: '/phone', label: t('nav.phone'), icon: Dialpad24Regular },
+  { index: '/proxy', label: t('nav.proxy'), icon: Globe24Regular },
+  { index: '/sms', label: t('nav.sms'), icon: Mail24Regular },
+  { index: '/commands', label: t('nav.commands'), icon: Chat24Regular },
+  { index: '/automatic-tasks', label: t('nav.tasks'), icon: CalendarClock24Regular },
+  { index: '/logs', label: t('nav.logs'), icon: DocumentText24Regular },
+  { index: '/settings', label: t('nav.settings'), icon: Settings24Regular }
+])
+const mobileMenuItems = computed(() => menuItems.value.filter((item) => ['/', '/phone', '/devices', '/sms', '/commands'].includes(item.index)))
 const effectiveCollapsed = computed(() => collapsed.value || viewportCompact.value)
 const expandedSidebarWidth = computed(() => viewportNarrow.value ? '190px' : '218px')
 
 async function handleLogout() {
   const { ElMessageBox } = await import('element-plus')
-  const confirmed = await ElMessageBox.confirm('确认退出登录？', '提示', {
-    confirmButtonText: '退出',
-    cancelButtonText: '取消',
+  const confirmed = await ElMessageBox.confirm(t('nav.logoutConfirm'), t('nav.logoutTitle'), {
+    confirmButtonText: t('nav.logoutAction'),
+    cancelButtonText: t('common.cancel'),
     type: 'warning'
   })
     .then(() => true)
@@ -140,7 +147,7 @@ watch(
 )
 
 const activePath = computed(() => route.path)
-const activeMenuItem = computed(() => menuItems.find((item) => item.index === route.path) || menuItems[0])
+const activeMenuItem = computed(() => menuItems.value.find((item) => item.index === route.path) || menuItems.value[0])
 </script>
 
 <template>
@@ -172,20 +179,27 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
       </el-menu>
 
       <div v-if="effectiveCollapsed" class="sidebar-account-compact">
-        <el-tooltip content="退出登录" placement="right">
-          <button type="button" aria-label="退出登录" @click="handleLogout">
+        <el-tooltip :content="localeHint" placement="right">
+          <button type="button" :aria-label="localeHint" @click="toggleLocale">
+            <el-icon><Settings24Regular /></el-icon>
+          </button>
+        </el-tooltip>
+        <el-tooltip :content="t('nav.logout')" placement="right">
+          <button type="button" :aria-label="t('nav.logout')" @click="handleLogout">
             <el-icon><SignOut24Regular /></el-icon>
           </button>
         </el-tooltip>
       </div>
       <div v-else class="sidebar-account-expanded">
         <div class="sidebar-account flex items-center gap-3">
-          <div class="sidebar-account-icon"><el-icon><Settings24Regular /></el-icon></div>
+          <button type="button" class="sidebar-account-icon" :aria-label="localeHint" :title="localeHint" @click="toggleLocale">
+            <el-icon><Settings24Regular /></el-icon>
+          </button>
           <div class="flex-1 min-w-0">
-            <div class="text-sm font-semibold truncate text-[var(--ui-nav-text)]">Admin</div>
-            <div class="text-xs truncate sidebar-account-role">Administrator</div>
+            <div class="text-sm font-semibold truncate text-[var(--ui-nav-text)]">{{ t('nav.admin') }}</div>
+            <div class="text-xs truncate sidebar-account-role">{{ t('nav.administrator') }}</div>
           </div>
-          <el-button text type="danger" aria-label="退出登录" @click="handleLogout">
+          <el-button text type="danger" :aria-label="t('nav.logout')" @click="handleLogout">
             <el-icon><SignOut24Regular /></el-icon>
           </el-button>
         </div>
@@ -217,12 +231,12 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
 
         <div class="absolute bottom-3 w-full px-3">
           <div class="sidebar-account flex items-center gap-3">
-            <div class="sidebar-account-icon">
+            <button type="button" class="sidebar-account-icon" :aria-label="localeHint" :title="localeHint" @click="toggleLocale">
               <el-icon><Settings24Regular /></el-icon>
-            </div>
+            </button>
             <div class="flex-1 min-w-0">
-              <div class="text-sm font-semibold truncate text-[var(--ui-nav-text)]">Admin</div>
-              <div class="text-xs truncate sidebar-account-role">Administrator</div>
+              <div class="text-sm font-semibold truncate text-[var(--ui-nav-text)]">{{ t('nav.admin') }}</div>
+              <div class="text-xs truncate sidebar-account-role">{{ t('nav.administrator') }}</div>
             </div>
             <el-button text type="danger" @click="handleLogout">
               <el-icon><SignOut24Regular /></el-icon>
@@ -235,7 +249,7 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
     <el-container class="h-full">
       <el-header class="app-topbar h-16 px-3 sm:px-5 flex items-center justify-between sticky top-0 z-10">
         <div class="topbar-side topbar-side-left">
-          <el-button text :aria-label="isMobile ? '打开导航' : collapsed ? '展开侧边栏' : '收起侧边栏'" @click="handleNavToggle" class="nav-toggle !px-2">
+          <el-button text :aria-label="isMobile ? t('nav.openNav') : collapsed ? t('nav.expandSidebar') : t('nav.collapseSidebar')" @click="handleNavToggle" class="nav-toggle !px-2">
             <el-icon>
               <Expand v-if="isMobile || collapsed" />
               <Fold v-else />
@@ -247,9 +261,9 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
         <div class="topbar-route"><strong>{{ activeMenuItem.label }}</strong></div>
 
         <div class="topbar-side topbar-side-right">
-          <div class="hidden sm:flex service-state" aria-label="实时连接">
+          <div class="hidden sm:flex service-state" :aria-label="t('nav.live')">
             <span class="service-state-dot" />
-            <span>实时连接</span>
+            <span>{{ t('nav.live') }}</span>
           </div>
           <SmsNotificationCenter />
           <SwitchDark :is-dark="isDark" @toggle="(e) => emit('toggle-theme', e)" />
@@ -264,13 +278,13 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
             <ErrorBoundary v-if="Component" title="页面渲染失败">
               <component :is="Component" :key="r.fullPath" />
             </ErrorBoundary>
-            <LoadingScreen v-else title="正在加载页面…" subtitle="正在准备页面组件与资源" />
+            <LoadingScreen v-else :title="t('common.loadingPage')" :subtitle="t('common.loadingPageHint')" />
           </router-view>
         </div>
       </el-main>
     </el-container>
 
-    <nav v-if="isMobile" class="mobile-bottom-nav" aria-label="移动导航">
+    <nav v-if="isMobile" class="mobile-bottom-nav" :aria-label="t('nav.mobileNav')">
       <button
         v-for="item in mobileMenuItems"
         :key="item.index"
@@ -512,6 +526,7 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
   left: 0;
   width: 100%;
   display: grid;
+  gap: 8px;
   place-items: center;
 }
 
@@ -540,9 +555,18 @@ const activeMenuItem = computed(() => menuItems.find((item) => item.index === ro
   height: 32px;
   flex: 0 0 32px;
   place-items: center;
+  padding: 0;
+  border: 0;
   border-radius: var(--ui-radius-sm);
   background: color-mix(in srgb, var(--ui-accent) 12%, transparent);
   color: var(--ui-accent);
+  cursor: pointer;
+}
+
+.sidebar-account-icon:hover,
+.sidebar-account-icon:focus-visible {
+  color: var(--ui-nav-active);
+  background: color-mix(in srgb, var(--ui-accent) 20%, transparent);
 }
 
 .sidebar-account-role {
