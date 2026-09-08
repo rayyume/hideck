@@ -22,6 +22,12 @@ import { Delete24Regular, Person24Regular, Send24Regular } from '@vicons/fluent'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 import { formatDeviceDate } from '../utils/deviceTime'
 import { createSmsConversationContext, createSmsDeviceChannels } from '../utils/smsPresentation'
+import { isNearTimelineEnd } from '../utils/timelineFollow'
+import {
+  SMS_THREAD_PAGE_SIZE,
+  mergeSmsThreadPages,
+  threadAlreadyHasLatest
+} from '../utils/smsThreadMessages'
 
 type SmsThread = {
   key: string
@@ -66,11 +72,6 @@ let smsPageResizeObserver: ResizeObserver | null = null
 
 function syncSmsPageWidth() {
   smsPageWidth.value = smsPageRef.value?.clientWidth || 0
-}
-
-function parseTs(s: string) {
-  const ms = new Date(s).getTime()
-  return Number.isFinite(ms) ? ms : 0
 }
 
 function dateKey(timestamp: string) {
@@ -164,6 +165,8 @@ function estimateSegments(text: string) {
 const composerLen = computed(() => Array.from(String(composer.value || '')).length)
 const composerEstimate = computed(() => estimateSegments(String(composer.value || '')))
 const detailScrollbar = ref<HTMLElement | null>(null)
+const followingLatest = ref(true)
+let followLatestTimer = 0
 
 const sendForm = ref({
   device_id: '',
@@ -223,28 +226,25 @@ async function markThreadSeen(t: SmsThread | null) {
 }
 
 function scrollThreadToBottom() {
-  const doScroll = () => {
+  followingLatest.value = true
+  const snap = () => {
     const wrap = detailScrollbar.value
     if (!wrap) return
     wrap.scrollTop = wrap.scrollHeight
   }
-  // 第一次：DOM 更新后立即滚动
   nextTick(() => {
-    requestAnimationFrame(doScroll)
-    // 第二次：延迟 150ms 补偿大量消息渲染延迟
-    setTimeout(doScroll, 150)
+    snap()
+    requestAnimationFrame(() => {
+      snap()
+      requestAnimationFrame(snap)
+    })
+    window.clearTimeout(followLatestTimer)
+    followLatestTimer = window.setTimeout(snap, 80)
   })
 }
 
 function getDetailWrap() {
   return detailScrollbar.value
-}
-
-function isNearBottom(thresholdPx = 160) {
-  const wrap = detailScrollbar.value
-  if (!wrap) return true
-  const distance = wrap.scrollHeight - (wrap.scrollTop + wrap.clientHeight)
-  return distance <= thresholdPx
 }
 
 async function loadMoreHistory() {
@@ -261,7 +261,7 @@ async function loadMoreHistory() {
     const oldest = threadMessages.value[0]
     const params: SmsThreadQueryParams = {
       peer: selectedThread.value.peer,
-      limit: 80,
+      limit: SMS_THREAD_PAGE_SIZE,
       before_ts: oldest.timestamp,
       before_id: oldest.id
     }
@@ -280,8 +280,7 @@ async function loadMoreHistory() {
       return
     }
     const list = (result.data || []) as SMSMessage[]
-    const merged = list.slice().sort((a, b) => parseTs(a.timestamp) - parseTs(b.timestamp) || a.id - b.id).concat(threadMessages.value)
-    threadMessages.value = merged
+    threadMessages.value = mergeSmsThreadPages(list, threadMessages.value)
     threadHasMore.value = list.length === params.limit
     await nextTick()
     requestAnimationFrame(() => {
@@ -303,7 +302,13 @@ async function loadMoreHistory() {
 
 function onDetailScroll(e: Event) {
   const target = e.target as HTMLElement
-  if (target && target.scrollTop <= 80) {
+  if (!target) return
+  followingLatest.value = isNearTimelineEnd({
+    scrollTop: target.scrollTop,
+    clientHeight: target.clientHeight,
+    scrollHeight: target.scrollHeight
+  }, 160)
+  if (target.scrollTop <= 80) {
     loadMoreHistory()
   }
 }
@@ -374,7 +379,6 @@ async function fetchMessages(silent = false) {
   const seq = ++messagesFetchSeq
   if (!silent) loading.value = true
   messagesError.value = null
-  const wasNearBottom = isNearBottom()
   const result = await smsStore.fetchThreads(selectedDevice.value)
   if (seq !== messagesFetchSeq) return false
   if (targetMessageQuery.value !== undefined) {
@@ -395,9 +399,6 @@ async function fetchMessages(silent = false) {
     messagesError.value = result.error
   }
   if (!silent) loading.value = false
-  if (result.ok && selectedThreadKey.value && wasNearBottom && !viewingTarget.value) {
-    scrollThreadToBottom()
-  }
   return result.ok
 }
 
@@ -413,9 +414,12 @@ async function fetchThreadLatest(silent = false) {
     threadHasMore.value = messageTarget.value.hasMore
     return true
   }
+  if (silent && threadAlreadyHasLatest(threadMessages.value, t.lastSmsId)) {
+    return true
+  }
   const seq = ++threadFetchSeq
   if (!silent) threadLoading.value = true
-  const params: SmsThreadQueryParams = { peer: t.peer, limit: 80 }
+  const params: SmsThreadQueryParams = { peer: t.peer, limit: SMS_THREAD_PAGE_SIZE }
   if (t.iccid) {
     params.iccid = t.iccid
   } else if (selectedDevice.value && selectedDevice.value !== 'all') {
@@ -427,8 +431,14 @@ async function fetchThreadLatest(silent = false) {
   const result = await smsStore.fetchThread(params)
   if (seq !== threadFetchSeq) return false
   if (result.ok) {
-    threadMessages.value = (result.data || []) as SMSMessage[]
-    threadHasMore.value = threadMessages.value.length === params.limit
+    const list = (result.data || []) as SMSMessage[]
+    if (silent && threadMessages.value.length > 0) {
+      threadMessages.value = mergeSmsThreadPages(threadMessages.value, list)
+      if (!threadHasMore.value) threadHasMore.value = list.length === params.limit
+    } else {
+      threadMessages.value = list
+      threadHasMore.value = list.length === params.limit
+    }
   } else {
     messagesError.value = result.error
   }
@@ -439,7 +449,7 @@ async function fetchThreadLatest(silent = false) {
 async function ensureThreadSelection(options: { syncRoute?: boolean; silent?: boolean; scrollToBottom?: boolean } = {}) {
   const syncRoute = options.syncRoute === true
   const silent = options.silent === true
-  const scrollToBottom = options.scrollToBottom === true
+  const scrollToBottom = options.scrollToBottom ?? !viewingTarget.value
 
   const requestedKey = selectedThreadKey.value
   let current = selectedThread.value
@@ -454,10 +464,15 @@ async function ensureThreadSelection(options: { syncRoute?: boolean; silent?: bo
     }
   }
   if (current) {
+    const previousCount = threadMessages.value.length
+    const previousLastId = threadMessages.value.at(-1)?.id
     const ok = await fetchThreadLatest(silent)
     if (ok) {
       await applyThreadSeen(current)
-      if (scrollToBottom) scrollThreadToBottom()
+      const changed = threadMessages.value.length !== previousCount || threadMessages.value.at(-1)?.id !== previousLastId
+      if (!viewingTarget.value && (scrollToBottom || (silent && followingLatest.value && changed))) {
+        scrollThreadToBottom()
+      }
     }
     return
   }
@@ -483,6 +498,7 @@ async function selectThread(key: string, options: { syncRoute?: boolean; silent?
   const syncRoute = options.syncRoute !== false
   const silent = options.silent === true
   const scrollToBottom = options.scrollToBottom !== false
+  followingLatest.value = scrollToBottom
 
   selectedThreadKey.value = key
   threadFetchSeq += 1
@@ -524,7 +540,7 @@ async function handleSelectDevice(deviceId: string, options: { syncRoute?: boole
 
   const ok = await fetchMessages(silent)
   if (!ok || selectedDevice.value !== nextDevice) return
-  await ensureThreadSelection({ syncRoute, silent, scrollToBottom: false })
+  await ensureThreadSelection({ syncRoute, silent, scrollToBottom: !viewingTarget.value })
 }
 
 async function fetchMessagesAndThread(silent = false) {
@@ -538,9 +554,14 @@ async function refreshAll() {
   await fetchMessagesAndThread()
 }
 
-function showLatestMessages() {
+async function showLatestMessages() {
+  followingLatest.value = true
   if (viewingTarget.value) {
+    targetMessageQuery.value = undefined
+    messageTarget.value = null
     void router.replace({ query: { ...route.query, latest: '1' } })
+    const ok = await fetchThreadLatest(false)
+    if (ok) scrollThreadToBottom()
     return
   }
   scrollThreadToBottom()
@@ -566,7 +587,7 @@ watch(
     if (isNarrow) return
     if (selectedThreadKey.value) return
     if (filteredThreads.value.length === 0) return
-    await selectThread(filteredThreads.value[0].key, { syncRoute: true, scrollToBottom: false })
+    await selectThread(filteredThreads.value[0].key, { syncRoute: true, scrollToBottom: true })
   }
 )
 
@@ -587,7 +608,7 @@ onMounted(async () => {
   if (!messagesOk && selectedDevice.value !== initialDevice) {
     messagesOk = await fetchMessages()
   }
-  if (messagesOk) await ensureThreadSelection({ syncRoute: false, silent: false, scrollToBottom: !!messageTarget.value })
+  if (messagesOk) await ensureThreadSelection({ syncRoute: false, silent: false, scrollToBottom: !viewingTarget.value })
 })
 
 onUnmounted(() => {
@@ -597,6 +618,7 @@ onUnmounted(() => {
   smsPageResizeObserver?.disconnect()
   smsPageResizeObserver = null
   window.removeEventListener('resize', syncSmsPageWidth)
+  window.clearTimeout(followLatestTimer)
 })
 
 function openSendModal() {
@@ -804,7 +826,7 @@ async function confirmDeleteThread(thread: SmsThread) {
             :loading="threadLoading"
             :show-back="false"
             @refresh="() => void fetchMessagesAndThread(false)"
-            @latest="showLatestMessages"
+            @latest="() => void showLatestMessages()"
             @delete="selectedThread && void confirmDeleteThread(selectedThread)"
           />
 
