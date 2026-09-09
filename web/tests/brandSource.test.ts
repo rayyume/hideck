@@ -7,7 +7,7 @@ async function source(path: string) {
 }
 
 test('production Vue surfaces present the HiDeck brand consistently', async () => {
-  const [app, shell, login, loading, header, commands, automation, settings, atConsole] = await Promise.all([
+  const [app, shell, login, loading, header, commands, automation, settings, atConsole, zhCN] = await Promise.all([
     source('../src/App.vue'),
     source('../src/layouts/AuthenticatedShell.vue'),
     source('../src/views/Login.vue'),
@@ -16,7 +16,8 @@ test('production Vue surfaces present the HiDeck brand consistently', async () =
     source('../src/components/commands/CommandChat.vue'),
     source('../src/views/AutomaticTasks.vue'),
     source('../src/views/Settings.vue'),
-    source('../src/components/DeviceAtTab.vue')
+    source('../src/components/DeviceAtTab.vue'),
+    source('../src/i18n/zh-CN.ts')
   ])
   const visibleSources = [app, shell, login, loading, header, commands, automation, settings, atConsole]
 
@@ -27,8 +28,10 @@ test('production Vue surfaces present the HiDeck brand consistently', async () =
   assert.match(shell, /sidebar-brand-title">HiDeck</)
   assert.match(shell, /topbar-product">HIDECK</)
   assert.match(login, /identity-mark">H</)
-  assert.match(login, /登录 HiDeck/)
-  assert.match(app, /HiDeck 最终用户许可与免责声明/)
+  assert.match(login, /t\('login\.title'\)/)
+  assert.match(zhCN, /login:\s*\{[\s\S]*?title:\s*'登录 HiDeck'/)
+  assert.match(app, /t\('disclaimer\.title'\)/)
+  assert.match(zhCN, /disclaimer:\s*\{[\s\S]*?title:\s*'HiDeck 最终用户许可与免责声明'/)
   assert.match(commands, /HiDeck 命令会话/)
   assert.match(settings, /title="HiDeck Gateway"/)
 })
