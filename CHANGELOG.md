@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.1.19 - 2026-09-09
+
+### 设备 / PC/SC
+
+- Linux 读卡器句柄按本地 `LONG` 宽度传。
+- 没有 IMEI 也能保存读卡器 SIM 身份。
+- PIN 只在文件受保护时才校验，失败次数跟当前卡绑定，不再自动连打。
+
+### VoWiFi / IMS
+
+- SIP 地址头里的 service URN 能解析。
+- INVITE 失败后 typed-nil SIP 消息不再空指针。
+
 ## 2.1.18 - 2026-09-09
 
 ### 短信 / IMS
