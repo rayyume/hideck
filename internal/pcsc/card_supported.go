@@ -16,8 +16,8 @@ const (
 
 type systemCard struct {
 	api      *winscardAPI
-	context  uintptr
-	handle   uintptr
+	context  pcscLong
+	handle   pcscLong
 	protocol pcscDword
 	closed   bool
 	mu       sync.Mutex
