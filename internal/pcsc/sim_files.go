@@ -9,7 +9,8 @@ import (
 	"strings"
 )
 
-func readIdentity(ctx context.Context, card Card, pin string) (Identity, error) {
+func (session *Session) readIdentity(ctx context.Context, pin string) (Identity, error) {
+	card := session.card
 	identity := Identity{PINTries: -1}
 	var err error
 	identity.ICCID, err = readICCID(ctx, card)
@@ -20,22 +21,17 @@ func readIdentity(ctx context.Context, card Card, pin string) (Identity, error) 
 	if err != nil {
 		return identity, err
 	}
-	if err := verifyPIN(ctx, card, pin); err != nil {
+	err = session.withPINAccess(ctx, identity.USIMAID, pin, func() error {
+		var readErr error
+		identity.IMSI, readErr = readIMSI(ctx, card)
+		return readErr
+	})
+	if err != nil {
 		identity.PINRequired = errors.Is(err, ErrPINRequired) || errors.Is(err, ErrPINTriesLow)
 		var pinErr *PINError
 		if errors.As(err, &pinErr) {
 			identity.PINTries = pinErr.Tries
 		}
-		return identity, err
-	}
-	if err := selectFile(ctx, card, []byte{0x6F, 0x07}); err != nil {
-		return identity, fmt.Errorf("pcsc: select EF_IMSI: %w", err)
-	}
-	imsiData, err := readBinary(ctx, card, 9)
-	if err != nil {
-		return identity, fmt.Errorf("pcsc: read EF_IMSI: %w", err)
-	}
-	if identity.IMSI, err = decodeIMSI(imsiData); err != nil {
 		return identity, err
 	}
 	if reselectUSIM(ctx, card, identity.USIMAID) {
@@ -48,6 +44,17 @@ func readIdentity(ctx context.Context, card Card, pin string) (Identity, error) 
 		identity.SMSC = readSMSC(ctx, card)
 	}
 	return identity, nil
+}
+
+func readIMSI(ctx context.Context, card Card) (string, error) {
+	if err := selectFile(ctx, card, []byte{0x6F, 0x07}); err != nil {
+		return "", fmt.Errorf("pcsc: select EF_IMSI: %w", err)
+	}
+	data, err := readBinary(ctx, card, 9)
+	if err != nil {
+		return "", fmt.Errorf("pcsc: read EF_IMSI: %w", err)
+	}
+	return decodeIMSI(data)
 }
 
 func reselectUSIM(ctx context.Context, card Card, aid []byte) bool {
@@ -160,10 +167,14 @@ func readBinary(ctx context.Context, card Card, length int) ([]byte, error) {
 }
 
 func verifyPIN(ctx context.Context, card Card, pin string) error {
+	return verifyPINReference(ctx, card, pin, 0x01)
+}
+
+func verifyPINReference(ctx context.Context, card Card, pin string, reference byte) error {
 	pin = strings.TrimSpace(pin)
-	_, sw, err := card.Transmit(ctx, []byte{0x00, 0x20, 0x00, 0x01, 0x00})
+	_, sw, err := card.Transmit(ctx, []byte{0x00, 0x20, 0x00, reference, 0x00})
 	if err != nil {
-		return fmt.Errorf("pcsc: SIM PIN status check failed: %w", err)
+		return &PINError{Kind: fmt.Errorf("pcsc: SIM PIN status check failed: %w", err), Tries: -1}
 	}
 	if sw == 0x9000 {
 		return nil
@@ -171,33 +182,36 @@ func verifyPIN(ctx context.Context, card Card, pin string) error {
 	tries := pinTries(sw)
 	if pin == "" {
 		if tries >= 0 {
-			return &PINError{Kind: ErrPINRequired, Tries: tries}
+			return &PINError{Kind: ErrPINRequired, Tries: tries, Status: sw, HasStatus: true}
 		}
 		if sw == 0x6982 || sw == 0x9804 {
-			return &PINError{Kind: ErrPINRequired, Tries: -1}
+			return &PINError{Kind: ErrPINRequired, Tries: -1, Status: sw, HasStatus: true}
 		}
-		return fmt.Errorf("pcsc: SIM PIN status check failed with status %04X", sw)
+		return &PINError{Kind: ErrPINStatusUnknown, Tries: -1, Status: sw, HasStatus: true}
+	}
+	if tries < 0 {
+		return &PINError{Kind: ErrPINStatusUnknown, Tries: -1, Status: sw, HasStatus: true}
 	}
 	if len(pin) < 4 || len(pin) > 8 || !decimalDigits(pin) {
-		return errors.New("pcsc: SIM PIN must contain 4 to 8 digits")
+		return &PINError{Kind: errors.New("pcsc: SIM PIN must contain 4 to 8 digits"), Tries: tries, Status: sw, HasStatus: true}
 	}
 	if tries >= 0 && tries <= 2 {
-		return &PINError{Kind: ErrPINTriesLow, Tries: tries}
+		return &PINError{Kind: ErrPINTriesLow, Tries: tries, Status: sw, HasStatus: true}
 	}
 	body := bytes.Repeat([]byte{0xFF}, 8)
 	copy(body, pin)
-	apdu := append([]byte{0x00, 0x20, 0x00, 0x01, 0x08}, body...)
+	apdu := append([]byte{0x00, 0x20, 0x00, reference, 0x08}, body...)
 	_, sw, err = card.Transmit(ctx, apdu)
 	if err != nil {
-		return fmt.Errorf("pcsc: SIM PIN verification transport failed: %w", err)
+		return &PINError{Kind: fmt.Errorf("pcsc: SIM PIN verification transport failed: %w", err), Tries: -1}
 	}
 	if sw == 0x9000 {
 		return nil
 	}
 	if tries = pinTries(sw); tries >= 0 {
-		return &PINError{Kind: ErrPINRejected, Tries: tries}
+		return &PINError{Kind: ErrPINRejected, Tries: tries, Status: sw, HasStatus: true}
 	}
-	return ErrPINRejected
+	return &PINError{Kind: ErrPINVerification, Tries: -1, Status: sw, HasStatus: true}
 }
 
 func pinTries(sw uint16) int {
@@ -215,7 +229,7 @@ func requireStatus(operation string, sw uint16, err error) error {
 		return nil
 	}
 	if sw == 0x6982 || sw == 0x9804 {
-		return &PINError{Kind: ErrPINRequired, Tries: -1}
+		return fmt.Errorf("pcsc: %s failed (SW=%04X): %w", operation, sw, ErrSecurityStatus)
 	}
-	return fmt.Errorf("pcsc: %s failed with status %04X", operation, sw)
+	return fmt.Errorf("pcsc: %s failed (SW=%04X)", operation, sw)
 }

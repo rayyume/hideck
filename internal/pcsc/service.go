@@ -70,7 +70,9 @@ func (service *Service) resolveSelector(ctx context.Context, selector Selector) 
 }
 
 type readerGate struct {
-	token chan struct{}
+	token      chan struct{}
+	pinMu      sync.RWMutex
+	pinFailure error
 }
 
 func newReaderGate() *readerGate {
@@ -92,6 +94,22 @@ func (gate *readerGate) acquire(ctx context.Context) error {
 }
 
 func (gate *readerGate) release() { gate.token <- struct{}{} }
+
+func (gate *readerGate) pinRetryError() error {
+	gate.pinMu.RLock()
+	defer gate.pinMu.RUnlock()
+	if gate.pinFailure == nil {
+		return nil
+	}
+	return fmt.Errorf("%w: %w", ErrPINRetryBlocked, gate.pinFailure)
+}
+
+func (service *Service) PINFailure(reader Reader) error {
+	if service == nil {
+		return ErrUnavailable
+	}
+	return service.readerLock(canonicalSelector(reader)).pinRetryError()
+}
 
 func (service *Service) readerLock(selector Selector) *readerGate {
 	key := selectorLockKey(selector)
@@ -115,6 +133,29 @@ type Session struct {
 	lock   *readerGate
 	card   Card
 	closed bool
+}
+
+func (session *Session) verifyPIN(ctx context.Context, pin string) error {
+	return session.verifyPINReference(ctx, pin, 0x01)
+}
+
+func (session *Session) blockPINRetry(err error) error {
+	session.lock.pinMu.Lock()
+	if session.lock.pinFailure == nil {
+		session.lock.pinFailure = err
+	}
+	session.lock.pinMu.Unlock()
+	return session.lock.pinRetryError()
+}
+
+func (session *Session) verifyPINReference(ctx context.Context, pin string, reference byte) error {
+	if err := session.lock.pinRetryError(); err != nil {
+		return err
+	}
+	if err := verifyPINReference(ctx, session.card, pin, reference); err != nil {
+		return session.blockPINRetry(err)
+	}
+	return nil
 }
 
 func (service *Service) OpenSession(ctx context.Context, selector Selector) (*Session, error) {
@@ -203,7 +244,7 @@ func (service *Service) ReadIdentity(ctx context.Context, selector Selector, pin
 		return Identity{}, err
 	}
 	defer session.Close()
-	return readIdentity(ctx, session.card, pin)
+	return session.readIdentity(ctx, pin)
 }
 
 func MatchReader(readers []Reader, selector Selector) (Reader, bool) {
@@ -253,7 +294,13 @@ func (service *Service) CheckReady(ctx context.Context, selector Selector, expec
 	if err != nil {
 		return "", err
 	}
-	if err := verifyPIN(ctx, session.card, pin); err != nil {
+	if err := session.withPINAccess(ctx, aid, pin, func() error {
+		_, err := readIMSI(ctx, session.card)
+		return err
+	}); err != nil {
+		return "", err
+	}
+	if _, err := selectApplication(ctx, session.card, aid); err != nil {
 		return "", err
 	}
 	return strings.ToUpper(hex.EncodeToString(aid)), nil
@@ -263,7 +310,7 @@ func statusError(operation string, sw uint16) error {
 	if sw == 0x9862 {
 		return ErrAKARejected
 	}
-	return fmt.Errorf("pcsc: %s failed with status %04X", operation, sw)
+	return requireStatus(operation, sw, nil)
 }
 
 func (service *Service) Authenticate(ctx context.Context, selector Selector, expectedICCID, pin string, challenge AKAChallenge) (AKAResult, error) {
@@ -279,10 +326,11 @@ func (service *Service) Authenticate(ctx context.Context, selector Selector, exp
 	if changedCard(expectedICCID, iccid) {
 		return AKAResult{}, ErrCardChanged
 	}
-	if _, err := selectUSIM(ctx, session.card); err != nil {
+	aid, err := selectUSIM(ctx, session.card)
+	if err != nil {
 		return AKAResult{}, err
 	}
-	if err := verifyPIN(ctx, session.card, pin); err != nil {
+	if err := session.lock.pinRetryError(); err != nil {
 		return AKAResult{}, err
 	}
 	apdu := []byte{0x00, 0x88, 0x00, 0x81, 0x22, 0x10}
@@ -290,12 +338,18 @@ func (service *Service) Authenticate(ctx context.Context, selector Selector, exp
 	apdu = append(apdu, 0x10)
 	apdu = append(apdu, challenge.AUTN[:]...)
 	apdu = append(apdu, 0x00)
-	data, sw, err := session.card.Transmit(ctx, apdu)
+	var data []byte
+	err = session.withPINAccess(ctx, aid, pin, func() error {
+		var status uint16
+		var transportErr error
+		data, status, transportErr = session.card.Transmit(ctx, apdu)
+		if transportErr != nil {
+			return fmt.Errorf("pcsc: USIM authentication transport failed: %w", transportErr)
+		}
+		return statusError("USIM authentication", status)
+	})
 	if err != nil {
-		return AKAResult{}, fmt.Errorf("pcsc: USIM authentication transport failed: %w", err)
-	}
-	if sw != 0x9000 {
-		return AKAResult{}, statusError("USIM authentication", sw)
+		return AKAResult{}, err
 	}
 	return parseAKAResponse(data)
 }
