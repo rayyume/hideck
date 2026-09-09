@@ -19,7 +19,7 @@ var (
 	ErrPINRejected         = errors.New("pcsc: SIM PIN was rejected")
 	ErrPINStatusUnknown    = errors.New("pcsc: SIM PIN state or retry count is unknown; verification refused")
 	ErrPINVerification     = errors.New("pcsc: SIM PIN verification failed")
-	ErrPINRetryBlocked     = errors.New("pcsc: automatic SIM PIN retries disabled; resolve the cause before restarting HiDeck")
+	ErrPINRetryBlocked     = errors.New("pcsc: automatic SIM PIN retries disabled; correct the PIN and explicitly allow another attempt")
 	ErrSecurityStatus      = errors.New("pcsc: card security status does not allow this operation")
 	ErrUSIMUnavailable     = errors.New("pcsc: no usable USIM application was found")
 	ErrApplicationNotFound = errors.New("pcsc: smart-card application was not found")

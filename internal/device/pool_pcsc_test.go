@@ -75,7 +75,7 @@ func TestReconcilePCSCReadersDoesNotRetryPINFailure(test *testing.T) {
 			test.Fatal(err)
 		}
 	}
-	if native.opens != 1 || native.queries != 1 || native.verifications != 1 {
+	if native.opens <= 1 || native.queries != 1 || native.verifications != 1 {
 		test.Fatalf("automatic retry after failure: opens=%d queries=%d verifications=%d", native.opens, native.queries, native.verifications)
 	}
 	if _, err := pool.AddWorkerFromConfig(cfg); !errors.Is(err, pcsc.ErrPINRetryBlocked) {

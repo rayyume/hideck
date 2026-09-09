@@ -79,6 +79,7 @@ const editDirty = ref(false)
 const configLoading = ref(false)
 const configError = ref<AppError | null>(null)
 const saving = ref(false)
+const retryingPIN = ref(false)
 const rotating = ref(false)
 const reconnectingVoWiFi = ref(false)
 const e911Starting = ref(false)
@@ -1035,6 +1036,34 @@ async function saveConfig() {
   }
 }
 
+async function retrySIMPin() {
+  const id = String(selectedId.value || '').trim()
+  if (!id) return
+  if (editDirty.value) {
+    ElMessage.warning('请先保存 SIM PIN 环境变量配置，再重新尝试')
+    return
+  }
+  const confirmed = await ElMessageBox.confirm(
+    '此操作会解除当前 SIM 的 PIN 安全锁并重新初始化读卡器。如果 PIN 仍不正确，可能消耗一次剩余尝试次数。',
+    '重新尝试 SIM PIN',
+    { confirmButtonText: '确认重新尝试', cancelButtonText: '取消', type: 'warning' }
+  ).then(() => true).catch(() => false)
+  if (!confirmed) return
+
+  retryingPIN.value = true
+  try {
+    const result = await devicesService.retrySIMPin(id)
+    if (!result.ok) throw new Error(result.error.message || '重新尝试失败')
+    ElMessage.success('已重新初始化读卡器并尝试验证当前 SIM PIN')
+    await Promise.all([refreshListOnly(), refreshSelectedDetailOnly()])
+  } catch (e: unknown) {
+    const err = toAppError(e)
+    ElMessage.error(err.message || '重新尝试 SIM PIN 失败')
+  } finally {
+    retryingPIN.value = false
+  }
+}
+
 async function deleteDevice() {
   const id = String(selectedId.value || '').trim()
   if (!id) return
@@ -1486,8 +1515,10 @@ usePollingScheduler(async () => {
                 :device-status="selectedDetail"
                 :saving="saving"
                 :deleting="deleting"
+                :retrying-pin="retryingPIN"
                 @save="saveConfig"
                 @delete="deleteDevice"
+                @retry-pin="retrySIMPin"
               />
               </el-tab-pane>
             </el-tabs>

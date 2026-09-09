@@ -8,6 +8,8 @@ import (
 	"testing"
 )
 
+const pinTestICCID = "89012345678901234567"
+
 func TestPINUnknownStateNeverSubmitsConfiguredPIN(test *testing.T) {
 	for _, status := range []uint16{0x0000, 0x6700, 0x6982, 0x6983, 0x6984, 0x6985, 0x9804, 0x6A86, 0x6D00, 0x6F00} {
 		test.Run(fmt.Sprintf("%04X", status), func(test *testing.T) {
@@ -67,13 +69,13 @@ func TestPINSuccessfulVerificationRemainsAvailable(test *testing.T) {
 		if err != nil {
 			test.Fatal(err)
 		}
-		if err := session.verifyPIN(context.Background(), "1234"); err != nil {
+		if err := session.verifyPIN(context.Background(), pinTestICCID, "1234"); err != nil {
 			test.Fatal(err)
 		}
 		if err := session.Close(); err != nil {
 			test.Fatal(err)
 		}
-		if err := service.PINFailure(Reader{Name: "Reader A", USBPath: "1-2"}); err != nil {
+		if err := service.PINFailure(Reader{Name: "Reader A", USBPath: "1-2"}, pinTestICCID); err != nil {
 			test.Fatalf("successful verification disabled retries: %v", err)
 		}
 		if len(card.calls) != len(replies) {
@@ -82,33 +84,25 @@ func TestPINSuccessfulVerificationRemainsAvailable(test *testing.T) {
 	}
 }
 
-func TestPINFailureBlocksLaterSessionsAndAliases(test *testing.T) {
+func TestSubmittedPINFailureBlocksOnlyTheSameCard(test *testing.T) {
 	transportError := errors.New("native transport failed")
 	for _, scenario := range []struct {
 		name    string
-		pin     string
 		replies []scriptedReply
 	}{
-		{name: "missing PIN", replies: []scriptedReply{{sw: 0x63C3}}},
-		{name: "unknown state", pin: "1234", replies: []scriptedReply{{sw: 0x6983}}},
-		{name: "rejected", pin: "1234", replies: []scriptedReply{{sw: 0x63C3}, {sw: 0x63C2}}},
-		{name: "unknown verification result", pin: "1234", replies: []scriptedReply{{sw: 0x63C3}, {sw: 0x6984}}},
-		{name: "status transport error", pin: "1234", replies: []scriptedReply{{err: transportError}}},
-		{name: "verification transport error", pin: "1234", replies: []scriptedReply{{sw: 0x63C3}, {err: transportError}}},
+		{name: "rejected", replies: []scriptedReply{{sw: 0x63C3}, {sw: 0x63C2}}},
+		{name: "unknown verification result", replies: []scriptedReply{{sw: 0x63C3}, {sw: 0x6984}}},
+		{name: "verification transport error", replies: []scriptedReply{{sw: 0x63C3}, {err: transportError}}},
 	} {
 		test.Run(scenario.name, func(test *testing.T) {
-			card := &scriptedCard{replies: scenario.replies}
+			card := &scriptedCard{replies: append(scenario.replies, scriptedReply{sw: 0x9000})}
 			service := NewWithBackend(&scriptedBackend{card: card})
 			for attempt, selector := range []Selector{{ReaderName: "Reader A"}, {USBPath: "1-2"}} {
 				session, err := service.OpenSession(context.Background(), selector)
 				if err != nil {
 					test.Fatal(err)
 				}
-				pin := scenario.pin
-				if attempt > 0 {
-					pin = "5678"
-				}
-				err = session.verifyPIN(context.Background(), pin)
+				err = session.verifyPIN(context.Background(), pinTestICCID, "1234")
 				if closeErr := session.Close(); closeErr != nil {
 					test.Fatal(closeErr)
 				}
@@ -119,13 +113,86 @@ func TestPINFailureBlocksLaterSessionsAndAliases(test *testing.T) {
 					test.Fatalf("attempt %d submitted extra APDUs: %d", attempt, len(card.calls))
 				}
 			}
-			if err := service.PINFailure(Reader{Name: "Reader A", USBPath: "1-2"}); !errors.Is(err, ErrPINRetryBlocked) {
-				test.Fatalf("missing reader-level failure: %v", err)
+			if err := service.PINFailure(Reader{Name: "Reader A", USBPath: "1-2"}, pinTestICCID); !errors.Is(err, ErrPINRetryBlocked) {
+				test.Fatalf("missing card-level failure: %v", err)
 			}
-			if err := service.PINFailure(Reader{Name: "Reader B", USBPath: "1-3"}); err != nil {
-				test.Fatalf("failure leaked into unrelated reader: %v", err)
+			session, err := service.OpenSession(context.Background(), Selector{ReaderName: "Reader A"})
+			if err != nil {
+				test.Fatal(err)
+			}
+			err = session.verifyPIN(context.Background(), "89111111111111111111", "5678")
+			_ = session.Close()
+			if err != nil {
+				test.Fatalf("failure leaked into replacement card: %v", err)
 			}
 		})
+	}
+}
+
+func TestNonSubmittedPINFailuresRemainRetryable(test *testing.T) {
+	transportError := errors.New("native transport failed")
+	for _, scenario := range []struct {
+		name    string
+		pin     string
+		replies []scriptedReply
+	}{
+		{name: "missing PIN", replies: []scriptedReply{{sw: 0x63C3}, {sw: 0x63C3}, {sw: 0x9000}}},
+		{name: "unknown status", pin: "1234", replies: []scriptedReply{{sw: 0x6983}, {sw: 0x9000}}},
+		{name: "low retries", pin: "1234", replies: []scriptedReply{{sw: 0x63C2}, {sw: 0x9000}}},
+		{name: "status transport error", pin: "1234", replies: []scriptedReply{{err: transportError}, {sw: 0x9000}}},
+	} {
+		test.Run(scenario.name, func(test *testing.T) {
+			card := &scriptedCard{replies: scenario.replies}
+			service := NewWithBackend(&scriptedBackend{card: card})
+			session, err := service.OpenSession(context.Background(), Selector{ReaderName: "Reader A"})
+			if err != nil {
+				test.Fatal(err)
+			}
+			firstErr := session.verifyPIN(context.Background(), pinTestICCID, scenario.pin)
+			_ = session.Close()
+			if firstErr == nil || errors.Is(firstErr, ErrPINRetryBlocked) {
+				test.Fatalf("first attempt was incorrectly latched: %v", firstErr)
+			}
+			session, err = service.OpenSession(context.Background(), Selector{USBPath: "1-2"})
+			if err != nil {
+				test.Fatal(err)
+			}
+			err = session.verifyPIN(context.Background(), pinTestICCID, "5678")
+			_ = session.Close()
+			if err != nil {
+				test.Fatalf("safe retry was blocked: %v", err)
+			}
+		})
+	}
+}
+
+func TestExplicitRetryClearsCurrentCardFailure(test *testing.T) {
+	card := &scriptedCard{replies: []scriptedReply{{sw: 0x63C3}, {sw: 0x63C2}}}
+	service := NewWithBackend(&scriptedBackend{card: card})
+	session, err := service.OpenSession(context.Background(), Selector{ReaderName: "Reader A"})
+	if err != nil {
+		test.Fatal(err)
+	}
+	if err = session.verifyPIN(context.Background(), pinTestICCID, "1234"); !errors.Is(err, ErrPINRetryBlocked) {
+		test.Fatalf("PIN failure was not latched: %v", err)
+	}
+	_ = session.Close()
+	card.replies = append(card.replies,
+		scriptedReply{sw: 0x9000}, scriptedReply{sw: 0x9000},
+		scriptedReply{data: []byte{0x98, 0x10, 0x32, 0x54, 0x76, 0x98, 0x10, 0x32, 0x54, 0x76}, sw: 0x9000},
+		scriptedReply{sw: 0x63C3}, scriptedReply{sw: 0x9000},
+	)
+	if iccid, err := service.AllowPINRetry(context.Background(), Selector{ReaderName: "Reader A"}); err != nil || iccid != pinTestICCID {
+		test.Fatalf("allow retry returned iccid=%q err=%v", iccid, err)
+	}
+	session, err = service.OpenSession(context.Background(), Selector{ReaderName: "Reader A"})
+	if err != nil {
+		test.Fatal(err)
+	}
+	err = session.verifyPIN(context.Background(), pinTestICCID, "5678")
+	_ = session.Close()
+	if err != nil {
+		test.Fatalf("explicit retry remained blocked: %v", err)
 	}
 }
 
@@ -148,7 +215,6 @@ func TestPINFailureGuardCoversIdentityReadinessAndAuthentication(test *testing.T
 	)
 	card.replies = append(card.replies, scriptedReply{sw: 0x63C3}, scriptedReply{sw: 0x6984})
 	card.replies = append(card.replies, selection...)
-	card.replies = append(card.replies, scriptedReply{sw: 0x9000}, scriptedReply{sw: 0x6982})
 	card.replies = append(card.replies, selection...)
 	service := NewWithBackend(&scriptedBackend{card: card})
 	selector := Selector{ReaderName: "Reader A"}

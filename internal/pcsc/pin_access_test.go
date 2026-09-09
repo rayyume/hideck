@@ -145,14 +145,43 @@ func TestAccessDenialRequiresFCPBeforePIN(test *testing.T) {
 		card := &accessTestCard{fcp: fcp, imsiStatus: 0x6982, queryStatus: 0x63C3}
 		service := NewWithBackend(&accessTestBackend{card: card})
 		_, err := service.ReadIdentity(context.Background(), Selector{ReaderName: "Reader A"}, "1234")
-		if !errors.Is(err, ErrPINStatusUnknown) || !errors.Is(err, ErrPINRetryBlocked) || !strings.Contains(err.Error(), "read EF_IMSI") || !strings.Contains(err.Error(), "SW=6982") {
+		if !errors.Is(err, ErrPINStatusUnknown) || errors.Is(err, ErrPINRetryBlocked) || !strings.Contains(err.Error(), "read EF_IMSI") || !strings.Contains(err.Error(), "SW=6982") {
 			test.Fatalf("missing access/FCP diagnostics: %v", err)
+		}
+		if _, retryErr := service.ReadIdentity(context.Background(), Selector{ReaderName: "Reader A"}, "1234"); errors.Is(retryErr, ErrPINRetryBlocked) {
+			test.Fatalf("FCP failure blocked a later safe retry: %v", retryErr)
 		}
 		for _, command := range card.calls {
 			if command[1] == 0x20 {
 				test.Fatal("PIN operation sent without an unambiguous enabled PIN")
 			}
 		}
+	}
+}
+
+func TestMissingPINCanRecoverAfterPINIsConfigured(test *testing.T) {
+	card := &accessTestCard{
+		fcp: pinTestFCP(0x80, 0x83, 1, 1), imsiStatus: 0x6982,
+		queryStatus: 0x63C3, verifyStatus: 0x9000,
+	}
+	service := NewWithBackend(&accessTestBackend{card: card})
+	selector := Selector{ReaderName: "Reader A"}
+	identity, err := service.ReadIdentity(context.Background(), selector, "")
+	if identity.ICCID == "" || !errors.Is(err, ErrPINRequired) || errors.Is(err, ErrPINRetryBlocked) {
+		test.Fatalf("missing PIN was incorrectly latched: identity=%+v err=%v", identity, err)
+	}
+	identity, err = service.ReadIdentity(context.Background(), selector, "1234")
+	if err != nil || identity.IMSI != "123456789012345" {
+		test.Fatalf("configured PIN did not recover access: identity=%+v err=%v", identity, err)
+	}
+	submissions := 0
+	for _, command := range card.calls {
+		if command[1] == 0x20 && len(command) > 5 {
+			submissions++
+		}
+	}
+	if submissions != 1 {
+		test.Fatalf("PIN submissions=%d want 1", submissions)
 	}
 }
 

@@ -6,32 +6,37 @@ import (
 	"fmt"
 )
 
-func (session *Session) withPINAccess(ctx context.Context, aid []byte, pin string, operation func() error) error {
-	accessErr := operation()
+type pinAccessRequest struct {
+	iccid     string
+	aid       []byte
+	pin       string
+	operation func() error
+}
+
+func (session *Session) withPINAccess(ctx context.Context, request pinAccessRequest) error {
+	if err := session.lock.pinRetryError(request.iccid); err != nil {
+		return err
+	}
+	accessErr := request.operation()
 	if !errors.Is(accessErr, ErrSecurityStatus) {
 		return accessErr
 	}
-	if err := session.lock.pinRetryError(); err != nil {
-		return errors.Join(accessErr, err)
-	}
-	fcp, err := selectApplication(ctx, session.card, aid)
+	fcp, err := selectApplication(ctx, session.card, request.aid)
 	if err != nil {
-		return errors.Join(accessErr, session.blockPINRetry(err))
+		return errors.Join(accessErr, err)
 	}
 	reference, err := activePINReference(fcp)
 	if err != nil {
-		return errors.Join(accessErr, session.blockPINRetry(fmt.Errorf("%w: %v", ErrPINStatusUnknown, err)))
+		return errors.Join(accessErr, fmt.Errorf("%w: %v", ErrPINStatusUnknown, err))
 	}
-	if err := session.verifyPINReference(ctx, pin, reference); err != nil {
+	verification := pinVerificationRequest{pin: request.pin, reference: reference}
+	if err := session.verifyPINReference(ctx, request.iccid, verification); err != nil {
 		return errors.Join(accessErr, fmt.Errorf("pcsc: FCP PIN reference=%02X enabled/required: %w", reference, err))
 	}
-	if _, err := selectApplication(ctx, session.card, aid); err != nil {
-		return session.blockPINRetry(err)
+	if _, err := selectApplication(ctx, session.card, request.aid); err != nil {
+		return err
 	}
-	if err := operation(); err != nil {
-		return session.blockPINRetry(err)
-	}
-	return nil
+	return request.operation()
 }
 
 type pinTLV struct {

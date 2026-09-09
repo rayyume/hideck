@@ -2,12 +2,14 @@ package device
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/damonto/euicc-go/driver"
 	"github.com/yibaiba/hideck/internal/apduarbiter"
+	"github.com/yibaiba/hideck/internal/backend"
 	"github.com/yibaiba/hideck/internal/config"
 	"github.com/yibaiba/hideck/internal/esim"
 	"github.com/yibaiba/hideck/internal/pcsc"
@@ -88,9 +90,6 @@ func (p *Pool) reconcilePCSCReaders(opts rescanReconnectOptions, allDevices, dev
 		if worker != nil || !opts.allowWorkerMutation(cfg.ID) {
 			continue
 		}
-		if p.sharedPCSCService().PINFailure(reader) != nil {
-			continue
-		}
 		logger.Info("检测到 PC/SC 卡片上线，自动启动", "device", cfg.ID, "reader", reader.Name)
 		if _, err := p.AddWorkerFromConfig(bindPCSCReader(cfg, reader)); err != nil {
 			logger.Warn("自动启动 PC/SC 设备失败", "device", cfg.ID, "err", err)
@@ -101,6 +100,25 @@ func (p *Pool) reconcilePCSCReaders(opts rescanReconnectOptions, allDevices, dev
 		}
 	}
 	return nil
+}
+
+func (p *Pool) RetryPCSCPIN(ctx context.Context, deviceID string) error {
+	cfg, err := config.GetDeviceByID(deviceID)
+	if err != nil {
+		return fmt.Errorf("读取设备 %s 配置失败: %w", deviceID, err)
+	}
+	if cfg == nil {
+		return fmt.Errorf("设备 %s 不存在", deviceID)
+	}
+	if resolvedBackendMode(*cfg) != backend.BackendPCSC {
+		return errors.New("只有 PC/SC 读卡器设备支持重新尝试 SIM PIN")
+	}
+	_, err = p.sharedPCSCService().AllowPINRetry(ctx, pcscSelector(*cfg))
+	if err != nil {
+		return fmt.Errorf("允许当前 SIM 重新验证 PIN 失败: %w", err)
+	}
+	logger.Info("已按用户请求允许当前 SIM 重新验证 PIN", "device", deviceID)
+	return p.RebuildWorker(deviceID)
 }
 
 func (p *Pool) pcscMonitorLoop() {
