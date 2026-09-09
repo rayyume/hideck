@@ -455,6 +455,7 @@ type deviceMgmtListItem struct {
 	PhoneMode              string              `json:"phone_mode,omitempty"`
 	VoWiFiEnabled          bool                `json:"vowifi_enabled"`
 	VoWiFiRuntime          *voWiFiRuntimeDTO   `json:"vowifi_runtime,omitempty"`
+	NativeVoLTE            *volte.Status       `json:"native_volte,omitempty"`
 	Modem                  deviceMgmtListModem `json:"modem"`
 	NetworkConnected       bool                `json:"network_connected"`
 	RegistrationStateLabel string              `json:"registration_state_label"`
@@ -844,6 +845,10 @@ func (s *Server) handleDeviceMgmtList(c *gin.Context) {
 				RegStatus:     status.RegStatus,
 				PSAttached:    status.PSAttached,
 			},
+		}
+		if device.IsNativeVoLTEMode(cfg.PhoneMode) {
+			volteStatus := s.pool.NativeVoLTEStatus(w.ID)
+			item.NativeVoLTE = &volteStatus
 		}
 		s.applyLifecycleToListItem(&item, true, cfg)
 		items = append(items, item)

@@ -1,5 +1,5 @@
 import { t } from '../i18n'
-import type { DashboardDevice, VoWiFiRuntimeState } from '../types/api'
+import type { DashboardDevice, NativeVoLTEStatus, VoWiFiRuntimeState } from '../types/api'
 import { isNativeVoLTEMode } from './phoneMode'
 import { displaySignalDbm, hasValidSignalDbm } from './signalPresentation'
 import {
@@ -39,6 +39,8 @@ export type DashboardDeviceFilter = Readonly<{
 
 export type DashboardOperatorSource = Readonly<{
   id: string
+  phone_mode?: string
+  native_volte?: NativeVoLTEStatus
   modem?: Readonly<{
     operator?: string
     native_spn?: string
@@ -51,9 +53,13 @@ export function hasDashboardSignal(value: unknown): value is number {
   return hasValidSignalDbm(value)
 }
 
+export function dashboardUsesNativeVoLTE(device: DashboardDevice): boolean {
+  return isNativeVoLTEMode(device.phone_mode) || volteRegistered(device.native_volte)
+}
+
 export function formatDashboardNetworkType(device: DashboardDevice): string {
+  if (dashboardUsesNativeVoLTE(device)) return 'VoLTE'
   if (device.vowifi_active) return 'VoWiFi'
-  if (isNativeVoLTEMode(device.phone_mode)) return 'VoLTE'
   const parts = [device.network_duplex, device.network_mode]
     .map((value) => String(value || '').trim())
     .filter(Boolean)
@@ -82,7 +88,7 @@ export function createDashboardStages(
 
 export function canAnimateDashboardConnection(device: DashboardDevice): boolean {
   if (!device.healthy) return false
-  if (isNativeVoLTEMode(device.phone_mode)) {
+  if (dashboardUsesNativeVoLTE(device)) {
     return volteRegistered(device.native_volte)
   }
   if (device.vowifi_active !== true) return false
@@ -107,14 +113,21 @@ export function mergeDashboardDeviceOperators(
   devices: readonly DashboardDevice[],
   managedDevices: readonly DashboardOperatorSource[]
 ): DashboardDevice[] {
-  const operators = new Map(managedDevices.map((device) => [
-    device.id,
-    managedOperatorFallback(device.modem)
-  ]))
+  const managedByID = new Map(managedDevices.map((device) => [device.id, device]))
   return devices.map((device) => {
-    if (String(device.operator || '').trim()) return device
-    const operator = operators.get(device.id)
-    return operator ? { ...device, operator } : device
+    const managed = managedByID.get(device.id)
+    let next = device
+    if (!String(device.operator || '').trim()) {
+      const operator = managedOperatorFallback(managed?.modem)
+      if (operator) next = { ...next, operator }
+    }
+    if (!String(next.phone_mode || '').trim() && managed?.phone_mode) {
+      next = { ...next, phone_mode: managed.phone_mode }
+    }
+    if (!next.native_volte && managed?.native_volte) {
+      next = { ...next, native_volte: managed.native_volte }
+    }
+    return next
   })
 }
 
@@ -133,8 +146,8 @@ export function createDashboardDevicePresentation(
 ): DashboardDevicePresentation {
   const connectionType = formatDashboardNetworkType(device)
   const isOnline = device.healthy
-  const isVoWiFi = device.vowifi_active === true
-  const isVoLTE = isNativeVoLTEMode(device.phone_mode)
+  const isVoLTE = dashboardUsesNativeVoLTE(device)
+  const isVoWiFi = !isVoLTE && device.vowifi_active === true
   const volte = isVoLTE ? volteServiceState(true, device.native_volte) : null
 
   return Object.freeze({

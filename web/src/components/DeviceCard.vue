@@ -96,7 +96,7 @@ const showCellularFacts = computed(() => presentation.value.showsCellularFacts)
     </span>
 
     <WiFiCallingHealth
-      v-if="device.vowifi_health"
+      v-if="device.vowifi_health && presentation.connectionKind !== 'volte'"
       :health="device.vowifi_health"
       mode="compact"
     />

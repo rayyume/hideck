@@ -114,7 +114,7 @@ function stageStatusLabel(ready: boolean | undefined): string {
 
     <aside class="connection-stage-aside" :aria-label="t('dashboard.networkFacts')">
       <WiFiCallingHealth
-        v-if="device?.vowifi_health"
+        v-if="device?.vowifi_health && presentation?.connectionKind !== 'volte'"
         :health="device.vowifi_health"
         mode="summary"
       />

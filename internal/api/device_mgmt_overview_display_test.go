@@ -44,6 +44,26 @@ func TestOverviewDisplayConfigTakesPolicyFromRuntime(t *testing.T) {
 	}
 }
 
+// 仪表盘 /dashboard/devices 以前直接用 yaml 覆盖 worker.Config，
+// PhoneMode 被空字符串盖掉后前端只能画 VoWiFi。必须跟概览一样走 overviewDisplayConfig。
+func TestDashboardListConfigKeepsRuntimePhoneMode(t *testing.T) {
+	runtime := config.DeviceConfig{
+		ID:        "wwan1",
+		Name:      "Unicom",
+		Interface: "wwan1",
+		PhoneMode: "volte",
+	}
+	persisted := config.DeviceConfig{
+		ID:   "wwan1",
+		Name: "Unicom",
+	}
+
+	got := overviewDisplayConfig(runtime, persisted, true)
+	if overviewPhoneMode(got.PhoneMode) != "volte" {
+		t.Fatalf("dashboard phone_mode=%q want volte", got.PhoneMode)
+	}
+}
+
 // 回归：SMS 是系统不变量（恒开），即使 runtime/persisted 都为 false，
 // overviewDisplayConfig 也必须返回 sms_enabled=true，否则短信中心设备会被过滤消失。
 func TestOverviewDisplayConfigSMSAlwaysEnabled(t *testing.T) {

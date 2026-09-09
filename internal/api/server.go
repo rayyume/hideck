@@ -626,7 +626,9 @@ func (s *Server) handleListDevices(c *gin.Context) {
 		status := w.GetCachedDeviceStatus() // 仓表盘列表读缓存，0 IPC
 		cfg := w.Config
 		if v, ok := cfgByID[w.ID]; ok {
-			cfg = v
+			// PhoneMode 等策略字段只在 worker 运行时投影，yaml 里是空的。
+			// 直接用 persisted 会把联通原生 VoLTE 画成 VoWiFi。
+			cfg = overviewDisplayConfig(w.Config, v, true)
 		}
 		item := DeviceStatus{
 			ID:               cfg.ID,
@@ -640,15 +642,15 @@ func (s *Server) handleListDevices(c *gin.Context) {
 			SignalDBM:        status.SignalDBM,
 			NetworkMode:      status.NetworkMode,
 			NetworkDuplex:    status.NetworkDuplex,
-			PhoneMode:        cfg.PhoneMode,
+			PhoneMode:        overviewPhoneMode(cfg.PhoneMode),
 			VoWiFiActive:     s.pool.IsVoWiFiActive(w.ID), // 逐个设备判断 VoWiFi 状态，支持多设备
 			VoWiFiRuntime:    s.getVoWiFiRuntimeDTO(w.ID),
 			VoWiFiHealth:     s.getWiFiCallingHealth(w.ID),
 			NetworkConnected: w.NetworkConnected(),
 		}
 		if device.IsNativeVoLTEMode(cfg.PhoneMode) {
-			status := s.pool.NativeVoLTEStatus(w.ID)
-			item.NativeVoLTE = &status
+			volteStatus := s.pool.NativeVoLTEStatus(w.ID)
+			item.NativeVoLTE = &volteStatus
 		}
 		// 添加格式化流量
 		if w.Proxy != nil {
