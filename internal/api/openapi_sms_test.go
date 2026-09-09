@@ -45,6 +45,25 @@ func TestOpenAPIDocumentsPersistentSMSReadState(t *testing.T) {
 	}
 }
 
+func TestOpenAPIDocumentsVoWiFiMOSMSReadiness(t *testing.T) {
+	data, err := os.ReadFile("openapi.hideck.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document map[string]any
+	if err := yaml.Unmarshal(data, &document); err != nil {
+		t.Fatal(err)
+	}
+	components := openAPIMap(t, document, "components")
+	schemas := openAPIMap(t, components, "schemas")
+	runtimeSchema := openAPIMap(t, schemas, "VoWiFiRuntime")
+	properties := openAPIMap(t, runtimeSchema, "properties")
+	moReady := openAPIMap(t, properties, "sms_mo_ready")
+	if moReady["type"] != "boolean" {
+		t.Fatalf("OpenAPI VoWiFiRuntime.sms_mo_ready type=%v, want boolean", moReady["type"])
+	}
+}
+
 func hasOpenAPIParameter(parameters []any, name string) bool {
 	for _, item := range parameters {
 		parameter, ok := item.(map[string]any)

@@ -4150,6 +4150,9 @@ components:
           type: boolean
         sms_ready:
           type: boolean
+        sms_mo_ready:
+          type: boolean
+          description: IMS 短信发送前置条件是否就绪；不依赖用于下行短信的 port-s 接收连接。
         sms_ready_reason:
           type: string
         reg_status:
