@@ -133,6 +133,39 @@ func TestSIMCardsSchemaNoLongerStoresPhoneFields(t *testing.T) {
 	}
 }
 
+func TestPCSCIdentityPreservesOperatorAndDetachesPriorModem(t *testing.T) {
+	initPhoneNumberTestDB(t)
+	iccid := "8986000000000000421"
+	imsi := "001010000000421"
+	imei := "previous-modem-421"
+	if err := DB.Create(&Device{IMEI: imei, CurrentICCID: &iccid}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := UpsertSIMCardIdentity(iccid, imsi, "Stored carrier", &imei); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := UpsertSIMCardIdentity(iccid, imsi, "", nil); err != nil {
+		t.Fatal(err)
+	}
+
+	sim := loadSIMCardByIMSI(t, imsi)
+	if sim.Operator != "Stored carrier" || sim.CurrentIMEI != nil {
+		t.Fatalf("unexpected SIM identity after PC/SC move: %+v", sim)
+	}
+	subscription := loadSIMSubscriptionByIMSI(t, imsi)
+	if subscription.Operator != "Stored carrier" {
+		t.Fatalf("subscription operator=%q want Stored carrier", subscription.Operator)
+	}
+	var priorDevice Device
+	if err := DB.First(&priorDevice, "imei = ?", imei).Error; err != nil {
+		t.Fatal(err)
+	}
+	if priorDevice.CurrentICCID != nil {
+		t.Fatalf("prior modem retained ICCID %q", *priorDevice.CurrentICCID)
+	}
+}
+
 func TestListIMSIsForICCIDKeepsHistoryAfterFlip(t *testing.T) {
 	initPhoneNumberTestDB(t)
 	iccid := "8944000000000000087"

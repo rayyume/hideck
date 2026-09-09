@@ -44,10 +44,10 @@ func (service *Service) Readers(ctx context.Context) ([]Reader, error) {
 }
 
 func selectorLockKey(selector Selector) string {
-	if path := strings.TrimSpace(selector.USBPath); path != "" {
-		return "path:" + path
+	if name := strings.TrimSpace(selector.ReaderName); name != "" {
+		return "name:" + name
 	}
-	return "name:" + strings.TrimSpace(selector.ReaderName)
+	return "path:" + strings.TrimSpace(selector.USBPath)
 }
 
 func canonicalSelector(reader Reader) Selector {

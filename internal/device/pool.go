@@ -2581,6 +2581,9 @@ func (p *Pool) PersistIdentityState(worker *Worker) {
 	operator := strings.TrimSpace(status.Operator)
 
 	if resolvedBackendMode(worker.Config) == backend.BackendPCSC || (worker.Backend != nil && worker.Backend.Mode() == backend.BackendPCSC) {
+		if operator == "" {
+			operator = strings.TrimSpace(status.NativeSPN)
+		}
 		if err := db.UpsertSIMCard(iccid, imsi, "", operator, nil); err != nil {
 			logger.Warn(fmt.Sprintf("[%s] 更新 SIM 卡信息失败", worker.ID), "err", err)
 		}

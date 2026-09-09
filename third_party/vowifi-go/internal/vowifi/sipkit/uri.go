@@ -12,7 +12,8 @@ import (
 
 var serviceURNPattern = regexp.MustCompile(`(?i)^urn:service:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*$`)
 
-// ParseURI validates a SIP, SIPS, TEL, or URN URI.
+// ParseURI validates a SIP, SIPS, or TEL URI. Service URNs used in SIP address
+// headers must be validated separately with ParseServiceURN.
 func ParseURI(value string) error {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -26,6 +27,14 @@ func ParseURI(value string) error {
 	}
 	_, err := parseURIValue(value)
 	return err
+}
+
+// ParseServiceURN validates an RFC 5031 service URN used in SIP address headers.
+func ParseServiceURN(value string) error {
+	if !serviceURNPattern.MatchString(strings.TrimSpace(value)) {
+		return errors.New("invalid service URN")
+	}
+	return nil
 }
 
 // ParseAORWithDefaultHost validates an address-of-record, supplying its host
@@ -156,12 +165,6 @@ func hasURIScheme(value string) bool {
 
 func parseURIValue(value string) (*sip.Uri, error) {
 	value = strings.TrimSpace(value)
-	if strings.HasPrefix(strings.ToLower(value), "urn:service:") {
-		if !serviceURNPattern.MatchString(value) {
-			return nil, errors.New("invalid service URN")
-		}
-		return &sip.Uri{Scheme: "urn", Host: value[len("urn:"):]}, nil
-	}
 	if !hasURIScheme(value) {
 		value = "sip:" + value
 	}

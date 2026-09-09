@@ -115,7 +115,7 @@ func newSIPParser() *sip.Parser {
 			if !strings.HasPrefix(strings.ToLower(address), "urn:service:") {
 				return base(headerName, value)
 			}
-			if err := sipkit.ParseURI(address); err != nil {
+			if err := sipkit.ParseServiceURN(address); err != nil {
 				return nil, err
 			}
 			masked := value[:start] + "sip:" + strings.Repeat("x", len(address)-4) + value[end:]

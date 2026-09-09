@@ -118,6 +118,29 @@ func TestPersistPCSCIdentityWithoutModemRecord(test *testing.T) {
 	}
 }
 
+func TestPersistPCSCIdentityUsesNativeSPNWhenRuntimeOperatorIsEmpty(test *testing.T) {
+	initDevicePhoneNumberTestDB(test)
+	pool := NewPool(nil)
+	worker := &Worker{
+		ID:      "reader-native-spn",
+		Backend: &workerPhoneBackendStub{workerStatusBackendStub: workerStatusBackendStub{mode: backend.BackendPCSC}},
+	}
+	worker.state.Identity.ICCID = "8986000000000000100"
+	worker.state.Identity.IMSI = "pcsc-native-spn-imsi"
+	worker.state.Identity.NativeSPN = "Native carrier"
+
+	pool.PersistIdentityState(worker)
+
+	sim := loadDeviceTestSIMCardByIMSI(test, worker.state.Identity.IMSI)
+	if sim.Operator != "Native carrier" {
+		test.Fatalf("SIM operator=%q want Native carrier", sim.Operator)
+	}
+	subscription := loadDeviceTestSIMSubscriptionByIMSI(test, worker.state.Identity.IMSI)
+	if subscription.Operator != "Native carrier" {
+		test.Fatalf("subscription operator=%q want Native carrier", subscription.Operator)
+	}
+}
+
 func TestPersistModemStillRequiresIMEI(test *testing.T) {
 	initDevicePhoneNumberTestDB(test)
 	pool := NewPool(nil)

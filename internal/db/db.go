@@ -282,17 +282,28 @@ func UpsertSIMCardIdentity(iccid, imsi, operator string, currentIMEI *string) er
 		LastSeen:    now,
 	}
 	return DB.Transaction(func(tx *gorm.DB) error {
+		updates := map[string]any{
+			"imsi":         imsi,
+			"current_imei": currentIMEI,
+			"last_seen":    now,
+			"updated_at":   now,
+		}
+		if operator != "" {
+			updates["operator"] = operator
+		}
 		if err := tx.Clauses(clause.OnConflict{
-			Columns: []clause.Column{{Name: "iccid"}},
-			DoUpdates: clause.Assignments(map[string]any{
-				"imsi":         imsi,
-				"operator":     operator,
-				"current_imei": currentIMEI,
-				"last_seen":    now,
-				"updated_at":   now,
-			}),
+			Columns:   []clause.Column{{Name: "iccid"}},
+			DoUpdates: clause.Assignments(updates),
 		}).Create(&sim).Error; err != nil {
 			return err
+		}
+		if currentIMEI == nil {
+			if err := tx.Model(&Device{}).Where("iccid = ?", iccid).Updates(map[string]any{
+				"iccid":      nil,
+				"updated_at": now,
+			}).Error; err != nil {
+				return err
+			}
 		}
 		if imsi == "" {
 			return nil
@@ -304,9 +315,11 @@ func UpsertSIMCardIdentity(iccid, imsi, operator string, currentIMEI *string) er
 func upsertSIMSubscriptionIdentity(tx *gorm.DB, imsi, iccid, operator string, now time.Time) error {
 	updates := map[string]any{
 		"current_iccid": iccid,
-		"operator":      operator,
 		"last_seen":     now,
 		"updated_at":    now,
+	}
+	if operator != "" {
+		updates["operator"] = operator
 	}
 	row := SIMSubscription{
 		IMSI:         imsi,

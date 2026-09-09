@@ -129,6 +129,17 @@ func TestSubmittedPINFailureBlocksOnlyTheSameCard(test *testing.T) {
 	}
 }
 
+func TestPINFailureSurvivesReaderPathRediscovery(test *testing.T) {
+	service := NewWithBackend(&scriptedBackend{})
+	discovered := Selector{ReaderName: "Reader A", USBPath: "1-2"}
+	fallback := Selector{ReaderName: "Reader A", USBPath: "pcsc:Reader A"}
+
+	service.readerLock(discovered).blockPINRetry(pinTestICCID, ErrPINRejected)
+	if err := service.readerLock(fallback).pinRetryError(pinTestICCID); !errors.Is(err, ErrPINRetryBlocked) {
+		test.Fatalf("reader path change bypassed PIN retry block: %v", err)
+	}
+}
+
 func TestNonSubmittedPINFailuresRemainRetryable(test *testing.T) {
 	transportError := errors.New("native transport failed")
 	for _, scenario := range []struct {
