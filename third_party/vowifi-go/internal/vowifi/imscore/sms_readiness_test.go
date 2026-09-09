@@ -44,6 +44,31 @@ func TestProtectedSMSReadinessRequiresPortSFlow(t *testing.T) {
 	}
 }
 
+func TestProtectedSMSReadinessAllowsMOSendWithoutPortSFlow(t *testing.T) {
+	service := newProtectedKeepaliveTestService(t)
+	registration, registrationPeer := net.Pipe()
+	t.Cleanup(func() { _ = registrationPeer.Close() })
+	service.mu.Lock()
+	service.registrationTCP = registration
+	service.registrationTCPProtected = true
+	service.mu.Unlock()
+
+	got := service.SMSReadiness()
+	if got.Ready || got.ReceiverReady || !got.MOReady {
+		t.Fatalf("readiness without port-s = %+v, want MT unready and MO ready", got)
+	}
+	if _, err := service.prepareSendEnv(nil, "+15551234567", "test", SendOptions{}); err != nil {
+		t.Fatalf("prepareSendEnv without port-s: %v", err)
+	}
+}
+
+func TestSMSReadinessReportsMissingSMSCBeforeReceiver(t *testing.T) {
+	got := evaluateSMSReadiness(true, true, true, false, "")
+	if got.MOReady || got.Reason != smsReadyReasonSMSCNotConfigured {
+		t.Fatalf("readiness without receiver or SMSC = %+v, want missing SMSC", got)
+	}
+}
+
 func TestProtectedSMSHealthTreatsOnlyCleanEOFAsOnDemand(t *testing.T) {
 	tests := []struct {
 		name       string

@@ -126,6 +126,8 @@ func evaluateSMSReadiness(registered, profileReady, transportReady, receiverRead
 		ReceiverReady:  receiverReady,
 		SMSCPresent:    strings.TrimSpace(smsc) != "",
 	}
+	readiness.MOReady = readiness.Registered && readiness.ProfileReady &&
+		readiness.TransportReady && readiness.SMSCPresent
 	switch {
 	case !readiness.Registered:
 		readiness.Reason = smsReadyReasonNotRegistered
@@ -133,6 +135,8 @@ func evaluateSMSReadiness(registered, profileReady, transportReady, receiverRead
 		readiness.Reason = smsReadyReasonProfileNotReady
 	case !readiness.TransportReady:
 		readiness.Reason = smsReadyReasonTransportNotReady
+	case !readiness.SMSCPresent && !readiness.ReceiverReady:
+		readiness.Reason = smsReadyReasonSMSCNotConfigured
 	case !readiness.ReceiverReady:
 		readiness.Reason = smsReadyReasonReceiverNotReady
 	default:

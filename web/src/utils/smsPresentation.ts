@@ -99,9 +99,12 @@ function resolveConversationDevice(options: Readonly<{
 
 function readinessContext(device: DeviceMgmtListItem | undefined) {
   const runtime = device?.vowifi_runtime
+  const smsSendReady = runtime?.sms_mo_ready ?? runtime?.sms_ready
   return {
-    smsLabel: readinessLabel(runtime?.sms_ready, 'SMS', runtime?.sms_ready_reason),
-    smsTone: readinessTone(runtime?.sms_ready),
+    smsLabel: runtime?.sms_mo_ready === true
+      ? 'VoWiFi · SMS 可发送'
+      : readinessLabel(smsSendReady, 'SMS', runtime?.sms_ready_reason),
+    smsTone: readinessTone(smsSendReady),
     imsLabel: readinessLabel(runtime?.ims_ready, 'IMS'),
     imsTone: readinessTone(runtime?.ims_ready)
   } as const
