@@ -8,7 +8,7 @@ import (
 )
 
 func logUSSISIPRaw(deviceID, phase, direction string, message sip.Message) {
-	if message == nil {
+	if isNilSIPMessage(message) {
 		return
 	}
 	raw := strings.TrimSpace(message.String())
@@ -28,7 +28,7 @@ func logUSSISIPRaw(deviceID, phase, direction string, message sip.Message) {
 }
 
 func ussiSIPRawLogMethodAndCallID(message sip.Message) (string, string) {
-	if message == nil {
+	if isNilSIPMessage(message) {
 		return "", ""
 	}
 	method := ""
@@ -45,6 +45,17 @@ func ussiSIPRawLogMethodAndCallID(message sip.Message) (string, string) {
 		callID = strings.TrimSpace(header.Value())
 	}
 	return method, callID
+}
+
+func isNilSIPMessage(message sip.Message) bool {
+	switch value := message.(type) {
+	case *sip.Request:
+		return value == nil
+	case *sip.Response:
+		return value == nil
+	default:
+		return message == nil
+	}
 }
 
 func (s *Service) logInboundMismatch(phase, reason string, request *sip.Request) {
