@@ -3,6 +3,7 @@ package runtimehost
 import (
 	"context"
 	"errors"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -88,6 +89,44 @@ func TestCoreReplaysMOSMSReadinessAfterIMSRegistration(t *testing.T) {
 	}
 	if state.SMSReady || state.SMSReadyReason != "IMS SMS receiver is not ready" {
 		t.Fatalf("MT readiness changed after IMS registration: %+v", state)
+	}
+}
+
+func TestCoreKeepsMOReadinessDuringConcurrentIMSRegistration(t *testing.T) {
+	const attempts = 2000
+	readiness := imscore.SMSReadiness{
+		Registered: true, ProfileReady: true, TransportReady: true,
+		SMSCPresent: true, MOReady: true, Reason: "IMS SMS receiver is not ready",
+	}
+	for attempt := 0; attempt < attempts; attempt++ {
+		instance := &Instance{}
+		instance.setState(State{DeviceID: "wwan0", Phase: "ipsec_up"})
+		observer := &instanceObserver{inst: instance, deviceID: "wwan0"}
+		request := runtimecore.RuntimeStartRequest{}
+		chainSMSReadinessHook(&request, observer)
+
+		start := make(chan struct{})
+		var calls sync.WaitGroup
+		calls.Add(2)
+		go func() {
+			defer calls.Done()
+			<-start
+			request.Hooks.OnSMSReadinessChanged(context.Background(), readiness)
+		}()
+		go func() {
+			defer calls.Done()
+			<-start
+			observer.OnRuntimeEvent(context.Background(), runtimecore.RuntimeEvent[*runtimecore.SessionResult]{
+				Kind: "ims_registered", DeviceID: "wwan0",
+			})
+		}()
+		close(start)
+		calls.Wait()
+
+		state := instance.State()
+		if !state.IMSReady || !state.SMSMOReady {
+			t.Fatalf("attempt %d lost concurrent MO readiness: %+v", attempt, state)
+		}
 	}
 }
 

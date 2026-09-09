@@ -168,6 +168,15 @@ func (i *Instance) setState(s State) {
 	i.mu.Unlock()
 }
 
+func (i *Instance) mutateState(update func(*State)) State {
+	i.mu.Lock()
+	update(&i.state)
+	i.state.UpdatedAt = time.Now()
+	state := i.state
+	i.mu.Unlock()
+	return state
+}
+
 func (i *Instance) updateState(update func(*State)) {
 	i.updateStateWithEvent(context.Background(), "state", update)
 }
@@ -177,11 +186,7 @@ func (i *Instance) updateStateWithEvent(
 	kind string,
 	update func(*State),
 ) {
-	i.mu.Lock()
-	update(&i.state)
-	i.state.UpdatedAt = time.Now()
-	state := i.state
-	i.mu.Unlock()
+	state := i.mutateState(update)
 	detail := firstNonEmptyString(state.Phase, state.SessionState)
 	i.publish(ctx, Event{
 		Kind: kind, DeviceID: state.DeviceID, Reason: state.LastReason, State: state,

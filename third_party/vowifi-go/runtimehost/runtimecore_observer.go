@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/iniwex5/vowifi-go/internal/vowifi/runtimecore"
 )
@@ -27,7 +26,34 @@ func (observer *instanceObserver) OnRuntimeEvent(
 		return
 	}
 	kind := recoveredEventKind(event.Kind)
-	state := observer.inst.State()
+	state := observer.applyRuntimeEventState(kind, event)
+	observer.inst.publish(ctx, Event{
+		Kind: kind, DeviceID: state.DeviceID, TraceID: event.TraceID,
+		Reason: event.Reason, Attempt: event.Attempt, RetryDelay: event.RetryDelay,
+		RedirectEPDG: event.RedirectEPDG, State: state,
+		Type: kind, Detail: event.Reason, Session: observer.inst,
+	})
+}
+
+func (observer *instanceObserver) applyRuntimeEventState(
+	kind string,
+	event runtimecore.RuntimeEvent[*runtimecore.SessionResult],
+) State {
+	observer.applyEventHandles(kind, event)
+	return observer.inst.mutateState(func(state *State) {
+		observer.applyEventMetadata(event, state)
+		observer.applyEvent(kind, event, state)
+		state.LastEvent = kind
+		if kind == "ims_registered" {
+			observer.applyLatestSMSReadiness(state)
+		}
+	})
+}
+
+func (observer *instanceObserver) applyEventMetadata(
+	event runtimecore.RuntimeEvent[*runtimecore.SessionResult],
+	state *State,
+) {
 	if state.DeviceID == "" {
 		state.DeviceID = observer.deviceID
 	}
@@ -37,19 +63,6 @@ func (observer *instanceObserver) OnRuntimeEvent(
 	if strings.TrimSpace(event.RedirectEPDG) != "" {
 		state.LastRedirectEPDG = strings.TrimSpace(event.RedirectEPDG)
 	}
-	observer.applyEvent(kind, event, &state)
-	state.LastEvent = kind
-	if kind == "ims_registered" {
-		observer.applyLatestSMSReadiness(&state)
-	}
-	state.UpdatedAt = time.Now()
-	observer.inst.setState(state)
-	observer.inst.publish(ctx, Event{
-		Kind: kind, DeviceID: state.DeviceID, TraceID: event.TraceID,
-		Reason: event.Reason, Attempt: event.Attempt, RetryDelay: event.RetryDelay,
-		RedirectEPDG: event.RedirectEPDG, State: state,
-		Type: kind, Detail: event.Reason, Session: observer.inst,
-	})
 }
 
 func (observer *instanceObserver) updateSMSReadiness(readiness SMSReadiness) {
@@ -70,6 +83,20 @@ func (observer *instanceObserver) applyLatestSMSReadiness(state *State) {
 	}
 }
 
+func (observer *instanceObserver) applyEventHandles(
+	kind string,
+	event runtimecore.RuntimeEvent[*runtimecore.SessionResult],
+) {
+	switch kind {
+	case "ipsec_up":
+		observer.installSession(event)
+	case "ims_registered":
+		observer.installService(event)
+	case "retrying", "error", "terminal_error", "stopped":
+		observer.clearRuntimeHandles()
+	}
+}
+
 func (observer *instanceObserver) applyEvent(
 	kind string,
 	event runtimecore.RuntimeEvent[*runtimecore.SessionResult],
@@ -85,7 +112,6 @@ func (observer *instanceObserver) applyEvent(
 		state.SIMReady = true
 		state.AccessReady = true
 	case "ipsec_up":
-		observer.installSession(event)
 		markIMSUnavailable(state, "registering")
 		state.Phase = readyPhase(*state)
 		state.SessionState = "established"
@@ -96,7 +122,6 @@ func (observer *instanceObserver) applyEvent(
 			observer.readyOnce.Do(func() { close(observer.ready) })
 		}
 	case "ims_registered":
-		observer.installService(event)
 		state.Phase = "ims_ready"
 		state.IMSState = "registered"
 		state.IMSReady = true
@@ -118,16 +143,13 @@ func (observer *instanceObserver) applyEvent(
 		state.LastReason = strings.TrimSpace(event.Reason)
 		state.LastRedirectEPDG = strings.TrimSpace(event.RedirectEPDG)
 	case "retrying":
-		observer.clearRuntimeHandles()
 		applyRetryingState(state, event.Reason)
 	case "error":
-		observer.clearRuntimeHandles()
 		applyRetryingState(state, event.Reason)
 		state.LastErrorClass = "runtime"
 		state.LastError = firstNonEmptyString(event.Message, event.Reason)
 		state.Error = state.LastError
 	case "terminal_error":
-		observer.clearRuntimeHandles()
 		state.Phase = "error"
 		state.SessionState = "error"
 		state.TunnelReady = false
@@ -137,7 +159,6 @@ func (observer *instanceObserver) applyEvent(
 		state.LastError = firstNonEmptyString(event.Message, event.Reason)
 		state.Error = state.LastError
 	case "stopped":
-		observer.clearRuntimeHandles()
 		state.Phase = "stopped"
 		state.SessionState = "stopped"
 		state.TunnelReady = false
