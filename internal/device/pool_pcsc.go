@@ -88,6 +88,9 @@ func (p *Pool) reconcilePCSCReaders(opts rescanReconnectOptions, allDevices, dev
 		if worker != nil || !opts.allowWorkerMutation(cfg.ID) {
 			continue
 		}
+		if p.sharedPCSCService().PINFailure(reader) != nil {
+			continue
+		}
 		logger.Info("检测到 PC/SC 卡片上线，自动启动", "device", cfg.ID, "reader", reader.Name)
 		if _, err := p.AddWorkerFromConfig(bindPCSCReader(cfg, reader)); err != nil {
 			logger.Warn("自动启动 PC/SC 设备失败", "device", cfg.ID, "err", err)
