@@ -3,11 +3,14 @@ package sipkit
 import (
 	"errors"
 	"net"
+	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/emiago/sipgo/sip"
 )
+
+var serviceURNPattern = regexp.MustCompile(`(?i)^urn:service:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*$`)
 
 // ParseURI validates a SIP, SIPS, TEL, or URN URI.
 func ParseURI(value string) error {
@@ -153,6 +156,12 @@ func hasURIScheme(value string) bool {
 
 func parseURIValue(value string) (*sip.Uri, error) {
 	value = strings.TrimSpace(value)
+	if strings.HasPrefix(strings.ToLower(value), "urn:service:") {
+		if !serviceURNPattern.MatchString(value) {
+			return nil, errors.New("invalid service URN")
+		}
+		return &sip.Uri{Scheme: "urn", Host: value[len("urn:"):]}, nil
+	}
 	if !hasURIScheme(value) {
 		value = "sip:" + value
 	}

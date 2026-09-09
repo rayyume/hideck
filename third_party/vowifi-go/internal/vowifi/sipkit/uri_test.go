@@ -3,13 +3,13 @@ package sipkit
 import "testing"
 
 func TestParseURIValidation(t *testing.T) {
-	valid := []string{"sip:user@example.com", "user@example.com", "tel:+441234", "sip:"}
+	valid := []string{"sip:user@example.com", "user@example.com", "tel:+441234", "sip:", "urn:service:sos", "URN:service:sos.police"}
 	for _, value := range valid {
 		if err := ParseURI(value); err != nil {
 			t.Errorf("ParseURI(%q): %v", value, err)
 		}
 	}
-	for _, value := range []string{"", "tel:   ", "urn:service:sos"} {
+	for _, value := range []string{"", "tel:   ", "urn:service:", "urn:service:so s", "urn:service:sos..police", "urn:service:sos:5060"} {
 		if err := ParseURI(value); err == nil {
 			t.Errorf("ParseURI(%q) succeeded", value)
 		}
