@@ -18,6 +18,42 @@ const (
 	finalText = "Balance: 10"
 )
 
+func TestUSSILogTypedNil(t *testing.T) {
+	for _, message := range []sip.Message{nil, (*sip.Request)(nil), (*sip.Response)(nil)} {
+		logUSSISIPRaw("test", "recv", "recv", message)
+		method, callID := ussiSIPRawLogMethodAndCallID(message)
+		if method != "" || callID != "" {
+			t.Fatalf("nil message metadata = %q %q", method, callID)
+		}
+	}
+}
+
+type failedInviteEndpoint struct {
+	*fakeEndpoint
+	cause error
+}
+
+func (endpoint *failedInviteEndpoint) StartClientInvite(context.Context, string, imsendpoint.ClientInviteOptions) (*imsendpoint.ClientInviteResult, error) {
+	return &imsendpoint.ClientInviteResult{}, endpoint.cause
+}
+
+func TestSendInviteWithoutResponse(t *testing.T) {
+	for _, cause := range []error{errors.New("SIP stream closed"), nil} {
+		endpoint := &failedInviteEndpoint{fakeEndpoint: newFakeEndpoint(t), cause: cause}
+		service := NewService("dev-1", endpoint)
+		result, err := service.Send(context.Background(), "*100#")
+		if err == nil || result == nil || result.Status != 2 {
+			t.Fatalf("result=%+v err=%v", result, err)
+		}
+		if cause != nil && !errors.Is(err, cause) {
+			t.Fatalf("lost original failure: %v", err)
+		}
+		if service.ActiveSessionID() != "" {
+			t.Fatal("failed session still active")
+		}
+	}
+}
+
 func TestRecoveredTypeLayouts(t *testing.T) {
 	assertFields(t, reflect.TypeOf(Context{}), []string{
 		"LocalIP", "LocalPortC", "LocalPortS", "Transport", "Domain", "Realm", "AOR",

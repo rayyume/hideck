@@ -41,7 +41,7 @@ func (s *Service) Send(ctx context.Context, command string) (*Result, error) {
 		imsendpoint.ClientInviteOptions{
 			Request: request, Contact: request.Contact(), Timeout: int64(ussiTransactionTimeout),
 		})
-	if invite != nil {
+	if invite != nil && invite.Response != nil {
 		logUSSISIPRaw(s.deviceID, "initial_invite", "recv", invite.Response)
 	}
 	if err != nil {
