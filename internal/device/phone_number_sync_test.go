@@ -2,12 +2,14 @@ package device
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"testing"
 
-	"github.com/yibaiba/hideck/internal/backend"
-	"github.com/yibaiba/hideck/internal/db"
 	"github.com/iniwex5/vowifi-go/runtimehost/eventhost"
+	"github.com/yibaiba/hideck/internal/backend"
+	"github.com/yibaiba/hideck/internal/config"
+	"github.com/yibaiba/hideck/internal/db"
 )
 
 type workerPhoneBackendStub struct {
@@ -73,6 +75,63 @@ func loadDeviceTestSIMSubscriptionByIMSI(t *testing.T, imsi string) db.SIMSubscr
 		t.Fatalf("First(subscription) error=%v", err)
 	}
 	return sub
+}
+
+func TestPersistPCSCIdentityWithoutModemRecord(test *testing.T) {
+	for _, configured := range []bool{false, true} {
+		for _, imei := range []string{"", "stale-modem-imei"} {
+			test.Run(fmt.Sprintf("configured=%t/imei=%s", configured, imei), func(test *testing.T) {
+				initDevicePhoneNumberTestDB(test)
+				pool := NewPool(nil)
+				worker := &Worker{ID: "reader-1"}
+				if configured {
+					worker.Config = config.DeviceConfig{DeviceBackend: backend.BackendPCSC}
+				} else {
+					worker.Backend = &workerPhoneBackendStub{workerStatusBackendStub: workerStatusBackendStub{mode: backend.BackendPCSC}}
+				}
+				worker.state.Identity.IMEI = imei
+				worker.state.Identity.ICCID = "8986000000000000099"
+				worker.state.Identity.IMSI = "pcsc-imsi"
+				worker.state.Runtime.Operator = "Test operator"
+				previousIMEI := "previous-modem"
+				if err := db.UpsertSIMCard(worker.state.Identity.ICCID, "old-imsi", "", "old operator", &previousIMEI); err != nil {
+					test.Fatal(err)
+				}
+				for attempt := 0; attempt < 2; attempt++ {
+					pool.PersistRuntimeState(worker)
+					pool.PersistIdentityState(worker)
+				}
+				sim := loadDeviceTestSIMCardByIMSI(test, "pcsc-imsi")
+				if sim.ICCID != worker.state.Identity.ICCID || sim.Operator != "Test operator" || sim.CurrentIMEI != nil {
+					test.Fatalf("unexpected SIM identity: %+v", sim)
+				}
+				subscription := loadDeviceTestSIMSubscriptionByIMSI(test, "pcsc-imsi")
+				if subscription.CurrentICCID != sim.ICCID {
+					test.Fatal("SIM subscription identity was not persisted")
+				}
+				var count int64
+				if err := db.DB.Model(&db.Device{}).Count(&count).Error; err != nil || count != 0 {
+					test.Fatalf("reader created a modem record: count=%d err=%v", count, err)
+				}
+			})
+		}
+	}
+}
+
+func TestPersistModemStillRequiresIMEI(test *testing.T) {
+	initDevicePhoneNumberTestDB(test)
+	pool := NewPool(nil)
+	worker := &Worker{ID: "modem", Backend: &workerPhoneBackendStub{workerStatusBackendStub: workerStatusBackendStub{mode: backend.BackendQMI}}}
+	worker.state.Identity.ICCID = "8986000000000000099"
+	worker.state.Identity.IMSI = "modem-imsi"
+	pool.PersistRuntimeState(worker)
+	pool.PersistIdentityState(worker)
+	for _, model := range []any{&db.Device{}, &db.SIMCard{}} {
+		var count int64
+		if err := db.DB.Model(model).Count(&count).Error; err != nil || count != 0 {
+			test.Fatalf("persisted modem without IMEI: count=%d err=%v", count, err)
+		}
+	}
 }
 
 func TestPersistIdentityStateStoresQMIMSISDNAsModemPhoneNumber(t *testing.T) {
