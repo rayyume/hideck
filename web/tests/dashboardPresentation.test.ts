@@ -88,6 +88,38 @@ test('keeps offline state distinct from a failed or unknown VoWiFi stage', () =>
   assert.equal(canAnimateDashboardConnection(device), false)
 })
 
+test('native VoLTE uses the cellular IMS path instead of Wi-Fi calling stages', () => {
+  const device = createDevice({
+    operator: '中国联通',
+    phone_mode: 'volte',
+    vowifi_active: false,
+    native_volte: {
+      phase: 'registered',
+      ims_registered: true,
+      lte_registered: true,
+      ims_pdn_active: true,
+      voice_available: true,
+      plmn: '460-01',
+      mbn_name: 'CU-VoLTE'
+    }
+  })
+  const presentation = createDashboardDevicePresentation(device)
+
+  assert.equal(presentation.connectionKind, 'volte')
+  assert.equal(presentation.connectionTitle, 'VoLTE 已注册')
+  assert.equal(presentation.connectionState, '460-01 · CU-VoLTE')
+  assert.equal(presentation.connectionType, 'VoLTE')
+  assert.equal(presentation.showsCellularFacts, true)
+  assert.deepEqual(presentation.stages.map(stage => [stage.key, stage.ready]), [
+    ['SIM', true],
+    ['LTE', true],
+    ['PDN', true],
+    ['IMS', true],
+    ['Voice', true]
+  ])
+  assert.equal(canAnimateDashboardConnection(device), true)
+})
+
 test('animates the service path only for active VoWiFi without failed stages', () => {
   assert.equal(canAnimateDashboardConnection(createDevice({
     vowifi_active: true,

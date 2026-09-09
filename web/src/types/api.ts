@@ -384,9 +384,11 @@ export type DashboardDevice = {
   signal_dbm: number
   public_ip?: string
   public_ipv6?: string
+  phone_mode?: string
   vowifi_active?: boolean
   vowifi_runtime?: VoWiFiRuntimeState
   vowifi_health?: WiFiCallingHealthSnapshot
+  native_volte?: NativeVoLTEStatus
 }
 
 export type SMSMessage = {

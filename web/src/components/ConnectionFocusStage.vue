@@ -33,6 +33,9 @@ const focusMeta = computed(() => {
 const focusDetail = computed(() => {
   if (!props.device) return t('dashboard.addDeviceFirst')
   if (!props.device.healthy) return t('dashboard.deviceOffline')
+  if (presentation.value?.connectionKind === 'volte') {
+    return t('dashboard.viaVolte')
+  }
   if (props.device.vowifi_active) return t('dashboard.viaWifiIms')
   return t('dashboard.vowifiInactive')
 })
@@ -80,7 +83,7 @@ function stageStatusLabel(ready: boolean | undefined): string {
       <div
         class="connection-path"
         :class="{ 'is-flowing': pathIsFlowing }"
-        :aria-label="t('dashboard.vowifiPath')"
+        :aria-label="presentation?.connectionKind === 'volte' ? t('dashboard.voltePath') : t('dashboard.vowifiPath')"
       >
         <div class="connection-path-track" aria-hidden="true">
           <span class="connection-signal" />

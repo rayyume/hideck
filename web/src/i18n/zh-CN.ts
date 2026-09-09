@@ -96,6 +96,8 @@ export const zhCN = {
     wifiCalling: 'Wi-Fi Calling',
     viaWifiIms: '通过 Wi-Fi 注册到 IMS',
     vowifiInactive: '设备在线，VoWiFi 尚未激活',
+    viaVolte: '通过蜂窝 IMS 注册',
+    voltePath: 'VoLTE 服务链路',
     deviceOffline: '设备离线，等待链路恢复',
     deviceOfflineShort: '设备离线',
     waitDevice: '设备管理 · 等待接入',

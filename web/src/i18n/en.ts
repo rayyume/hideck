@@ -98,6 +98,8 @@ export const en: typeof zhCN = {
     wifiCalling: 'Wi-Fi Calling',
     viaWifiIms: 'Registered to IMS over Wi-Fi',
     vowifiInactive: 'Device is online. VoWiFi is not active yet',
+    viaVolte: 'Registered to IMS over cellular',
+    voltePath: 'VoLTE path',
     deviceOffline: 'Device is offline. Waiting for the link',
     deviceOfflineShort: 'Device offline',
     waitDevice: 'Devices · waiting',

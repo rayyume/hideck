@@ -1,19 +1,27 @@
 import { t } from '../i18n'
 import type { DashboardDevice, VoWiFiRuntimeState } from '../types/api'
+import { isNativeVoLTEMode } from './phoneMode'
 import { displaySignalDbm, hasValidSignalDbm } from './signalPresentation'
+import {
+  createVoLTEStages,
+  volteRegistered,
+  volteServiceState
+} from './volteConnectionPresentation'
 
 export const DASHBOARD_UNAVAILABLE = '不可用'
 export const DASHBOARD_UNASSIGNED = '未分配'
 
 export type DashboardConnectionStage = Readonly<{
-  key: 'SIM' | 'Access' | 'Tunnel' | 'IMS' | 'SMS'
+  key: string
   ready: boolean | undefined
 }>
 
 export type DashboardDevicePresentation = Readonly<{
+  connectionKind: 'wifi' | 'volte' | 'cellular'
   connectionState: string
   connectionTitle: string
   connectionType: string
+  connectionDetail: string
   displayName: string
   ipv4: string
   ipv6: string
@@ -45,6 +53,7 @@ export function hasDashboardSignal(value: unknown): value is number {
 
 export function formatDashboardNetworkType(device: DashboardDevice): string {
   if (device.vowifi_active) return 'VoWiFi'
+  if (isNativeVoLTEMode(device.phone_mode)) return 'VoLTE'
   const parts = [device.network_duplex, device.network_mode]
     .map((value) => String(value || '').trim())
     .filter(Boolean)
@@ -72,7 +81,11 @@ export function createDashboardStages(
 }
 
 export function canAnimateDashboardConnection(device: DashboardDevice): boolean {
-  if (!device.healthy || device.vowifi_active !== true) return false
+  if (!device.healthy) return false
+  if (isNativeVoLTEMode(device.phone_mode)) {
+    return volteRegistered(device.native_volte)
+  }
+  if (device.vowifi_active !== true) return false
   return !createDashboardStages(device.vowifi_runtime).some(stage => stage.ready === false)
 }
 
@@ -121,18 +134,28 @@ export function createDashboardDevicePresentation(
   const connectionType = formatDashboardNetworkType(device)
   const isOnline = device.healthy
   const isVoWiFi = device.vowifi_active === true
+  const isVoLTE = isNativeVoLTEMode(device.phone_mode)
+  const volte = isVoLTE ? volteServiceState(true, device.native_volte) : null
 
   return Object.freeze({
-    connectionState: getConnectionState(isOnline, isVoWiFi, connectionType),
-    connectionTitle: getConnectionTitle(device, isOnline, isVoWiFi),
+    connectionKind: isVoLTE ? 'volte' : isVoWiFi ? 'wifi' : 'cellular',
+    connectionState: isVoLTE
+      ? (isOnline ? volte!.detail : t('dashboard.deviceUnavailable'))
+      : getConnectionState(isOnline, isVoWiFi, connectionType),
+    connectionTitle: isVoLTE
+      ? (isOnline ? volte!.title : t('dashboard.deviceOfflineShort'))
+      : getConnectionTitle(device, isOnline, isVoWiFi),
     connectionType,
+    connectionDetail: isVoLTE ? volte!.detail : '',
     displayName: String(device.name || device.id).trim() || device.id,
     ipv4: isVoWiFi ? '' : normalizeAddress(device.public_ip),
     ipv6: isVoWiFi ? '' : normalizeAddress(device.public_ipv6),
     operator: normalizeFact(device.operator),
     showsCellularFacts: !isVoWiFi,
     signal: formatDashboardSignal(device.signal_dbm),
-    stages: createDashboardStages(device.vowifi_runtime),
+    stages: isVoLTE
+      ? createVoLTEStages(isOnline ? true : undefined, device.native_volte)
+      : createDashboardStages(device.vowifi_runtime),
     statusLabel: isOnline ? t('common.online') : t('common.offline')
   })
 }

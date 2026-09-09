@@ -1,5 +1,5 @@
 import { t } from '../i18n'
-import type { DeviceOverviewItem, NativeVoLTEStatus } from '../types/api'
+import type { DeviceOverviewItem } from '../types/api'
 import {
   createDashboardStages,
   formatDashboardSignal,
@@ -7,6 +7,11 @@ import {
 } from './dashboardPresentation'
 import { displaySignalDbm } from './signalPresentation'
 import { isNativeVoLTEMode, phoneModeCampsOnCell } from './phoneMode'
+import {
+  createVoLTEStages,
+  volteRegistered,
+  volteServiceState
+} from './volteConnectionPresentation'
 
 export type OverviewConnectionKind = 'wifi' | 'volte' | 'cellular'
 
@@ -45,8 +50,8 @@ export function createOverviewConnectionPresentation(
 
 function createVoLTEPresentation(device: DeviceOverviewItem): OverviewConnectionPresentation {
   const status = device.native_volte
-  const stages = createVoLTEStages(device, status)
-  const state = volteServiceState(device, status)
+  const stages = createVoLTEStages(device.modem?.iccid ? true : undefined, status)
+  const state = volteServiceState(device.vowifi_enabled === true, status)
   return Object.freeze({
     kind: 'volte',
     eyebrow: 'VOLTE',
@@ -151,85 +156,6 @@ function createVoWiFiOrCellularPresentation(
       metric(t('overview.errorClass'), runtime?.last_error_class, t('common.none'))
     ])
   })
-}
-
-function createVoLTEStages(
-  device: DeviceOverviewItem,
-  status?: NativeVoLTEStatus
-): readonly OverviewConnectionStage[] {
-  return Object.freeze([
-    Object.freeze({ key: 'SIM', ready: device.modem?.iccid ? true : undefined }),
-    Object.freeze({ key: 'LTE', ready: volteStageReady(status?.lte_registered, status) }),
-    Object.freeze({ key: 'PDN', ready: volteStageReady(status?.ims_pdn_active, status) }),
-    Object.freeze({ key: 'IMS', ready: volteStageReady(status?.ims_registered, status) }),
-    Object.freeze({ key: 'Voice', ready: volteStageReady(status?.voice_available, status) })
-  ])
-}
-
-function volteStageReady(ok: boolean | undefined, status?: NativeVoLTEStatus): boolean | undefined {
-  if (ok) return true
-  if (status?.phase === 'failed') return false
-  return undefined
-}
-
-function volteRegistered(status?: NativeVoLTEStatus): boolean {
-  return status?.ims_registered === true || status?.phase === 'registered'
-}
-
-function volteServiceState(
-  device: DeviceOverviewItem,
-  status?: NativeVoLTEStatus
-): { tone: OverviewConnectionPresentation['tone']; title: string; detail: string } {
-  if (!device.vowifi_enabled) {
-    return {
-      tone: 'is-idle',
-      title: 'VoLTE 未开启',
-      detail: '打开卡策略里的电话后，模组会注册原生 IMS'
-    }
-  }
-  if (status?.reboot_required) {
-    return {
-      tone: 'is-pending',
-      title: 'VoLTE 需重启模组',
-      detail: status.last_error || 'USB/UAC 变更后需要重启模组'
-    }
-  }
-  if (status?.phase === 'failed') {
-    return {
-      tone: 'is-failed',
-      title: 'VoLTE 失败',
-      detail: status.last_error || '请检查模组 IMS 注册'
-    }
-  }
-  if (volteRegistered(status)) {
-    return {
-      tone: 'is-ready',
-      title: 'VoLTE 已注册',
-      detail: volteReadyDetail(status)
-    }
-  }
-  if (
-    status?.phase === 'registering'
-    || status?.phase === 'enabling'
-    || status?.phase === 'ims_enabled_unverified'
-  ) {
-    return {
-      tone: 'is-pending',
-      title: 'VoLTE 正在注册',
-      detail: status.last_error || status.provision_stage || '等待模组 IMS 注册'
-    }
-  }
-  return {
-    tone: 'is-idle',
-    title: 'VoLTE 等待注册',
-    detail: status?.last_error || '尚未收到 IMS 状态'
-  }
-}
-
-function volteReadyDetail(status?: NativeVoLTEStatus): string {
-  const parts = [status?.plmn, status?.mbn_name].map((value) => String(value || '').trim()).filter(Boolean)
-  if (parts.length) return parts.join(' · ')
-  return t('overview.volteRegistered')
 }
 
 function metric(label: string, value?: string | null, empty?: string): OverviewConnectionMetric {

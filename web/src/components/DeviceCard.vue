@@ -25,6 +25,9 @@ const props = withDefaults(defineProps<{
 
 const presentation = computed(() => createDashboardDevicePresentation(props.device))
 const networkIcon = computed(() => {
+  if (presentation.value.connectionKind === 'volte' || presentation.value.connectionType === 'VoLTE') {
+    return Cellular4G24Regular
+  }
   if (props.device.vowifi_active) return Wifi124Regular
   const mode = presentation.value.connectionType.toUpperCase()
   if (mode.includes('5G') || mode.includes('NR')) return Cellular5G24Regular
@@ -36,6 +39,9 @@ const networkIcon = computed(() => {
 })
 const connectionDetail = computed(() => {
   if (!props.device.healthy) return '设备未连接'
+  if (presentation.value.connectionKind === 'volte') {
+    return presentation.value.connectionTitle
+  }
   if (props.device.vowifi_active) return `${presentation.value.connectionType} · VoWiFi 已连接`
   if (presentation.value.connectionType === '不可用') return '网络检测中'
   return `${presentation.value.connectionType} 已连接`

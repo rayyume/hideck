@@ -34,6 +34,7 @@ import (
 	"github.com/yibaiba/hideck/internal/proxy/server"
 	proxytraffic "github.com/yibaiba/hideck/internal/proxy/traffic"
 	"github.com/yibaiba/hideck/internal/updater"
+	"github.com/yibaiba/hideck/internal/volte"
 	vwebsheet "github.com/yibaiba/hideck/internal/websheet"
 	"github.com/yibaiba/hideck/pkg/smscodec"
 
@@ -611,9 +612,11 @@ func (s *Server) handleListDevices(c *gin.Context) {
 		SignalDBM        int                               `json:"signal_dbm"`
 		NetworkMode      string                            `json:"network_mode"`
 		NetworkDuplex    string                            `json:"network_duplex"`
+		PhoneMode        string                            `json:"phone_mode,omitempty"`
 		VoWiFiActive     bool                              `json:"vowifi_active"`
 		VoWiFiRuntime    *voWiFiRuntimeDTO                 `json:"vowifi_runtime,omitempty"`
 		VoWiFiHealth     *device.WiFiCallingHealthSnapshot `json:"vowifi_health,omitempty"`
+		NativeVoLTE      *volte.Status                     `json:"native_volte,omitempty"`
 		Traffic          map[string]string                 `json:"traffic,omitempty"`
 		NetworkConnected bool                              `json:"network_connected"`
 	}
@@ -637,10 +640,15 @@ func (s *Server) handleListDevices(c *gin.Context) {
 			SignalDBM:        status.SignalDBM,
 			NetworkMode:      status.NetworkMode,
 			NetworkDuplex:    status.NetworkDuplex,
+			PhoneMode:        cfg.PhoneMode,
 			VoWiFiActive:     s.pool.IsVoWiFiActive(w.ID), // 逐个设备判断 VoWiFi 状态，支持多设备
 			VoWiFiRuntime:    s.getVoWiFiRuntimeDTO(w.ID),
 			VoWiFiHealth:     s.getWiFiCallingHealth(w.ID),
 			NetworkConnected: w.NetworkConnected(),
+		}
+		if device.IsNativeVoLTEMode(cfg.PhoneMode) {
+			status := s.pool.NativeVoLTEStatus(w.ID)
+			item.NativeVoLTE = &status
 		}
 		// 添加格式化流量
 		if w.Proxy != nil {
