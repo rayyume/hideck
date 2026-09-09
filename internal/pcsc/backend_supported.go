@@ -33,21 +33,16 @@ type systemBackend struct {
 
 type winscardAPI struct {
 	library          uintptr
-	establishContext func(uint32, uintptr, uintptr, *uintptr) int32
-	releaseContext   func(uintptr) int32
-	listReaders      func(uintptr, uintptr, []byte, *uint32) int32
-	connect          func(uintptr, string, uint32, uint32, *uintptr, *uint32) int32
-	disconnect       func(uintptr, uint32) int32
-	beginTransaction func(uintptr) int32
-	endTransaction   func(uintptr, uint32) int32
-	status           func(uintptr, []byte, *uint32, *uint32, *uint32, []byte, *uint32) int32
-	transmit         func(uintptr, *ioRequest, []byte, uint32, *ioRequest, []byte, *uint32) int32
-	getAttrib        func(uintptr, uint32, []byte, *uint32) int32
-}
-
-type ioRequest struct {
-	Protocol uint32
-	Length   uint32
+	establishContext func(pcscDword, uintptr, uintptr, *uintptr) pcscLong
+	releaseContext   func(uintptr) pcscLong
+	listReaders      func(uintptr, uintptr, []byte, *pcscDword) pcscLong
+	connect          func(uintptr, string, pcscDword, pcscDword, *uintptr, *pcscDword) pcscLong
+	disconnect       func(uintptr, pcscDword) pcscLong
+	beginTransaction func(uintptr) pcscLong
+	endTransaction   func(uintptr, pcscDword) pcscLong
+	status           func(uintptr, []byte, *pcscDword, *pcscDword, *pcscDword, []byte, *pcscDword) pcscLong
+	transmit         func(uintptr, *ioRequest, []byte, pcscDword, *ioRequest, []byte, *pcscDword) pcscLong
+	getAttrib        func(uintptr, pcscDword, []byte, *pcscDword) pcscLong
 }
 
 func newSystemBackend() Backend { return &systemBackend{} }
@@ -120,7 +115,7 @@ func (err *pcscError) Error() string {
 	return fmt.Sprintf("pcsc: %s failed with code 0x%08X", err.Operation, err.Code)
 }
 
-func checkPCSC(operation string, result int32) error {
+func checkPCSC(operation string, result pcscLong) error {
 	if result == 0 {
 		return nil
 	}
@@ -179,7 +174,7 @@ func (backend *systemBackend) Readers(ctx context.Context) ([]Reader, error) {
 }
 
 func (api *winscardAPI) readerNames(handle uintptr) ([]string, error) {
-	var size uint32
+	var size pcscDword
 	result := api.listReaders(handle, 0, nil, &size)
 	if uint32(result) == 0x8010002E {
 		return []string{}, nil
@@ -223,7 +218,7 @@ func readerProduct(name string) string {
 
 func (api *winscardAPI) enrichReader(contextHandle uintptr, reader *Reader) {
 	var card uintptr
-	var protocol uint32
+	var protocol pcscDword
 	result := api.connect(contextHandle, reader.Name+"\x00", pcscShareShared, pcscProtocolAny, &card, &protocol)
 	if result == 0 {
 		reader.CardPresent = true
@@ -241,10 +236,10 @@ func (api *winscardAPI) enrichReader(contextHandle uintptr, reader *Reader) {
 func (api *winscardAPI) readCardDetails(card uintptr, reader *Reader) {
 	nameBuffer := make([]byte, 256)
 	atrBuffer := make([]byte, 64)
-	nameLength, atrLength := uint32(len(nameBuffer)), uint32(len(atrBuffer))
-	var state, protocol uint32
+	nameLength, atrLength := pcscDword(len(nameBuffer)), pcscDword(len(atrBuffer))
+	var state, protocol pcscDword
 	result := api.status(card, nameBuffer, &nameLength, &state, &protocol, atrBuffer, &atrLength)
-	if result == 0 && atrLength <= uint32(len(atrBuffer)) {
+	if result == 0 && atrLength <= pcscDword(len(atrBuffer)) {
 		reader.ATR = strings.ToUpper(hex.EncodeToString(atrBuffer[:atrLength]))
 	}
 	api.readUSBPath(card, reader)
@@ -252,7 +247,7 @@ func (api *winscardAPI) readCardDetails(card uintptr, reader *Reader) {
 
 func (api *winscardAPI) readUSBPath(card uintptr, reader *Reader) {
 	attribute := make([]byte, 8)
-	length := uint32(len(attribute))
+	length := pcscDword(len(attribute))
 	if api.getAttrib(card, pcscAttrChannelID, attribute, &length) != 0 || length < 4 {
 		return
 	}
@@ -287,7 +282,7 @@ func (backend *systemBackend) Open(ctx context.Context, selector Selector) (Card
 		return nil, err
 	}
 	var cardHandle uintptr
-	var protocol uint32
+	var protocol pcscDword
 	result := api.connect(contextHandle, reader.Name+"\x00", pcscShareShared, pcscProtocolAny, &cardHandle, &protocol)
 	if err := checkPCSC("SCardConnect", result); err != nil {
 		_ = api.releaseContext(contextHandle)
