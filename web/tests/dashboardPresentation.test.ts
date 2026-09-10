@@ -175,6 +175,26 @@ test('animates the service path only for active VoWiFi without failed stages', (
   assert.equal(canAnimateDashboardConnection(createDevice({ vowifi_active: false })), false)
 })
 
+test('uses outbound SMS readiness when the optional receiver path is unavailable', () => {
+  const device = createDevice({
+    vowifi_active: true,
+    vowifi_runtime: {
+      sim_ready: true,
+      access_ready: true,
+      tunnel_ready: true,
+      ims_ready: true,
+      sms_ready: false,
+      sms_mo_ready: true,
+      sms_ready_reason: 'IMS SMS receiver is not ready'
+    }
+  })
+
+  const presentation = createDashboardDevicePresentation(device)
+
+  assert.deepEqual(presentation.stages.map(stage => stage.ready), [true, true, true, true, true])
+  assert.equal(canAnimateDashboardConnection(device), true)
+})
+
 test('formats cellular connection and validates signal sentinels', () => {
   const presentation = createDashboardDevicePresentation(createDevice())
 

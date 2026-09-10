@@ -74,11 +74,15 @@ function createVoLTEPresentation(device: DeviceOverviewItem): OverviewConnection
 function createVoWiFiOrCellularPresentation(
   device: DeviceOverviewItem | null
 ): OverviewConnectionPresentation {
-  const stages = createDashboardStages(device?.vowifi_runtime)
+  const runtime = device?.vowifi_runtime
+  const stages = createDashboardStages(runtime)
   const hasFailedStage = stages.some((stage) => stage.ready === false)
   const hasReadyStage = stages.some((stage) => stage.ready === true)
   const allStagesReady = stages.every((stage) => stage.ready === true)
-  const runtimeReason = device?.vowifi_runtime?.sms_ready_reason || device?.vowifi_runtime?.last_reason || ''
+  const smsOperational = runtime?.sms_mo_ready ?? runtime?.sms_ready
+  const runtimeReason = runtime?.last_reason
+    || (smsOperational === false ? runtime?.sms_ready_reason : '')
+    || ''
   const protocol = metric(t('devices.protocol'), device?.backend_mode?.toUpperCase())
   const deviceInterface = metric(t('devices.iface'), device?.interface)
 
@@ -138,7 +142,6 @@ function createVoWiFiOrCellularPresentation(
     detail = runtimeReason || t('overview.waitStages')
   }
 
-  const runtime = device.vowifi_runtime
   return Object.freeze({
     kind: 'wifi',
     eyebrow: 'WI-FI CALLING',
@@ -152,7 +155,7 @@ function createVoWiFiOrCellularPresentation(
       metric(t('overview.dataplane'), runtime?.dataplane_mode),
       protocol,
       deviceInterface,
-      metric(t('overview.lastReason'), runtime?.last_reason || runtime?.sms_ready_reason, t('common.none')),
+      metric(t('overview.lastReason'), runtimeReason, t('common.none')),
       metric(t('overview.errorClass'), runtime?.last_error_class, t('common.none'))
     ])
   })
