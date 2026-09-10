@@ -34,6 +34,7 @@ import (
 	"github.com/yibaiba/hideck/internal/proxy/server"
 	proxytraffic "github.com/yibaiba/hideck/internal/proxy/traffic"
 	"github.com/yibaiba/hideck/internal/updater"
+	"github.com/yibaiba/hideck/internal/volte"
 	vwebsheet "github.com/yibaiba/hideck/internal/websheet"
 	"github.com/yibaiba/hideck/pkg/smscodec"
 
@@ -412,6 +413,7 @@ func (s *Server) newRouter() *gin.Engine {
 		api.PUT("/devices/:device_id", s.handleDeviceMgmtUpdateDevice)                         // 更新设备配置
 		api.DELETE("/devices/:device_id", s.handleDeviceMgmtDeleteDevice)                      // 删除设备
 		api.POST("/devices/:device_id/actions/refresh", s.handleDeviceMgmtRefreshInfo)         // 手动触发刷新设备缓存信息
+		api.POST("/devices/:device_id/actions/retry-sim-pin", s.handleDeviceMgmtRetryPCSCPIN)  // 允许当前 PC/SC SIM 重新验证 PIN
 		api.POST("/devices/:device_id/actions/reboot", s.handleDeviceMgmtReboot)               // 重启设备模组
 		api.POST("/devices/:device_id/actions/at", s.handleDeviceMgmtExecuteAT)                // 执行 AT 命令
 		api.POST("/devices/:device_id/actions/ussd", s.handleDeviceMgmtExecuteUSSD)            // 执行 USSD 指令
@@ -610,9 +612,11 @@ func (s *Server) handleListDevices(c *gin.Context) {
 		SignalDBM        int                               `json:"signal_dbm"`
 		NetworkMode      string                            `json:"network_mode"`
 		NetworkDuplex    string                            `json:"network_duplex"`
+		PhoneMode        string                            `json:"phone_mode,omitempty"`
 		VoWiFiActive     bool                              `json:"vowifi_active"`
 		VoWiFiRuntime    *voWiFiRuntimeDTO                 `json:"vowifi_runtime,omitempty"`
 		VoWiFiHealth     *device.WiFiCallingHealthSnapshot `json:"vowifi_health,omitempty"`
+		NativeVoLTE      *volte.Status                     `json:"native_volte,omitempty"`
 		Traffic          map[string]string                 `json:"traffic,omitempty"`
 		NetworkConnected bool                              `json:"network_connected"`
 	}
@@ -622,7 +626,9 @@ func (s *Server) handleListDevices(c *gin.Context) {
 		status := w.GetCachedDeviceStatus() // 仓表盘列表读缓存，0 IPC
 		cfg := w.Config
 		if v, ok := cfgByID[w.ID]; ok {
-			cfg = v
+			// PhoneMode 等策略字段只在 worker 运行时投影，yaml 里是空的。
+			// 直接用 persisted 会把联通原生 VoLTE 画成 VoWiFi。
+			cfg = overviewDisplayConfig(w.Config, v, true)
 		}
 		item := DeviceStatus{
 			ID:               cfg.ID,
@@ -636,10 +642,15 @@ func (s *Server) handleListDevices(c *gin.Context) {
 			SignalDBM:        status.SignalDBM,
 			NetworkMode:      status.NetworkMode,
 			NetworkDuplex:    status.NetworkDuplex,
+			PhoneMode:        overviewPhoneMode(cfg.PhoneMode),
 			VoWiFiActive:     s.pool.IsVoWiFiActive(w.ID), // 逐个设备判断 VoWiFi 状态，支持多设备
 			VoWiFiRuntime:    s.getVoWiFiRuntimeDTO(w.ID),
 			VoWiFiHealth:     s.getWiFiCallingHealth(w.ID),
 			NetworkConnected: w.NetworkConnected(),
+		}
+		if device.IsNativeVoLTEMode(cfg.PhoneMode) {
+			volteStatus := s.pool.NativeVoLTEStatus(w.ID)
+			item.NativeVoLTE = &volteStatus
 		}
 		// 添加格式化流量
 		if w.Proxy != nil {

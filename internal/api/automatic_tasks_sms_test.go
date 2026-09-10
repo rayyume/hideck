@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/iniwex5/vowifi-go/runtimehost"
 	"github.com/iniwex5/vowifi-go/runtimehost/messaging"
 	"github.com/yibaiba/hideck/internal/automation"
 	"github.com/yibaiba/hideck/internal/config"
@@ -66,5 +67,18 @@ func TestExecuteSMSDoesNotFallbackAfterIMSAccept(t *testing.T) {
 	}
 	if csCalls != 0 {
 		t.Fatalf("cs calls=%d", csCalls)
+	}
+}
+
+func TestVoWiFiReadyForSMSTaskUsesMOReadiness(t *testing.T) {
+	state := runtimehost.State{
+		IMSReady: true, SMSMOReady: true,
+		SMSReadyReason: "IMS SMS receiver is not ready",
+	}
+	if !voWiFiReadyForTask(state, true) {
+		t.Fatalf("MO-ready runtime blocked SMS task: %+v", state)
+	}
+	if voWiFiReadyForTask(runtimehost.State{IMSReady: true}, true) {
+		t.Fatal("SMS task started without MO readiness")
 	}
 }

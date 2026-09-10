@@ -36,7 +36,9 @@ func (Runtime) Start(
 		req.fastReauth = &FastReauthStore{}
 	}
 	if req.subscriptionRegistrations == nil {
-		req.subscriptionRegistrations = imscore.NewSubscriptionRegistrationStore()
+		req.subscriptionRegistrations = imscore.NewPersistentSubscriptionRegistrationStore(
+			req.SubscriptionStore,
+		)
 	}
 	if req.Options.Voice != nil && req.voiceBinding == nil {
 		req.voiceBinding = &voiceLifecycleBinding{deviceID: req.DeviceID, voice: req.Options.Voice}

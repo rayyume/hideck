@@ -14,16 +14,21 @@ import {
 } from './utils/startupGate'
 import { Warning24Regular } from '@vicons/fluent'
 import { useTheme } from './composables/useTheme'
+import { locale, t, useLocale } from './i18n'
+import zhCn from 'element-plus/es/locale/lang/zh-cn'
+import enLocale from 'element-plus/es/locale/lang/en'
 
 const route = useRoute()
 const auth = useAuthStore()
 const { isDark, toggleTheme } = useTheme()
 const disclaimerAccepted = ref(false)
 const confirmText = ref('')
-const expectedConfirmText = '我同意并确认'
+useLocale()
+const expectedConfirmText = computed(() => t('disclaimer.phrase'))
+const elLocale = computed(() => (locale.value === 'en' ? enLocale : zhCn))
 const acceptingDisclaimer = ref(false)
 const disclaimerActionError = ref('')
-const canAccept = computed(() => confirmText.value === expectedConfirmText && !acceptingDisclaimer.value)
+const canAccept = computed(() => confirmText.value === expectedConfirmText.value && !acceptingDisclaimer.value)
 const deviceTimeState = ref<StartupState>(auth.isAuthenticated ? 'loading' : 'idle')
 const deviceTimeError = ref('')
 const disclaimerState = ref<StartupState>(auth.isAuthenticated ? 'loading' : 'idle')
@@ -103,14 +108,14 @@ watch(() => auth.isAuthenticated, (isAuthenticated) => {
 }, { immediate: true })
 
 function rejectDisclaimer() {
-  ElMessage.warning('正在退出并清理软件...')
+  ElMessage.warning(t('disclaimer.uninstalling'))
   const token = localStorage.getItem('token') || ''
   fetch('/api/system/uninstall', {
     method: 'POST',
     headers: token ? { Authorization: `Bearer ${token}` } : undefined
   })
     .finally(() => {
-      document.body.innerHTML = '<div style="display:flex;height:100vh;background:var(--ui-bg);align-items:center;justify-content:center;font-size:24px;color:var(--ui-danger);font-weight:bold;font-family:sans-serif;flex-direction:column;gap:16px;"><div><svg style="width:64px;height:64px;" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg></div><div>软件已被卸载 / 服务已终止</div></div>'
+      document.body.innerHTML = `<div style="display:flex;height:100vh;background:var(--ui-bg);align-items:center;justify-content:center;font-size:24px;color:var(--ui-danger);font-weight:bold;font-family:sans-serif;flex-direction:column;gap:16px;"><div><svg style="width:64px;height:64px;" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg></div><div>${t('disclaimer.uninstalled')}</div></div>`
     })
 }
 
@@ -134,9 +139,9 @@ const startupLoading = computed(() => auth.isAuthenticated && (
 ))
 const startupError = computed(() => {
   if (deviceTimeState.value === 'error') {
-    return { title: '设备时间同步失败', message: deviceTimeError.value }
+    return { title: t('disclaimer.timeFailed'), message: deviceTimeError.value }
   }
-  return { title: '免责声明状态加载失败', message: disclaimerError.value }
+  return { title: t('disclaimer.disclaimerFailed'), message: disclaimerError.value }
 })
 
 function retryStartup() {
@@ -146,6 +151,7 @@ function retryStartup() {
 </script>
 
 <template>
+  <el-config-provider :locale="elLocale">
   <div class="app-root h-screen w-screen overflow-hidden font-sans transition-colors duration-300">
     <Suspense v-if="canRenderShell">
       <template #default>
@@ -161,7 +167,7 @@ function retryStartup() {
         class="w-full max-w-xl"
         :title="startupError.title"
         :message="startupError.message"
-        retry-text="重试"
+        :retry-text="t('common.retry')"
         @retry="retryStartup"
       />
     </div>
@@ -175,30 +181,30 @@ function retryStartup() {
               <Warning24Regular class="w-6 h-6" />
             </div>
             
-            <h2 class="mb-5 text-2xl font-extrabold text-center text-[var(--ui-text)] tracking-tight">HiDeck 最终用户许可与免责声明</h2>
+            <h2 class="mb-5 text-2xl font-extrabold text-center text-[var(--ui-text)] tracking-tight">{{ t('disclaimer.title') }}</h2>
             
             <div class="space-y-4 text-[14px] text-[var(--ui-muted)] leading-relaxed font-medium">
               <div class="flex items-start">
                 <div class="license-index">1</div>
-                <p>本软件（HiDeck）属于个人开发者业余时间开发的工具软件，仅供技术研究、学习交流和个人内部测试使用。<strong class="license-emphasis">严禁用于任何商业用途</strong>，严禁作为生产环境的基础设施。</p>
+                <p>{{ t('disclaimer.p1') }}</p>
               </div>
               <div class="flex items-start">
                 <div class="license-index">2</div>
-                <p>使用者承诺将严格遵守所在国家或地区的相关法律法规。<strong class="text-red-500 dark:text-red-400">严禁将本软件用于电信诈骗、垃圾短信发送、非法网络代理、渗透测试等任何非法或违规场景</strong>。</p>
+                <p>{{ t('disclaimer.p2') }}</p>
               </div>
               <div class="flex items-start">
                 <div class="license-index">3</div>
-                <p>本软件涉及底层 Modem 通信操作，可能包含未知的缺陷。对于因使用本软件引发的硬件损坏、通信资费异常、隐私泄露等直接或间接损失，<strong>由使用者自行承担所有责任</strong>。</p>
+                <p>{{ t('disclaimer.p3') }}</p>
               </div>
               <div class="flex items-start">
                 <div class="license-index">4</div>
-                <p>一旦点击继续即表示无条件接受本协议。如果您拒绝，本软件将立即触发自毁与环境清理机制以确保设备安全。</p>
+                <p>{{ t('disclaimer.p4') }}</p>
               </div>
             </div>
             
             <div class="mt-6 pt-5 border-t border-[var(--ui-border)]">
               <p class="mb-3 text-xs font-bold text-center text-[var(--ui-muted)]">
-                请输入「<span class="license-emphasis select-all">{{ expectedConfirmText }}</span>」以解锁按钮
+                {{ t('disclaimer.typeHint', { phrase: expectedConfirmText }) }}
               </p>
               
               <div class="mb-5">
@@ -206,7 +212,7 @@ function retryStartup() {
                   type="text" 
                   v-model="confirmText" 
                   class="license-input w-full px-4 py-3 text-center text-sm font-semibold outline-none transition-all"
-                  :placeholder="`请输入：${expectedConfirmText}`"
+                  :placeholder="t('disclaimer.placeholder', { phrase: expectedConfirmText })"
                   @paste.prevent
                   autocomplete="off"
                 />
@@ -218,7 +224,7 @@ function retryStartup() {
 
               <div class="flex gap-4">
                 <button @click="rejectDisclaimer" class="license-reject flex-1 px-4 py-3 text-sm font-bold transition-colors">
-                  拒绝并卸载
+                  {{ t('disclaimer.reject') }}
                 </button>
                 <button 
                   @click="acceptDisclaimer" 
@@ -230,7 +236,7 @@ function retryStartup() {
                       : 'license-accept license-accept-disabled cursor-not-allowed'
                   ]"
                 >
-                  {{ acceptingDisclaimer ? '正在保存…' : '同意并继续' }}
+                  {{ acceptingDisclaimer ? t('common.loading') : t('disclaimer.accept') }}
                 </button>
               </div>
             </div>
@@ -239,6 +245,7 @@ function retryStartup() {
       </div>
     </Transition>
   </div>
+  </el-config-provider>
 </template>
 
 <style>

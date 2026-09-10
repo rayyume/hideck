@@ -46,6 +46,7 @@ type State struct {
 	EPDGAddress    string
 	SMSReadyReason string
 	SMSHealthReady bool
+	SMSMOReady     bool
 }
 
 // Event retains the recovered runtime event payload before additive fields.
@@ -154,6 +155,7 @@ type SMSReadiness struct {
 	ReceiverReady  bool
 	SMSCPresent    bool
 	Ready          bool
+	MOReady        bool
 	HealthReady    bool
 	Reason         string
 }

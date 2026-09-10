@@ -5,6 +5,7 @@ import StatusLight from './StatusLight.vue'
 import { lifecycleStatusLabel, primaryLifecycleStatus } from '../utils/deviceLifecycle'
 import { useSensitiveVisibility } from '../composables/useSensitiveVisibility'
 import { ArrowSync24Regular, Mail24Regular, Power24Regular, Sim24Regular } from '@vicons/fluent'
+import { t } from '../i18n'
 
 const props = defineProps<{
   device: DeviceOverviewItem
@@ -30,14 +31,14 @@ const simOperator = computed(() => {
   const value = String(props.simOperatorDisplay || '').trim()
   return value && value !== '--' ? value : ''
 })
-const operatorName = computed(() => servingOperator.value || simOperator.value || '运营商不可用')
+const operatorName = computed(() => servingOperator.value || simOperator.value || t('devices.operatorUnavailable'))
 const operatorFlag = computed(() => servingOperator.value ? '' : (props.simOperatorCountryCode || ''))
 
 const identityItems = computed(() => [
-  { label: 'IMEI', value: props.device.modem?.imei || '不可用', sensitive: true },
-  { label: 'ICCID', value: props.device.modem?.iccid || '不可用', sensitive: true },
-  { label: '协议', value: props.device.backend_mode?.toUpperCase() || '不可用', sensitive: false },
-  { label: '接口', value: props.device.interface || '不可用', sensitive: false }
+  { label: 'IMEI', value: props.device.modem?.imei || t('common.unavailable'), sensitive: true },
+  { label: 'ICCID', value: props.device.modem?.iccid || t('common.unavailable'), sensitive: true },
+  { label: t('devices.protocol'), value: props.device.backend_mode?.toUpperCase() || t('common.unavailable'), sensitive: false },
+  { label: t('devices.iface'), value: props.device.interface || t('common.unavailable'), sensitive: false }
 ])
 </script>
 
@@ -57,7 +58,7 @@ const identityItems = computed(() => [
           </span>
         </div>
         <p class="device-operator">
-          <span class="device-operator-label">运营商</span>
+          <span class="device-operator-label">{{ t('devices.operator') }}</span>
           <span
             v-if="operatorFlag"
             class="fi device-operator-flag"
@@ -81,19 +82,19 @@ const identityItems = computed(() => [
     <div class="device-workspace-actions" aria-label="当前设备操作">
       <el-button @click="emit('openSms')" class="ui-glass-border !border-0">
         <el-icon><Mail24Regular /></el-icon>
-        短信
+        {{ t('devices.sms') }}
       </el-button>
       <el-button v-if="device.vowifi_enabled" :loading="reconnecting" @click="emit('reconnectVowifi')" class="ui-glass-border !border-0">
         <el-icon><ArrowSync24Regular /></el-icon>
-        重连 VoWiFi
+        {{ t('devices.reconnectVowifi') }}
       </el-button>
       <el-button v-else :loading="rotating" :disabled="!device.network_connected" @click="emit('rotateIp')" class="ui-glass-border !border-0">
         <el-icon><ArrowSync24Regular /></el-icon>
-        切换 IP
+        {{ t('devices.rotateIp') }}
       </el-button>
       <el-button :loading="rebooting" @click="emit('rebootModem')" class="ui-glass-border device-reboot-button !border-0">
         <el-icon><Power24Regular /></el-icon>
-        重启模组
+        {{ t('devices.reboot') }}
       </el-button>
     </div>
   </header>

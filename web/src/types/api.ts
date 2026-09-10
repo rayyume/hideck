@@ -65,6 +65,7 @@ export type VoWiFiRuntimeState = {
   tunnel_ready?: boolean
   ims_ready?: boolean
   sms_ready?: boolean
+  sms_mo_ready?: boolean
   sms_ready_reason?: string
   reg_status?: number
   reg_status_text?: string
@@ -196,6 +197,7 @@ export type DeviceMgmtListItem = {
   phone_mode?: string
   vowifi_enabled?: boolean
   vowifi_runtime?: VoWiFiRuntimeState
+  native_volte?: NativeVoLTEStatus
   modem?: Pick<ModemStatus, 'operator' | 'native_spn' | 'native_mcc' | 'native_mnc' | 'network_mode' | 'network_duplex' | 'radio_band' | 'radio_channel' | 'signal_dbm' | 'signal_sinr' | 'imei' | 'iccid' | 'reg_status'>
 }
 
@@ -383,9 +385,11 @@ export type DashboardDevice = {
   signal_dbm: number
   public_ip?: string
   public_ipv6?: string
+  phone_mode?: string
   vowifi_active?: boolean
   vowifi_runtime?: VoWiFiRuntimeState
   vowifi_health?: WiFiCallingHealthSnapshot
+  native_volte?: NativeVoLTEStatus
 }
 
 export type SMSMessage = {

@@ -17,6 +17,10 @@ var (
 	ErrPINRequired         = errors.New("pcsc: SIM PIN is required")
 	ErrPINTriesLow         = errors.New("pcsc: refusing PIN verification because too few attempts remain")
 	ErrPINRejected         = errors.New("pcsc: SIM PIN was rejected")
+	ErrPINStatusUnknown    = errors.New("pcsc: SIM PIN state or retry count is unknown; verification refused")
+	ErrPINVerification     = errors.New("pcsc: SIM PIN verification failed")
+	ErrPINRetryBlocked     = errors.New("pcsc: automatic SIM PIN retries disabled; correct the PIN and explicitly allow another attempt")
+	ErrSecurityStatus      = errors.New("pcsc: card security status does not allow this operation")
 	ErrUSIMUnavailable     = errors.New("pcsc: no usable USIM application was found")
 	ErrApplicationNotFound = errors.New("pcsc: smart-card application was not found")
 	ErrCardChanged         = errors.New("pcsc: card identity changed during authentication")
@@ -76,18 +80,24 @@ type AKAResult struct {
 }
 
 type PINError struct {
-	Kind  error
-	Tries int
+	Kind      error
+	Tries     int
+	Status    uint16
+	HasStatus bool
 }
 
 func (err *PINError) Error() string {
 	if err == nil {
 		return "pcsc: SIM PIN error"
 	}
+	message := err.Kind.Error()
 	if err.Tries >= 0 {
-		return fmt.Sprintf("%v (%d attempts remain)", err.Kind, err.Tries)
+		message = fmt.Sprintf("%s (%d attempts remain)", message, err.Tries)
 	}
-	return err.Kind.Error()
+	if err.HasStatus || err.Status != 0 {
+		message = fmt.Sprintf("%s (SW=%04X)", message, err.Status)
+	}
+	return message
 }
 
 func (err *PINError) Unwrap() error {

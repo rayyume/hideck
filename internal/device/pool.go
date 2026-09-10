@@ -2548,6 +2548,9 @@ func (p *Pool) PersistRuntimeState(worker *Worker) {
 	if worker == nil {
 		return
 	}
+	if resolvedBackendMode(worker.Config) == backend.BackendPCSC || (worker.Backend != nil && worker.Backend.Mode() == backend.BackendPCSC) {
+		return
+	}
 
 	status := worker.ProjectDeviceStatus()
 	imei := strings.TrimSpace(status.IMEI)
@@ -2576,6 +2579,16 @@ func (p *Pool) PersistIdentityState(worker *Worker) {
 	}
 	imei := strings.TrimSpace(status.IMEI)
 	operator := strings.TrimSpace(status.Operator)
+
+	if resolvedBackendMode(worker.Config) == backend.BackendPCSC || (worker.Backend != nil && worker.Backend.Mode() == backend.BackendPCSC) {
+		if operator == "" {
+			operator = strings.TrimSpace(status.NativeSPN)
+		}
+		if err := db.UpsertSIMCard(iccid, imsi, "", operator, nil); err != nil {
+			logger.Warn(fmt.Sprintf("[%s] 更新 SIM 卡信息失败", worker.ID), "err", err)
+		}
+		return
+	}
 
 	if imei == "" {
 		logger.Warn(fmt.Sprintf("[%s] 无法同步设备 SIM 身份：IMEI 为空", worker.ID))

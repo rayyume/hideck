@@ -206,7 +206,7 @@ watch(levelFilter, () => {
               <el-icon><ArrowDownload24Regular /></el-icon>
               导出
             </el-button>
-            <el-button size="small" @click="clearLogs" class="!border-0">
+            <el-button size="small" @click="clearLogs" class="log-console-btn-ghost !border-0">
               <el-icon><Delete24Regular /></el-icon>
               清空
             </el-button>
@@ -268,15 +268,13 @@ watch(levelFilter, () => {
   gap: 3px;
 }
 
-.logs-rail-status small,
-.log-console-header span {
+.logs-rail-status small {
   color: var(--ui-primary);
   font: 700 9px "v-mono", monospace;
   letter-spacing: .13em;
 }
 
-.logs-rail-status strong,
-.log-console-header strong {
+.logs-rail-status strong {
   color: var(--ui-text);
   font-size: 15px;
 }
@@ -321,19 +319,41 @@ watch(levelFilter, () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid var(--ui-border);
+  border-bottom: 1px solid color-mix(in srgb, var(--ui-console-text) 12%, transparent);
   background: var(--ui-console);
+  color: var(--ui-console-text);
+}
+
+.log-console-header span {
+  color: var(--ui-console-muted);
+  font: 700 12px "v-mono", monospace;
+  letter-spacing: .12em;
+}
+
+.log-console-header strong {
+  color: var(--ui-console-text);
+  font-size: 15px;
 }
 
 .log-console-header small {
-  color: var(--ui-text-muted);
-  font: 10px "v-mono", monospace;
+  color: var(--ui-console-muted);
+  font: 12px "v-mono", monospace;
+  letter-spacing: .08em;
 }
 
 .log-console-actions {
   display: flex !important;
   align-items: center;
   gap: 7px !important;
+}
+
+.log-console-actions :deep(.log-console-btn-ghost) {
+  --el-button-text-color: var(--ui-console-text);
+  --el-button-bg-color: color-mix(in srgb, var(--ui-console-text) 14%, transparent);
+  --el-button-hover-text-color: var(--ui-console-text);
+  --el-button-hover-bg-color: color-mix(in srgb, var(--ui-console-text) 22%, transparent);
+  --el-button-hover-border-color: transparent;
+  --el-button-border-color: transparent;
 }
 
 .logs-connection-dot {

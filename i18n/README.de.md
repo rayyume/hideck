@@ -89,18 +89,18 @@ curl -fsSL https://raw.githubusercontent.com/yibaiba/hideck/main/deploy-binary.s
 ```bash
 curl -fsSL https://raw.githubusercontent.com/yibaiba/hideck/main/deploy-binary.sh | \
   HIDECK_DIR=/opt/hideck \
-  HIDECK_VERSION=v2.1.15 \
+  HIDECK_VERSION=v2.1.19 \
   HIDECK_ARCH=linux_amd64 sh
 ```
 
 | Datei | Plattform |
 | --- | --- |
-| `hideck_v2.1.15_linux_amd64` | x86_64, glibc + UPX |
-| `hideck_v2.1.15_linux_arm64` | ARM64 / Raspberry Pi OS 64-Bit, glibc + UPX |
-| `hideck_v2.1.15_linux_armv7` | 32-Bit-ARM, glibc + UPX |
-| `hideck_v2.1.15_openwrt_amd64` | OpenWrt x86_64, musl statisch, ohne UPX |
-| `hideck_v2.1.15_openwrt_arm64` | OpenWrt aarch64 |
-| `hideck_v2.1.15_openwrt_armv7` | OpenWrt 32-Bit-ARM |
+| `hideck_v2.1.19_linux_amd64` | x86_64, glibc + UPX |
+| `hideck_v2.1.19_linux_arm64` | ARM64 / Raspberry Pi OS 64-Bit, glibc + UPX |
+| `hideck_v2.1.19_linux_armv7` | 32-Bit-ARM, glibc + UPX |
+| `hideck_v2.1.19_openwrt_amd64` | OpenWrt x86_64, musl statisch, ohne UPX |
+| `hideck_v2.1.19_openwrt_arm64` | OpenWrt aarch64 |
+| `hideck_v2.1.19_openwrt_armv7` | OpenWrt 32-Bit-ARM |
 
 Unter OpenWrt nur `openwrt_*` verwenden. Siehe [packaging/openwrt/README.md](../packaging/openwrt/README.md).
 

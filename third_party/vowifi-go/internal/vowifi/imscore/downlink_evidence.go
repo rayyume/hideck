@@ -67,7 +67,6 @@ func (s *Service) recordCurrentDownlinkRequest(peer net.Conn, checkpoint downlin
 	if current {
 		s.downlinkRequests++
 		if _, datagram := peer.(*protectedUDPPeer); datagram {
-			s.clearPortSResetRecovery(checkpoint.registrar)
 			s.udpDownlinkProven.Store(true)
 			s.portSRecoveryAwaitingFlow.Store(false)
 			s.portSReconnectWaiting.Store(false)
@@ -77,6 +76,10 @@ func (s *Service) recordCurrentDownlinkRequest(peer net.Conn, checkpoint downlin
 		// Failover commits under mu too: it must not observe the request before
 		// the same request has canceled its pending timeout recovery.
 		timeoutProven = s.confirmPortSTimeoutDownlinkLocked(peer)
+		// A current downlink also proves that a recovered TCP path is usable.
+		// Clear the earlier reset incident only after timeout recovery has been
+		// canceled so both recovery state transitions remain atomic to failover.
+		s.clearPortSResetRecovery(checkpoint.registrar)
 	}
 	s.mu.Unlock()
 	if !current {

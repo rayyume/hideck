@@ -12,6 +12,7 @@ import {
 import ErrorState from '../components/ErrorState.vue'
 import EmptyState from '../components/EmptyState.vue'
 import PageHeader from '../components/PageHeader.vue'
+import { t } from '../i18n'
 import { devicesService } from '../services/devices'
 import { utService, type UtSimservs } from '../services/ut'
 import type { AppError } from '../types/domain'
@@ -138,7 +139,7 @@ async function save(kind: string, payload: Record<string, unknown>) {
 
 <template>
   <div class="app-page ut-page">
-    <PageHeader title="呼叫设置" subtitle="设置呼叫前转、主叫号码显示和呼叫限制。一次只改一项。">
+    <PageHeader :title="t('ut.title')" :subtitle="t('ut.subtitle')">
       <template #actions>
         <el-button :loading="loading" :disabled="loading" @click="retry">
           <el-icon v-if="!loading"><ArrowClockwise24Regular /></el-icon>

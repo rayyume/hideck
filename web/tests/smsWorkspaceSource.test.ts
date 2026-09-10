@@ -79,6 +79,16 @@ test('unread presentation and history failures stay explicit', () => {
   assert.match(messageTimeline, /当前接口未返回此会话的历史短信/)
 })
 
+test('conversation opens the latest page on demand and follows new messages', () => {
+  assert.match(smsView, /SMS_THREAD_PAGE_SIZE/)
+  assert.match(smsView, /scrollToBottom: !viewingTarget.value/)
+  assert.match(smsView, /threadAlreadyHasLatest/)
+  assert.match(smsView, /mergeSmsThreadPages/)
+  assert.match(smsView, /followingLatest.value = isNearTimelineEnd/)
+  assert.match(smsView, /@latest="\(\) => void showLatestMessages\(\)"/)
+  assert.doesNotMatch(smsView, /limit: 80/)
+})
+
 test('switching conversations clears prior content before requesting the next thread', () => {
   const selectionStart = smsView.indexOf('async function selectThread')
   const selectionEnd = smsView.indexOf('async function applyThreadSeen', selectionStart)

@@ -91,12 +91,63 @@ func TestPortSTimeoutFailoverIsCarrierAndErrorScoped(t *testing.T) {
 				s.completePortSRecovery(nil, true)
 				fireTestPortSWatch(t, s)
 				got := s.pendingPortSTimeoutFailover().registrar != ""
-				want := preset == vodafoneUKCarrierPresetID && closeErr == syscall.ETIMEDOUT
+				want := preset == vodafoneUKCarrierPresetID &&
+					(closeErr == syscall.ETIMEDOUT || closeErr == syscall.ECONNRESET)
 				if got != want {
 					t.Fatalf("timeout replacement pending = %t, want %t", got, want)
 				}
 			})
 		}
+	}
+}
+
+func TestVodafoneUKPeerResetWithoutReopenedDownlinkRequestsFreshPath(t *testing.T) {
+	s := newPortSTimeoutTestService(t)
+	closeTestPortS(t, s, syscall.ECONNRESET)
+	s.handleProtectedServerPushClosed()
+	fireTestPortSWatch(t, s)
+	if !s.portSRecoveryPending.Load() {
+		t.Fatal("peer reset did not request same-P-CSCF REGISTER recovery")
+	}
+	s.reRegisterPending.Store(false)
+	s.completePortSRecovery(nil, true)
+	fireTestPortSWatch(t, s)
+	pending := s.pendingPortSTimeoutFailover()
+	if pending.registrar == "" || pending.failure != portSPeerResetFailure {
+		t.Fatalf("missing post-REGISTER downlink validation failure: %+v", pending)
+	}
+	expirePortSTimeoutBackoff(t, s)
+	select {
+	case err := <-s.RegistrationErrors():
+		if !strings.Contains(err.Error(), "fresh runtime required") {
+			t.Fatal(err)
+		}
+	default:
+		t.Fatal("unrecovered peer reset kept refreshing the same P-CSCF")
+	}
+}
+
+func TestClosedPortSCleanupCannotHideValidatedTimeoutFailure(t *testing.T) {
+	s := newPortSTimeoutTestService(t)
+	client, server := net.Pipe()
+	t.Cleanup(func() {
+		_ = client.Close()
+		_ = server.Close()
+	})
+	s.recordPortSOpened(client, time.Now())
+	if !s.trackProtectedConnection(client) {
+		t.Fatal("track port-s")
+	}
+	s.recordPortSClosed(client, syscall.ETIMEDOUT, time.Now())
+	s.portSSessionMu.Lock()
+	s.portSSession.timeoutRecovery.validationFailed = true
+	s.portSSessionMu.Unlock()
+	pending := s.pendingPortSTimeoutFailover()
+	_, _, changed := s.commitPortSFailover(pending.registrar, portSFailoverCause{
+		reason: pending.failure, generation: pending.generation,
+	})
+	if !changed {
+		t.Fatal("closed port-s awaiting map cleanup canceled a validated failure")
 	}
 }
 

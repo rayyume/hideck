@@ -13,6 +13,94 @@ import (
 	"github.com/emiago/sipgo/sip"
 )
 
+func TestSIPStreamServiceURN(t *testing.T) {
+	wire := "SIP/2.0 380 Alternative Service\r\nVia: SIP/2.0/TCP [2001:db8::1]:5060;branch=z9hG4bKurn\r\nFrom: <sip:user@ims.example>;tag=local\r\nTo: <urn:service:sos>;tag=remote\r\nContact: <urn:service:sos>\r\nCall-ID: urn-test\r\nCSeq: 1 INVITE\r\nContent-Length: 0\r\n\r\n"
+	message, err := parseSIPMessage(wire)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if message.To().Address.String() != "urn:service:sos" {
+		t.Fatalf("To URI changed: %s", message.To().Address.String())
+	}
+	decoder := newSIPStreamDecoder(strings.NewReader(wire + wire))
+	defer decoder.Close()
+	for count := 0; count < 2; count++ {
+		message, err := decoder.ReadMessage()
+		if err != nil {
+			t.Fatal(err)
+		}
+		response, ok := message.(*sip.Response)
+		if !ok || response.StatusCode != 380 || response.Contact().Address.String() != "urn:service:sos" {
+			t.Fatalf("unexpected response: %v", message)
+		}
+	}
+	if _, err := decoder.ReadMessage(); err != io.EOF {
+		t.Fatalf("stream boundary lost: %v", err)
+	}
+}
+
+func TestServiceURNHeaderCompatibility(test *testing.T) {
+	for _, name := range []string{"To", "t", "From", "f", "Contact", "m", "Route", "Record-Route", "Refer-To", "Referred-By"} {
+		test.Run(name, func(test *testing.T) {
+			wire := "SIP/2.0 380 Alternative Service\r\n" + name + ": <urn:service:sos.police>\r\nContent-Length: 0\r\n\r\n"
+			message, err := parseSIPMessage(wire)
+			if err != nil {
+				test.Fatal(err)
+			}
+			if got := message.(*sip.Response).Headers()[0].Value(); got != "<urn:service:sos.police>" {
+				test.Fatalf("header changed: %q", got)
+			}
+		})
+	}
+}
+
+func TestServiceURNPreservesHeaderListsAndBody(test *testing.T) {
+	body := "<ussd>urn:service:sos</ussd>"
+	for _, contacts := range []string{
+		`<urn:service:sos>;expires=60, <sip:user@[2001:db8::1]:5060>;expires=30`,
+		`<sip:user@[2001:db8::1]:5060>;expires=30, <urn:service:sos>;expires=60`,
+		"<urn:service:sos>;expires=60,\r\n\t<urn:service:sos.police>;expires=30",
+	} {
+		wire := "SIP/2.0 380 Alternative Service\r\nTo: urn:service:sos;tag=remote\r\nContact: " + contacts + "\r\nContent-Length: " + fmt.Sprint(len(body)) + "\r\n\r\n" + body
+		message, err := parseSIPMessage(wire)
+		if err != nil {
+			test.Fatal(err)
+		}
+		if string(message.Body()) != body || message.To().Params.ToString(';') != "tag=remote" {
+			test.Fatal("body or header parameters changed")
+		}
+		headers := message.GetHeaders("Contact")
+		if len(headers) != 2 {
+			test.Fatalf("got %d contacts", len(headers))
+		}
+		for index, value := range strings.Split(contacts, ",") {
+			if headers[index].Value() != strings.TrimSpace(value) {
+				test.Fatalf("contact %d changed: %q", index, headers[index].Value())
+			}
+		}
+	}
+}
+
+func TestServiceURNCompatibilityRemainsLocal(test *testing.T) {
+	for _, value := range []string{"urn:service:", "urn:service:so s", "urn:service:sos..police", "sip:ims.example:sos"} {
+		if _, err := parseSIPMessage("SIP/2.0 380 Alternative Service\r\nTo: <" + value + ">\r\nContent-Length: 0\r\n\r\n"); err == nil {
+			test.Fatalf("accepted malformed URI %q", value)
+		}
+	}
+	wire := "SIP/2.0 380 Alternative Service\r\nTo: <urn:service:sos>\r\nContent-Length: 0\r\n\r\n"
+	if _, err := parseSIPMessage(wire); err != nil {
+		test.Fatal(err)
+	}
+	if _, err := sip.NewParser().ParseSIP([]byte(wire)); err == nil {
+		test.Fatal("compatibility parser modified sipgo global parsers")
+	}
+	value := `"<urn:service:sos>" <sip:user@ims.example>;tag=remote`
+	message, err := parseSIPMessage("SIP/2.0 200 OK\r\nTo: " + value + "\r\nContent-Length: 0\r\n\r\n")
+	if err != nil || message.To().Address.String() != "sip:user@ims.example" {
+		test.Fatalf("quoted display name treated as URI: %v", err)
+	}
+}
+
 func TestSIPParserAcceptsBuiltRegisterAndResponse(t *testing.T) {
 	service := &Service{cfg: &IMSConfig{
 		IMSI: "234102356143376", IMPI: "234102356143376@ims.example",

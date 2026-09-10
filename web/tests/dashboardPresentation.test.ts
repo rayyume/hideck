@@ -8,6 +8,7 @@ import {
   formatDashboardNetworkType,
   formatDashboardSignal,
   hasDashboardSignal,
+  dashboardUsesNativeVoLTE,
   mergeDashboardDeviceOperators
 } from '../src/utils/dashboardPresentation.ts'
 
@@ -86,6 +87,80 @@ test('keeps offline state distinct from a failed or unknown VoWiFi stage', () =>
   assert.equal(presentation.connectionState, '当前设备不可用')
   assert.deepEqual(presentation.stages.map(stage => stage.ready), [false, undefined, undefined, undefined, undefined])
   assert.equal(canAnimateDashboardConnection(device), false)
+})
+
+test('native VoLTE uses the cellular IMS path instead of Wi-Fi calling stages', () => {
+  const device = createDevice({
+    operator: '中国联通',
+    phone_mode: 'volte',
+    vowifi_active: false,
+    native_volte: {
+      phase: 'registered',
+      ims_registered: true,
+      lte_registered: true,
+      ims_pdn_active: true,
+      voice_available: true,
+      plmn: '460-01',
+      mbn_name: 'CU-VoLTE'
+    }
+  })
+  const presentation = createDashboardDevicePresentation(device)
+
+  assert.equal(presentation.connectionKind, 'volte')
+  assert.equal(presentation.connectionTitle, 'VoLTE 已注册')
+  assert.equal(presentation.connectionState, '460-01 · CU-VoLTE')
+  assert.equal(presentation.connectionType, 'VoLTE')
+  assert.equal(presentation.showsCellularFacts, true)
+  assert.deepEqual(presentation.stages.map(stage => [stage.key, stage.ready]), [
+    ['SIM', true],
+    ['LTE', true],
+    ['PDN', true],
+    ['IMS', true],
+    ['Voice', true]
+  ])
+  assert.equal(canAnimateDashboardConnection(device), true)
+})
+
+test('treats registered native VoLTE as the cellular path even if phone_mode is omitted', () => {
+  const device = createDevice({
+    operator: '中国联通',
+    vowifi_active: false,
+    native_volte: {
+      phase: 'registered',
+      ims_registered: true,
+      lte_registered: true,
+      ims_pdn_active: true,
+      voice_available: true
+    }
+  })
+  const presentation = createDashboardDevicePresentation(device)
+
+  assert.equal(dashboardUsesNativeVoLTE(device), true)
+  assert.equal(presentation.connectionKind, 'volte')
+  assert.equal(presentation.connectionTitle, 'VoLTE 已注册')
+  assert.deepEqual(presentation.stages.map(stage => stage.key), ['SIM', 'LTE', 'PDN', 'IMS', 'Voice'])
+})
+
+test('fills missing dashboard phone_mode and native VoLTE from the managed device list', () => {
+  const devices = [createDevice({
+    operator: '中国联通',
+    vowifi_active: false
+  })]
+  const merged = mergeDashboardDeviceOperators(devices, [{
+    id: 'modem-1',
+    phone_mode: 'volte',
+    native_volte: {
+      phase: 'registered',
+      ims_registered: true,
+      plmn: '460-01',
+      mbn_name: 'CU-VoLTE'
+    }
+  }])
+
+  assert.equal(merged[0]?.phone_mode, 'volte')
+  assert.equal(merged[0]?.native_volte?.mbn_name, 'CU-VoLTE')
+  assert.equal(createDashboardDevicePresentation(merged[0]!).connectionKind, 'volte')
+  assert.equal(devices[0]?.phone_mode, undefined)
 })
 
 test('animates the service path only for active VoWiFi without failed stages', () => {

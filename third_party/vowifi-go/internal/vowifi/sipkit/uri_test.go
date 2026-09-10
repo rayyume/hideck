@@ -9,9 +9,22 @@ func TestParseURIValidation(t *testing.T) {
 			t.Errorf("ParseURI(%q): %v", value, err)
 		}
 	}
-	for _, value := range []string{"", "tel:   ", "urn:service:sos"} {
+	for _, value := range []string{"", "tel:   ", "urn:service:sos", "urn:service:", "urn:service:so s", "urn:service:sos..police", "urn:service:sos:5060"} {
 		if err := ParseURI(value); err == nil {
 			t.Errorf("ParseURI(%q) succeeded", value)
+		}
+	}
+}
+
+func TestParseServiceURNValidation(t *testing.T) {
+	for _, value := range []string{"urn:service:sos", "URN:service:sos.police"} {
+		if err := ParseServiceURN(value); err != nil {
+			t.Errorf("ParseServiceURN(%q): %v", value, err)
+		}
+	}
+	for _, value := range []string{"", "urn:service:", "urn:service:so s", "urn:service:sos..police", "urn:service:sos:5060"} {
+		if err := ParseServiceURN(value); err == nil {
+			t.Errorf("ParseServiceURN(%q) succeeded", value)
 		}
 	}
 }
@@ -58,6 +71,9 @@ func TestParseHostPortWithDefault(t *testing.T) {
 		if err != nil || host != test.host || port != test.port {
 			t.Errorf("ParseHostPortWithDefault(%q) = %q, %d, %v", test.input, host, port, err)
 		}
+	}
+	if _, _, err := ParseHostPortWithDefault("urn:service:sos", 5060); err == nil {
+		t.Fatal("service URN was accepted as a registrar endpoint")
 	}
 }
 

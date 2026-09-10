@@ -33,21 +33,16 @@ type systemBackend struct {
 
 type winscardAPI struct {
 	library          uintptr
-	establishContext func(uint32, uintptr, uintptr, *uintptr) int32
-	releaseContext   func(uintptr) int32
-	listReaders      func(uintptr, uintptr, []byte, *uint32) int32
-	connect          func(uintptr, string, uint32, uint32, *uintptr, *uint32) int32
-	disconnect       func(uintptr, uint32) int32
-	beginTransaction func(uintptr) int32
-	endTransaction   func(uintptr, uint32) int32
-	status           func(uintptr, []byte, *uint32, *uint32, *uint32, []byte, *uint32) int32
-	transmit         func(uintptr, *ioRequest, []byte, uint32, *ioRequest, []byte, *uint32) int32
-	getAttrib        func(uintptr, uint32, []byte, *uint32) int32
-}
-
-type ioRequest struct {
-	Protocol uint32
-	Length   uint32
+	establishContext func(pcscDword, uintptr, uintptr, *pcscLong) pcscLong
+	releaseContext   func(pcscLong) pcscLong
+	listReaders      func(pcscLong, uintptr, []byte, *pcscDword) pcscLong
+	connect          func(pcscLong, string, pcscDword, pcscDword, *pcscLong, *pcscDword) pcscLong
+	disconnect       func(pcscLong, pcscDword) pcscLong
+	beginTransaction func(pcscLong) pcscLong
+	endTransaction   func(pcscLong, pcscDword) pcscLong
+	status           func(pcscLong, []byte, *pcscDword, *pcscDword, *pcscDword, []byte, *pcscDword) pcscLong
+	transmit         func(pcscLong, *ioRequest, []byte, pcscDword, *ioRequest, []byte, *pcscDword) pcscLong
+	getAttrib        func(pcscLong, pcscDword, []byte, *pcscDword) pcscLong
 }
 
 func newSystemBackend() Backend { return &systemBackend{} }
@@ -120,7 +115,7 @@ func (err *pcscError) Error() string {
 	return fmt.Sprintf("pcsc: %s failed with code 0x%08X", err.Operation, err.Code)
 }
 
-func checkPCSC(operation string, result int32) error {
+func checkPCSC(operation string, result pcscLong) error {
 	if result == 0 {
 		return nil
 	}
@@ -137,8 +132,8 @@ func checkPCSC(operation string, result int32) error {
 	}
 }
 
-func (api *winscardAPI) context() (uintptr, error) {
-	var handle uintptr
+func (api *winscardAPI) context() (pcscLong, error) {
+	var handle pcscLong
 	if err := checkPCSC("SCardEstablishContext", api.establishContext(pcscScopeSystem, 0, 0, &handle)); err != nil {
 		return 0, err
 	}
@@ -178,8 +173,8 @@ func (backend *systemBackend) Readers(ctx context.Context) ([]Reader, error) {
 	return readers, contextError(ctx)
 }
 
-func (api *winscardAPI) readerNames(handle uintptr) ([]string, error) {
-	var size uint32
+func (api *winscardAPI) readerNames(handle pcscLong) ([]string, error) {
+	var size pcscDword
 	result := api.listReaders(handle, 0, nil, &size)
 	if uint32(result) == 0x8010002E {
 		return []string{}, nil
@@ -221,9 +216,9 @@ func readerProduct(name string) string {
 	return strings.TrimSpace(trimmed)
 }
 
-func (api *winscardAPI) enrichReader(contextHandle uintptr, reader *Reader) {
-	var card uintptr
-	var protocol uint32
+func (api *winscardAPI) enrichReader(contextHandle pcscLong, reader *Reader) {
+	var card pcscLong
+	var protocol pcscDword
 	result := api.connect(contextHandle, reader.Name+"\x00", pcscShareShared, pcscProtocolAny, &card, &protocol)
 	if result == 0 {
 		reader.CardPresent = true
@@ -238,21 +233,21 @@ func (api *winscardAPI) enrichReader(contextHandle uintptr, reader *Reader) {
 	}
 }
 
-func (api *winscardAPI) readCardDetails(card uintptr, reader *Reader) {
+func (api *winscardAPI) readCardDetails(card pcscLong, reader *Reader) {
 	nameBuffer := make([]byte, 256)
 	atrBuffer := make([]byte, 64)
-	nameLength, atrLength := uint32(len(nameBuffer)), uint32(len(atrBuffer))
-	var state, protocol uint32
+	nameLength, atrLength := pcscDword(len(nameBuffer)), pcscDword(len(atrBuffer))
+	var state, protocol pcscDword
 	result := api.status(card, nameBuffer, &nameLength, &state, &protocol, atrBuffer, &atrLength)
-	if result == 0 && atrLength <= uint32(len(atrBuffer)) {
+	if result == 0 && atrLength <= pcscDword(len(atrBuffer)) {
 		reader.ATR = strings.ToUpper(hex.EncodeToString(atrBuffer[:atrLength]))
 	}
 	api.readUSBPath(card, reader)
 }
 
-func (api *winscardAPI) readUSBPath(card uintptr, reader *Reader) {
+func (api *winscardAPI) readUSBPath(card pcscLong, reader *Reader) {
 	attribute := make([]byte, 8)
-	length := uint32(len(attribute))
+	length := pcscDword(len(attribute))
 	if api.getAttrib(card, pcscAttrChannelID, attribute, &length) != 0 || length < 4 {
 		return
 	}
@@ -286,8 +281,8 @@ func (backend *systemBackend) Open(ctx context.Context, selector Selector) (Card
 	if err != nil {
 		return nil, err
 	}
-	var cardHandle uintptr
-	var protocol uint32
+	var cardHandle pcscLong
+	var protocol pcscDword
 	result := api.connect(contextHandle, reader.Name+"\x00", pcscShareShared, pcscProtocolAny, &cardHandle, &protocol)
 	if err := checkPCSC("SCardConnect", result); err != nil {
 		_ = api.releaseContext(contextHandle)

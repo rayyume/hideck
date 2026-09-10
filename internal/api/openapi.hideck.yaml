@@ -1214,6 +1214,29 @@ paths:
         '404':
           $ref: '#/components/responses/ErrorMessage'
 
+  /devices/{device_id}/actions/retry-sim-pin:
+    post:
+      tags: [devices]
+      summary: 允许当前 PC/SC SIM 重新验证 PIN
+      description: |
+        清除当前读卡器中这张 SIM 的 PIN 安全锁并重建 Worker。
+        这是明确的人工重试操作；若配置的 PIN 仍然错误，可能消耗一次剩余尝试次数。
+      parameters:
+        - $ref: '#/components/parameters/DeviceIDPath'
+      responses:
+        '200':
+          description: 已开始重新验证
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        '400':
+          $ref: '#/components/responses/ErrorMessage'
+        '409':
+          $ref: '#/components/responses/ErrorMessage'
+        '503':
+          $ref: '#/components/responses/ErrorMessage'
+
   /devices/{device_id}/actions/reboot:
     post:
       tags: [devices]
@@ -4150,6 +4173,9 @@ components:
           type: boolean
         sms_ready:
           type: boolean
+        sms_mo_ready:
+          type: boolean
+          description: IMS 短信发送前置条件是否就绪；不依赖用于下行短信的 port-s 接收连接。
         sms_ready_reason:
           type: string
         reg_status:

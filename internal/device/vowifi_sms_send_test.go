@@ -28,6 +28,24 @@ func TestSendVoWiFiSMSWhenReadySendsImmediately(t *testing.T) {
 	}
 }
 
+func TestSendVoWiFiSMSWhenMOReadyDoesNotWaitForMTReceiver(t *testing.T) {
+	runtime := &fakeVoWiFiSMSRuntime{state: runtimehost.State{
+		IMSReady: true, SMSMOReady: true, SMSReadyReason: "IMS SMS receiver is not ready",
+	}}
+	runtime.send = func(context.Context, string, string, messaging.SendOptions) (messaging.SendOutcome, error) {
+		return messaging.SendOutcome{MessageID: "msg-mo-ready"}, nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	outcome, err := sendVoWiFiSMSWhenReady(ctx, voWiFiSMSSendRequest{
+		DeviceID: "wwan0", To: "+15551234567", Text: "test", Updates: make(chan runtimehost.State),
+		Runtime: func() voWiFiSMSRuntime { return runtime },
+	})
+	if err != nil || outcome.MessageID != "msg-mo-ready" || runtime.sendCount() != 1 {
+		t.Fatalf("MO-ready send outcome=%+v err=%v count=%d", outcome, err, runtime.sendCount())
+	}
+}
+
 func TestSendVoWiFiSMSWhenReadyWaitsAcrossRecovery(t *testing.T) {
 	failedRuntime := &fakeVoWiFiSMSRuntime{state: runtimehost.State{
 		SMSReadyReason: "IMS registration is not ready",

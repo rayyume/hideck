@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"strings"
 
 	"github.com/emiago/sipgo/sip"
@@ -101,7 +102,79 @@ func sipHeaderContinuation(data []byte, offset int) (int, bool) {
 }
 
 func parseSIPMessage(raw string) (sip.Message, error) {
-	return sip.NewParser().ParseSIP(unfoldSIPHeaders([]byte(raw)))
+	return newSIPParser().ParseSIP(unfoldSIPHeaders([]byte(raw)))
+}
+
+func newSIPParser() *sip.Parser {
+	parsers := maps.Clone(sip.DefaultHeadersParser())
+	for _, name := range []string{"to", "t", "from", "f", "contact", "m", "route", "record-route", "refer-to", "referred-by"} {
+		base := parsers[name]
+		parsers[name] = func(headerName []byte, value string) (sip.Header, error) {
+			start, end := sipAddressSpan(value)
+			address := value[start:end]
+			if !strings.HasPrefix(strings.ToLower(address), "urn:service:") {
+				return base(headerName, value)
+			}
+			if err := sipkit.ParseServiceURN(address); err != nil {
+				return nil, err
+			}
+			masked := value[:start] + "sip:" + strings.Repeat("x", len(address)-4) + value[end:]
+			header, err := base(headerName, masked)
+			uri := sip.Uri{Scheme: "urn", Host: address[len("urn:"):]}
+			switch typed := header.(type) {
+			case *sip.ToHeader:
+				typed.Address = uri
+			case *sip.FromHeader:
+				typed.Address = uri
+			case *sip.ContactHeader:
+				typed.Address = uri
+			case *sip.RouteHeader:
+				typed.Address = uri
+			case *sip.RecordRouteHeader:
+				typed.Address = uri
+			case *sip.ReferToHeader:
+				typed.Address = uri
+			case *sip.ReferredByHeader:
+				typed.Address = uri
+			}
+			return header, err
+		}
+	}
+	return sip.NewParser(sip.WithHeadersParsers(parsers))
+}
+
+func sipAddressSpan(value string) (int, int) {
+	quoted, escaped := false, false
+	for index, character := range value {
+		if escaped {
+			escaped = false
+			continue
+		}
+		if quoted && character == '\\' {
+			escaped = true
+			continue
+		}
+		if character == '"' {
+			quoted = !quoted
+		}
+		if quoted {
+			continue
+		}
+		if character == '<' {
+			if end := strings.IndexByte(value[index+1:], '>'); end >= 0 {
+				return index + 1, index + 1 + end
+			}
+			return 0, 0
+		}
+		if character == ',' {
+			break
+		}
+	}
+	start := len(value) - len(strings.TrimLeft(value, " \t"))
+	if end := strings.IndexAny(value[start:], ";, \t"); end >= 0 {
+		return start, start + end
+	}
+	return start, len(value)
 }
 
 func parseSIPResponse(raw string) (*sipResponse, error) {
@@ -196,7 +269,7 @@ func readSIPStreamFrame(reader *bufio.Reader, keepalive io.Writer, onPong func()
 		return nil, "", err
 	}
 	unfolded := unfoldSIPHeaders(header)
-	message, _, err := sip.NewParser().ParseHeaders(unfolded, true)
+	message, _, err := newSIPParser().ParseHeaders(unfolded, true)
 	if err != nil {
 		if errors.Is(err, sip.ErrParseReadBodyIncomplete) {
 			return nil, "", fmt.Errorf("%w: %s", err, summarizeSIPHeaderFrame(unfolded))

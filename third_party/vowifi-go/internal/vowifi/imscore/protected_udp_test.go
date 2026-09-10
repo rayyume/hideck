@@ -1,6 +1,7 @@
 package imscore
 
 import (
+	"bufio"
 	"errors"
 	"net"
 	"strings"
@@ -75,11 +76,33 @@ func readProtectedTestUDP(t *testing.T, conn *net.UDPConn) string {
 	return string(buffer[:n])
 }
 
-func TestProtectedUDPSMSRepliesAndDeduplicates(t *testing.T) {
-	s, subscriber, tcpOutbound := newInboundSMSTestService(t)
-	s.registrationTCP = newRecoveryCompletionPortS(t)
+func startProtectedTestTCPOutbound(t *testing.T, s *Service) <-chan string {
+	t.Helper()
+	serviceConn, networkConn := net.Pipe()
+	t.Cleanup(func() { _ = serviceConn.Close(); _ = networkConn.Close() })
+	s.mu.Lock()
+	s.registrationTCP = serviceConn
 	s.registrationTCPProtected = true
 	s.registrationTransport = "tcp"
+	s.mu.Unlock()
+	outbound := make(chan string, 2)
+	go func() {
+		reader := bufio.NewReader(networkConn)
+		for {
+			request, err := readSIPStreamMessage(reader)
+			if err != nil {
+				return
+			}
+			outbound <- request
+			s.transport.DeliverResponse(registerResponseForRequest(request, 202, nil))
+		}
+	}()
+	return outbound
+}
+
+func TestProtectedUDPSMSRepliesAndDeduplicates(t *testing.T) {
+	s, subscriber, _ := newInboundSMSTestService(t)
+	tcpOutbound := startProtectedTestTCPOutbound(t, s)
 	path, remoteC, remoteS := startProtectedTestUDP(t, s)
 	raw := inboundSMSRequest(t, imsSMSContentType, inboundRPData(t, 0x43, "+447700900123", "UDP delivery"))
 	raw = strings.ReplaceAll(raw, "SIP/2.0/TCP", "SIP/2.0/UDP")
@@ -89,19 +112,15 @@ func TestProtectedUDPSMSRepliesAndDeduplicates(t *testing.T) {
 	if response := readProtectedTestUDP(t, remoteS); !strings.HasPrefix(response, "SIP/2.0 200") {
 		t.Fatalf("SIP reply = %s", response)
 	}
-	report := readProtectedTestUDP(t, remoteS)
+	report := waitForOutboundSMSControl(t, tcpOutbound)
 	body, err := rawSIPBody(report)
 	if err != nil || string(body) != string(smscodec.BuildRPAck(0x43)) {
 		t.Fatalf("RP report = %x, %v", body, err)
 	}
-	if !strings.HasPrefix(sipHeaderValue(report, "Via"), "SIP/2.0/UDP ") {
-		t.Fatal("RP report advertised TCP")
+	if !strings.HasPrefix(sipHeaderValue(report, "Via"), "SIP/2.0/TCP ") {
+		t.Fatal("RP report did not use the registered TCP flow")
 	}
-	response := registerWireResponse(report, 202, "")
-	if _, err := remoteC.WriteToUDP([]byte(response), path.server.LocalAddr().(*net.UDPAddr)); err != nil {
-		t.Fatal(err)
-	}
-	waitForProtectedRPAck(t, s)
+	waitForProtectedRPAck(t, s, "TCP", 1)
 	select {
 	case <-subscriber.events:
 	case <-time.After(time.Second):
@@ -116,13 +135,11 @@ func TestProtectedUDPSMSRepliesAndDeduplicates(t *testing.T) {
 	select {
 	case <-subscriber.events:
 		t.Fatal("duplicate SMS delivery")
-	case <-tcpOutbound:
-		t.Fatal("UDP reply escaped onto unrelated transport")
 	default:
 	}
 }
 
-func waitForProtectedRPAck(t *testing.T, s *Service) {
+func waitForProtectedRPAck(t *testing.T, s *Service, wantTransport string, wantCount int64) {
 	t.Helper()
 	deadline := time.NewTimer(time.Second)
 	defer deadline.Stop()
@@ -132,7 +149,7 @@ func waitForProtectedRPAck(t *testing.T, s *Service) {
 		s.lastMTAckMu.Lock()
 		transport, failure := s.lastMTAckTransport, s.lastMTAckErr
 		s.lastMTAckMu.Unlock()
-		if transport == "UDP" && failure == "" && s.mtAckSendOK.Load() == 1 {
+		if transport == wantTransport && failure == "" && s.mtAckSendOK.Load() == wantCount {
 			return
 		}
 		select {

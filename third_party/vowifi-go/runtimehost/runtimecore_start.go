@@ -42,8 +42,9 @@ func (req StartRequest) coreRequest() runtimecore.RuntimeStartRequest {
 			Mode: req.Dataplane.Mode, TUNName: req.Dataplane.TUNName,
 		},
 		Proxy: runtimeCoreProxy(req.Proxy), DNSServer: req.DNSServer,
-		DeliveryStore: runtimeCoreDeliveryStore(req.DeliveryStore),
-		Dispatch:      runtimeCoreDispatcher(req.Dispatch), ShouldRun: req.ShouldRun,
+		DeliveryStore:     runtimeCoreDeliveryStore(req.DeliveryStore),
+		SubscriptionStore: runtimeCoreSubscriptionRejectionStore(req.DeliveryStore),
+		Dispatch:          runtimeCoreDispatcher(req.Dispatch), ShouldRun: req.ShouldRun,
 	}
 	if req.BeforeStart != nil {
 		hook := req.BeforeStart
@@ -137,7 +138,7 @@ func chainSMSReadinessHook(
 		if previous != nil {
 			previous(ctx, readiness)
 		}
-		observer.inst.updateSMSReadiness(adaptSMSReadiness(readiness))
+		observer.updateSMSReadiness(adaptSMSReadiness(readiness))
 	}
 }
 

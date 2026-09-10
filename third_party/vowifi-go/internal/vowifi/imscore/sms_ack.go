@@ -81,7 +81,8 @@ func (s *Service) sendRPReport(report rpReportRequest) error {
 		s.mtAckSendErr.Add(1)
 		return err
 	}
-	modeCtx, resolveErr := s.resolveOutboundModeContextForPeer("mt-rp-ack", request, report.PeerConn)
+	peer := rpReportOutboundPeer(report.PeerConn)
+	modeCtx, resolveErr := s.resolveOutboundModeContextForPeer("mt-rp-ack", request, peer)
 	if resolveErr != nil {
 		s.mtAckSendErr.Add(1)
 		return resolveErr
@@ -101,7 +102,7 @@ func (s *Service) sendRPReport(report rpReportRequest) error {
 	result, dispatchErr := s.dispatchOutboundMESSAGEWithCallbacks(outboundDispatchOptions{
 		Mode:    &modeCtx,
 		Context: ctx, Flow: "mt-rp-ack", Request: request,
-		Timeout: inboundSMSAckTimeout, PeerConn: report.PeerConn,
+		Timeout: inboundSMSAckTimeout, PeerConn: peer,
 	})
 	err = rpReportTransactionError(result.SIPCode, dispatchErr)
 	annotateRPReportReject(err, modeCtx.Registrar)
@@ -115,6 +116,16 @@ func (s *Service) sendRPReport(report rpReportRequest) error {
 	s.mtAckSendOK.Add(1)
 	s.recordMTAckAudit(audit, nil)
 	return nil
+}
+
+// An RP report is a new out-of-dialog MESSAGE, not the SIP response to the
+// delivered MESSAGE. A protected UDP datagram proves the downlink path but
+// must not replace the registered originating flow used by the new request.
+func rpReportOutboundPeer(peer net.Conn) net.Conn {
+	if _, protectedUDP := peer.(*protectedUDPPeer); protectedUDP {
+		return nil
+	}
+	return peer
 }
 
 func rpReportForTransport(request *sip.Request, mode outboundModeContext) *sip.Request {

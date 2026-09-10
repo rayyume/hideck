@@ -19,6 +19,9 @@ import { filterDashboardDevices } from '../utils/dashboardPresentation'
 import { formatPlmnOperatorLabel, getMccMncIndex, type MccMncRow } from '../utils/mcc-mnc'
 import { Search } from '@element-plus/icons-vue'
 import { Add24Regular, ArrowRight24Regular } from '@vicons/fluent'
+import { t, useLocale } from '../i18n'
+
+useLocale()
 
 const dashboard = useDashboardStore()
 const router = useRouter()
@@ -123,7 +126,7 @@ onMounted(() => {
 
 <template>
   <div class="app-page dashboard-page">
-    <PageHeader title="连接总览" subtitle="统一查看全部通信设备、VoWiFi 链路与出口流量">
+    <PageHeader :title="t('dashboard.title')" :subtitle="t('dashboard.subtitle')">
       <template #actions>
         <RefreshButton :loading="loading" @click="fetchDevices" />
       </template>
@@ -137,27 +140,27 @@ onMounted(() => {
       />
     </Transition>
 
-    <section class="fleet-summary" aria-label="设备状态摘要">
+    <section class="fleet-summary" :aria-label="t('dashboard.fleetSummary')">
       <div class="fleet-summary-copy">
         <span class="section-kicker">FLEET SUMMARY</span>
         <strong>{{ onlineCount }} / {{ totalCount }}</strong>
-        <span>台设备在线</span>
+        <span>{{ t('dashboard.devicesOnline') }}</span>
       </div>
       <div class="fleet-metrics">
         <div class="fleet-metric">
-          <span>全部</span>
+          <span>{{ t('dashboard.all') }}</span>
           <strong>{{ totalCount }}</strong>
         </div>
         <div class="fleet-metric">
-          <span>在线</span>
+          <span>{{ t('dashboard.online') }}</span>
           <strong>{{ onlineCount }}</strong>
         </div>
         <div class="fleet-metric">
-          <span>离线</span>
+          <span>{{ t('dashboard.offline') }}</span>
           <strong>{{ offlineCount }}</strong>
         </div>
         <div class="fleet-metric fleet-metric-time">
-          <span>更新</span>
+          <span>{{ t('dashboard.updated') }}</span>
           <strong>
             {{ devicesLastOkAt ? formatDeviceTime(devicesLastOkAt, { clientClock: true }) : '--:--:--' }}
           </strong>
@@ -168,30 +171,30 @@ onMounted(() => {
     <ErrorState
       v-if="devicesError"
       class="mb-6"
-      title="设备列表加载失败"
+      :title="t('dashboard.loadFailed')"
       :message="devicesError.message"
       :status-code="devicesError.status"
       :request-method="devicesError.method"
       :request-url="devicesError.url"
       :last-success-at="devicesLastOkAt"
-      retry-text="重试"
+      :retry-text="t('common.retry')"
       @retry="fetchDevices"
     />
 
-    <section class="device-overview-toolbar" aria-label="设备筛选">
+    <section class="device-overview-toolbar" :aria-label="t('dashboard.filterAria')">
       <div>
         <span class="section-kicker">DEVICE FLEET</span>
-        <h2>设备连接</h2>
-        <p>显示 {{ filteredDevices.length }} / {{ totalCount }} 台设备</p>
+        <h2>{{ t('dashboard.fleetTitle') }}</h2>
+        <p>{{ t('dashboard.showing', { shown: filteredDevices.length, total: totalCount }) }}</p>
       </div>
       <div v-if="devices.length > 0" class="device-filter-controls">
-          <el-input v-model="searchQuery" clearable placeholder="搜索设备、运营商或 IP" :prefix-icon="Search" />
+          <el-input v-model="searchQuery" clearable :placeholder="t('dashboard.searchPlaceholder')" :prefix-icon="Search" />
           <el-segmented
             v-model="statusFilter"
             :options="[
-              { label: '全部', value: 'all' },
-              { label: '在线', value: 'online' },
-              { label: '离线', value: 'offline' }
+              { label: t('dashboard.all'), value: 'all' },
+              { label: t('dashboard.online'), value: 'online' },
+              { label: t('dashboard.offline'), value: 'offline' }
             ]"
           />
       </div>
@@ -203,16 +206,16 @@ onMounted(() => {
       v-else-if="devices.length === 0"
       type="button"
       class="device-fleet-empty"
-      aria-label="打开设备管理，添加或接管设备"
+      :aria-label="t('dashboard.emptyAria')"
       @click="openDeviceOverview()"
     >
       <span class="device-fleet-empty-icon" aria-hidden="true"><Add24Regular /></span>
       <span class="device-fleet-empty-copy">
-        <strong>等待设备接入</strong>
-        <small>添加或接管设备后，这里会显示实时连接状态</small>
+        <strong>{{ t('dashboard.emptyTitle') }}</strong>
+        <small>{{ t('dashboard.emptyHint') }}</small>
       </span>
       <span class="device-fleet-empty-action">
-        管理设备
+        {{ t('dashboard.manageDevices') }}
         <ArrowRight24Regular aria-hidden="true" />
       </span>
     </button>

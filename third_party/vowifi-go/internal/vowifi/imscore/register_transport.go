@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/iniwex5/vowifi-go/internal/vowifi/logging"
@@ -260,11 +261,10 @@ func (s *Service) acceptProtectedSIP(listener net.Listener) {
 		s.inboundTCPAccept.Add(1)
 		s.configureRegistrationTCPKeepalive(conn)
 		conn = s.newPortSInboundConn(conn)
-		if !s.trackProtectedConnection(conn) {
+		if !s.trackProtectedPortSConnection(conn, time.Now()) {
 			_ = conn.Close()
 			return
 		}
-		s.recordPortSOpened(conn, time.Now())
 		s.resetPortSReadClock()
 		s.networkDone.Add(1)
 		go s.serveProtectedSIPConnection(conn)
@@ -571,14 +571,42 @@ func (s *Service) trackProtectedConnection(conn net.Conn) bool {
 		changed := !s.portSPushReady.Swap(true)
 		s.protectedConnMu.Unlock()
 		s.mu.RUnlock()
-		s.confirmCurrentRegistrarDownlinkHealthy()
-		s.signalDownlinkValidation()
-		s.cancelPortSReconnectWatch()
-		s.recordOnDemandPortSReconnect()
-		if changed {
-			s.notifySMSReadiness()
-		}
+		s.finishProtectedConnectionTracking(changed)
 		return true
+	}
+}
+
+// Track the accepted socket and its port-s generation atomically with failover.
+func (s *Service) trackProtectedPortSConnection(conn net.Conn, now time.Time) bool {
+	s.mu.RLock()
+	s.protectedConnMu.Lock()
+	select {
+	case <-s.stop:
+		s.protectedConnMu.Unlock()
+		s.mu.RUnlock()
+		return false
+	default:
+	}
+	registrar := strings.TrimSpace(s.registrar)
+	s.portSSessionMu.Lock()
+	generation := s.recordPortSOpenedLocked(conn, now, registrar)
+	s.protectedConns[conn] = struct{}{}
+	changed := !s.portSPushReady.Swap(true)
+	s.portSSessionMu.Unlock()
+	s.protectedConnMu.Unlock()
+	s.mu.RUnlock()
+	s.logPortSOpened(conn, registrar, generation)
+	s.finishProtectedConnectionTracking(changed)
+	return true
+}
+
+func (s *Service) finishProtectedConnectionTracking(readinessChanged bool) {
+	s.confirmCurrentRegistrarDownlinkHealthy()
+	s.signalDownlinkValidation()
+	s.cancelPortSReconnectWatch()
+	s.recordOnDemandPortSReconnect()
+	if readinessChanged {
+		s.notifySMSReadiness()
 	}
 }
 

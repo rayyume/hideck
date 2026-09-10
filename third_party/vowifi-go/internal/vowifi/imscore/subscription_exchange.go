@@ -25,6 +25,7 @@ func (s *Service) recordSubscriptionUsageAttempt(result subscriptionResult, mwi 
 	l := f.lifecycle
 	l.context, l.started = result.context.subscriptionContext, true
 	l.attemptKey, l.sentAt = key, time.Time{}
+	l.selfRouted = false
 	l.notifyDeadline, l.retryAt = time.Time{}, time.Time{}
 	l.notifyExpires, l.unsubscribing = false, result.unsubscribe
 	*f.closed, *f.lastErr = false, ""
@@ -121,10 +122,22 @@ func (s *Service) recordSubscriptionUsageResult(result subscriptionResult, mwi b
 
 func (s *Service) failSubscriptionUsageLocked(f subscriptionFields, result subscriptionResult) error {
 	if subscriptionPermanentlyRejected(result.response) {
+		status := result.response.StatusCode
+		if f.lifecycle.selfRouted && status == 405 {
+			reason := fmt.Sprintf("SUBSCRIBE %s was routed back to the local contact", subscriptionEventPackage(f.mwi))
+			f.terminate(reason)
+			f.lifecycle.blockedReason = reason
+			return fmt.Errorf("imscore: %s: %w", reason, result.err)
+		}
 		f.terminate(result.err.Error())
-		f.lifecycle.rejectedStatus = result.response.StatusCode
-		if f.mwi {
-			s.subscriptionRegistrations.rejectMWI(result.context.binding, result.response.StatusCode)
+		if identityScopedSubscriptionRejection(status) {
+			s.subscriptionRegistrations.reject(
+				result.context.binding,
+				subscriptionEventPackage(f.mwi),
+				status,
+			)
+		} else {
+			f.lifecycle.rejectedStatus = status
 		}
 		return result.err
 	}

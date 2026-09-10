@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/iniwex5/vowifi-go/internal/vowifi/events"
+	"github.com/iniwex5/vowifi-go/internal/vowifi/imscore"
 	"github.com/iniwex5/vowifi-go/internal/vowifi/smsdelivery"
 	"github.com/iniwex5/vowifi-go/runtimehost/eventhost"
 	"github.com/iniwex5/vowifi-go/runtimehost/messaging"
@@ -14,6 +15,13 @@ func runtimeCoreDispatcher(dispatcher eventhost.Dispatcher) events.EventDispatch
 		return nil
 	}
 	return eventDispatcherAdapter{dispatch: dispatcher}
+}
+
+func runtimeCoreSubscriptionRejectionStore(
+	store messaging.DeliveryStore,
+) imscore.SubscriptionRejectionPersistence {
+	persistence, _ := store.(messaging.SubscriptionRejectionStore)
+	return persistence
 }
 
 type runtimeCoreDeliveryStoreAdapter struct{ store messaging.DeliveryStore }

@@ -35,25 +35,25 @@ test('VoWiFi overview exposes one service path and centralizes diagnostics', () 
   assert.match(overviewTab, /<DeviceOverviewIdentityPanel/)
   assert.equal(connectionStage.match(/class="overview-service-path"/g)?.length, 1)
   assert.match(connectionStage, /createOverviewConnectionPresentation/)
-  assert.match(connectionPresentation, /VoLTE 已注册/)
+  assert.match(connectionPresentation, /overview\.volteRegistered/)
 
-  for (const label of ['接入方式', '数据平面', '协议', '接口', '最后原因', '错误分类']) {
-    assert.match(connectionPresentation, new RegExp(`'${label}'`))
+  for (const key of ['overview.access', 'overview.dataplane', 'devices.protocol', 'devices.iface', 'overview.lastReason', 'overview.errorClass']) {
+    assert.match(connectionPresentation, new RegExp(key.replace('.', '\\.')))
   }
 })
 
 test('identity panel keeps production facts and existing operations', () => {
-  for (const label of [
-    'IMEI',
-    'ICCID',
-    'IMSI',
-    '本机号码',
-    '原运营商',
-    '固件版本',
-    '飞行模式',
-    '运行模式'
-  ]) {
+  for (const label of ['IMEI', 'ICCID', 'IMSI']) {
     assert.match(identityPanel, new RegExp(`label: '${label}'`))
+  }
+  for (const key of [
+    'devices.localNumber',
+    'devices.homeOperator',
+    'devices.firmware',
+    'devices.flightMode',
+    'devices.backend'
+  ]) {
+    assert.match(identityPanel, new RegExp(key.replace('.', '\\.')))
   }
 
   assert.match(identityPanel, /useSensitiveVisibility/)

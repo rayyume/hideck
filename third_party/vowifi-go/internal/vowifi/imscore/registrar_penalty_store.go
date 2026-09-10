@@ -13,11 +13,20 @@ type RegistrarPenaltyStore struct {
 	entries          map[string]registrarPenaltyEntry
 	lastCandidates   []string
 	recovering       bool
+	recoveryMode     registrarRecoveryMode
 	generation       uint64
 	downlinkRound    *registrarDownlinkRound
 	downlinkAttempt  uint64
 	recoveryAttempts map[string]bool
 }
+
+type registrarRecoveryMode uint8
+
+const (
+	registrarRecoveryModeNone registrarRecoveryMode = iota
+	registrarRecoveryModeDownlinkValidation
+	registrarRecoveryModeMTReportRedelivery
+)
 
 // A successful binding can confirm only failures observed before its attempt.
 type registrarRecoveryAttempt struct {
@@ -87,6 +96,7 @@ func (store *RegistrarPenaltyStore) clearFailures(attempt registrarRecoveryAttem
 		return
 	}
 	store.recovering = false
+	store.recoveryMode = registrarRecoveryModeNone
 	store.downlinkRound = nil
 	store.recoveryAttempts = nil
 	if !exists {
@@ -98,6 +108,40 @@ func (store *RegistrarPenaltyStore) clearFailures(attempt registrarRecoveryAttem
 	} else {
 		store.entries[registrar] = entry
 	}
+}
+
+func (store *RegistrarPenaltyStore) recoveryNeedsDownlinkValidation() bool {
+	if store == nil {
+		return false
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	return store.recovering && store.recoveryMode != registrarRecoveryModeMTReportRedelivery
+}
+
+// A replacement REGISTER after an MT report 488 selects a new delivery path,
+// but silence cannot prove that path broken. Preserve node penalties and wait
+// for the SMSC to redeliver before making another path decision.
+func (store *RegistrarPenaltyStore) settleMTReportRecoveryAfterRegister(attempt registrarRecoveryAttempt) bool {
+	registrar := strings.TrimSpace(attempt.registrar)
+	if store == nil || registrar == "" {
+		return false
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if !store.recovering || store.recoveryMode != registrarRecoveryModeMTReportRedelivery ||
+		attempt.generation != store.generation {
+		return false
+	}
+	entry := store.entries[registrar]
+	if entry.reason == vodafoneUKMTReportFailure && time.Now().Before(entry.deprioritizedUntil) {
+		return false
+	}
+	store.recovering = false
+	store.recoveryMode = registrarRecoveryModeNone
+	store.downlinkRound = nil
+	store.recoveryAttempts = nil
+	return true
 }
 
 func (store *RegistrarPenaltyStore) recoveryInProgress() bool {

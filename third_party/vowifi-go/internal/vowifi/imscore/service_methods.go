@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/iniwex5/vowifi-go/internal/vowifi/ipsec3gpp"
+	"github.com/iniwex5/vowifi-go/internal/vowifi/logging"
 )
 
 // Start launches the IMS core session.
@@ -22,7 +23,12 @@ func (s *Service) Start(ctx context.Context) error {
 	baseline := s.captureDownlinkCheckpoint()
 	err := s.Register(ctx)
 	if err == nil {
-		s.startReplacementDownlinkWatch(baseline)
+		if s.settleMTReportRecoveryAfterRegister() {
+			logging.Info("IMS MT report recovery registered; awaiting SMSC redelivery",
+				"device", s.DeviceID(), "pcscf", s.currentPortSRecoveryRegistrar())
+		} else {
+			s.startReplacementDownlinkWatch(baseline)
+		}
 	}
 	return s.scheduleInitialRecoveryFailure(err)
 }

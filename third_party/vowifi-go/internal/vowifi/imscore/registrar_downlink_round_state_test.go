@@ -14,6 +14,11 @@ func TestDownlinkRoundDoesNotCountWaitingAsAnotherAttempt(t *testing.T) {
 		nextRetry: func(uint32) time.Time { return now.Add(time.Minute) },
 	}
 	first := store.planDownlinkRound(input)
+	if !first.rediscover {
+		t.Fatal("completed set did not request P-CSCF rediscovery")
+	}
+	input.current = ""
+	first = store.planDownlinkRound(input)
 	store.mark("a:5060", now.Add(time.Hour))
 	input.now = first.retryAt.Add(time.Second)
 	input.nextRetry = func(uint32) time.Time { return input.now.Add(time.Minute) }
@@ -23,23 +28,86 @@ func TestDownlinkRoundDoesNotCountWaitingAsAnotherAttempt(t *testing.T) {
 	}
 }
 
-func TestDownlinkRoundNewDiscoveryCannotEraseCooldown(t *testing.T) {
+func TestDownlinkRoundFreshDiscoveryUsesANewCandidateImmediately(t *testing.T) {
 	store := NewRegistrarPenaltyStore()
 	store.noteDownlinkAttempt("a:5060")
 	now := time.Now()
 	input := downlinkRoundInput{
-		candidates: []string{"a:5060"}, now: now,
+		candidates: []string{"a:5060"}, current: "a:5060", now: now,
 		nextRetry: func(uint32) time.Time { return now.Add(time.Minute) },
 	}
 	first := store.planDownlinkRound(input)
-	input.candidates = []string{"new:5060", "a:5060"}
-	input.now = now.Add(time.Second)
-	if waiting := store.planDownlinkRound(input); !waiting.retryAt.Equal(first.retryAt) || waiting.next != "" {
-		t.Fatalf("rediscovery bypassed the completed round's delay: %+v", waiting)
+	if !first.rediscover {
+		t.Fatal("completed set did not request P-CSCF rediscovery")
 	}
-	input.now = first.retryAt.Add(time.Second)
-	if ready := store.planDownlinkRound(input); ready.next != "new:5060" || ready.round != 2 {
-		t.Fatalf("fresh discovery was not available in the next round: %+v", ready)
+	input.candidates = []string{"new:5060", "a:5060"}
+	input.current = ""
+	input.now = now.Add(time.Second)
+	if ready := store.planDownlinkRound(input); ready.next != "new:5060" || ready.round != 1 {
+		t.Fatalf("freshly discovered P-CSCF was not selected: %+v", ready)
+	}
+}
+
+func TestDownlinkRoundFreshDiscoveryOccursOncePerRound(t *testing.T) {
+	store := NewRegistrarPenaltyStore()
+	now := time.Now()
+	store.noteDownlinkAttempt("a:5060")
+	if plan := store.planDownlinkRound(downlinkRoundInput{
+		candidates: []string{"a:5060"}, current: "a:5060", now: now,
+		nextRetry: func(uint32) time.Time { return now.Add(time.Minute) },
+	}); !plan.rediscover {
+		t.Fatalf("first exhausted set did not request discovery: %+v", plan)
+	}
+
+	fresh := downlinkRoundInput{
+		candidates: []string{"c:5060", "d:5060"}, now: now.Add(time.Second),
+		nextRetry: func(uint32) time.Time { return now.Add(time.Minute) },
+	}
+	if plan := store.planDownlinkRound(fresh); plan.next != "c:5060" {
+		t.Fatalf("newly discovered candidate not selected: %+v", plan)
+	}
+	store.noteDownlinkAttempt("c:5060")
+	fresh.current = "c:5060"
+	if plan := store.planDownlinkRound(fresh); plan.next != "d:5060" {
+		t.Fatalf("fresh alternate not selected: %+v", plan)
+	}
+	store.noteDownlinkAttempt("d:5060")
+	fresh.current = "d:5060"
+	if plan := store.planDownlinkRound(fresh); plan.rediscover || !plan.retryAt.After(now) {
+		t.Fatalf("same round requested repeated discovery: %+v", plan)
+	}
+}
+
+func TestDownlinkRoundBackoffEscalatesByRound(t *testing.T) {
+	s := singleCandidateReplacement(t)
+	s.portSRecoveryJitter = func(upper time.Duration) time.Duration { return upper }
+	s.registrarPenalties.mu.Lock()
+	s.registrarPenalties.downlinkRound.number = 3
+	s.registrarPenalties.downlinkRound.rediscoveryRequested = true
+	s.registrarPenalties.mu.Unlock()
+
+	now := time.Now()
+	plan := s.planDownlinkRound([]string{s.cfg.Registrar}, s.cfg.Registrar)
+	want := rfc5626RecoveryUpperBound(3, false)
+	if delta := plan.retryAt.Sub(now); delta < want-time.Second || delta > want+time.Second {
+		t.Fatalf("round backoff = %s, want %s", delta, want)
+	}
+}
+
+func TestDownlinkRoundSameRediscoveredSetWaitsBeforeReuse(t *testing.T) {
+	store := NewRegistrarPenaltyStore()
+	store.noteDownlinkAttempt("a:5060")
+	now := time.Now()
+	input := downlinkRoundInput{
+		candidates: []string{"a:5060"}, current: "a:5060", now: now,
+		nextRetry: func(uint32) time.Time { return now.Add(time.Minute) },
+	}
+	if plan := store.planDownlinkRound(input); !plan.rediscover {
+		t.Fatalf("completed set did not request rediscovery: %+v", plan)
+	}
+	input.current = ""
+	if plan := store.planDownlinkRound(input); plan.next != "" || !plan.retryAt.After(now) {
+		t.Fatalf("unchanged P-CSCF set bypassed cooldown: %+v", plan)
 	}
 }
 

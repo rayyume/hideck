@@ -17,13 +17,16 @@ type portSFailoverCause struct {
 }
 
 func (cause portSFailoverCause) policy() string {
-	if cause.reason == "downlink_validation_timeout" {
+	switch cause.reason {
+	case "downlink_validation_timeout":
 		return "vodafone_uk_downlink_validation"
-	}
-	if cause.reason == portSTransportTimeoutFailure {
+	case portSTransportTimeoutFailure:
 		return "vodafone_uk_port_s_timeout"
+	case vodafoneUKMTReportFailure:
+		return vodafoneUKMTReportRecoveryPolicy
+	default:
+		return vodafoneUKPortSResetRecoveryPolicy
 	}
-	return vodafoneUKPortSResetRecoveryPolicy
 }
 
 // The caller owns registerMu and has validated the failure against the current
@@ -53,7 +56,11 @@ func (s *Service) commitPortSFailover(failedRegistrar string, cause portSFailove
 	if s.udpDownlinkProven.Load() {
 		return "", time.Time{}, false
 	}
-	if cause.reason == portSTransportTimeoutFailure && !s.consumePortSTimeoutFailoverLocked(failedRegistrar, cause.generation) {
+	if s.hasCurrentTrackedPortSLocked(failedRegistrar) {
+		return "", time.Time{}, false
+	}
+	if cause.generation != 0 &&
+		!s.consumePortSTimeoutFailoverLocked(failedRegistrar, cause.generation, cause.reason) {
 		return "", time.Time{}, false
 	}
 	// A new, confirmed transport failure is not an idle validation timeout.
@@ -79,6 +86,12 @@ func (s *Service) recoverPortSOnAlternate(failedRegistrar, next string, cause po
 	cancel()
 	if err != nil {
 		s.rejectFailedPortSRegistrar(next, cause, err)
+		return
+	}
+	if cause.reason == vodafoneUKMTReportFailure {
+		s.settleMTReportRecoveryAfterRegister()
+		logging.Info("IMS MT report recovery switched P-CSCF; awaiting SMSC redelivery",
+			"device", s.DeviceID(), "policy", cause.policy(), "registrar", next)
 		return
 	}
 	logging.Info("IMS port-s recovery registered; awaiting downlink validation",

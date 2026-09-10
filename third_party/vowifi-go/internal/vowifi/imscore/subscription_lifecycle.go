@@ -33,6 +33,7 @@ type subscriptionLifecycle struct {
 	notifyVersion   uint64
 	notifications   *subscriptionNotificationQueue
 	usageGeneration uint64
+	selfRouted      bool
 }
 
 type subscriptionAttemptContext struct {
@@ -68,8 +69,8 @@ func (s *Service) trackSubscriptionRegistrationLocked(expires time.Duration) {
 	s.subscriptionBinding = s.subscriptionRegistrations.registered(binding, time.Now().Add(expires))
 }
 
-// A normal REGISTER refresh preserves dialogs and negative subscription results.
-// MWI 405/489 is scoped to identity deregistration (TS 24.606 4.7.2.1), not a flow.
+// A normal REGISTER refresh preserves dialogs and explicit event-package
+// rejections. A 405/489 is scoped to identity deregistration, not a TCP flow.
 func (s *Service) prepareSubscriptionStart(mwi bool) (bool, string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -78,13 +79,17 @@ func (s *Service) prepareSubscriptionStart(mwi bool) (bool, string) {
 	}
 	lifecycle := s.alignSubscriptionContextLocked(mwi)
 	current := lifecycle.context
-	if mwi {
-		if status := s.subscriptionRegistrations.mwiRejected(current.binding); status != 0 {
+	if status := s.subscriptionRegistrations.rejected(current.binding, subscriptionEventPackage(mwi)); status != 0 {
+		if mwi {
 			s.mwiSubscriptionClosed = true
 			s.mwiSubscriptionRefreshAt = time.Time{}
 			s.mwiSubscriptionLastErr = fmt.Sprintf("MWI rejected with status %d; waiting for IMS identity deregistration", status)
 			return false, s.mwiSubscriptionLastErr
 		}
+		s.subscriptionClosed = true
+		s.subscriptionRefreshAt = time.Time{}
+		s.subscriptionLastErr = fmt.Sprintf("registration event subscription rejected with status %d; waiting for IMS identity deregistration", status)
+		return false, s.subscriptionLastErr
 	}
 	if lifecycle.rejectedStatus != 0 {
 		return false, fmt.Sprintf("subscription previously rejected with status %d", lifecycle.rejectedStatus)

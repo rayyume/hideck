@@ -12,6 +12,7 @@ import {
   createDashboardDevicePresentation
 } from '../utils/dashboardPresentation'
 import WiFiCallingHealth from './WiFiCallingHealth.vue'
+import { t } from '../i18n'
 
 const props = defineProps<{
   device?: DashboardDevice
@@ -26,39 +27,42 @@ const presentation = computed(() => props.device ? createDashboardDevicePresenta
 const stages = computed(() => presentation.value?.stages || emptyStages)
 const pathIsFlowing = computed(() => !!props.device && canAnimateDashboardConnection(props.device))
 const focusMeta = computed(() => {
-  if (!props.device || !presentation.value) return '设备管理 · 等待接入'
+  if (!props.device || !presentation.value) return t('dashboard.waitDevice')
   return [presentation.value.operator, props.device.id, presentation.value.connectionType].join(' · ')
 })
 const focusDetail = computed(() => {
-  if (!props.device) return '请先在设备管理中添加或接管设备'
-  if (!props.device.healthy) return '设备离线，等待链路恢复'
-  if (props.device.vowifi_active) return '通过 Wi-Fi 注册到 IMS'
-  return '设备在线，VoWiFi 尚未激活'
+  if (!props.device) return t('dashboard.addDeviceFirst')
+  if (!props.device.healthy) return t('dashboard.deviceOffline')
+  if (presentation.value?.connectionKind === 'volte') {
+    return t('dashboard.viaVolte')
+  }
+  if (props.device.vowifi_active) return t('dashboard.viaWifiIms')
+  return t('dashboard.vowifiInactive')
 })
 const primaryFact = computed(() => {
   if (props.device?.vowifi_active) {
     return {
-      label: '链路状态',
-      value: presentation.value?.connectionState || '等待状态',
-      hint: 'Wi-Fi Calling'
+      label: t('dashboard.linkState'),
+      value: presentation.value?.connectionState || t('dashboard.waitState'),
+      hint: t('dashboard.wifiCalling')
     }
   }
   return {
-    label: '蜂窝信号',
-    value: presentation.value?.signal || '不可用',
-    hint: props.device ? '当前设备' : '暂无设备'
+    label: t('dashboard.cellularSignal'),
+    value: presentation.value?.signal || t('common.unavailable'),
+    hint: props.device ? t('dashboard.currentDevice') : t('dashboard.noDevice')
   }
 })
 
 function stageStatusLabel(ready: boolean | undefined): string {
-  if (ready === true) return '已就绪'
-  if (ready === false) return '失败'
-  return '等待状态'
+  if (ready === true) return t('common.ready')
+  if (ready === false) return t('common.failed')
+  return t('dashboard.waitState')
 }
 </script>
 
 <template>
-  <section class="connection-stage" aria-label="当前设备连接焦点">
+  <section class="connection-stage" :aria-label="t('dashboard.focusAria')">
     <div class="connection-stage-main">
       <header class="connection-stage-heading">
         <span class="dashboard-eyebrow">ACTIVE DEVICE</span>
@@ -67,19 +71,19 @@ function stageStatusLabel(ready: boolean | undefined): string {
           :class="device ? device.healthy ? 'is-online' : 'is-offline' : 'is-idle'"
         >
           <i aria-hidden="true" />
-          {{ presentation?.statusLabel || '等待设备' }}
+          {{ presentation?.statusLabel || t('dashboard.waitingDevice') }}
         </span>
       </header>
 
-      <h2>{{ presentation?.connectionTitle || '等待设备接入' }}</h2>
-      <strong :class="{ 'is-idle': !device }">{{ presentation?.connectionState || '暂无可用设备' }}</strong>
+      <h2>{{ presentation?.connectionTitle || t('dashboard.waitingDevice') }}</h2>
+      <strong :class="{ 'is-idle': !device }">{{ presentation?.connectionState || t('dashboard.noDeviceAvailable') }}</strong>
       <p>{{ focusMeta }}</p>
       <small class="focus-detail">{{ focusDetail }}</small>
 
       <div
         class="connection-path"
         :class="{ 'is-flowing': pathIsFlowing }"
-        aria-label="VoWiFi 服务链路"
+        :aria-label="presentation?.connectionKind === 'volte' ? t('dashboard.voltePath') : t('dashboard.vowifiPath')"
       >
         <div class="connection-path-track" aria-hidden="true">
           <span class="connection-signal" />
@@ -108,9 +112,9 @@ function stageStatusLabel(ready: boolean | undefined): string {
       <i v-for="line in 5" :key="line" />
     </div>
 
-    <aside class="connection-stage-aside" aria-label="当前设备网络事实">
+    <aside class="connection-stage-aside" :aria-label="t('dashboard.networkFacts')">
       <WiFiCallingHealth
-        v-if="device?.vowifi_health"
+        v-if="device?.vowifi_health && presentation?.connectionKind !== 'volte'"
         :health="device.vowifi_health"
         mode="summary"
       />
@@ -121,32 +125,32 @@ function stageStatusLabel(ready: boolean | undefined): string {
           <small>{{ primaryFact.hint }}</small>
         </div>
         <div>
-          <dt>运营商 / 连接</dt>
-          <dd>{{ presentation ? `${presentation.operator} · ${presentation.connectionType}` : '不可用' }}</dd>
+          <dt>{{ t('dashboard.operatorConnect') }}</dt>
+          <dd>{{ presentation ? `${presentation.operator} · ${presentation.connectionType}` : t('common.unavailable') }}</dd>
         </div>
         <template v-if="device?.vowifi_active">
           <div>
-            <dt>接入方式</dt>
+            <dt>{{ t('dashboard.accessMode') }}</dt>
             <dd>Wi-Fi</dd>
           </div>
           <div>
-            <dt>IMS / SMS</dt>
-            <dd>{{ presentation?.connectionState || '等待状态' }}</dd>
+            <dt>{{ t('dashboard.imsSms') }}</dt>
+            <dd>{{ presentation?.connectionState || t('dashboard.waitState') }}</dd>
           </div>
         </template>
         <template v-else>
           <div>
-            <dt>公网 IPv4</dt>
-            <dd class="is-address" :title="presentation?.ipv4 || '未分配'">{{ presentation?.ipv4 || '未分配' }}</dd>
+            <dt>{{ t('dashboard.publicV4') }}</dt>
+            <dd class="is-address" :title="presentation?.ipv4 || t('common.unassigned')">{{ presentation?.ipv4 || t('common.unassigned') }}</dd>
           </div>
           <div>
-            <dt>公网 IPv6</dt>
-            <dd class="is-address" :title="presentation?.ipv6 || '未分配'">{{ presentation?.ipv6 || '未分配' }}</dd>
+            <dt>{{ t('dashboard.publicV6') }}</dt>
+            <dd class="is-address" :title="presentation?.ipv6 || t('common.unassigned')">{{ presentation?.ipv6 || t('common.unassigned') }}</dd>
           </div>
         </template>
       </dl>
       <button type="button" class="focus-open-button" @click="emit('open', device?.id)">
-        <span>{{ device ? '打开设备工作区' : '前往设备管理' }}</span>
+        <span>{{ device ? t('dashboard.openWorkspace') : t('dashboard.goDevices') }}</span>
         <Open20Regular aria-hidden="true" />
       </button>
     </aside>

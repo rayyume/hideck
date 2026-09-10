@@ -455,6 +455,7 @@ type deviceMgmtListItem struct {
 	PhoneMode              string              `json:"phone_mode,omitempty"`
 	VoWiFiEnabled          bool                `json:"vowifi_enabled"`
 	VoWiFiRuntime          *voWiFiRuntimeDTO   `json:"vowifi_runtime,omitempty"`
+	NativeVoLTE            *volte.Status       `json:"native_volte,omitempty"`
 	Modem                  deviceMgmtListModem `json:"modem"`
 	NetworkConnected       bool                `json:"network_connected"`
 	RegistrationStateLabel string              `json:"registration_state_label"`
@@ -471,6 +472,7 @@ type voWiFiRuntimeDTO struct {
 	TunnelReady        bool      `json:"tunnel_ready"`
 	IMSReady           bool      `json:"ims_ready"`
 	SMSReady           bool      `json:"sms_ready"`
+	SMSMOReady         bool      `json:"sms_mo_ready"`
 	SMSReadyReason     string    `json:"sms_ready_reason,omitempty"`
 	RegStatus          int       `json:"reg_status"`
 	RegStatusText      string    `json:"reg_status_text"`
@@ -499,6 +501,7 @@ func runtimeStateToDTO(st runtimehost.State, status modem.DeviceStatus) *voWiFiR
 		TunnelReady:    st.TunnelReady,
 		IMSReady:       st.IMSReady,
 		SMSReady:       st.SMSReady,
+		SMSMOReady:     st.SMSMOReady,
 		SMSReadyReason: st.SMSReadyReason,
 		RegStatus:      st.RegStatus,
 		RegStatusText:  st.RegStatusText,
@@ -722,6 +725,7 @@ type overviewStreamEmitVersion struct {
 	TunnelReady           bool
 	IMSReady              bool
 	SMSReady              bool
+	SMSMOReady            bool
 	LastErrorClass        string
 	LebaraIdentityStatus  string
 	LebaraIdentityMessage string
@@ -746,6 +750,7 @@ func newOverviewStreamEmitVersion(item deviceMgmtOverviewLiteItem) overviewStrea
 		v.TunnelReady = item.VoWiFiRuntime.TunnelReady
 		v.IMSReady = item.VoWiFiRuntime.IMSReady
 		v.SMSReady = item.VoWiFiRuntime.SMSReady
+		v.SMSMOReady = item.VoWiFiRuntime.SMSMOReady
 		v.LastErrorClass = item.VoWiFiRuntime.LastErrorClass
 	}
 	return v
@@ -840,6 +845,10 @@ func (s *Server) handleDeviceMgmtList(c *gin.Context) {
 				RegStatus:     status.RegStatus,
 				PSAttached:    status.PSAttached,
 			},
+		}
+		if device.IsNativeVoLTEMode(cfg.PhoneMode) {
+			volteStatus := s.pool.NativeVoLTEStatus(w.ID)
+			item.NativeVoLTE = &volteStatus
 		}
 		s.applyLifecycleToListItem(&item, true, cfg)
 		items = append(items, item)
@@ -2999,6 +3008,7 @@ func (s *Server) handleDeviceMgmtOverviewStreamSingle(c *gin.Context) {
 				"tunnel_ready", readiness.TunnelReady,
 				"ims_ready", readiness.IMSReady,
 				"sms_ready", readiness.SMSReady,
+				"sms_mo_ready", readiness.SMSMOReady,
 				"last_reason", readiness.LastReason,
 				"last_error", readiness.LastError,
 				"last_error_class", readiness.LastErrorClass,

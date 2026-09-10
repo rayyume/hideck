@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import {
+  ArrowSync24Regular,
   Router24Regular,
   Delete24Regular,
   Save24Regular
@@ -13,11 +14,13 @@ const props = defineProps<{
   deviceStatus?: DeviceOverviewItem | null
   saving: boolean
   deleting: boolean
+  retryingPin: boolean
 }>()
 
 const emit = defineEmits<{
   save: []
   delete: []
+  retryPin: []
 }>()
 
 const activeControlDevice = computed(() => props.deviceStatus?.control_device || props.editConfig?.control_device)
@@ -117,10 +120,16 @@ const isPCSCBackend = computed(() => configuredBackend.value === 'pcsc')
           <el-icon><Delete24Regular /></el-icon>
           删除设备
         </el-button>
-        <el-button type="primary" :loading="saving" @click="emit('save')" class="!border-0">
-          <el-icon><Save24Regular /></el-icon>
-          保存配置
-        </el-button>
+        <div class="config-primary-actions">
+          <el-button v-if="isPCSCBackend" type="warning" plain :loading="retryingPin" :disabled="saving" @click="emit('retryPin')">
+            <el-icon><ArrowSync24Regular /></el-icon>
+            重新尝试 SIM PIN
+          </el-button>
+          <el-button type="primary" :loading="saving" :disabled="retryingPin" @click="emit('save')" class="!border-0">
+            <el-icon><Save24Regular /></el-icon>
+            保存配置
+          </el-button>
+        </div>
       </footer>
     </div>
   </section>
@@ -146,6 +155,7 @@ const isPCSCBackend = computed(() => configuredBackend.value === 'pcsc')
 .config-protocol-field small { display: block; margin-top: 2px; color: var(--ui-text-muted); font-size: var(--ui-font-caption); }
 .config-notice { margin: 0; padding: 11px 22px; border-top: 1px solid var(--ui-border); border-bottom: 1px solid var(--ui-border); background: color-mix(in srgb, var(--ui-warning) 6%, var(--ui-surface)); color: var(--ui-text-muted); font-size: var(--ui-font-body-sm); }
 .config-actions { min-height: 70px; padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.config-primary-actions { display: flex; align-items: center; gap: 10px; }
 
 @media (max-width: 760px) {
   .config-columns { grid-template-columns: minmax(0, 1fr); }
@@ -158,5 +168,6 @@ const isPCSCBackend = computed(() => configuredBackend.value === 'pcsc')
   .config-protocol-field { align-items: stretch; flex-direction: column; }
   .config-actions { align-items: stretch; flex-direction: column-reverse; }
   .config-actions :deep(.el-button) { width: 100%; min-height: 44px; margin-left: 0; }
+  .config-primary-actions { width: 100%; flex-direction: column-reverse; }
 }
 </style>

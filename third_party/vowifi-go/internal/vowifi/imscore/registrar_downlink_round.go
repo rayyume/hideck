@@ -8,9 +8,10 @@ import (
 // This is a Vodafone delivery-validation policy, not a REGISTER failure count.
 // The owning penalty store outlives individual IMS services and tunnels.
 type registrarDownlinkRound struct {
-	number    uint32
-	attempted map[string]bool
-	retryAt   time.Time
+	number               uint32
+	attempted            map[string]bool
+	retryAt              time.Time
+	rediscoveryRequested bool
 }
 
 type downlinkRoundInput struct {
@@ -25,11 +26,29 @@ type downlinkRoundPlan struct {
 	retryAt     time.Time
 	round       uint32
 	reuseTunnel bool
+	rediscover  bool
 }
 
 func (store *RegistrarPenaltyStore) noteDownlinkAttempt(registrar string) uint64 {
 	store.mu.Lock()
 	defer store.mu.Unlock()
+	store.ensureDownlinkRoundLocked()
+	return store.noteDownlinkAttemptLocked(registrar)
+}
+
+func (store *RegistrarPenaltyStore) noteMTReportFailureAttempt(registrar string, now time.Time) uint64 {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	store.ensureDownlinkRoundLocked()
+	for candidate, entry := range store.entries {
+		if entry.reason == vodafoneUKMTReportFailure && now.Before(entry.deprioritizedUntil) {
+			store.downlinkRound.attempted[candidate] = true
+		}
+	}
+	return store.noteDownlinkAttemptLocked(registrar)
+}
+
+func (store *RegistrarPenaltyStore) ensureDownlinkRoundLocked() {
 	if store.downlinkRound == nil {
 		store.downlinkRound = &registrarDownlinkRound{number: 1, attempted: make(map[string]bool)}
 		// Do not revisit paths already rejected by an actual failure in this
@@ -38,6 +57,9 @@ func (store *RegistrarPenaltyStore) noteDownlinkAttempt(registrar string) uint64
 			store.downlinkRound.attempted[candidate] = true
 		}
 	}
+}
+
+func (store *RegistrarPenaltyStore) noteDownlinkAttemptLocked(registrar string) uint64 {
 	store.downlinkRound.attempted[strings.TrimSpace(registrar)] = true
 	store.downlinkAttempt++
 	return store.downlinkAttempt
@@ -103,6 +125,13 @@ func (store *RegistrarPenaltyStore) planDownlinkRound(input downlinkRoundInput) 
 		round.beginNextIfDue(newRound)
 		return downlinkRoundPlan{next: candidates[index], round: round.number}
 	}
+	// A successful REGISTER does not prove the reverse SMS path. Once every
+	// candidate assigned to this tunnel has been tried, obtain a fresh P-CSCF
+	// set instead of cycling the same addresses in another local round.
+	if !newRound && input.current != "" && !round.rediscoveryRequested {
+		round.rediscoveryRequested = true
+		return downlinkRoundPlan{round: round.number, rediscover: true}
+	}
 	// A single-candidate recovery can rediscover/recreate its path once the
 	// whole-round delay expires, never on every 30-second validation timeout.
 	if newRound && input.current != "" && states[input.current].retryNotBefore.IsZero() {
@@ -123,6 +152,7 @@ func (round *registrarDownlinkRound) beginNextIfDue(due bool) {
 	round.number++
 	round.attempted = make(map[string]bool)
 	round.retryAt = time.Time{}
+	round.rediscoveryRequested = false
 }
 
 func (s *Service) planDownlinkRound(candidates []string, current string) downlinkRoundPlan {
@@ -132,14 +162,11 @@ func (s *Service) planDownlinkRound(candidates []string, current string) downlin
 	now := time.Now()
 	return s.registrarPenalties.planDownlinkRound(downlinkRoundInput{
 		candidates: candidates, current: current, now: now,
-		nextRetry: func(_ uint32) time.Time {
-			// A passive validation round is not another registration failure.
-			// Reuse the initial recovery window without exponential escalation;
-			// actual failures and Retry-After remain per-candidate constraints.
-			upper := 2 * rfc5626RecoveryBaseFlowAlive
-			if current == "" {
-				upper = 2 * rfc5626RecoveryBaseAllFailed
-			}
+		nextRetry: func(round uint32) time.Time {
+			// Every exhausted round failed to restore the protected downlink.
+			// Escalate the shared retry window instead of rebuilding tunnels at
+			// the initial cadence forever. Per-node Retry-After still extends it.
+			upper := rfc5626RecoveryUpperBound(round, current == "")
 			return now.Add(s.jitterPortSRecoveryDelay(upper))
 		},
 	})

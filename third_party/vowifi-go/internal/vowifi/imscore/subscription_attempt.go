@@ -34,10 +34,11 @@ func (s *Service) subscriptionAttemptBlockedLocked(mwi, unsubscribe bool) error 
 	}
 	lifecycle := s.subscriptionFieldsLocked(mwi).lifecycle
 	status := lifecycle.rejectedStatus
-	if mwi {
-		if rejected := s.subscriptionRegistrations.mwiRejected(s.subscriptionBinding); rejected != 0 {
-			status = rejected
-		}
+	if rejected := s.subscriptionRegistrations.rejected(
+		s.subscriptionBinding,
+		subscriptionEventPackage(mwi),
+	); rejected != 0 {
+		status = rejected
 	}
 	if status != 0 {
 		return fmt.Errorf("imscore: subscription previously rejected with status %d", status)

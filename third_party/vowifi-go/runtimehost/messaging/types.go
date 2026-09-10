@@ -151,6 +151,15 @@ type DeliveryStore interface {
 	GetSMSDeliveryStatus(messageID string) (*DeliveryStatus, error)
 }
 
+// SubscriptionRejectionStore persists explicit 489 Bad Event responses across
+// runtime and process restarts. Expiration follows the associated IMS
+// registration lifetime so a genuinely new registration may probe again.
+type SubscriptionRejectionStore interface {
+	LoadIMSSubscriptionRejection(identity, eventPackage string, now time.Time) (status int, expiresAt time.Time, err error)
+	SaveIMSSubscriptionRejection(identity, eventPackage string, status int, expiresAt time.Time) error
+	DeleteIMSSubscriptionRejections(identity string) error
+}
+
 // SIPResultStore is an optional delivery-store capability used to preserve
 // the initial SIP MESSAGE result while the part is still waiting for RP-ACK.
 type SIPResultStore interface {

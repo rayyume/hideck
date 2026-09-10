@@ -147,7 +147,7 @@ func sendVoWiFiSMSWhenReady(
 		if runtime != nil {
 			state := runtime.State()
 			lastReason = voWiFiSMSWaitReason(state)
-			if state.SMSReady || !shouldWaitForVoWiFiSMS(state) {
+			if state.SMSMOReady || state.SMSReady || !shouldWaitForVoWiFiSMS(state) {
 				outcome, err := runtime.SendSMSWithOptions(ctx, request.To, request.Text, request.Options)
 				if err == nil || !errors.Is(err, messaging.ErrSMSNotReady) {
 					return outcome, err
@@ -175,7 +175,7 @@ func currentVoWiFiSMSRuntime(getter func() voWiFiSMSRuntime) voWiFiSMSRuntime {
 }
 
 func shouldWaitForVoWiFiSMS(state runtimehost.State) bool {
-	return !state.SMSReady && !strings.EqualFold(
+	return !state.SMSMOReady && !state.SMSReady && !strings.EqualFold(
 		strings.TrimSpace(state.SMSReadyReason), "IMS SMSC is not configured",
 	)
 }

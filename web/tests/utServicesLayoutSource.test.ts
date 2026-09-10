@@ -22,7 +22,7 @@ test('Ut services reads callService payloads from data, not value', () => {
 })
 
 test('Ut services uses the shared workspace, Element Plus controls, and error surface', () => {
-  assert.match(utServices, /<PageHeader title="呼叫设置"/)
+  assert.match(utServices, /<PageHeader :title="t\('ut.title'\)"/)
   assert.match(utServices, /class="ut-workspace ui-card ui-workspace-glow"/)
   assert.match(utServices, /<ErrorState/)
   assert.match(utServices, /title="呼叫设置不可用"/)

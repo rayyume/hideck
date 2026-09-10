@@ -6,12 +6,12 @@ import (
 )
 
 const (
-	vodafoneUKCarrierPresetID           = "vodafone_uk_23415"
-	vodafoneUKPortSResetRecoveryPolicy  = "vodafone_uk_port_s_reset"
-	vodafoneUKPortSResetReconnectGrace  = 5 * time.Second
-	vodafoneUKPortSReconnectGrace       = 30 * time.Second
-	vodafoneUKMaturePortSResetThreshold = 2 * time.Minute
-	vodafoneUKPCSCFDeprioritizedPeriod  = 30 * time.Minute
+	vodafoneUKCarrierPresetID          = "vodafone_uk_23415"
+	vodafoneUKPortSResetRecoveryPolicy = "vodafone_uk_port_s_reset"
+	portSPeerResetFailure              = "port_s_peer_reset"
+	vodafoneUKPortSResetReconnectGrace = 5 * time.Second
+	vodafoneUKPortSReconnectGrace      = 30 * time.Second
+	vodafoneUKPCSCFDeprioritizedPeriod = 30 * time.Minute
 )
 
 type portSResetRecoveryState struct {
@@ -19,7 +19,6 @@ type portSResetRecoveryState struct {
 	observedAt          time.Time
 	recoveryAttemptedAt time.Time
 	recoverySucceeded   bool
-	switchAfterRecovery bool
 	failoverPending     bool
 }
 
@@ -27,21 +26,11 @@ func (s *Service) armVodafoneUKResetRecoveryLocked(registrar string, openedAt, n
 	if !usesVodafoneUKPortSResetRecovery(s.cfg) || openedAt.IsZero() {
 		return false
 	}
-	lifetime := now.Sub(openedAt)
-	if lifetime < 0 {
+	if now.Before(openedAt) {
 		return false
 	}
 	registrar = strings.TrimSpace(registrar)
 	if registrar == "" {
-		return false
-	}
-	if lifetime > vodafoneUKMaturePortSResetThreshold {
-		// Vodafone UK and its sub-brands share this IMS network policy. A
-		// mature push flow reset can indicate a stale MT delivery binding.
-		// Let same-P-CSCF REGISTER recovery complete before switching once.
-		s.portSSession.resetRecovery = portSResetRecoveryState{
-			registrar: registrar, observedAt: now, switchAfterRecovery: true,
-		}
 		return false
 	}
 	state := &s.portSSession.resetRecovery
@@ -98,7 +87,6 @@ func (s *Service) markPortSResetRecoverySucceeded(registrar string) {
 	state := &s.portSSession.resetRecovery
 	if state.registrar == strings.TrimSpace(registrar) && !state.recoveryAttemptedAt.IsZero() {
 		state.recoverySucceeded = true
-		state.failoverPending = state.switchAfterRecovery
 	}
 }
 
@@ -141,6 +129,6 @@ func (s *Service) recoverPCSCFAfterPortSReset(failedRegistrar string, observedAt
 	s.registerMu.Lock()
 	defer s.registerMu.Unlock()
 	s.recoverPCSCFAfterPortSFailureLocked(failedRegistrar, portSFailoverCause{
-		reason: "port_s_peer_reset", observedAt: observedAt,
+		reason: portSPeerResetFailure, observedAt: observedAt,
 	})
 }

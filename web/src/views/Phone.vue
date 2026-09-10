@@ -16,6 +16,7 @@ import {
   Speaker224Regular
 } from '@vicons/fluent'
 import PageHeader from '../components/PageHeader.vue'
+import { t } from '../i18n'
 import PhoneCallHistory from '../components/PhoneCallHistory.vue'
 import PhoneContactsPanel from '../components/PhoneContactsPanel.vue'
 import PhoneDialPad from '../components/PhoneDialPad.vue'
@@ -355,7 +356,7 @@ async function sendDTMF(digit: string) {
 
 <template>
   <div class="app-page phone-page">
-    <PageHeader title="电话" subtitle="通过 VoWiFi 设备进行浏览器实时语音与 DTMF 通话">
+    <PageHeader :title="t('phone.title')" :subtitle="t('phone.subtitle')">
       <template #actions>
         <span class="media-state" :class="`is-${phone.mediaState}`">
           <span aria-hidden="true" />{{ phone.mediaReady

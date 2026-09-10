@@ -11,7 +11,6 @@ import (
 
 func TestDeadRegisteredFlowIsNotBlockedByPassiveDownlinkWait(t *testing.T) {
 	s := singleCandidateReplacement(t)
-	s.replacementDownlinkWatchFired(expireReplacementWatchForTest(t, s))
 	// Preserve a real server deadline independently of passive observations.
 	hardDeadline := time.Now().Add(time.Hour)
 	s.registrarPenalties.mark("other.example:5060", hardDeadline)
@@ -32,7 +31,6 @@ func TestDeadRegisteredFlowIsNotBlockedByPassiveDownlinkWait(t *testing.T) {
 
 func TestRetiredRegisteredFlowDoesNotCancelPassiveDownlinkWait(t *testing.T) {
 	s := singleCandidateReplacement(t)
-	s.replacementDownlinkWatchFired(expireReplacementWatchForTest(t, s))
 	watch := s.replacementDownlinkWatch
 	old, peer := net.Pipe()
 	t.Cleanup(func() { _ = peer.Close() })
@@ -44,7 +42,6 @@ func TestRetiredRegisteredFlowDoesNotCancelPassiveDownlinkWait(t *testing.T) {
 
 func TestListenerFailureCancelsPassiveButPreservesServerDeadline(t *testing.T) {
 	s := singleCandidateReplacement(t)
-	s.replacementDownlinkWatchFired(expireReplacementWatchForTest(t, s))
 	deadline := time.Now().Add(time.Hour)
 	s.registrarPenalties.mark(s.registrar, deadline)
 	listener := &failedPortSListener{err: errors.New("listener failed")}
@@ -69,24 +66,17 @@ func TestOldServiceFailurePreservesOverlappingReplacementRound(t *testing.T) {
 	replacement.replacementDownlinkWatchFired(expireReplacementWatchForTest(t, replacement))
 	store := old.registrarPenalties
 	store.mu.Lock()
-	round, deadline := store.downlinkRound, store.downlinkRound.retryAt
+	round := store.downlinkRound
+	rediscoveryRequested := round != nil && round.rediscoveryRequested
 	store.mu.Unlock()
-	if deadline.IsZero() {
-		t.Fatal("replacement did not enter the shared passive wait")
+	if !rediscoveryRequested || replacement.RegState() != regFailed {
+		t.Fatal("replacement did not preserve the exhausted candidate set")
 	}
 	old.clearClosedRegistrationTCP(old.registrationTCP, io.EOF)
 	store.mu.Lock()
-	preserved := store.downlinkRound == round && round.retryAt.Equal(deadline)
+	preserved := store.downlinkRound == round && round.rediscoveryRequested
 	store.mu.Unlock()
 	if !preserved || old.replacementDownlinkWatch != nil {
 		t.Fatal("old service failure reset the overlapping replacement's recovery round")
-	}
-	// The replacement still owns the round and can cancel it on its own failure.
-	replacement.clearClosedRegistrationTCP(replacement.registrationTCP, io.EOF)
-	store.mu.Lock()
-	canceled := store.downlinkRound == nil
-	store.mu.Unlock()
-	if !canceled {
-		t.Fatal("current replacement could not release its passive wait")
 	}
 }

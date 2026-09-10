@@ -44,10 +44,10 @@ func (service *Service) Readers(ctx context.Context) ([]Reader, error) {
 }
 
 func selectorLockKey(selector Selector) string {
-	if path := strings.TrimSpace(selector.USBPath); path != "" {
-		return "path:" + path
+	if name := strings.TrimSpace(selector.ReaderName); name != "" {
+		return "name:" + name
 	}
-	return "name:" + strings.TrimSpace(selector.ReaderName)
+	return "path:" + strings.TrimSpace(selector.USBPath)
 }
 
 func canonicalSelector(reader Reader) Selector {
@@ -70,11 +70,13 @@ func (service *Service) resolveSelector(ctx context.Context, selector Selector) 
 }
 
 type readerGate struct {
-	token chan struct{}
+	token       chan struct{}
+	pinMu       sync.RWMutex
+	pinFailures map[string]error
 }
 
 func newReaderGate() *readerGate {
-	gate := &readerGate{token: make(chan struct{}, 1)}
+	gate := &readerGate{token: make(chan struct{}, 1), pinFailures: make(map[string]error)}
 	gate.token <- struct{}{}
 	return gate
 }
@@ -203,7 +205,7 @@ func (service *Service) ReadIdentity(ctx context.Context, selector Selector, pin
 		return Identity{}, err
 	}
 	defer session.Close()
-	return readIdentity(ctx, session.card, pin)
+	return session.readIdentity(ctx, pin)
 }
 
 func MatchReader(readers []Reader, selector Selector) (Reader, bool) {
@@ -253,7 +255,14 @@ func (service *Service) CheckReady(ctx context.Context, selector Selector, expec
 	if err != nil {
 		return "", err
 	}
-	if err := verifyPIN(ctx, session.card, pin); err != nil {
+	request := pinAccessRequest{iccid: iccid, aid: aid, pin: pin, operation: func() error {
+		_, readErr := readIMSI(ctx, session.card)
+		return readErr
+	}}
+	if err := session.withPINAccess(ctx, request); err != nil {
+		return "", err
+	}
+	if _, err := selectApplication(ctx, session.card, aid); err != nil {
 		return "", err
 	}
 	return strings.ToUpper(hex.EncodeToString(aid)), nil
@@ -263,7 +272,7 @@ func statusError(operation string, sw uint16) error {
 	if sw == 0x9862 {
 		return ErrAKARejected
 	}
-	return fmt.Errorf("pcsc: %s failed with status %04X", operation, sw)
+	return requireStatus(operation, sw, nil)
 }
 
 func (service *Service) Authenticate(ctx context.Context, selector Selector, expectedICCID, pin string, challenge AKAChallenge) (AKAResult, error) {
@@ -279,10 +288,11 @@ func (service *Service) Authenticate(ctx context.Context, selector Selector, exp
 	if changedCard(expectedICCID, iccid) {
 		return AKAResult{}, ErrCardChanged
 	}
-	if _, err := selectUSIM(ctx, session.card); err != nil {
+	aid, err := selectUSIM(ctx, session.card)
+	if err != nil {
 		return AKAResult{}, err
 	}
-	if err := verifyPIN(ctx, session.card, pin); err != nil {
+	if err := session.lock.pinRetryError(iccid); err != nil {
 		return AKAResult{}, err
 	}
 	apdu := []byte{0x00, 0x88, 0x00, 0x81, 0x22, 0x10}
@@ -290,12 +300,19 @@ func (service *Service) Authenticate(ctx context.Context, selector Selector, exp
 	apdu = append(apdu, 0x10)
 	apdu = append(apdu, challenge.AUTN[:]...)
 	apdu = append(apdu, 0x00)
-	data, sw, err := session.card.Transmit(ctx, apdu)
+	var data []byte
+	request := pinAccessRequest{iccid: iccid, aid: aid, pin: pin, operation: func() error {
+		var status uint16
+		var transportErr error
+		data, status, transportErr = session.card.Transmit(ctx, apdu)
+		if transportErr != nil {
+			return fmt.Errorf("pcsc: USIM authentication transport failed: %w", transportErr)
+		}
+		return statusError("USIM authentication", status)
+	}}
+	err = session.withPINAccess(ctx, request)
 	if err != nil {
-		return AKAResult{}, fmt.Errorf("pcsc: USIM authentication transport failed: %w", err)
-	}
-	if sw != 0x9000 {
-		return AKAResult{}, statusError("USIM authentication", sw)
+		return AKAResult{}, err
 	}
 	return parseAKAResponse(data)
 }

@@ -1,18 +1,27 @@
-import type { DashboardDevice, VoWiFiRuntimeState } from '../types/api'
+import { t } from '../i18n'
+import type { DashboardDevice, NativeVoLTEStatus, VoWiFiRuntimeState } from '../types/api'
+import { isNativeVoLTEMode } from './phoneMode'
 import { displaySignalDbm, hasValidSignalDbm } from './signalPresentation'
+import {
+  createVoLTEStages,
+  volteRegistered,
+  volteServiceState
+} from './volteConnectionPresentation'
 
 export const DASHBOARD_UNAVAILABLE = '不可用'
 export const DASHBOARD_UNASSIGNED = '未分配'
 
 export type DashboardConnectionStage = Readonly<{
-  key: 'SIM' | 'Access' | 'Tunnel' | 'IMS' | 'SMS'
+  key: string
   ready: boolean | undefined
 }>
 
 export type DashboardDevicePresentation = Readonly<{
+  connectionKind: 'wifi' | 'volte' | 'cellular'
   connectionState: string
   connectionTitle: string
   connectionType: string
+  connectionDetail: string
   displayName: string
   ipv4: string
   ipv6: string
@@ -20,7 +29,7 @@ export type DashboardDevicePresentation = Readonly<{
   showsCellularFacts: boolean
   signal: string
   stages: readonly DashboardConnectionStage[]
-  statusLabel: '在线' | '离线'
+  statusLabel: string
 }>
 
 export type DashboardDeviceFilter = Readonly<{
@@ -30,6 +39,8 @@ export type DashboardDeviceFilter = Readonly<{
 
 export type DashboardOperatorSource = Readonly<{
   id: string
+  phone_mode?: string
+  native_volte?: NativeVoLTEStatus
   modem?: Readonly<{
     operator?: string
     native_spn?: string
@@ -42,12 +53,17 @@ export function hasDashboardSignal(value: unknown): value is number {
   return hasValidSignalDbm(value)
 }
 
+export function dashboardUsesNativeVoLTE(device: DashboardDevice): boolean {
+  return isNativeVoLTEMode(device.phone_mode) || volteRegistered(device.native_volte)
+}
+
 export function formatDashboardNetworkType(device: DashboardDevice): string {
+  if (dashboardUsesNativeVoLTE(device)) return 'VoLTE'
   if (device.vowifi_active) return 'VoWiFi'
   const parts = [device.network_duplex, device.network_mode]
     .map((value) => String(value || '').trim())
     .filter(Boolean)
-  return parts.join(' ') || DASHBOARD_UNAVAILABLE
+  return parts.join(' ') || t('common.unavailable')
 }
 
 export function formatDashboardSignal(value: unknown, rsrp?: unknown): string {
@@ -55,7 +71,7 @@ export function formatDashboardSignal(value: unknown, rsrp?: unknown): string {
     typeof value === 'number' ? value : undefined,
     typeof rsrp === 'number' ? rsrp : undefined
   )
-  return dbm === undefined ? DASHBOARD_UNAVAILABLE : `${dbm} dBm`
+  return dbm === undefined ? t('common.unavailable') : `${dbm} dBm`
 }
 
 export function createDashboardStages(
@@ -71,7 +87,11 @@ export function createDashboardStages(
 }
 
 export function canAnimateDashboardConnection(device: DashboardDevice): boolean {
-  if (!device.healthy || device.vowifi_active !== true) return false
+  if (!device.healthy) return false
+  if (dashboardUsesNativeVoLTE(device)) {
+    return volteRegistered(device.native_volte)
+  }
+  if (device.vowifi_active !== true) return false
   return !createDashboardStages(device.vowifi_runtime).some(stage => stage.ready === false)
 }
 
@@ -93,14 +113,21 @@ export function mergeDashboardDeviceOperators(
   devices: readonly DashboardDevice[],
   managedDevices: readonly DashboardOperatorSource[]
 ): DashboardDevice[] {
-  const operators = new Map(managedDevices.map((device) => [
-    device.id,
-    managedOperatorFallback(device.modem)
-  ]))
+  const managedByID = new Map(managedDevices.map((device) => [device.id, device]))
   return devices.map((device) => {
-    if (String(device.operator || '').trim()) return device
-    const operator = operators.get(device.id)
-    return operator ? { ...device, operator } : device
+    const managed = managedByID.get(device.id)
+    let next = device
+    if (!String(device.operator || '').trim()) {
+      const operator = managedOperatorFallback(managed?.modem)
+      if (operator) next = { ...next, operator }
+    }
+    if (!String(next.phone_mode || '').trim() && managed?.phone_mode) {
+      next = { ...next, phone_mode: managed.phone_mode }
+    }
+    if (!next.native_volte && managed?.native_volte) {
+      next = { ...next, native_volte: managed.native_volte }
+    }
+    return next
   })
 }
 
@@ -119,20 +146,30 @@ export function createDashboardDevicePresentation(
 ): DashboardDevicePresentation {
   const connectionType = formatDashboardNetworkType(device)
   const isOnline = device.healthy
-  const isVoWiFi = device.vowifi_active === true
+  const isVoLTE = dashboardUsesNativeVoLTE(device)
+  const isVoWiFi = !isVoLTE && device.vowifi_active === true
+  const volte = isVoLTE ? volteServiceState(true, device.native_volte) : null
 
   return Object.freeze({
-    connectionState: getConnectionState(isOnline, isVoWiFi, connectionType),
-    connectionTitle: getConnectionTitle(device, isOnline, isVoWiFi),
+    connectionKind: isVoLTE ? 'volte' : isVoWiFi ? 'wifi' : 'cellular',
+    connectionState: isVoLTE
+      ? (isOnline ? volte!.detail : t('dashboard.deviceUnavailable'))
+      : getConnectionState(isOnline, isVoWiFi, connectionType),
+    connectionTitle: isVoLTE
+      ? (isOnline ? volte!.title : t('dashboard.deviceOfflineShort'))
+      : getConnectionTitle(device, isOnline, isVoWiFi),
     connectionType,
+    connectionDetail: isVoLTE ? volte!.detail : '',
     displayName: String(device.name || device.id).trim() || device.id,
     ipv4: isVoWiFi ? '' : normalizeAddress(device.public_ip),
     ipv6: isVoWiFi ? '' : normalizeAddress(device.public_ipv6),
     operator: normalizeFact(device.operator),
     showsCellularFacts: !isVoWiFi,
     signal: formatDashboardSignal(device.signal_dbm),
-    stages: createDashboardStages(device.vowifi_runtime),
-    statusLabel: isOnline ? '在线' : '离线'
+    stages: isVoLTE
+      ? createVoLTEStages(isOnline ? true : undefined, device.native_volte)
+      : createDashboardStages(device.vowifi_runtime),
+    statusLabel: isOnline ? t('common.online') : t('common.offline')
   })
 }
 
@@ -141,9 +178,9 @@ function getConnectionState(
   isVoWiFi: boolean,
   connectionType: string
 ): string {
-  if (!isOnline) return '当前设备不可用'
-  if (isVoWiFi) return '已连接'
-  return connectionType === DASHBOARD_UNAVAILABLE ? '控制面在线' : connectionType
+  if (!isOnline) return t('dashboard.deviceUnavailable')
+  if (isVoWiFi) return t('common.connected')
+  return connectionType === t('common.unavailable') ? t('dashboard.controlOnline') : connectionType
 }
 
 function getConnectionTitle(
@@ -151,15 +188,15 @@ function getConnectionTitle(
   isOnline: boolean,
   isVoWiFi: boolean
 ): string {
-  if (!isOnline) return '设备离线'
-  if (isVoWiFi) return 'Wi-Fi Calling'
-  return normalizeFact(device.operator, '网络检测中')
+  if (!isOnline) return t('dashboard.deviceOfflineShort')
+  if (isVoWiFi) return t('dashboard.wifiCalling')
+  return normalizeFact(device.operator, t('dashboard.detectingNetwork'))
 }
 
 function normalizeAddress(value: unknown): string {
-  return String(value || '').trim() || DASHBOARD_UNASSIGNED
+  return String(value || '').trim() || t('common.unassigned')
 }
 
-function normalizeFact(value: unknown, fallback = DASHBOARD_UNAVAILABLE): string {
+function normalizeFact(value: unknown, fallback = t('common.unavailable')): string {
   return String(value || '').trim() || fallback
 }

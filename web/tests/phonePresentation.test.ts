@@ -14,11 +14,13 @@ const contactService = await readFile(new URL('../src/services/phone-contacts.ts
 const phoneIdentity = await readFile(new URL('../src/composables/usePhoneIdentity.ts', import.meta.url), 'utf8')
 const shell = await readFile(new URL('../src/layouts/AuthenticatedShell.vue', import.meta.url), 'utf8')
 const router = await readFile(new URL('../src/router/index.ts', import.meta.url), 'utf8')
+const zhCN = await readFile(new URL('../src/i18n/zh-CN.ts', import.meta.url), 'utf8')
 
 test('phone route and navigation remain available outside the phone page', () => {
   assert.match(router, /path: '\/phone'/)
   assert.match(shell, /<PhoneCallBar\s*\/>/)
-  assert.match(shell, /index: '\/phone', label: '电话'/)
+  assert.match(shell, /index: '\/phone', label: t\('nav\.phone'\)/)
+  assert.match(zhCN, /phone:\s*'电话'/)
   assert.match(shell, /v-for="item in mobileMenuItems"/)
 })
 

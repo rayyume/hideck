@@ -16,9 +16,9 @@ const (
 
 type systemCard struct {
 	api      *winscardAPI
-	context  uintptr
-	handle   uintptr
-	protocol uint32
+	context  pcscLong
+	handle   pcscLong
+	protocol pcscDword
 	closed   bool
 	mu       sync.Mutex
 }
@@ -40,13 +40,13 @@ func (card *systemCard) transmit(ctx context.Context, command []byte, depth int)
 		return nil, 0, err
 	}
 	response := make([]byte, pcscMaxResponseLength)
-	responseLength := uint32(len(response))
-	send := ioRequest{Protocol: card.protocol, Length: uint32(unsafe.Sizeof(ioRequest{}))}
-	result := card.api.transmit(card.handle, &send, command, uint32(len(command)), nil, response, &responseLength)
+	responseLength := pcscDword(len(response))
+	send := ioRequest{Protocol: card.protocol, Length: pcscDword(unsafe.Sizeof(ioRequest{}))}
+	result := card.api.transmit(card.handle, &send, command, pcscDword(len(command)), nil, response, &responseLength)
 	if err := checkPCSC("SCardTransmit", result); err != nil {
 		return nil, 0, err
 	}
-	if responseLength < 2 || responseLength > uint32(len(response)) {
+	if responseLength < 2 || responseLength > pcscDword(len(response)) {
 		return nil, 0, errors.New("pcsc: APDU response omitted its status word")
 	}
 	response = response[:responseLength]
@@ -68,7 +68,7 @@ func (card *systemCard) Close() error { return card.close(pcscLeaveCard) }
 
 func (card *systemCard) CloseWithReset() error { return card.close(pcscResetCard) }
 
-func (card *systemCard) close(disposition uint32) error {
+func (card *systemCard) close(disposition pcscDword) error {
 	card.mu.Lock()
 	defer card.mu.Unlock()
 	if card == nil || card.closed {

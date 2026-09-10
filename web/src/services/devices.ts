@@ -141,6 +141,12 @@ export const devicesService = {
       return true
     })
   },
+  retrySIMPin(id: string) {
+    return callService(async () => {
+      await api.post(`/devices/${id}/actions/retry-sim-pin`)
+      return true
+    })
+  },
   setFlightMode(id: string, flightModeEnabled: boolean) {
     return callService(async () => {
       const res = await api.patch<FlightModeResponse>(`/devices/${id}/flight-mode`, { enabled: flightModeEnabled })

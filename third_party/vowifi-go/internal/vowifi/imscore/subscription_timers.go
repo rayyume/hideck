@@ -13,7 +13,7 @@ func (s *Service) subscriptionDueLocked(mwi bool, now time.Time) bool {
 	if !eligible || f.retryBlocked() || !f.lifecycle.notifyDeadline.IsZero() {
 		return false
 	}
-	if mwi && s.subscriptionRegistrations.mwiRejected(s.subscriptionBinding) != 0 {
+	if s.subscriptionRegistrations.rejected(s.subscriptionBinding, subscriptionEventPackage(mwi)) != 0 {
 		return false
 	}
 	if (mwi && s.mwiSubscriptionInFlight.Load()) || (!mwi && s.subscriptionInFlight.Load()) {
@@ -23,7 +23,10 @@ func (s *Service) subscriptionDueLocked(mwi bool, now time.Time) bool {
 		return !now.Before(f.lifecycle.retryAt)
 	}
 	if *f.closed {
-		return false
+		// Identity-scoped 405/489 responses close the usage while their
+		// registration-lifetime cache is active. Once that cache expires,
+		// retry without requiring a process or IMS service restart.
+		return f.lifecycle.started && f.lifecycle.rejectedStatus == 0
 	}
 	return (!mwi && f.refreshAt.IsZero()) || (!f.refreshAt.IsZero() && !now.Before(*f.refreshAt))
 }

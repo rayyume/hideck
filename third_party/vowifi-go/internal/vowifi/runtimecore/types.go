@@ -168,6 +168,7 @@ type RuntimeStartRequest struct {
 	Proxy               *ProxyConfig
 	DNSServer           string
 	DeliveryStore       smsdelivery.Store
+	SubscriptionStore   imscore.SubscriptionRejectionPersistence
 	Dispatch            events.EventDispatcher
 	Reconnect           bool
 	ReconnectDelay      func(int) int64

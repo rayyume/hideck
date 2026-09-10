@@ -26,7 +26,7 @@ func (s *Service) watchReplacementDownlink(baseline downlinkCheckpoint, delay ti
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.stopped() || s.regState != regRegistered || !usesVodafoneUKPortSResetRecovery(s.cfg) ||
-		!s.registrarPenalties.recoveryInProgress() || !s.protectedSMSPushRequiredLocked() ||
+		!s.registrarPenalties.recoveryNeedsDownlinkValidation() || !s.protectedSMSPushRequiredLocked() ||
 		s.downlinkEvidenceSinceLocked(baseline) != "" {
 		return
 	}
@@ -82,6 +82,14 @@ func (s *Service) replacementDownlinkWatchFired(watch *replacementDownlinkWatch)
 		logging.Info("IMS downlink recovery round exhausted; keeping registration pending validation",
 			"device", s.DeviceID(), "pcscf", watch.path.registrar,
 			"round", plan.round, "retry_at", plan.retryAt)
+		return
+	}
+	if plan.rediscover {
+		logging.Info("IMS downlink candidate set exhausted; requesting fresh P-CSCF discovery",
+			"device", s.DeviceID(), "pcscf", watch.path.registrar, "round", plan.round)
+		s.requestFreshRuntimeAfterPortSFailure(watch.path.registrar, portSFailoverCause{
+			reason: "downlink_validation_timeout", observedAt: time.Now(),
+		}, "all P-CSCF candidates from the current tunnel lack downlink evidence")
 		return
 	}
 	logging.Info("IMS downlink recovery continuing candidate round",
