@@ -86,6 +86,31 @@ test('wifi calling presentation stays on the ePDG path', () => {
   assert.equal(presentation.metrics.find((item) => item.label === '接入方式')?.value, 'Wi-Fi Calling')
 })
 
+test('wifi calling stays healthy when SMS is send-ready without the optional receiver path', () => {
+  const presentation = createOverviewConnectionPresentation(device({
+    phone_mode: 'wifi',
+    vowifi_enabled: true,
+    vowifi_active: true,
+    vowifi_runtime: {
+      sim_ready: true,
+      access_ready: true,
+      tunnel_ready: true,
+      ims_ready: true,
+      sms_ready: false,
+      sms_mo_ready: true,
+      sms_ready_reason: 'IMS SMS receiver is not ready'
+    }
+  }))
+
+  assert.equal(presentation.title, 'VoWiFi 已连接')
+  assert.equal(presentation.tone, 'is-ready')
+  assert.equal(presentation.pathIsFlowing, true)
+  assert.deepEqual(presentation.stages.map((stage) => stage.ready), [true, true, true, true, true])
+  assert.equal(
+    presentation.metrics.some((item) => item.value === 'IMS SMS receiver is not ready'), false
+  )
+})
+
 test('wifi calling stays on the wifi path when the service is off', () => {
   const presentation = createOverviewConnectionPresentation(device({
     phone_mode: 'wifi',

@@ -140,7 +140,7 @@ func (s *wifiCallingHealthStore) Observe(deviceID string, state runtimehost.Stat
 			session.currentReason = healthReason(state)
 			return
 		}
-		session.start(at, healthReason(state))
+		session.start(at, healthStartReason(state))
 		return
 	}
 	session.transition(healthState(state), at, healthReason(state))
@@ -214,7 +214,7 @@ func (s *wifiCallingHealthSession) start(at time.Time, reason string) {
 	s.currentReason = ""
 	s.currentStartedAt = at
 	if strings.TrimSpace(reason) == "" {
-		reason = "IMS SMS receiver ready"
+		reason = "WiFi Calling ready"
 	}
 	s.appendEvent("started", "healthy", at, reason)
 }
@@ -372,18 +372,24 @@ func healthState(state runtimehost.State) string {
 }
 
 func wifiCallingReady(state runtimehost.State) bool {
-	return state.SMSHealthReady || (state.IMSReady && state.SMSReady)
+	return state.IMSReady || state.SMSHealthReady
+}
+
+func healthStartReason(state runtimehost.State) string {
+	if state.IMSReady {
+		return "IMS registered"
+	}
+	if state.SMSHealthReady {
+		return "IMS runtime health ready"
+	}
+	return ""
 }
 
 func healthReason(state runtimehost.State) string {
-	if state.SMSHealthReady && !state.SMSReady {
+	if wifiCallingReady(state) {
 		return ""
 	}
-	values := []string{state.LastError, state.LastReason}
-	if state.IMSReady || state.SMSHealthReady {
-		values = []string{state.SMSReadyReason, state.LastError, state.LastReason}
-	}
-	values = append(values, state.Phase)
+	values := []string{state.LastError, state.LastReason, state.SMSReadyReason, state.Phase}
 	for _, value := range values {
 		if value = strings.TrimSpace(value); value != "" {
 			return value

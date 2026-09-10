@@ -82,7 +82,7 @@ export function createDashboardStages(
     Object.freeze({ key: 'Access', ready: runtime?.access_ready }),
     Object.freeze({ key: 'Tunnel', ready: runtime?.tunnel_ready }),
     Object.freeze({ key: 'IMS', ready: runtime?.ims_ready }),
-    Object.freeze({ key: 'SMS', ready: runtime?.sms_ready })
+    Object.freeze({ key: 'SMS', ready: runtime?.sms_mo_ready ?? runtime?.sms_ready })
   ])
 }
 
