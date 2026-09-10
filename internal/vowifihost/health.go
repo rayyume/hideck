@@ -135,12 +135,12 @@ func (s *wifiCallingHealthStore) Observe(deviceID string, state runtimehost.Stat
 	}
 	session.lastObservedAt = at
 	if session.startedAt.IsZero() {
-		if !wifiCallingReady(state) {
+		if !wifiCallingMeasurable(state) {
 			session.currentState = "checking"
 			session.currentReason = healthReason(state)
 			return
 		}
-		session.start(at, healthStartReason(state))
+		session.start(at, healthState(state), healthStartReason(state))
 		return
 	}
 	session.transition(healthState(state), at, healthReason(state))
@@ -206,17 +206,29 @@ func (s *wifiCallingHealthStore) Snapshot(deviceID string, now time.Time) (WiFiC
 	return session.snapshot(now), true
 }
 
-func (s *wifiCallingHealthSession) start(at time.Time, reason string) {
+func (s *wifiCallingHealthSession) start(at time.Time, state, reason string) {
+	if state == "" {
+		state = "recovering"
+	}
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		if state == "healthy" {
+			reason = "WiFi Calling ready"
+		} else {
+			reason = "WiFi Calling service is not fully ready"
+		}
+	}
 	s.active = true
 	s.startedAt = at
-	s.stableSince = at
-	s.currentState = "healthy"
-	s.currentReason = ""
+	s.currentState = state
 	s.currentStartedAt = at
-	if strings.TrimSpace(reason) == "" {
-		reason = "WiFi Calling ready"
+	if state == "healthy" {
+		s.stableSince = at
+	} else {
+		s.currentReason = reason
+		s.currentInterruptionAt = at
 	}
-	s.appendEvent("started", "healthy", at, reason)
+	s.appendEvent("started", state, at, reason)
 }
 
 func (s *wifiCallingHealthSession) transition(next string, at time.Time, reason string) {
@@ -360,7 +372,7 @@ func (s *wifiCallingHealthSession) appendEvent(kind, state string, at time.Time,
 }
 
 func healthState(state runtimehost.State) string {
-	if wifiCallingReady(state) {
+	if wifiCallingHealthy(state) {
 		return "healthy"
 	}
 	switch strings.TrimSpace(state.Phase) {
@@ -371,11 +383,18 @@ func healthState(state runtimehost.State) string {
 	}
 }
 
-func wifiCallingReady(state runtimehost.State) bool {
+func wifiCallingMeasurable(state runtimehost.State) bool {
 	return state.IMSReady || state.SMSHealthReady
 }
 
+func wifiCallingHealthy(state runtimehost.State) bool {
+	return state.SMSHealthReady || (state.IMSReady && state.SMSReady)
+}
+
 func healthStartReason(state runtimehost.State) string {
+	if !wifiCallingHealthy(state) {
+		return healthReason(state)
+	}
 	if state.IMSReady {
 		return "IMS registered"
 	}
@@ -386,10 +405,14 @@ func healthStartReason(state runtimehost.State) string {
 }
 
 func healthReason(state runtimehost.State) string {
-	if wifiCallingReady(state) {
+	if wifiCallingHealthy(state) {
 		return ""
 	}
-	values := []string{state.LastError, state.LastReason, state.SMSReadyReason, state.Phase}
+	values := []string{state.LastError, state.LastReason}
+	if state.IMSReady || state.SMSHealthReady {
+		values = []string{state.SMSReadyReason, state.LastError, state.LastReason}
+	}
+	values = append(values, state.Phase)
 	for _, value := range values {
 		if value = strings.TrimSpace(value); value != "" {
 			return value

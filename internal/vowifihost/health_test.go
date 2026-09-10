@@ -87,7 +87,7 @@ func TestWiFiCallingHealthNewSessionDoesNotAccumulatePriorEvents(t *testing.T) {
 	}
 }
 
-func TestWiFiCallingHealthDoesNotCountSMSReceiverReadinessAsIMSOutage(t *testing.T) {
+func TestWiFiCallingHealthTracksSMSReceiverOutageAfterIMSRegistration(t *testing.T) {
 	store := newWiFiCallingHealthStore()
 	started := time.Date(2026, 9, 4, 10, 0, 0, 0, time.UTC)
 	observeHealth(store, started, true, "ims_ready", "")
@@ -101,14 +101,14 @@ func TestWiFiCallingHealthDoesNotCountSMSReceiverReadinessAsIMSOutage(t *testing
 	})
 
 	snapshot, _ := store.Snapshot("wwan0", started.Add(2*time.Minute))
-	if snapshot.State != "healthy" || snapshot.InterruptionCount != 0 {
-		t.Fatalf("SMS receiver readiness changed IMS health: %+v", snapshot)
+	if snapshot.State != "healthy" || snapshot.InterruptionCount != 1 {
+		t.Fatalf("SMS receiver outage was not recorded: %+v", snapshot)
 	}
-	if snapshot.InterruptedSeconds != 0 || snapshot.Availability != 100 {
-		t.Fatalf("SMS receiver readiness reduced IMS availability: %+v", snapshot)
+	if snapshot.InterruptedSeconds != 30 || snapshot.Availability != 75 {
+		t.Fatalf("SMS receiver outage duration = %+v", snapshot)
 	}
-	if len(snapshot.Events) != 1 || snapshot.Events[0].Kind != "started" {
-		t.Fatalf("SMS receiver readiness created health events: %+v", snapshot.Events)
+	if len(snapshot.Events) != 3 || snapshot.Events[1].Kind != "interrupted" || snapshot.Events[2].Kind != "recovered" {
+		t.Fatalf("SMS receiver outage events = %+v", snapshot.Events)
 	}
 }
 
@@ -122,13 +122,13 @@ func TestWiFiCallingHealthStartsWhenIMSIsRegistered(t *testing.T) {
 	})
 
 	registered, _ := store.Snapshot("wwan0", started.Add(2*time.Second))
-	if !registered.Measured || registered.State != "healthy" {
+	if !registered.Measured || registered.State != "recovering" {
 		t.Fatalf("IMS registration did not start health measurement: %+v", registered)
 	}
 	if registered.SessionStartedAt != started.Add(time.Second) {
 		t.Fatalf("session started at %v, want first IMS registration", registered.SessionStartedAt)
 	}
-	if got := registered.Events[0]; got.Kind != "started" || got.Reason != "IMS registered" {
+	if got := registered.Events[0]; got.Kind != "started" || got.State != "recovering" || got.Reason != "IMS SMS receiver is not ready" {
 		t.Fatalf("start event = %+v", got)
 	}
 
@@ -140,8 +140,8 @@ func TestWiFiCallingHealthStartsWhenIMSIsRegistered(t *testing.T) {
 	if !snapshot.Measured || snapshot.SessionStartedAt != started.Add(time.Second) {
 		t.Fatalf("SMS readiness restarted health measurement: %+v", snapshot)
 	}
-	if len(snapshot.Events) != 1 {
-		t.Fatalf("SMS readiness created health events: %+v", snapshot.Events)
+	if snapshot.State != "healthy" || len(snapshot.Events) != 2 || snapshot.Events[1].Kind != "recovered" {
+		t.Fatalf("SMS readiness recovery was not recorded: %+v", snapshot)
 	}
 }
 
