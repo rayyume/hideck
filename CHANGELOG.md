@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.1.21 - 2026-09-12
+
+### 前置代理
+
+- SOCKS5 探测会真的走 UDP 中继做公共 DNS 往返，不只看 ASSOCIATE。
+- UDP 探测失败不再拦住保存或开启 VoWiFi；ASSOCIATE 通了就继续，实际链路交给 ePDG/IKE。
+
 ## 2.1.20 - 2026-09-10
 
 ### 界面
