@@ -2,32 +2,18 @@ package upstreamproxy
 
 import (
 	"context"
-	"encoding/binary"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"strings"
 	"time"
 )
 
 const (
-	socks5Version          = 0x05
-	socks5AuthNone         = 0x00
-	socks5AuthUserPassword = 0x02
-	socks5AuthNoAcceptable = 0xFF
-	socks5UserPassVersion  = 0x01
-	socks5CmdUDPAssociate  = 0x03
-	socks5AtypIPv4         = 0x01
-	socks5AtypDomain       = 0x03
-	socks5AtypIPv6         = 0x04
-	socks5ReplySuccess     = 0x00
-)
-
-const (
 	ProbeStageTCPConnect   = "tcp_connect"
 	ProbeStageHandshake    = "socks5_handshake"
 	ProbeStageUDPAssociate = "udp_associate"
+	ProbeStageUDPRelay     = "udp_relay"
 	ProbeStageOK           = "ok"
 )
 
@@ -36,6 +22,8 @@ type ProbeConfig struct {
 	Username  string
 	Password  string
 	Timeout   time.Duration
+	// UDPProbeTargets overrides the fixed public DNS endpoints used for the data-plane check.
+	UDPProbeTargets []string
 }
 
 type ProbeResult struct {
@@ -44,6 +32,8 @@ type ProbeResult struct {
 	Reachable      bool   `json:"reachable"`
 	HandshakeOK    bool   `json:"handshake_ok"`
 	UDPAssociateOK bool   `json:"udp_associate_ok"`
+	UDPRelayOK     bool   `json:"udp_relay_ok"`
+	UDPProbeTarget string `json:"udp_probe_target,omitempty"`
 	AuthMethod     string `json:"auth_method,omitempty"`
 	RelayAddr      string `json:"relay_addr,omitempty"`
 	DurationMS     int64  `json:"duration_ms"`
@@ -53,7 +43,7 @@ type ProbeResult struct {
 }
 
 func (r ProbeResult) OK() bool {
-	return r.Reachable && r.HandshakeOK && r.UDPAssociateOK
+	return r.Reachable && r.HandshakeOK && r.UDPAssociateOK && r.UDPRelayOK
 }
 
 func (r ProbeResult) FailureSummary() string {
@@ -89,9 +79,12 @@ func ProbeSOCKS5(ctx context.Context, cfg ProbeConfig) (ProbeResult, error) {
 	if timeout <= 0 {
 		timeout = 5 * time.Second
 	}
+	deadline := probeDeadline(ctx, timeout)
+	probeCtx, cancel := context.WithDeadline(ctx, deadline)
+	defer cancel()
 
-	dialer := &net.Dialer{Timeout: timeout}
-	conn, err := dialer.DialContext(ctx, "tcp", result.ProxyAddr)
+	dialer := &net.Dialer{Deadline: deadline}
+	conn, err := dialer.DialContext(probeCtx, "tcp", result.ProxyAddr)
 	if err != nil {
 		result.Error = fmt.Sprintf("代理 TCP 连接失败: %v", err)
 		return finalizeProbeResult(result, startedAt), err
@@ -99,7 +92,7 @@ func ProbeSOCKS5(ctx context.Context, cfg ProbeConfig) (ProbeResult, error) {
 	defer conn.Close()
 
 	result.Reachable = true
-	if err := conn.SetDeadline(probeDeadline(ctx, timeout)); err != nil {
+	if err := conn.SetDeadline(deadline); err != nil {
 		result.Error = fmt.Sprintf("设置探测超时失败: %v", err)
 		return finalizeProbeResult(result, startedAt), err
 	}
@@ -114,15 +107,31 @@ func ProbeSOCKS5(ctx context.Context, cfg ProbeConfig) (ProbeResult, error) {
 	result.HandshakeOK = true
 	result.AuthMethod = socks5AuthMethodName(selectedMethod)
 
-	relayAddr, err := probeUDPAssociate(conn)
+	udpConn, err := openProbeUDPClient(conn)
+	if err != nil {
+		result.Error = err.Error()
+		return finalizeProbeResult(result, startedAt), err
+	}
+	defer udpConn.Close()
+
+	relayAddr, err := probeUDPAssociate(probeCtx, conn, udpConn.LocalAddr().(*net.UDPAddr))
+	if err != nil {
+		result.Error = err.Error()
+		return finalizeProbeResult(result, startedAt), err
+	}
+	result.UDPAssociateOK = true
+	result.RelayAddr = relayAddr.String()
+	result.Stage = ProbeStageUDPRelay
+
+	target, err := probeUDPRelay(probeCtx, udpConn, relayAddr, cfg.UDPProbeTargets, deadline)
 	if err != nil {
 		result.Error = err.Error()
 		return finalizeProbeResult(result, startedAt), err
 	}
 
 	result.Stage = ProbeStageOK
-	result.UDPAssociateOK = true
-	result.RelayAddr = relayAddr.String()
+	result.UDPRelayOK = true
+	result.UDPProbeTarget = target
 	return finalizeProbeResult(result, startedAt), nil
 }
 
@@ -137,7 +146,7 @@ func annotateProbeResult(result *ProbeResult) {
 		return
 	}
 	if result.OK() {
-		result.Diagnosis = "代理支持标准 SOCKS5 UDP Associate"
+		result.Diagnosis = "代理 SOCKS5 UDP 数据转发往返正常"
 		return
 	}
 
@@ -189,6 +198,9 @@ func annotateProbeResult(result *ProbeResult) {
 			result.Diagnosis = "UDP Associate 失败"
 			result.Hint = "检查代理是否支持 SOCKS5 UDP Associate，以及是否允许当前来源使用 UDP relay"
 		}
+	case ProbeStageUDPRelay:
+		result.Diagnosis = "代理接受 UDP Associate，但 UDP 数据无法完成往返"
+		result.Hint = "检查代理服务端的 UDP 监听、防火墙、安全组和 UDP 转发链路"
 	default:
 		result.Diagnosis = "前置代理探测失败"
 		result.Hint = "请检查代理协议、认证和 UDP 转发能力"
@@ -201,174 +213,4 @@ func probeDeadline(ctx context.Context, timeout time.Duration) time.Time {
 		return ctxDeadline
 	}
 	return deadline
-}
-
-func probeHandshake(conn io.ReadWriter, username, password string) (byte, error) {
-	methods := []byte{socks5AuthNone}
-	if strings.TrimSpace(username) != "" {
-		methods = []byte{socks5AuthUserPassword, socks5AuthNone}
-	}
-
-	req := make([]byte, 2+len(methods))
-	req[0] = socks5Version
-	req[1] = byte(len(methods))
-	copy(req[2:], methods)
-	if _, err := conn.Write(req); err != nil {
-		return 0, fmt.Errorf("socks5 握手发送失败: %w", err)
-	}
-
-	resp := make([]byte, 2)
-	if _, err := io.ReadFull(conn, resp); err != nil {
-		return 0, fmt.Errorf("socks5 握手响应读取失败: %w", err)
-	}
-	if resp[0] != socks5Version {
-		return 0, fmt.Errorf("socks5 版本不匹配: 期望 0x05, 实际 0x%02x", resp[0])
-	}
-
-	selectedMethod := resp[1]
-	switch selectedMethod {
-	case socks5AuthNone:
-		return selectedMethod, nil
-	case socks5AuthUserPassword:
-		if strings.TrimSpace(username) == "" {
-			return 0, errors.New("socks5 服务器要求用户名密码鉴权但未提供凭据")
-		}
-		if err := probeUserPasswordAuth(conn, username, password); err != nil {
-			return 0, err
-		}
-		return selectedMethod, nil
-	case socks5AuthNoAcceptable:
-		return 0, errors.New("socks5 服务器拒绝了所有鉴权方法 (0xFF)")
-	default:
-		return 0, fmt.Errorf("socks5 服务器选择了不支持的鉴权方法: 0x%02x", selectedMethod)
-	}
-}
-
-func probeUserPasswordAuth(conn io.ReadWriter, username, password string) error {
-	if len(username) > 255 || len(password) > 255 {
-		return errors.New("socks5 用户名或密码过长 (>255 字节)")
-	}
-
-	req := make([]byte, 1+1+len(username)+1+len(password))
-	req[0] = socks5UserPassVersion
-	req[1] = byte(len(username))
-	copy(req[2:2+len(username)], username)
-	req[2+len(username)] = byte(len(password))
-	copy(req[3+len(username):], password)
-
-	if _, err := conn.Write(req); err != nil {
-		return fmt.Errorf("socks5 鉴权请求发送失败: %w", err)
-	}
-
-	resp := make([]byte, 2)
-	if _, err := io.ReadFull(conn, resp); err != nil {
-		return fmt.Errorf("socks5 鉴权响应读取失败: %w", err)
-	}
-	if resp[1] != 0x00 {
-		return fmt.Errorf("socks5 鉴权失败: 状态码 0x%02x", resp[1])
-	}
-	return nil
-}
-
-func probeUDPAssociate(conn net.Conn) (*net.UDPAddr, error) {
-	req := buildProbeUDPAssociateRequest(probeUDPAssociateClientIP(conn))
-	if _, err := conn.Write(req); err != nil {
-		return nil, fmt.Errorf("socks5 UDP ASSOCIATE 请求发送失败: %w", err)
-	}
-
-	header := make([]byte, 4)
-	if _, err := io.ReadFull(conn, header); err != nil {
-		return nil, fmt.Errorf("socks5 UDP ASSOCIATE 响应解析失败: 读取响应头失败: %w", err)
-	}
-	if header[0] != socks5Version {
-		return nil, fmt.Errorf("socks5 UDP ASSOCIATE 响应版本不匹配: 0x%02x", header[0])
-	}
-	if header[1] != socks5ReplySuccess {
-		return nil, fmt.Errorf("socks5 UDP ASSOCIATE 被拒绝: 状态码 0x%02x", header[1])
-	}
-
-	ip, err := readProbeReplyIP(conn, header[3])
-	if err != nil {
-		return nil, fmt.Errorf("socks5 UDP ASSOCIATE 响应解析失败: %w", err)
-	}
-
-	portBuf := make([]byte, 2)
-	if _, err := io.ReadFull(conn, portBuf); err != nil {
-		return nil, fmt.Errorf("socks5 UDP ASSOCIATE 响应解析失败: 读取端口失败: %w", err)
-	}
-	port := binary.BigEndian.Uint16(portBuf)
-	return &net.UDPAddr{IP: ip, Port: int(port)}, nil
-}
-
-func probeUDPAssociateClientIP(conn net.Conn) net.IP {
-	if conn != nil {
-		if tcpRemote, ok := conn.RemoteAddr().(*net.TCPAddr); ok && tcpRemote.IP != nil && tcpRemote.IP.To4() == nil {
-			return net.IPv6zero
-		}
-	}
-	return net.IPv4zero
-}
-
-func buildProbeUDPAssociateRequest(ip net.IP) []byte {
-	if v4 := ip.To4(); v4 != nil {
-		return []byte{
-			socks5Version,
-			socks5CmdUDPAssociate,
-			0x00,
-			socks5AtypIPv4,
-			v4[0], v4[1], v4[2], v4[3],
-			0x00, 0x00,
-		}
-	}
-
-	v6 := ip.To16()
-	if v6 == nil {
-		v6 = net.IPv6zero
-	}
-	req := make([]byte, 4+16+2)
-	req[0] = socks5Version
-	req[1] = socks5CmdUDPAssociate
-	req[3] = socks5AtypIPv6
-	copy(req[4:20], v6)
-	return req
-}
-
-func readProbeReplyIP(r io.Reader, atyp byte) (net.IP, error) {
-	switch atyp {
-	case socks5AtypIPv4:
-		buf := make([]byte, 4)
-		if _, err := io.ReadFull(r, buf); err != nil {
-			return nil, fmt.Errorf("读取 IPv4 地址失败: %w", err)
-		}
-		return net.IP(buf), nil
-	case socks5AtypIPv6:
-		buf := make([]byte, 16)
-		if _, err := io.ReadFull(r, buf); err != nil {
-			return nil, fmt.Errorf("读取 IPv6 地址失败: %w", err)
-		}
-		return net.IP(buf), nil
-	case socks5AtypDomain:
-		lenBuf := make([]byte, 1)
-		if _, err := io.ReadFull(r, lenBuf); err != nil {
-			return nil, fmt.Errorf("读取域名长度失败: %w", err)
-		}
-		buf := make([]byte, lenBuf[0])
-		if _, err := io.ReadFull(r, buf); err != nil {
-			return nil, fmt.Errorf("读取域名失败: %w", err)
-		}
-		return net.IP(buf), nil
-	default:
-		return nil, fmt.Errorf("未知地址类型: 0x%02x", atyp)
-	}
-}
-
-func socks5AuthMethodName(method byte) string {
-	switch method {
-	case socks5AuthNone:
-		return "noauth"
-	case socks5AuthUserPassword:
-		return "username_password"
-	default:
-		return fmt.Sprintf("0x%02x", method)
-	}
 }

@@ -519,6 +519,8 @@ export type UpstreamProxyProbeResult = {
   reachable: boolean
   handshake_ok: boolean
   udp_associate_ok: boolean
+  udp_relay_ok: boolean
+  udp_probe_target?: string
   auth_method?: string
   relay_addr?: string
   duration_ms: number

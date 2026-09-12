@@ -141,7 +141,7 @@ func (s *Server) handleDeleteUpstreamProxy(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "前置代理已删除"})
 }
 
-// handleProbeUpstreamProxy 探测前置代理是否支持标准 Socks5 + UDP Associate。
+// handleProbeUpstreamProxy 探测前置代理的 SOCKS5 协商及 UDP 数据往返能力。
 func (s *Server) handleProbeUpstreamProxy(c *gin.Context) {
 	id := upstreamProxyIDParam(c)
 	proxy, err := db.GetUpstreamProxyByID(id)

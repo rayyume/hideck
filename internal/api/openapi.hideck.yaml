@@ -5674,6 +5674,13 @@ components:
           type: boolean
         udp_associate_ok:
           type: boolean
+          description: SOCKS5 服务端已接受 UDP Associate 请求
+        udp_relay_ok:
+          type: boolean
+          description: UDP 报文已通过 relay 发出并收到匹配响应
+        udp_probe_target:
+          type: string
+          description: 成功完成往返验证的 UDP 目标
         auth_method:
           type: string
         relay_addr:

@@ -28,8 +28,9 @@ function successfulProbe(durationMs: number): ServiceResult<UpstreamProxyProbeRe
       reachable: true,
       handshake_ok: true,
       udp_associate_ok: true,
+      udp_relay_ok: true,
       duration_ms: durationMs,
-      diagnosis: '代理支持标准 SOCKS5 UDP Associate'
+      diagnosis: '代理 SOCKS5 UDP 数据转发往返正常'
     }
   })
 }
@@ -61,6 +62,35 @@ test('probe runner skips disabled proxies and exposes row failures', async () =>
   assert.equal(snapshots.at(-1)?.['route-1']?.state, 'unhealthy')
   assert.equal(snapshots.at(-1)?.['disabled']?.state, 'disabled')
   assert.equal(snapshots.at(-1)?.['route-1']?.detail, '代理明确拒绝了 UDP Associate')
+})
+
+test('UDP Associate alone is not presented as healthy', async () => {
+  const snapshots: UpstreamProxyHealthMap[] = []
+  const runner = createUpstreamProbeRunner({
+    probe: async () => ok({
+      status: 'error',
+      message: 'UDP 数据转发失败',
+      result: {
+        proxy_addr: enabledProxy.addr,
+        stage: 'udp_relay',
+        reachable: true,
+        handshake_ok: true,
+        udp_associate_ok: true,
+        udp_relay_ok: false,
+        duration_ms: 5000,
+        diagnosis: '代理接受 UDP Associate，但 UDP 数据无法完成往返'
+      }
+    }),
+    publish: snapshot => snapshots.push(snapshot)
+  })
+
+  await runner.run([enabledProxy])
+
+  assert.equal(snapshots.at(-1)?.['route-1']?.state, 'unhealthy')
+  assert.equal(
+    snapshots.at(-1)?.['route-1']?.detail,
+    '代理接受 UDP Associate，但 UDP 数据无法完成往返'
+  )
 })
 
 test('a stale probe run cannot overwrite a newer result', async () => {

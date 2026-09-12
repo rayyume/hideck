@@ -16,6 +16,7 @@ test('probe service posts to the encoded action path without a request body', as
       reachable: true,
       handshake_ok: true,
       udp_associate_ok: true,
+      udp_relay_ok: true,
       duration_ms: 4
     }
   }

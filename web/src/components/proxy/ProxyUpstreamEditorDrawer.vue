@@ -27,7 +27,7 @@ const form = defineModel<UpstreamProxy>('form', { required: true })
         <label>
           <span>SOCKS5 地址</span>
           <el-input v-model="form.addr" placeholder="host:port，例如 1.2.3.4:1080 或 [2001:db8::1]:1080" />
-          <small>保存时探测 SOCKS5 握手与 UDP Associate。{{ upstreamProxyIPv6AddressHint }}。</small>
+          <small>保存时会验证 SOCKS5 握手、UDP Associate 和真实 UDP 数据往返。{{ upstreamProxyIPv6AddressHint }}。</small>
         </label>
         <div class="proxy-editor-toggle">
           <div><strong>启用代理</strong><small>禁用后绑定国家会回退为直连</small></div>
