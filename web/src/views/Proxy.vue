@@ -14,7 +14,13 @@ import ProxyUpstreamInventory from '../components/proxy/ProxyUpstreamInventory.v
 import { usePollingScheduler } from '../composables/usePollingScheduler'
 import { useProxyStore } from '../stores/proxy'
 import { useUpstreamProxyStore } from '../stores/upstream-proxy'
-import type { ProxyInstance, ProxyDevice, ProxyMode, UpstreamProxy } from '../types/api'
+import type {
+  ProxyDevice,
+  ProxyInstance,
+  ProxyMode,
+  UpstreamProxy,
+  UpstreamProxyProbeResponse
+} from '../types/api'
 import { toAppError } from '../services/http'
 import {
   createOutboundProxyPresentation,
@@ -407,12 +413,12 @@ async function saveUpstreamForm() {
       // 更新
       const result = await upstreamStore.updateProxy(form.id, form)
       if (!result.ok) throw new Error(result.error.message || '更新失败')
-      ElMessage.success('前置代理已更新，并通过连通性探测')
+      showUpstreamSaveResult(result.data, '前置代理已更新')
     } else {
       // 新增
       const result = await upstreamStore.createProxy(form)
       if (!result.ok) throw new Error(result.error.message || '创建失败')
-      ElMessage.success('前置代理已创建，并通过连通性探测')
+      showUpstreamSaveResult(result.data, '前置代理已创建')
     }
     upstreamDrawerOpen.value = false
     await fetchUpstream()
@@ -420,6 +426,15 @@ async function saveUpstreamForm() {
     const err = toAppError(e)
     ElMessage.error(err.message || '保存失败')
   }
+}
+
+function showUpstreamSaveResult(result: UpstreamProxyProbeResponse, fallback: string) {
+  const message = result.message?.trim() || fallback
+  if (result.status === 'warning') {
+    ElMessage.warning(message)
+    return
+  }
+  ElMessage.success(message)
 }
 
 async function deleteUpstream(proxy: UpstreamProxy) {

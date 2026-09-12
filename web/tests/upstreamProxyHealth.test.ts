@@ -30,7 +30,7 @@ function successfulProbe(durationMs: number): ServiceResult<UpstreamProxyProbeRe
       udp_associate_ok: true,
       udp_relay_ok: true,
       duration_ms: durationMs,
-      diagnosis: '代理 SOCKS5 UDP 数据转发往返正常'
+      diagnosis: '代理公共 DNS UDP 数据往返正常'
     }
   })
 }
@@ -78,7 +78,7 @@ test('UDP Associate alone is not presented as healthy', async () => {
         udp_associate_ok: true,
         udp_relay_ok: false,
         duration_ms: 5000,
-        diagnosis: '代理接受 UDP Associate，但 UDP 数据无法完成往返'
+        diagnosis: '代理接受 UDP Associate，但公共 DNS UDP 数据无法完成往返'
       }
     }),
     publish: snapshot => snapshots.push(snapshot)
@@ -89,7 +89,7 @@ test('UDP Associate alone is not presented as healthy', async () => {
   assert.equal(snapshots.at(-1)?.['route-1']?.state, 'unhealthy')
   assert.equal(
     snapshots.at(-1)?.['route-1']?.detail,
-    '代理接受 UDP Associate，但 UDP 数据无法完成往返'
+    '代理接受 UDP Associate，但公共 DNS UDP 数据无法完成往返'
   )
 })
 

@@ -43,7 +43,11 @@ type ProbeResult struct {
 }
 
 func (r ProbeResult) OK() bool {
-	return r.Reachable && r.HandshakeOK && r.UDPAssociateOK && r.UDPRelayOK
+	return r.UDPAssociationOK() && r.UDPRelayOK
+}
+
+func (r ProbeResult) UDPAssociationOK() bool {
+	return r.Reachable && r.HandshakeOK && r.UDPAssociateOK
 }
 
 func (r ProbeResult) FailureSummary() string {
@@ -146,7 +150,7 @@ func annotateProbeResult(result *ProbeResult) {
 		return
 	}
 	if result.OK() {
-		result.Diagnosis = "代理 SOCKS5 UDP 数据转发往返正常"
+		result.Diagnosis = "代理公共 DNS UDP 数据往返正常"
 		return
 	}
 
@@ -199,7 +203,7 @@ func annotateProbeResult(result *ProbeResult) {
 			result.Hint = "检查代理是否支持 SOCKS5 UDP Associate，以及是否允许当前来源使用 UDP relay"
 		}
 	case ProbeStageUDPRelay:
-		result.Diagnosis = "代理接受 UDP Associate，但 UDP 数据无法完成往返"
+		result.Diagnosis = "代理接受 UDP Associate，但公共 DNS UDP 数据无法完成往返"
 		result.Hint = "检查代理服务端的 UDP 监听、防火墙、安全组和 UDP 转发链路"
 	default:
 		result.Diagnosis = "前置代理探测失败"

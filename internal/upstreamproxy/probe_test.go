@@ -157,10 +157,10 @@ func TestProbeSOCKS5RejectsAssociateOnlyProxy(t *testing.T) {
 	if result.Stage != ProbeStageUDPRelay {
 		t.Fatalf("stage mismatch: got=%q want=%q", result.Stage, ProbeStageUDPRelay)
 	}
-	if !result.UDPAssociateOK || result.UDPRelayOK || result.OK() {
+	if !result.UDPAssociationOK() || result.UDPRelayOK || result.OK() {
 		t.Fatalf("associate-only proxy must not pass: %+v", result)
 	}
-	if result.Diagnosis != "代理接受 UDP Associate，但 UDP 数据无法完成往返" {
+	if result.Diagnosis != "代理接受 UDP Associate，但公共 DNS UDP 数据无法完成往返" {
 		t.Fatalf("unexpected diagnosis: %q", result.Diagnosis)
 	}
 }

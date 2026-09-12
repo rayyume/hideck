@@ -38,6 +38,22 @@ func probeUpstreamProxyConfig(c *gin.Context, proxy db.UpstreamProxy) (upstreamp
 	})
 }
 
+func upstreamProxySaveResult(
+	successMessage string,
+	result upstreamproxy.ProbeResult,
+	probeErr error,
+) (string, string) {
+	if probeErr == nil {
+		return "ok", successMessage
+	}
+	message := successMessage + "，但公共 DNS UDP 往返探测失败；实际 VoWiFi 将由 ePDG/IKE 建链验证"
+	return "warning", message + ": " + result.FailureSummary()
+}
+
+func upstreamProxyProbeBlocksPersistence(result upstreamproxy.ProbeResult, probeErr error) bool {
+	return probeErr != nil && !result.UDPAssociationOK()
+}
+
 // handleListUpstreamProxies 获取所有前置代理实例
 func (s *Server) handleListUpstreamProxies(c *gin.Context) {
 	proxies, err := db.ListUpstreamProxies()
@@ -69,7 +85,7 @@ func (s *Server) handleCreateUpstreamProxy(c *gin.Context) {
 		return
 	}
 	result, probeErr := probeUpstreamProxyConfig(c, req)
-	if probeErr != nil {
+	if upstreamProxyProbeBlocksPersistence(result, probeErr) {
 		c.JSON(http.StatusBadGateway, gin.H{
 			"status":  "error",
 			"message": "前置代理探测失败: " + result.FailureSummary(),
@@ -81,9 +97,10 @@ func (s *Server) handleCreateUpstreamProxy(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": err.Error()})
 		return
 	}
+	status, message := upstreamProxySaveResult("前置代理已保存", result, probeErr)
 	c.JSON(http.StatusOK, gin.H{
-		"status":  "ok",
-		"message": "前置代理已保存，并已通过探测",
+		"status":  status,
+		"message": message,
 		"result":  result,
 	})
 }
@@ -112,7 +129,7 @@ func (s *Server) handleUpdateUpstreamProxy(c *gin.Context) {
 		return
 	}
 	result, probeErr := probeUpstreamProxyConfig(c, req)
-	if probeErr != nil {
+	if upstreamProxyProbeBlocksPersistence(result, probeErr) {
 		c.JSON(http.StatusBadGateway, gin.H{
 			"status":  "error",
 			"message": "前置代理探测失败: " + result.FailureSummary(),
@@ -124,9 +141,10 @@ func (s *Server) handleUpdateUpstreamProxy(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": err.Error()})
 		return
 	}
+	status, message := upstreamProxySaveResult("前置代理已更新", result, probeErr)
 	c.JSON(http.StatusOK, gin.H{
-		"status":  "ok",
-		"message": "前置代理已更新，并已通过探测",
+		"status":  status,
+		"message": message,
 		"result":  result,
 	})
 }
@@ -141,7 +159,7 @@ func (s *Server) handleDeleteUpstreamProxy(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "前置代理已删除"})
 }
 
-// handleProbeUpstreamProxy 探测前置代理的 SOCKS5 协商及 UDP 数据往返能力。
+// handleProbeUpstreamProxy 探测前置代理的 SOCKS5 协商及公共 DNS UDP 往返能力。
 func (s *Server) handleProbeUpstreamProxy(c *gin.Context) {
 	id := upstreamProxyIDParam(c)
 	proxy, err := db.GetUpstreamProxyByID(id)

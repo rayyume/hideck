@@ -79,14 +79,14 @@ function presentUpstreamHealth(
     return { label: '未启用', tone: 'neutral', detail: health?.detail || '代理未启用' }
   }
   if (!health || health.state === 'checking') {
-    return { label: '检测中', tone: 'warning', detail: health?.detail || '正在检测 UDP 数据往返' }
+    return { label: '检测中', tone: 'warning', detail: health?.detail || '正在检测公共 DNS UDP 往返' }
   }
   if (health.state === 'unhealthy') {
     return { label: '探测失败', tone: 'danger', detail: health.detail }
   }
 
   const duration = health.durationMs == null ? '' : ` · ${health.durationMs} ms`
-  return { label: `UDP 往返正常${duration}`, tone: 'success', detail: health.detail }
+  return { label: `DNS UDP 正常${duration}`, tone: 'success', detail: health.detail }
 }
 
 export function createOutboundProxyPresentation({

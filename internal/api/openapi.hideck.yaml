@@ -1539,7 +1539,7 @@ paths:
               $ref: '#/components/schemas/UpstreamProxy'
       responses:
         '200':
-          description: 保存并探测成功
+          description: 保存完成；公共 DNS UDP 探测失败时 status 为 warning
           content:
             application/json:
               schema:
@@ -1569,7 +1569,7 @@ paths:
               $ref: '#/components/schemas/UpstreamProxy'
       responses:
         '200':
-          description: 更新成功
+          description: 更新完成；公共 DNS UDP 探测失败时 status 为 warning
           content:
             application/json:
               schema:
@@ -5677,7 +5677,7 @@ components:
           description: SOCKS5 服务端已接受 UDP Associate 请求
         udp_relay_ok:
           type: boolean
-          description: UDP 报文已通过 relay 发出并收到匹配响应
+          description: 公共 DNS UDP 报文已通过 relay 发出并收到匹配响应；不代表 ePDG/IKE 已建链
         udp_probe_target:
           type: string
           description: 成功完成往返验证的 UDP 目标
@@ -5700,6 +5700,7 @@ components:
       properties:
         status:
           type: string
+          description: ok 表示完整探测通过；warning 表示配置已保存但公共 DNS UDP 往返失败
         message:
           type: string
         result:

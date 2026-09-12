@@ -22,7 +22,7 @@ test('presents upstream proxy facts with real probe health and latency', () => {
     ruleCount: 2,
     health: {
       state: 'healthy',
-      detail: '代理 SOCKS5 UDP 数据转发往返正常',
+      detail: '代理公共 DNS UDP 数据往返正常',
       durationMs: 18
     }
   })
@@ -30,9 +30,9 @@ test('presents upstream proxy facts with real probe health and latency', () => {
   assert.equal(presentation.name, 'UK route')
   assert.equal(presentation.address, '198.51.100.20:1080')
   assert.equal(presentation.enabledLabel, '已启用')
-  assert.equal(presentation.healthLabel, 'UDP 往返正常 · 18 ms')
+  assert.equal(presentation.healthLabel, 'DNS UDP 正常 · 18 ms')
   assert.equal(presentation.healthTone, 'success')
-  assert.equal(presentation.healthDetail, '代理 SOCKS5 UDP 数据转发往返正常')
+  assert.equal(presentation.healthDetail, '代理公共 DNS UDP 数据往返正常')
   assert.equal(presentation.authenticationLabel, '账号认证')
   assert.equal(presentation.ruleCount, 2)
   assert.equal(Object.isFrozen(presentation), true)
@@ -65,7 +65,7 @@ test('keeps checking and failed upstream probes explicit', () => {
   const checking = createUpstreamProxyPresentation({
     proxy,
     ruleCount: 0,
-    health: { state: 'checking', detail: '正在检测 SOCKS5 UDP 数据往返' }
+    health: { state: 'checking', detail: '正在检测公共 DNS UDP 数据往返' }
   })
   const failed = createUpstreamProxyPresentation({
     proxy,

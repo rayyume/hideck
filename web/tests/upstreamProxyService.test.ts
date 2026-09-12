@@ -36,3 +36,39 @@ test('probe service posts to the encoded action path without a request body', as
     api.post = originalPost
   }
 })
+
+test('create service preserves a saved proxy warning response', async () => {
+  const originalPost = api.post
+  const response: UpstreamProxyProbeResponse = {
+    status: 'warning',
+    message: '前置代理已保存，但公共 DNS UDP 往返探测失败',
+    result: {
+      proxy_addr: '198.51.100.10:1080',
+      stage: 'udp_relay',
+      reachable: true,
+      handshake_ok: true,
+      udp_associate_ok: true,
+      udp_relay_ok: false,
+      duration_ms: 5000
+    }
+  }
+  api.post = (async () => ({ data: response })) as typeof api.post
+
+  try {
+    const result = await upstreamProxyService.create({
+      id: 'uk-primary',
+      name: 'UK primary',
+      addr: '198.51.100.10:1080',
+      username: '',
+      enabled: true
+    })
+
+    assert.equal(result.ok, true)
+    if (result.ok) {
+      assert.equal(result.data.status, 'warning')
+      assert.equal(result.data.result.udp_relay_ok, false)
+    }
+  } finally {
+    api.post = originalPost
+  }
+})
