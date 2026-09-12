@@ -35,7 +35,7 @@ test('VoWiFi overview exposes one service path and centralizes diagnostics', () 
   assert.match(overviewTab, /<DeviceOverviewIdentityPanel/)
   assert.equal(connectionStage.match(/class="overview-service-path"/g)?.length, 1)
   assert.match(connectionStage, /createOverviewConnectionPresentation/)
-  assert.match(connectionPresentation, /overview\.volteRegistered/)
+  assert.match(connectionPresentation, /volteServiceState/)
 
   for (const key of ['overview.access', 'overview.dataplane', 'devices.protocol', 'devices.iface', 'overview.lastReason', 'overview.errorClass']) {
     assert.match(connectionPresentation, new RegExp(key.replace('.', '\\.')))

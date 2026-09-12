@@ -118,3 +118,9 @@ test('only the latest upstream refresh owns page errors and loading flags', () =
   assert.match(proxyView, /upstreamLoading\.value = isInitial/)
   assert.match(proxyView, /upstreamRefreshing\.value = !isInitial && !silent/)
 })
+
+test('upstream save keeps a public DNS probe warning visible', () => {
+  assert.match(proxyView, /result\.status === 'warning'/)
+  assert.match(proxyView, /ElMessage\.warning\(message\)/)
+  assert.match(upstreamEditor, /实际可用性由 ePDG\/IKE 建链确认/)
+})

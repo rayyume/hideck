@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.1.21 - 2026-09-12
+
+### 前置代理
+
+- SOCKS5 探测会真的走 UDP 中继做公共 DNS 往返，不只看 ASSOCIATE。
+- UDP 探测失败不再拦住保存或开启 VoWiFi；ASSOCIATE 通了就继续，实际链路交给 ePDG/IKE。
+
+## 2.1.20 - 2026-09-10
+
+### 界面
+
+- 仪表盘原生 VoLTE 走 SIM/LTE/PDN/IMS/Voice，不再画成 VoWiFi。
+- 仪表盘 `phone_mode` 取运行时，yaml 空字段不会把联通 VoLTE 盖掉。
+- VoWiFi 路径把短信发送和接收拆开显示。
+
+### VoWiFi / IMS
+
+- 健康状态按 IMS 实际就绪判断。
+- 短信接收降级会单独露出来。
+
 ## 2.1.19 - 2026-09-09
 
 ### 设备 / PC/SC

@@ -646,6 +646,18 @@ func (p *Pool) beforeVoWiFiStart(deviceID string, modemIface runtimehost.Modem, 
 				Timeout:   5 * time.Second,
 			})
 			if probeErr != nil {
+				if probeRes.UDPAssociationOK() {
+					probeSummary := probeRes.FailureSummary()
+					startupState.LastReason = "公共 DNS UDP 探测失败，继续验证实际 ePDG/IKE 链路: " + probeSummary
+					p.recordVoWiFiStartupState(deviceID, startupState)
+					logger.Warn("前置代理公共 DNS UDP 探测失败，继续验证实际 ePDG/IKE 链路",
+						"device", deviceID,
+						"proxy_addr", proxyCfg.Addr,
+						"probe_stage", probeRes.Stage,
+						"probe_summary", probeSummary,
+						"err", probeErr)
+					return nil
+				}
 				startupState.LastErrorClass = "proxy"
 				startupState.LastError = probeErr.Error()
 				startupState.LastReason = probeRes.FailureSummary()
