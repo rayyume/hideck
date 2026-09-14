@@ -22,7 +22,7 @@ const emit = defineEmits<{
   (event: 'open', deviceID?: string): void
 }>()
 
-const emptyStages = Object.freeze(['SIM', 'Access', 'Tunnel', 'IMS', 'SMS'].map(key => ({ key, ready: undefined })))
+const emptyStages = Object.freeze(['SIM', 'Access', 'Tunnel', 'IMS', 'SMS TX', 'SMS RX'].map(key => ({ key, ready: undefined })))
 const presentation = computed(() => props.device ? createDashboardDevicePresentation(props.device) : null)
 const stages = computed(() => presentation.value?.stages || emptyStages)
 const pathIsFlowing = computed(() => !!props.device && canAnimateDashboardConnection(props.device))
@@ -83,6 +83,7 @@ function stageStatusLabel(ready: boolean | undefined): string {
       <div
         class="connection-path"
         :class="{ 'is-flowing': pathIsFlowing }"
+        :style="{ gridTemplateColumns: `repeat(${stages.length}, minmax(0, 1fr))` }"
         :aria-label="presentation?.connectionKind === 'volte' ? t('dashboard.voltePath') : t('dashboard.vowifiPath')"
       >
         <div class="connection-path-track" aria-hidden="true">

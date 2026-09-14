@@ -48,6 +48,7 @@ function stageLabel(ready: boolean | undefined): string {
       <div
         class="overview-service-path"
         :class="{ 'is-flowing': pathIsFlowing }"
+        :style="{ gridTemplateColumns: `repeat(${stages.length}, minmax(0, 1fr))` }"
         :aria-label="presentation.kind === 'volte' ? 'VoLTE 服务链路' : 'VoWiFi 服务链路'"
       >
         <div class="overview-service-track" aria-hidden="true"><span /></div>

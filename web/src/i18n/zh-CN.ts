@@ -198,6 +198,7 @@ export const zhCN = {
     checkFailed: '请检查失败阶段',
     vowifiConnected: 'VoWiFi 已连接',
     vowifiConnectedHint: '通过 Wi-Fi 建立安全隧道并注册 IMS',
+    vowifiSMSDegraded: 'IMS 已注册，但短信发送或接收通道尚未就绪',
     vowifiBuilding: 'VoWiFi 正在建立',
     waitStages: '等待剩余阶段就绪',
     access: '接入方式',

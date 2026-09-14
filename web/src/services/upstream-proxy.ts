@@ -29,16 +29,16 @@ export const upstreamProxyService = {
   // 新增前置代理
   create(proxy: UpstreamProxy) {
     return callService(async () => {
-      await api.post('/upstream-proxies', proxy)
-      return true
+      const res = await api.post('/upstream-proxies', proxy)
+      return res.data as UpstreamProxyProbeResponse
     })
   },
 
   // 更新前置代理
   update(id: string, proxy: Partial<UpstreamProxy>) {
     return callService(async () => {
-      await api.put(`/upstream-proxies/${id}`, proxy)
-      return true
+      const res = await api.put(`/upstream-proxies/${id}`, proxy)
+      return res.data as UpstreamProxyProbeResponse
     })
   },
 

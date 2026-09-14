@@ -2,6 +2,7 @@ package device
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -277,6 +278,52 @@ func TestDiscoverFallbackOneRejectsQMIWithoutControlPath(t *testing.T) {
 	}
 }
 
+func TestDiscoverFallbackOneSelectsDeviceLocalATPortForQuectel0125RNDIS(t *testing.T) {
+	usbPath := t.TempDir()
+	usbName := filepath.Base(usbPath)
+
+	if err := os.WriteFile(filepath.Join(usbPath, "idVendor"), []byte("2c7c\n"), 0o644); err != nil {
+		t.Fatalf("write idVendor: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(usbPath, "idProduct"), []byte("0125\n"), 0o644); err != nil {
+		t.Fatalf("write idProduct: %v", err)
+	}
+
+	netPath := filepath.Join(usbPath, usbName+":1.0")
+	if err := os.MkdirAll(filepath.Join(netPath, "net", "usb0"), 0o755); err != nil {
+		t.Fatalf("mkdir RNDIS network interface: %v", err)
+	}
+	if err := os.Symlink("/tmp/rndis_host", filepath.Join(netPath, "driver")); err != nil {
+		t.Fatalf("symlink RNDIS driver: %v", err)
+	}
+
+	for _, port := range []struct {
+		interfaceNumber int
+		tty             string
+	}{
+		{interfaceNumber: 2, tty: "ttyUSB4"},
+		{interfaceNumber: 3, tty: "ttyUSB5"},
+		{interfaceNumber: 4, tty: "ttyUSB6"},
+		{interfaceNumber: 5, tty: "ttyUSB7"},
+	} {
+		ifPath := filepath.Join(usbPath, fmt.Sprintf("%s:1.%d", usbName, port.interfaceNumber))
+		if err := os.MkdirAll(filepath.Join(ifPath, port.tty), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", port.tty, err)
+		}
+	}
+
+	got, ok := discoverFallbackOne(usbPath)
+	if !ok {
+		t.Fatal("discoverFallbackOne() rejected Quectel 0125 RNDIS device")
+	}
+	if got.ATPort != "/dev/ttyUSB6" {
+		t.Fatalf("ATPort=%q want /dev/ttyUSB6", got.ATPort)
+	}
+	if got.Mode != "rndis" || got.NetInterface != "usb0" {
+		t.Fatalf("mode=%q interface=%q want rndis usb0", got.Mode, got.NetInterface)
+	}
+}
+
 func TestClassifyMode(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -379,5 +426,135 @@ func TestFindATPortsInUSBPathCollectsTTYUSBandTTYACM(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("got[%d]=%q want=%q all=%v", i, got[i], want[i], got)
 		}
+	}
+}
+
+func TestSelectBestATPortForUSBDeviceEC25UsesDeviceLocalInterfaceOrder(t *testing.T) {
+	usbPath := t.TempDir()
+
+	for _, tc := range []struct {
+		iface string
+		tty   string
+	}{
+		{iface: "1-1.2:1.2", tty: "ttyUSB4"},
+		{iface: "1-1.2:1.3", tty: "ttyUSB5"},
+		{iface: "1-1.2:1.4", tty: "ttyUSB6"},
+		{iface: "1-1.2:1.5", tty: "ttyUSB7"},
+	} {
+		if err := os.MkdirAll(filepath.Join(usbPath, tc.iface, tc.tty), 0o755); err != nil {
+			t.Fatalf("mkdir %s/%s: %v", tc.iface, tc.tty, err)
+		}
+	}
+
+	atPorts := findATPortsInUSBPath(usbPath)
+	legacy, _ := selectBestATPort(atPorts)
+	if legacy != "/dev/ttyUSB4" {
+		t.Fatalf("test setup: legacy ATPort=%q want /dev/ttyUSB4", legacy)
+	}
+
+	portScan := scanATPortsForUSBDevice(usbPath)
+	got, _ := selectBestATPortForUSBDevice(
+		usbDeviceIdentity{vendorID: 0x2c7c, productID: 0x0125}, "rndis", portScan,
+	)
+	if got != "/dev/ttyUSB6" {
+		t.Fatalf("EC25 ATPort=%q want /dev/ttyUSB6 (third device-local serial interface)", got)
+	}
+
+	fallback, _ := selectBestATPortForUSBDevice(
+		usbDeviceIdentity{vendorID: 0x1199, productID: 0x9077}, "rndis", portScan,
+	)
+	if fallback != legacy {
+		t.Fatalf("non-EC25 ATPort=%q want legacy choice %q", fallback, legacy)
+	}
+}
+
+func TestSelectBestATPortForUSBDeviceEC25QMIUsesDeviceLocalInterfaceOrder(t *testing.T) {
+	usbPath := t.TempDir()
+
+	for _, tc := range []struct {
+		iface string
+		tty   string
+	}{
+		{iface: "2-1:1.0", tty: "ttyUSB8"},
+		{iface: "2-1:1.1", tty: "ttyUSB9"},
+		{iface: "2-1:1.2", tty: "ttyUSB10"},
+		{iface: "2-1:1.3", tty: "ttyUSB11"},
+	} {
+		if err := os.MkdirAll(filepath.Join(usbPath, tc.iface, tc.tty), 0o755); err != nil {
+			t.Fatalf("mkdir %s/%s: %v", tc.iface, tc.tty, err)
+		}
+	}
+
+	atPorts := findATPortsInUSBPath(usbPath)
+	legacy, _ := selectBestATPort(atPorts)
+	if legacy != "/dev/ttyUSB8" {
+		t.Fatalf("test setup: legacy ATPort=%q want /dev/ttyUSB8", legacy)
+	}
+
+	got, _ := selectBestATPortForUSBDevice(
+		usbDeviceIdentity{vendorID: 0x2c7c, productID: 0x0125}, "qmi", scanATPortsForUSBDevice(usbPath),
+	)
+	if got != "/dev/ttyUSB10" {
+		t.Fatalf("EC25 ATPort=%q want /dev/ttyUSB10 (third device-local serial interface)", got)
+	}
+}
+
+func TestSelectBestATPortForUSBDeviceEC25IncompleteEnumerationFallsBack(t *testing.T) {
+	usbPath := t.TempDir()
+
+	for _, tc := range []struct {
+		iface string
+		tty   string
+	}{
+		{iface: "1-1.2:1.2", tty: "ttyUSB4"},
+		{iface: "1-1.2:1.3", tty: "ttyUSB5"},
+		{iface: "1-1.2:1.4", tty: "ttyUSB6"},
+	} {
+		if err := os.MkdirAll(filepath.Join(usbPath, tc.iface, tc.tty), 0o755); err != nil {
+			t.Fatalf("mkdir %s/%s: %v", tc.iface, tc.tty, err)
+		}
+	}
+
+	atPorts := findATPortsInUSBPath(usbPath)
+	legacy, _ := selectBestATPort(atPorts)
+	got, _ := selectBestATPortForUSBDevice(
+		usbDeviceIdentity{vendorID: 0x2c7c, productID: 0x0125}, "rndis", scanATPortsForUSBDevice(usbPath),
+	)
+	if got != legacy {
+		t.Fatalf("incomplete EC25 ATPort=%q want legacy choice %q", got, legacy)
+	}
+}
+
+func TestSelectBestATPortForUSBDeviceEC25RejectsNewerSysfsSnapshot(t *testing.T) {
+	usbPath := t.TempDir()
+
+	for _, tc := range []struct {
+		iface string
+		tty   string
+	}{
+		{iface: "1-1.2:1.2", tty: "ttyUSB4"},
+		{iface: "1-1.2:1.3", tty: "ttyUSB5"},
+		{iface: "1-1.2:1.4", tty: "ttyUSB6"},
+		{iface: "1-1.2:1.5", tty: "ttyUSB7"},
+	} {
+		if err := os.MkdirAll(filepath.Join(usbPath, tc.iface, tc.tty), 0o755); err != nil {
+			t.Fatalf("mkdir %s/%s: %v", tc.iface, tc.tty, err)
+		}
+	}
+
+	initialSnapshot := []string{"/dev/ttyUSB4", "/dev/ttyUSB5"}
+	legacy, _ := selectBestATPort(initialSnapshot)
+	portScan := scanATPortsForUSBDevice(usbPath)
+	portScan.candidates = initialSnapshot
+	got, _ := selectBestATPortForUSBDevice(
+		usbDeviceIdentity{vendorID: quectelVendorID, productID: quectel0125ProductID},
+		"rndis",
+		portScan,
+	)
+	if got != legacy {
+		t.Fatalf("ATPort=%q want initial snapshot fallback %q", got, legacy)
+	}
+	if containsPort(initialSnapshot, "/dev/ttyUSB6") {
+		t.Fatal("test setup unexpectedly contains the later AT port")
 	}
 }

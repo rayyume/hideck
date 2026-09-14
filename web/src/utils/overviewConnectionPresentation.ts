@@ -3,7 +3,8 @@ import type { DeviceOverviewItem } from '../types/api'
 import {
   createDashboardStages,
   formatDashboardSignal,
-  hasDashboardSignal
+  hasDashboardSignal,
+  VOWIFI_CORE_STAGE_COUNT
 } from './dashboardPresentation'
 import { displaySignalDbm } from './signalPresentation'
 import { isNativeVoLTEMode, phoneModeCampsOnCell } from './phoneMode'
@@ -74,11 +75,18 @@ function createVoLTEPresentation(device: DeviceOverviewItem): OverviewConnection
 function createVoWiFiOrCellularPresentation(
   device: DeviceOverviewItem | null
 ): OverviewConnectionPresentation {
-  const stages = createDashboardStages(device?.vowifi_runtime)
-  const hasFailedStage = stages.some((stage) => stage.ready === false)
+  const runtime = device?.vowifi_runtime
+  const stages = createDashboardStages(runtime)
+  const coreStages = stages.slice(0, VOWIFI_CORE_STAGE_COUNT)
+  const smsStages = stages.slice(VOWIFI_CORE_STAGE_COUNT)
+  const hasFailedCoreStage = coreStages.some((stage) => stage.ready === false)
+  const hasFailedSMSStage = smsStages.some((stage) => stage.ready === false)
   const hasReadyStage = stages.some((stage) => stage.ready === true)
-  const allStagesReady = stages.every((stage) => stage.ready === true)
-  const runtimeReason = device?.vowifi_runtime?.sms_ready_reason || device?.vowifi_runtime?.last_reason || ''
+  const coreStagesReady = coreStages.every((stage) => stage.ready === true)
+  const smsStagesReady = smsStages.every((stage) => stage.ready === true)
+  const runtimeReason = (hasFailedSMSStage ? runtime?.sms_ready_reason : '')
+    || runtime?.last_reason
+    || ''
   const protocol = metric(t('devices.protocol'), device?.backend_mode?.toUpperCase())
   const deviceInterface = metric(t('devices.iface'), device?.interface)
 
@@ -124,35 +132,38 @@ function createVoWiFiOrCellularPresentation(
   let tone: OverviewConnectionPresentation['tone'] = 'is-idle'
   let title = t('overview.vowifiWait')
   let detail = runtimeReason || t('overview.noLink')
-  if (hasFailedStage) {
+  if (hasFailedCoreStage) {
     tone = 'is-failed'
     title = t('overview.vowifiFailed')
     detail = runtimeReason || t('overview.checkFailed')
-  } else if (device.vowifi_active && allStagesReady) {
+  } else if (device.vowifi_active && coreStagesReady && smsStagesReady) {
     tone = 'is-ready'
     title = t('overview.vowifiConnected')
     detail = t('overview.vowifiConnectedHint')
+  } else if (device.vowifi_active && coreStagesReady && hasFailedSMSStage) {
+    tone = 'is-pending'
+    title = t('overview.vowifiConnected')
+    detail = runtimeReason || t('overview.vowifiSMSDegraded')
   } else if (hasReadyStage) {
     tone = 'is-pending'
     title = t('overview.vowifiBuilding')
     detail = runtimeReason || t('overview.waitStages')
   }
 
-  const runtime = device.vowifi_runtime
   return Object.freeze({
     kind: 'wifi',
     eyebrow: 'WI-FI CALLING',
     title,
     detail,
     tone,
-    pathIsFlowing: device.healthy === true && device.vowifi_active === true && !hasFailedStage,
+    pathIsFlowing: device.healthy === true && device.vowifi_active === true && !hasFailedCoreStage,
     stages,
     metrics: Object.freeze([
       metric(t('overview.access'), 'Wi-Fi Calling', 'Wi-Fi Calling'),
       metric(t('overview.dataplane'), runtime?.dataplane_mode),
       protocol,
       deviceInterface,
-      metric(t('overview.lastReason'), runtime?.last_reason || runtime?.sms_ready_reason, t('common.none')),
+      metric(t('overview.lastReason'), runtimeReason, t('common.none')),
       metric(t('overview.errorClass'), runtime?.last_error_class, t('common.none'))
     ])
   })

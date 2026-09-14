@@ -369,7 +369,6 @@ func (w *Worker) mergeRuntimeStateLocked(status modem.DeviceStatus, healthy bool
 		w.state.Identity.IMEI = strings.TrimSpace(status.IMEI)
 	}
 	w.state.Runtime.Firmware = status.Firmware
-	w.state.Runtime.Operator = status.Operator
 	w.state.Runtime.SimInserted = status.SimInserted
 	if status.SignalDBM != 0 {
 		w.state.Runtime.SignalDBM = status.SignalDBM
@@ -399,15 +398,34 @@ func (w *Worker) mergeRuntimeStateLocked(status modem.DeviceStatus, healthy bool
 		w.state.Runtime.RegStatusText = status.RegStatusText
 		w.state.Runtime.PSAttached = status.PSAttached
 	}
+	if modem.ServingRegistrationCurrent(w.state.Runtime.RegStatus) {
+		w.state.Runtime.Operator = status.Operator
+	} else {
+		w.state.Runtime.Operator = ""
+	}
 	w.state.Runtime.LAC = status.LAC
 	w.state.Runtime.CellID = status.CellID
 	w.state.Runtime.APN = status.APN
 	w.state.Runtime.IMSStatus = status.IMSStatus
-	if strings.TrimSpace(status.NetworkMode) != "" {
-		w.state.Runtime.NetworkMode = status.NetworkMode
-	}
-	if strings.TrimSpace(status.NetworkDuplex) != "" {
-		w.state.Runtime.NetworkDuplex = status.NetworkDuplex
+	if modem.ServingRegistrationCurrent(w.state.Runtime.RegStatus) {
+		if strings.TrimSpace(status.NetworkMode) != "" {
+			w.state.Runtime.NetworkMode = status.NetworkMode
+		}
+		if strings.TrimSpace(status.NetworkDuplex) != "" {
+			w.state.Runtime.NetworkDuplex = status.NetworkDuplex
+		}
+	} else if w.state.Runtime.RegStatus == 0 {
+		w.state.Runtime.NetworkMode = ""
+		w.state.Runtime.NetworkDuplex = ""
+		w.state.Runtime.RadioBand = ""
+		w.state.Runtime.RadioChannel = 0
+	} else {
+		if strings.TrimSpace(status.NetworkMode) != "" {
+			w.state.Runtime.NetworkMode = status.NetworkMode
+		}
+		if strings.TrimSpace(status.NetworkDuplex) != "" {
+			w.state.Runtime.NetworkDuplex = status.NetworkDuplex
+		}
 	}
 	w.state.Runtime.USBNetMode = status.USBNetMode
 	w.state.Runtime.OperatingMode = status.OperatingMode
