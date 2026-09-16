@@ -10,6 +10,7 @@ import {
 
 export const DASHBOARD_UNAVAILABLE = '不可用'
 export const DASHBOARD_UNASSIGNED = '未分配'
+export const VOWIFI_CORE_STAGE_COUNT = 4
 
 export type DashboardConnectionStage = Readonly<{
   key: string
@@ -77,12 +78,14 @@ export function formatDashboardSignal(value: unknown, rsrp?: unknown): string {
 export function createDashboardStages(
   runtime?: VoWiFiRuntimeState
 ): readonly DashboardConnectionStage[] {
+  const smsSendReady = runtime?.sms_mo_ready ?? runtime?.sms_ready
   return Object.freeze([
     Object.freeze({ key: 'SIM', ready: runtime?.sim_ready }),
     Object.freeze({ key: 'Access', ready: runtime?.access_ready }),
     Object.freeze({ key: 'Tunnel', ready: runtime?.tunnel_ready }),
     Object.freeze({ key: 'IMS', ready: runtime?.ims_ready }),
-    Object.freeze({ key: 'SMS', ready: runtime?.sms_ready })
+    Object.freeze({ key: 'SMS TX', ready: smsSendReady }),
+    Object.freeze({ key: 'SMS RX', ready: runtime?.sms_ready })
   ])
 }
 
@@ -92,7 +95,9 @@ export function canAnimateDashboardConnection(device: DashboardDevice): boolean 
     return volteRegistered(device.native_volte)
   }
   if (device.vowifi_active !== true) return false
-  return !createDashboardStages(device.vowifi_runtime).some(stage => stage.ready === false)
+  return !createDashboardStages(device.vowifi_runtime)
+    .slice(0, VOWIFI_CORE_STAGE_COUNT)
+    .some(stage => stage.ready === false)
 }
 
 export function filterDashboardDevices(

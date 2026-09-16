@@ -87,7 +87,7 @@ func TestWiFiCallingHealthNewSessionDoesNotAccumulatePriorEvents(t *testing.T) {
 	}
 }
 
-func TestWiFiCallingHealthMeasuresPortSOutageFromSMSReadiness(t *testing.T) {
+func TestWiFiCallingHealthTracksSMSReceiverOutageAfterIMSRegistration(t *testing.T) {
 	store := newWiFiCallingHealthStore()
 	started := time.Date(2026, 9, 4, 10, 0, 0, 0, time.UTC)
 	observeHealth(store, started, true, "ims_ready", "")
@@ -102,20 +102,17 @@ func TestWiFiCallingHealthMeasuresPortSOutageFromSMSReadiness(t *testing.T) {
 
 	snapshot, _ := store.Snapshot("wwan0", started.Add(2*time.Minute))
 	if snapshot.State != "healthy" || snapshot.InterruptionCount != 1 {
-		t.Fatalf("port-s outage was not recorded: %+v", snapshot)
+		t.Fatalf("SMS receiver outage was not recorded: %+v", snapshot)
 	}
 	if snapshot.InterruptedSeconds != 30 || snapshot.Availability != 75 {
-		t.Fatalf("port-s outage duration = %+v", snapshot)
+		t.Fatalf("SMS receiver outage duration = %+v", snapshot)
 	}
-	if got := snapshot.Events[1]; got.Kind != "interrupted" || got.Reason != "IMS SMS receiver is not ready" {
-		t.Fatalf("port-s interruption event = %+v", got)
-	}
-	if got := snapshot.Events[2]; got.Kind != "recovered" || got.At != started.Add(90*time.Second) {
-		t.Fatalf("port-s recovery event = %+v", got)
+	if len(snapshot.Events) != 3 || snapshot.Events[1].Kind != "interrupted" || snapshot.Events[2].Kind != "recovered" {
+		t.Fatalf("SMS receiver outage events = %+v", snapshot.Events)
 	}
 }
 
-func TestWiFiCallingHealthStartsWhenSMSReceiverIsReady(t *testing.T) {
+func TestWiFiCallingHealthStartsWhenIMSIsRegistered(t *testing.T) {
 	store := newWiFiCallingHealthStore()
 	started := time.Date(2026, 9, 4, 10, 30, 0, 0, time.UTC)
 	store.Begin("wwan0", started)
@@ -124,9 +121,15 @@ func TestWiFiCallingHealthStartsWhenSMSReceiverIsReady(t *testing.T) {
 		SMSReadyReason: "IMS SMS receiver is not ready", UpdatedAt: started.Add(time.Second),
 	})
 
-	checking, _ := store.Snapshot("wwan0", started.Add(2*time.Second))
-	if checking.Measured || checking.State != "checking" {
-		t.Fatalf("IMS-only readiness started health measurement: %+v", checking)
+	registered, _ := store.Snapshot("wwan0", started.Add(2*time.Second))
+	if !registered.Measured || registered.State != "recovering" {
+		t.Fatalf("IMS registration did not start health measurement: %+v", registered)
+	}
+	if registered.SessionStartedAt != started.Add(time.Second) {
+		t.Fatalf("session started at %v, want first IMS registration", registered.SessionStartedAt)
+	}
+	if got := registered.Events[0]; got.Kind != "started" || got.State != "recovering" || got.Reason != "IMS SMS receiver is not ready" {
+		t.Fatalf("start event = %+v", got)
 	}
 
 	store.Observe("wwan0", runtimehost.State{
@@ -134,11 +137,11 @@ func TestWiFiCallingHealthStartsWhenSMSReceiverIsReady(t *testing.T) {
 		SMSReadyReason: "IMS SMS receiver ready", UpdatedAt: started.Add(3 * time.Second),
 	})
 	snapshot, _ := store.Snapshot("wwan0", started.Add(4*time.Second))
-	if !snapshot.Measured || snapshot.SessionStartedAt != started.Add(3*time.Second) {
-		t.Fatalf("SMS readiness did not start health measurement: %+v", snapshot)
+	if !snapshot.Measured || snapshot.SessionStartedAt != started.Add(time.Second) {
+		t.Fatalf("SMS readiness restarted health measurement: %+v", snapshot)
 	}
-	if got := snapshot.Events[0]; got.Kind != "started" || got.Reason != "IMS SMS receiver ready" {
-		t.Fatalf("start event = %+v", got)
+	if snapshot.State != "healthy" || len(snapshot.Events) != 2 || snapshot.Events[1].Kind != "recovered" {
+		t.Fatalf("SMS readiness recovery was not recorded: %+v", snapshot)
 	}
 }
 
@@ -153,6 +156,9 @@ func TestWiFiCallingHealthStartsFromEarlyRuntimeHealthReadiness(t *testing.T) {
 	snapshot, _ := store.Snapshot("wwan0", started.Add(2*time.Second))
 	if !snapshot.Measured || snapshot.SessionStartedAt != started.Add(time.Second) {
 		t.Fatalf("early health readiness did not start measurement: %+v", snapshot)
+	}
+	if got := snapshot.Events[0]; got.Reason != "IMS runtime health ready" {
+		t.Fatalf("early readiness start event = %+v", got)
 	}
 }
 

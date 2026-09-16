@@ -33,7 +33,7 @@ defineEmits<{
     kicker="ROAMING PROXY INVENTORY"
     :loading="loading"
     :refreshing="refreshing"
-    subtitle="用于 VoWiFi 海外 ePDG 连接；Socks5 服务端必须支持 UDP Associate。"
+    subtitle="公共 DNS UDP 用于通用健康检查；VoWiFi 可用性最终由实际 ePDG/IKE 建链确认。"
     title="漫游前置代理"
     title-id="upstream-inventory-title"
     tone="communication"
@@ -49,7 +49,7 @@ defineEmits<{
             <th scope="col">代理名称</th>
             <th scope="col">地址（SOCKS5）</th>
             <th scope="col">启用状态</th>
-            <th scope="col">UDP Associate 健康</th>
+            <th scope="col">公共 DNS UDP</th>
             <th scope="col">认证状态</th>
             <th scope="col">国家规则</th>
             <th scope="col"><span class="sr-only">操作</span></th>

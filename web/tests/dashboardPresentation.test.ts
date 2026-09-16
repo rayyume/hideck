@@ -47,7 +47,7 @@ test('derives VoWiFi facts and preserves all runtime stage states', () => {
   assert.equal(presentation.ipv4, '')
   assert.equal(presentation.ipv6, '')
   assert.equal(presentation.showsCellularFacts, false)
-  assert.deepEqual(presentation.stages.map(stage => stage.ready), [true, true, false, undefined, true])
+  assert.deepEqual(presentation.stages.map(stage => stage.ready), [true, true, false, undefined, true, true])
   assert.equal(Object.isFrozen(presentation), true)
 })
 
@@ -85,7 +85,7 @@ test('keeps offline state distinct from a failed or unknown VoWiFi stage', () =>
   assert.equal(presentation.statusLabel, '离线')
   assert.equal(presentation.connectionTitle, '设备离线')
   assert.equal(presentation.connectionState, '当前设备不可用')
-  assert.deepEqual(presentation.stages.map(stage => stage.ready), [false, undefined, undefined, undefined, undefined])
+  assert.deepEqual(presentation.stages.map(stage => stage.ready), [false, undefined, undefined, undefined, undefined, undefined])
   assert.equal(canAnimateDashboardConnection(device), false)
 })
 
@@ -173,6 +173,33 @@ test('animates the service path only for active VoWiFi without failed stages', (
     vowifi_runtime: { tunnel_ready: false }
   })), false)
   assert.equal(canAnimateDashboardConnection(createDevice({ vowifi_active: false })), false)
+})
+
+test('shows independent SMS send and receive readiness', () => {
+  const device = createDevice({
+    vowifi_active: true,
+    vowifi_runtime: {
+      sim_ready: true,
+      access_ready: true,
+      tunnel_ready: true,
+      ims_ready: true,
+      sms_ready: false,
+      sms_mo_ready: true,
+      sms_ready_reason: 'IMS SMS receiver is not ready'
+    }
+  })
+
+  const presentation = createDashboardDevicePresentation(device)
+
+  assert.deepEqual(presentation.stages.map(stage => [stage.key, stage.ready]), [
+    ['SIM', true],
+    ['Access', true],
+    ['Tunnel', true],
+    ['IMS', true],
+    ['SMS TX', true],
+    ['SMS RX', false]
+  ])
+  assert.equal(canAnimateDashboardConnection(device), true)
 })
 
 test('formats cellular connection and validates signal sentinels', () => {

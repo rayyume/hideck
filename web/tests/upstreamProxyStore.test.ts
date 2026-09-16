@@ -50,6 +50,7 @@ function healthyProbe(durationMs: number): ServiceResult<UpstreamProxyProbeRespo
       reachable: true,
       handshake_ok: true,
       udp_associate_ok: true,
+      udp_relay_ok: true,
       duration_ms: durationMs
     }
   })

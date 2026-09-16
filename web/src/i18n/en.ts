@@ -200,6 +200,7 @@ export const en: typeof zhCN = {
     checkFailed: 'Check the failed stage',
     vowifiConnected: 'VoWiFi connected',
     vowifiConnectedHint: 'Secure tunnel over Wi-Fi and IMS registered',
+    vowifiSMSDegraded: 'IMS is registered, but SMS sending or receiving is not ready',
     vowifiBuilding: 'VoWiFi coming up',
     waitStages: 'Waiting for remaining stages',
     access: 'Access',

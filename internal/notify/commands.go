@@ -177,7 +177,8 @@ func (m *Manager) handleCmdStatus(cmdCtx CommandContext, args []string) string {
 	if strings.TrimSpace(privateIP) == "" {
 		privateIP = "N/A"
 	}
-	operator := strings.TrimSpace(status.Operator)
+	isVoWiFiActive := m.pool.IsVoWiFiActive(worker.ID)
+	operator := device.DisplayOperatorName(status, isVoWiFiActive)
 	if operator == "" {
 		operator = "未知网络"
 	}
@@ -209,7 +210,6 @@ func (m *Manager) handleCmdStatus(cmdCtx CommandContext, args []string) string {
 	if worker.IsDeviceHealthy() {
 		healthText = "正常"
 	}
-	isVoWiFiActive := m.pool.IsVoWiFiActive(worker.ID)
 	voWiFiState, hasVoWiFiState := m.pool.GetVoWiFiRuntimeState(worker.ID)
 	lastReason := "--"
 	if strings.TrimSpace(voWiFiState.LastReason) != "" {
@@ -325,15 +325,16 @@ func (m *Manager) handleCmdList(cmdCtx CommandContext, args []string) string {
 		}
 
 		phone := "N/A"
-		opName := status.Operator
+		vowifiActive := m.pool.IsVoWiFiActive(w.ID)
+		opName := device.DisplayOperatorName(status, vowifiActive)
 		if phoneByIMSI, err := db.GetSIMCardPhoneNumberByIMSI(status.IMSI); err == nil && strings.TrimSpace(phoneByIMSI) != "" {
 			phone = strings.TrimSpace(phoneByIMSI)
 		}
-		if status.ICCID != "" {
+		if opName == "" && !vowifiActive && status.ICCID != "" {
 			var sim db.SIMCard
 			if err := db.DB.Where("iccid = ?", status.ICCID).First(&sim).Error; err == nil {
-				if opName == "" && sim.Operator != "" {
-					opName = sim.Operator
+				if strings.TrimSpace(sim.Operator) != "" {
+					opName = strings.TrimSpace(sim.Operator)
 				}
 			}
 		}
@@ -352,7 +353,7 @@ func (m *Manager) handleCmdList(cmdCtx CommandContext, args []string) string {
 			netMode = ""
 		}
 
-		if m.pool.IsVoWiFiActive(w.ID) {
+		if vowifiActive {
 			if netMode == "" {
 				netMode = "VoWiFi"
 			} else {
@@ -372,7 +373,7 @@ func (m *Manager) handleCmdList(cmdCtx CommandContext, args []string) string {
 		sb.WriteString(fmt.Sprintf("%s / %s\n", displayName, healthy))
 		sb.WriteString(fmt.Sprintf("本号   %s\n", phone))
 		sb.WriteString(fmt.Sprintf("ICCID  *%s\n", iccidShort))
-		if m.pool.IsVoWiFiActive(w.ID) {
+		if vowifiActive {
 			sb.WriteString(fmt.Sprintf("网络   %s\n", netDisplay))
 		} else {
 			sb.WriteString(fmt.Sprintf("网络   %s\n", netDisplay))
