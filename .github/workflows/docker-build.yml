@@ -62,7 +62,9 @@ jobs:
           file: Dockerfile.github
           platforms: ${{ inputs.platforms }}
           push: ${{ inputs.push == 'true' }}
-          tags: ghcr.io/yibaiba/hideck:dev
+          tags: |
+            ghcr.io/rayyume/hideck:dev
+            ghcr.io/rayyume/hideck:latest
           provenance: false
           sbom: false
           cache-from: type=gha
