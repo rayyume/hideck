@@ -116,6 +116,10 @@ func (p *Pool) captureESIMSwitchContext(deviceID string, targetICCID string) esi
 }
 
 func (p *Pool) beginESIMSwitch(deviceID string, targetICCID string) esimSwitchContext {
+	transition := p.policyTransitionFor(deviceID)
+	transition.Lock()
+	defer transition.Unlock()
+	transition.switchEpoch++
 	snapshot := p.captureESIMSwitchContext(deviceID, targetICCID)
 	p.switchMu.Lock()
 	if p.switchingDevices == nil {

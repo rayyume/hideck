@@ -73,7 +73,7 @@ func NormalizeCardPolicy(p *CardPolicy) {
 		p.IPVersion = "v4"
 	}
 	switch strings.TrimSpace(p.PhoneMode) {
-	case "wifi", "cellular", "volte":
+	case "wifi", "cellular", "volte", "modem_voice":
 		p.PhoneMode = strings.TrimSpace(p.PhoneMode)
 	default:
 		p.PhoneMode = "wifi"

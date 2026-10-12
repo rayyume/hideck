@@ -8,6 +8,7 @@ import {
 } from './dashboardPresentation'
 import { displaySignalDbm } from './signalPresentation'
 import { isNativeVoLTEMode, phoneModeCampsOnCell } from './phoneMode'
+import { modemVoicePresentation, modemVoiceStages } from './modemVoicePresentation'
 import {
   createVoLTEStages,
   volteRegistered,
@@ -43,6 +44,11 @@ export type OverviewConnectionPresentation = Readonly<{
 export function createOverviewConnectionPresentation(
   device: DeviceOverviewItem | null
 ): OverviewConnectionPresentation {
+  if (device?.phone_mode === 'modem_voice') {
+    const state = modemVoicePresentation(device.modem_voice)
+    return Object.freeze({ ...state, kind: 'cellular', eyebrow: '模组直拨', pathIsFlowing: false,
+      stages: modemVoiceStages(device.modem_voice), metrics: [metric('通话方式', '模组直拨'), metric('设备', device.id)] })
+  }
   if (device && isNativeVoLTEMode(device.phone_mode)) {
     return createVoLTEPresentation(device)
   }

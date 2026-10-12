@@ -1,6 +1,7 @@
 import { t } from '../i18n'
 import type { DashboardDevice, NativeVoLTEStatus, VoWiFiRuntimeState } from '../types/api'
 import { isNativeVoLTEMode } from './phoneMode'
+import { modemVoicePresentation, modemVoiceStages } from './modemVoicePresentation'
 import { displaySignalDbm, hasValidSignalDbm } from './signalPresentation'
 import {
   createVoLTEStages,
@@ -55,10 +56,12 @@ export function hasDashboardSignal(value: unknown): value is number {
 }
 
 export function dashboardUsesNativeVoLTE(device: DashboardDevice): boolean {
+  if (device.phone_mode === 'modem_voice') return false
   return isNativeVoLTEMode(device.phone_mode) || volteRegistered(device.native_volte)
 }
 
 export function formatDashboardNetworkType(device: DashboardDevice): string {
+  if (device.phone_mode === 'modem_voice') return '模组直拨'
   if (dashboardUsesNativeVoLTE(device)) return 'VoLTE'
   if (device.vowifi_active) return 'VoWiFi'
   const parts = [device.network_duplex, device.network_mode]
@@ -154,6 +157,15 @@ export function createDashboardDevicePresentation(
   const isVoLTE = dashboardUsesNativeVoLTE(device)
   const isVoWiFi = !isVoLTE && device.vowifi_active === true
   const volte = isVoLTE ? volteServiceState(true, device.native_volte) : null
+
+  if (device.phone_mode === 'modem_voice') {
+    const state = modemVoicePresentation(device.modem_voice)
+    return Object.freeze({ connectionKind: 'cellular', connectionState: state.detail,
+      connectionTitle: state.title, connectionType, connectionDetail: state.detail,
+      displayName: device.name || device.id, ipv4: normalizeAddress(device.public_ip), ipv6: normalizeAddress(device.public_ipv6),
+      operator: normalizeFact(device.operator), showsCellularFacts: true, signal: formatDashboardSignal(device.signal_dbm),
+      stages: modemVoiceStages(device.modem_voice), statusLabel: isOnline ? t('common.online') : t('common.offline') })
+  }
 
   return Object.freeze({
     connectionKind: isVoLTE ? 'volte' : isVoWiFi ? 'wifi' : 'cellular',

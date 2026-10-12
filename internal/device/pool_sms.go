@@ -401,6 +401,18 @@ func (w *Worker) SendSMS(phone, message string) error {
 }
 
 func (w *Worker) SendSMSWithOptions(phone, message string, opts smscodec.SubmitOptions) error {
+	check := w.Pool.outboundOwnerCheck(w)
+	if err := w.Pool.authorizeSMS(context.Background(), outboundSMSRequest{Worker: w, To: phone, Text: message, Options: opts}); err != nil {
+		return err
+	}
+	if err := check(); err != nil {
+		return err
+	}
+	return w.sendSMSWithOptions(phone, message, opts)
+}
+
+// sendSMSWithOptions is the CS leg after the shared per-SIM budget was consumed.
+func (w *Worker) sendSMSWithOptions(phone, message string, opts smscodec.SubmitOptions) error {
 	if w.Backend != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
 		defer cancel()

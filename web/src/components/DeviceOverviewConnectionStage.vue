@@ -31,7 +31,7 @@ function stageLabel(ready: boolean | undefined): string {
   <section
     class="overview-connection-stage"
     :class="presentation.tone"
-    :aria-label="presentation.kind === 'volte' ? 'VoLTE 连接状态' : 'VoWiFi 连接状态'"
+    aria-label="通话连接状态"
   >
     <div class="overview-connection-main">
       <span class="overview-eyebrow">{{ presentation.eyebrow }}</span>
@@ -49,7 +49,7 @@ function stageLabel(ready: boolean | undefined): string {
         class="overview-service-path"
         :class="{ 'is-flowing': pathIsFlowing }"
         :style="{ gridTemplateColumns: `repeat(${stages.length}, minmax(0, 1fr))` }"
-        :aria-label="presentation.kind === 'volte' ? 'VoLTE 服务链路' : 'VoWiFi 服务链路'"
+        aria-label="通话服务链路"
       >
         <div class="overview-service-track" aria-hidden="true"><span /></div>
         <div

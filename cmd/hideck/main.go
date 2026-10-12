@@ -23,6 +23,7 @@ import (
 	"github.com/yibaiba/hideck/internal/device"
 	"github.com/yibaiba/hideck/internal/notify"
 	"github.com/yibaiba/hideck/internal/openwrt"
+	"github.com/yibaiba/hideck/internal/outbound"
 	"github.com/yibaiba/hideck/internal/phone"
 	proxyserver "github.com/yibaiba/hideck/internal/proxy/server"
 	"github.com/yibaiba/hideck/internal/proxy/traffic"
@@ -133,6 +134,14 @@ func main() {
 
 	dynamicInterfaceMapper := openwrt.NewMapper(cfg.System.OpenWRTDynamicInterfaces)
 	pool := device.NewPoolWithDynamicInterfaceMapper(cfg, dynamicInterfaceMapper)
+	outboundLimiter, err := outbound.New(db.NewOutboundUsageStore(db.DB), cfg.OutboundLimits, time.Now)
+	if err != nil {
+		log.Fatalf("初始化外发限流失败: %v", err)
+	}
+	pool.SetOutboundLimiter(outboundLimiter)
+	if cfg.Server.SMSRateLimitDisabled {
+		logger.Warn("server.sms_rate_limit_disabled 已废弃；短信与外呼现在使用 outbound_limits 配置")
+	}
 
 	pool.SetPolicyResolver(db.CardPolicyResolver{})
 
@@ -210,9 +219,12 @@ func main() {
 		callResultNotifier = notifyMgr
 	}
 	phoneGateway := &volte.Mux{
-		IMS:      voiceGW,
-		Native:   pool.NativeVoLTEController(),
-		IsNative: pool.IsNativeVoLTE,
+		BeforeDial: pool.AuthorizeOutboundCall,
+		IMS:        voiceGW,
+		Native:     pool.NativeVoLTEController(),
+		IsNative:   pool.IsNativeVoLTE,
+		Modem:      pool.ModemVoiceController(),
+		IsModem:    pool.IsModemVoice,
 	}
 	phoneService, err := phone.NewService(phone.ServiceOptions{
 		Gateway: phoneGateway, Store: db.NewVoiceCallStore(db.DB), Transcoder: audioTranscoder,

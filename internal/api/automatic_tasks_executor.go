@@ -245,7 +245,7 @@ func (e *automaticTaskExecutor) executeCall(
 		if e.server.voiceGW == nil {
 			return "", errors.New("VoWiFi voice gateway is unavailable")
 		}
-		result, err := e.server.voiceGW.SimulateCall(ctx, task.DeviceID, voicehost.SimulateCallRequest{
+		result, err := e.server.simulateCall(ctx, task.DeviceID, voicehost.SimulateCallRequest{
 			Callee: task.Payload.Phone, HoldSeconds: task.Payload.HoldSeconds,
 		})
 		if err != nil {
@@ -261,6 +261,9 @@ func (e *automaticTaskExecutor) executeCall(
 	}
 	if worker.Modem == nil {
 		return "", errors.New("cellular calling requires an AT modem channel")
+	}
+	if err := e.server.pool.AuthorizeOutboundCall(ctx, worker.ID, task.Payload.Phone); err != nil {
+		return "", automation.Permanent(err)
 	}
 	if err := worker.Modem.DialCall(task.Payload.Phone); err != nil {
 		return "", automation.Permanent(err)

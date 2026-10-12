@@ -35,11 +35,13 @@ Manage USB modems, cellular proxy, SMS, WiFi calling / IMS voice, eSIM, and sche
 - **eSIM** — download, enable, disable, rename, delete; activation code or QR / PDF
 - **Automation & notify** — scheduled tasks; Telegram, email, Bark, Feishu, WeCom, WeChat, QQ
 
-Protocol notes: [VoWiFi](docs/vowifi-protocol-alignment.md) · [VoLTE](docs/volte-native.md) · [operators](docs/operator-notes.md) · [hardware](docs/modem-hardware.md)
+Protocol notes: [VoWiFi](docs/vowifi-protocol-alignment.md) · [VoLTE](docs/volte-native.md) · [operators](docs/operator-notes.md) · [hardware](docs/modem-hardware.md) · [module voice troubleshooting](docs/modem-voice-troubleshooting.md)
+
+Outgoing call/SMS quotas are per SIM and survive restarts: [limits and configuration](docs/outbound-limits.md).
 
 ## Quick start
 
-Docker (recommended). Needs Linux, curl, Docker Compose, host networking, and USB access. The image includes AMR/MP3 libraries for call recording.
+Docker (recommended). Needs Linux, curl, Docker Compose, host networking, and USB access. The image includes ADB, ALSA tools, AMR/MP3 libraries, and the embedded module-side voice runtime. The host still needs a USB audio driver; see [module voice prerequisites](DOCKERHUB.md#module-voice-dependencies).
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/yibaiba/hideck/main/deploy.sh | sh
@@ -60,6 +62,8 @@ curl -fsSL https://raw.githubusercontent.com/yibaiba/hideck/main/deploy.sh | \
 ```
 
 Image: `yibaiba/hideck:latest`. Compose uses `network_mode: host`, `privileged: true`, `/dev`, and persists `config/`, `data/`, `logs/`. See [DOCKERHUB.md](DOCKERHUB.md) and [HTTPS / WebRTC](docs/https-webrtc.md).
+
+For Feiniu fnOS, the optional [FPK packaging](packaging/fnos/README.md) reuses the Docker image with an application entry and persistent app directories; on-device validation is still required.
 
 ```bash
 docker compose ps
@@ -85,6 +89,10 @@ Compose override described in [Docker PC/SC setup](DOCKERHUB.md#pcsc-smart-card-
 
 ## Binary install
 
+The installer also installs ADB, ALSA tools and recording libraries, then checks ADB capabilities and host USB audio support. Missing dependencies produce a nonzero exit status even if the HiDeck service was installed; they are not reported as a fully successful deployment. These checks do not connect to or reboot a modem.
+
+OpenWrt keeps module voice optional: use the separate `hideck-adb` and `hideck-modem-voice` packages. See [OpenWrt packaging](packaging/openwrt/README.md) for IPK/APK installation and target matching.
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/yibaiba/hideck/main/deploy-binary.sh | sh
 ```
@@ -104,8 +112,11 @@ curl -fsSL https://raw.githubusercontent.com/yibaiba/hideck/main/deploy-binary.s
 | `hideck_v2.1.23_openwrt_amd64` | OpenWrt x86_64, musl static, no UPX |
 | `hideck_v2.1.23_openwrt_arm64` | OpenWrt aarch64 |
 | `hideck_v2.1.23_openwrt_armv7` | OpenWrt 32-bit ARM |
+| `hideck_v2.1.23_openwrt_dynamic_amd64` | OpenWrt x86_64, dynamic musl, MP3 encoding capable |
+| `hideck_v2.1.23_openwrt_dynamic_arm64` | OpenWrt aarch64, dynamic musl, MP3 encoding capable |
+| `hideck_v2.1.23_openwrt_dynamic_armv7` | OpenWrt 32-bit ARM, dynamic musl, MP3 encoding capable |
 
-On OpenWrt, use `openwrt_*` only. See [packaging/openwrt/README.md](packaging/openwrt/README.md).
+On OpenWrt, use `openwrt_*` only. The package-manager archives and binary installer use the static assets. The dynamic assets require matching runtime libraries and are intended for MP3 call recording; see [OpenWrt packaging](packaging/openwrt/README.md#openwrt-dynamic-musl).
 
 ## Configuration
 
