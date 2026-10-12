@@ -241,7 +241,7 @@ paths:
               $ref: '#/components/schemas/SMSSendRequest'
       responses:
         '200':
-          description: 发送成功
+          description: 已提交到短信发送通道，不代表收件手机已收到
           content:
             application/json:
               schema:
@@ -2968,6 +2968,30 @@ paths:
         '503':
           $ref: '#/components/responses/PhoneError'
 
+  /phone/media/{media_id}:
+    delete:
+      tags: [phone]
+      summary: 释放尚未绑定电话的 WebRTC 媒体会话
+      description: 浏览器媒体连接建立失败时使用；已经绑定或正在用于电话操作的媒体不能通过该接口释放。
+      parameters:
+        - name: media_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/PhoneLease'
+      responses:
+        '204':
+          description: 媒体会话已释放
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/PhoneError'
+        '404':
+          $ref: '#/components/responses/PhoneError'
+        '409':
+          $ref: '#/components/responses/PhoneError'
+
   /phone/calls:
     post:
       tags: [phone]
@@ -4601,12 +4625,16 @@ components:
           type: string
         phone:
           type: string
+        destination:
+          type: string
+          description: 实际提交的收件地址，可能按发送 SIM 归属地区转为国际号码
         message_id:
           type: string
         parts_total:
           type: integer
         delivery_state:
           type: string
+          description: 通道发送状态；acked 仅表示发送端已受理，不保证收件手机已收到
 
     SMSDeliveryResponse:
       type: object

@@ -152,6 +152,7 @@ func Init(dbPath string) error {
 	if err := DB.AutoMigrate(
 		&Device{},
 		&CardPolicy{},
+		&OutboundUsage{},
 		&SIMCard{},
 		&SIMSubscription{},
 		&PendingPhoneNumber{},

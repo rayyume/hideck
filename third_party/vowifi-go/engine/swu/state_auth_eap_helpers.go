@@ -15,18 +15,11 @@ import (
 func (s *Session) resolveATCheckcodeValue(
 	mode string,
 	eapType uint8,
-	hasCheckcode bool,
 	serverValue []byte,
-	shouldEcho bool,
-) []byte {
-	if !hasCheckcode {
-		return nil
-	}
+) ([]byte, bool) {
 	switch normalizeAKAChallengeMode(mode) {
 	case "checkcode":
-		if shouldEcho {
-			return append([]byte(nil), serverValue...)
-		}
+		return append([]byte(nil), serverValue...), true
 	case "recompute":
 		hashType := "sha1"
 		if eapType == eapaka.TypeAKAPrime {
@@ -34,10 +27,10 @@ func (s *Session) resolveATCheckcodeValue(
 		}
 		checkcode := s.calcAKACheckcodeWithPending(hashType, nil)
 		if len(checkcode) > 0 {
-			return append([]byte{0, 0}, checkcode...)
+			return checkcode, true
 		}
 	}
-	return nil
+	return nil, false
 }
 
 func (s *Session) appendAKAChallengeMetaAttrs(
@@ -62,9 +55,9 @@ func (s *Session) appendAKAChallengeMetaAttrs(
 	if includeCheckcode && hasCheckcode {
 		value, err := checkcode.CheckcodeValue()
 		if err == nil {
-			resolved := s.resolveATCheckcodeValue(modeForCheckcode(mode), request.Type, true, value, len(value) > 0)
-			if len(resolved) >= 2 {
-				filtered = append(filtered, eapaka.CheckcodeAttribute(resolved[2:]))
+			resolved, include := s.resolveATCheckcodeValue(modeForCheckcode(mode), request.Type, value)
+			if include {
+				filtered = append(filtered, eapaka.CheckcodeAttribute(resolved))
 			}
 		}
 	}

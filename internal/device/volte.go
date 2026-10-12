@@ -5,11 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/iniwex5/quectel-qmi-go/pkg/qmi"
-	"github.com/yibaiba/hideck/internal/modem"
 	"github.com/yibaiba/hideck/internal/volte"
 	"github.com/yibaiba/hideck/pkg/logger"
 )
@@ -48,24 +46,40 @@ func (p *Pool) EnableNativeVoLTE(deviceID string) error {
 		return fmt.Errorf("VoLTE 控制器未初始化")
 	}
 	deviceID = strings.TrimSpace(deviceID)
-	w := p.GetWorker(deviceID)
-	if w == nil {
-		return fmt.Errorf("设备 %s 不存在", deviceID)
+	start := p.beginNativeVoLTESchedule(deviceID)
+	if start == nil {
+		return fmt.Errorf("设备 %s 正在启动 VoLTE 或切换模式", deviceID)
 	}
-	if p.IsESIMSwitching(deviceID) {
-		return fmt.Errorf("设备 %s 正在切卡，暂不允许启动 VoLTE", deviceID)
+	defer p.endNativeVoLTESchedule(deviceID, start)
+	return p.enableNativeVoLTE(deviceID, start)
+}
+
+func (p *Pool) enableNativeVoLTE(deviceID string, start *nativeVoLTEStart) error {
+	if err := start.waitTransition(); err != nil {
+		return err
 	}
-	class, err := ClassifyWorkerLebaraUKForControl(p.Context(), w)
+	if err := p.validateNativeVoLTEStart(deviceID, start); err != nil {
+		return err
+	}
+	class, err := ClassifyWorkerLebaraUKForControl(start.ctx, start.worker)
 	if err != nil {
 		return err
 	}
 	if class.BlocksVoWiFi() || class.IsLebara {
 		return ErrLebaraUKRFLocked
 	}
-	if err := p.waitQMICoreReady(deviceID, 30*time.Second); err != nil {
+	if err := p.waitQMICoreReadyContext(start.ctx, deviceID, 30*time.Second); err != nil {
+		if start.ctx.Err() != nil {
+			return start.ctx.Err()
+		}
 		logger.Warn("VoLTE 等待 QMI 就绪失败，继续尝试 AT", "device", deviceID, "err", err)
 	}
-	if err := p.volteCtl.Enable(p.Context(), deviceID); err != nil {
+	if err := p.volteCtl.EnableChecked(start.ctx, volte.EnableRequest{DeviceID: deviceID,
+		Validate: func() error { return p.validateNativeVoLTEStart(deviceID, start) },
+	}); err != nil {
+		return err
+	}
+	if err := p.validateNativeVoLTEStart(deviceID, start); err != nil {
 		return err
 	}
 	// IMS PDN 起来后 qmi_wwan 可能把上网口拉起来。未开「网络」时主机不能走 3gnet。
@@ -115,18 +129,19 @@ func (p *Pool) scheduleNativeVoLTE(deviceID, reason string) {
 		return
 	}
 	deviceID = strings.TrimSpace(deviceID)
-	if !p.beginNativeVoLTESchedule(deviceID) {
+	start := p.beginNativeVoLTESchedule(deviceID)
+	if start == nil {
 		return
 	}
 	go func() {
-		defer p.endNativeVoLTESchedule(deviceID)
+		defer p.endNativeVoLTESchedule(deviceID, start)
 		var err error
 		for attempt := 1; attempt <= nativeVoLTEStartAttempts; attempt++ {
-			if !p.IsNativeVoLTE(deviceID) {
+			err = p.enableNativeVoLTE(deviceID, start)
+			if err == nil {
 				return
 			}
-			err = p.EnableNativeVoLTE(deviceID)
-			if err == nil {
+			if start.ctx.Err() != nil {
 				return
 			}
 			if !isTransientVoLTEStartError(err) || attempt == nativeVoLTEStartAttempts {
@@ -136,7 +151,7 @@ func (p *Pool) scheduleNativeVoLTE(deviceID, reason string) {
 			logger.Warn("启动原生 VoLTE 将重试", "device", deviceID, "reason", reason, "attempt", attempt, "err", err)
 			timer := time.NewTimer(nativeVoLTERetryDelay(attempt))
 			select {
-			case <-p.Context().Done():
+			case <-start.ctx.Done():
 				timer.Stop()
 				return
 			case <-timer.C:
@@ -145,72 +160,21 @@ func (p *Pool) scheduleNativeVoLTE(deviceID, reason string) {
 	}()
 }
 
-func (p *Pool) beginNativeVoLTESchedule(deviceID string) bool {
-	p.nativeVoLTEScheduleMu.Lock()
-	defer p.nativeVoLTEScheduleMu.Unlock()
-	if p.nativeVoLTEScheduled == nil {
-		p.nativeVoLTEScheduled = make(map[string]struct{})
-	}
-	if _, exists := p.nativeVoLTEScheduled[deviceID]; exists {
-		return false
-	}
-	p.nativeVoLTEScheduled[deviceID] = struct{}{}
-	return true
-}
-
-func (p *Pool) endNativeVoLTESchedule(deviceID string) {
-	p.nativeVoLTEScheduleMu.Lock()
-	delete(p.nativeVoLTEScheduled, deviceID)
-	p.nativeVoLTEScheduleMu.Unlock()
-}
-
 func (p *Pool) stopNativeVoLTE(deviceID, reason string) {
 	if p == nil || p.volteCtl == nil {
 		return
 	}
+	p.cancelNativeVoLTEStart(deviceID)
 	p.volteCtl.Disable(deviceID)
 	logger.Debug("已停止原生 VoLTE 会话", "device", deviceID, "reason", reason)
-}
-
-func (p *Pool) ExecuteAT(deviceID, cmd string, timeout time.Duration) (string, error) {
-	w := p.GetWorker(deviceID)
-	if w == nil {
-		return "", fmt.Errorf("设备 %s 不存在", deviceID)
-	}
-	port := strings.TrimSpace(w.ResolvedATPort())
-	if port == "" {
-		return "", fmt.Errorf("设备 %s 没有 AT 口", deviceID)
-	}
-	unlock := p.lockDeviceAT(deviceID)
-	defer unlock()
-	session, err := modem.NewSerialAT(port, 115200, 8, 1, "N")
-	if err != nil {
-		return "", fmt.Errorf("打开 AT 口 %s: %w", port, err)
-	}
-	defer session.Close()
-	return session.Execute(cmd, timeout)
-}
-
-func (p *Pool) lockDeviceAT(deviceID string) func() {
-	p.atPortMu.Lock()
-	if p.atPortLocks == nil {
-		p.atPortLocks = map[string]*sync.Mutex{}
-	}
-	mu := p.atPortLocks[deviceID]
-	if mu == nil {
-		mu = &sync.Mutex{}
-		p.atPortLocks[deviceID] = mu
-	}
-	p.atPortMu.Unlock()
-	mu.Lock()
-	return mu.Unlock
 }
 
 func (p *Pool) StopSoftwareIMS(deviceID string) error {
 	if p == nil {
 		return nil
 	}
-	if !p.IsVoWiFiActive(deviceID) && p.GetVoWiFiAppForDevice(deviceID) == nil {
+	if !p.IsVoWiFiActive(deviceID) && !p.voWiFiHost().Starting(deviceID) {
+		p.voWiFiHost().InvalidateRuntime(deviceID, "native_phone")
 		return nil
 	}
 	return p.voWiFiHost().Disable(p.Context(), deviceID, "native_volte", true)

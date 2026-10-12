@@ -166,6 +166,7 @@ export type DeviceOverviewItem = {
   vowifi_runtime?: VoWiFiRuntimeState
   vowifi_health?: WiFiCallingHealthSnapshot
   native_volte?: NativeVoLTEStatus
+  modem_voice?: ModemVoiceStatus
   radio_live_ok?: boolean
   modem: ModemStatus
   traffic?: DeviceTrafficFormatted
@@ -198,6 +199,7 @@ export type DeviceMgmtListItem = {
   vowifi_enabled?: boolean
   vowifi_runtime?: VoWiFiRuntimeState
   native_volte?: NativeVoLTEStatus
+  modem_voice?: ModemVoiceStatus
   modem?: Pick<ModemStatus, 'operator' | 'native_spn' | 'native_mcc' | 'native_mnc' | 'network_mode' | 'network_duplex' | 'radio_band' | 'radio_channel' | 'signal_dbm' | 'signal_sinr' | 'imei' | 'iccid' | 'reg_status'>
 }
 
@@ -390,7 +392,10 @@ export type DashboardDevice = {
   vowifi_runtime?: VoWiFiRuntimeState
   vowifi_health?: WiFiCallingHealthSnapshot
   native_volte?: NativeVoLTEStatus
+  modem_voice?: ModemVoiceStatus
 }
+
+export type ModemVoiceStatus = { ready?: boolean; phase?: string; last_error?: string }
 
 export type SMSMessage = {
   id: number
@@ -401,7 +406,7 @@ export type SMSMessage = {
   recipient?: string
   content: string
   type: number
-  status?: number // 0=未读, 1=已读, 2=发送成功, 3=发送失败
+  status?: number // 0=未读, 1=已读, 2=已提交, 3=发送失败
   timestamp: string
   device_name?: string
 }
@@ -514,6 +519,8 @@ export type UpstreamProxy = {
 }
 
 export type UpstreamProxyProbeResult = {
+  checked_at?: string
+  egress?: UpstreamProxyEgressProbe
   proxy_addr: string
   stage: string
   reachable: boolean
@@ -526,6 +533,15 @@ export type UpstreamProxyProbeResult = {
   duration_ms: number
   diagnosis?: string
   hint?: string
+  error?: string
+}
+
+export type UpstreamProxyEgressProbe = {
+  source: string
+  checked_at: string
+  reachable: boolean
+  ip?: string
+  country_code?: string
   error?: string
 }
 

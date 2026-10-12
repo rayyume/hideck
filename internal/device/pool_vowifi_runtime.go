@@ -74,11 +74,15 @@ func (p *Pool) waitRadioRecoveryReady(deviceID string, timeout time.Duration) er
 }
 
 func (p *Pool) waitQMICoreReady(deviceID string, timeout time.Duration) error {
+	return p.waitQMICoreReadyContext(p.ctx, deviceID, timeout)
+}
+
+func (p *Pool) waitQMICoreReadyContext(ctx context.Context, deviceID string, timeout time.Duration) error {
 	w := p.GetWorker(deviceID)
 	if w == nil {
 		return fmt.Errorf("设备 %s 不存在", deviceID)
 	}
-	waitCtx, cancel := context.WithTimeout(p.ctx, timeout)
+	waitCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	if b, ok := w.Backend.(interface {
@@ -162,7 +166,13 @@ func (p *Pool) EnableVoWiFi(deviceID string) error {
 	if w := p.GetWorker(deviceID); w != nil && IsNativeVoLTEMode(w.Config.PhoneMode) {
 		return p.EnableNativeVoLTE(deviceID)
 	}
+	if w := p.GetWorker(deviceID); w != nil && IsModemVoiceMode(w.Config.PhoneMode) {
+		return fmt.Errorf("设备 %s: %w", deviceID, ErrModemVoiceSoftwareIMS)
+	}
 	p.stopNativeVoLTE(deviceID, "enable_vowifi")
+	if err := p.stopModemVoice(deviceID); err != nil {
+		return err
+	}
 	if w := p.GetWorker(deviceID); w != nil && w.Config.PhoneMode == "cellular" {
 		if w.Config.AirplaneEnabled {
 			logger.Info("蜂窝飞行：待机不建 SWu 隧道", "device", deviceID)

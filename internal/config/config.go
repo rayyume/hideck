@@ -5,6 +5,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/yibaiba/hideck/internal/outbound"
+
 	"github.com/spf13/viper"
 )
 
@@ -106,15 +108,17 @@ func ResolveIPFamily(in string) (enableV4 bool, enableV6 bool, err error) {
 }
 
 type Config struct {
-	Server   ServerConfig   `mapstructure:"server"`
-	System   SystemConfig   `mapstructure:"system"`
-	Devices  []DeviceConfig `mapstructure:"devices"`
-	Telegram TelegramConfig `mapstructure:"telegram"`
-	Feishu   FeishuConfig   `mapstructure:"feishu"`
-	QQ       QQConfig       `mapstructure:"qq"`
-	Weixin   WeixinConfig   `mapstructure:"weixin"`
-	WeComBot WeComBotConfig `mapstructure:"wecom_bot"`
-	Webhook  WebhookConfig  `mapstructure:"webhook"`
+	ModemVoice     ModemVoiceConfig `mapstructure:"modem_voice"`
+	OutboundLimits outbound.Config  `mapstructure:"outbound_limits"`
+	Server         ServerConfig     `mapstructure:"server"`
+	System         SystemConfig     `mapstructure:"system"`
+	Devices        []DeviceConfig   `mapstructure:"devices"`
+	Telegram       TelegramConfig   `mapstructure:"telegram"`
+	Feishu         FeishuConfig     `mapstructure:"feishu"`
+	QQ             QQConfig         `mapstructure:"qq"`
+	Weixin         WeixinConfig     `mapstructure:"weixin"`
+	WeComBot       WeComBotConfig   `mapstructure:"wecom_bot"`
+	Webhook        WebhookConfig    `mapstructure:"webhook"`
 
 	Bark     BarkConfig     `mapstructure:"bark"`
 	Email    EmailConfig    `mapstructure:"email"`
@@ -161,17 +165,18 @@ type WebConfig struct {
 }
 
 type ServerConfig struct {
-	Port                 string   `mapstructure:"port"`
-	HTTPSEnabled         bool     `mapstructure:"https_enabled"`
-	HTTPSPort            string   `mapstructure:"https_port"`
-	WebRTCUDPAddress     string   `mapstructure:"webrtc_udp_address"`
-	WebRTCPublicHost     string   `mapstructure:"webrtc_public_host"`
-	TLSCertFile          string   `mapstructure:"tls_cert_file"`
-	TLSKeyFile           string   `mapstructure:"tls_key_file"`
-	TLSDataDir           string   `mapstructure:"tls_data_dir"`
-	ICEServers           []string `mapstructure:"ice_servers"`
-	Debug                bool     `mapstructure:"debug"`
-	SMSRateLimitDisabled bool     `mapstructure:"sms_rate_limit_disabled"`
+	Port             string   `mapstructure:"port"`
+	HTTPSEnabled     bool     `mapstructure:"https_enabled"`
+	HTTPSPort        string   `mapstructure:"https_port"`
+	WebRTCUDPAddress string   `mapstructure:"webrtc_udp_address"`
+	WebRTCPublicHost string   `mapstructure:"webrtc_public_host"`
+	TLSCertFile      string   `mapstructure:"tls_cert_file"`
+	TLSKeyFile       string   `mapstructure:"tls_key_file"`
+	TLSDataDir       string   `mapstructure:"tls_data_dir"`
+	ICEServers       []string `mapstructure:"ice_servers"`
+	Debug            bool     `mapstructure:"debug"`
+	// Deprecated: startup warns; outbound_limits now controls per-SIM quotas.
+	SMSRateLimitDisabled bool `mapstructure:"sms_rate_limit_disabled"`
 }
 
 type ESIMSwitchConfig struct {

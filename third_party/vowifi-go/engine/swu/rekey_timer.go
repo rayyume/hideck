@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/iniwex5/vowifi-go/engine/ikev2"
+	"go.uber.org/zap"
 )
 
 const (
@@ -25,6 +26,8 @@ type rekeyTimerSpec struct {
 	target        **time.Timer
 	action        func() error
 	immediateFail func(error) bool
+	// declined keeps the current SA in service and asks again next interval.
+	declined      func(error) bool
 	retryInterval time.Duration
 }
 
@@ -74,8 +77,24 @@ func (s *Session) startChildSARekeyTimer(interval time.Duration) {
 	s.startRekeyTimer(rekeyTimerSpec{
 		name: "CHILD_SA", interval: interval,
 		reset: reset, target: &s.childRekeyTimer, action: s.RekeyChildSA,
-		immediateFail: isChildSANotFoundError,
+		immediateFail: isChildSANotFoundError, declined: s.childRekeyDeclined(),
 	})
+}
+
+// childRekeyDeclined treats NO_ADDITIONAL_SAS as a decline only where the
+// carrier preset opts in; elsewhere it stays a rekey failure.
+func (s *Session) childRekeyDeclined() func(error) bool {
+	if s.cfg != nil && s.cfg.KeepChildSAOnRekeyDecline {
+		return isNoAdditionalSAsError
+	}
+	return nil
+}
+
+// isNoAdditionalSAsError reports a peer that refuses a UE-initiated CHILD_SA
+// rekey. RFC 7296 2.8 keeps the old SA valid after a failed rekey.
+func isNoAdditionalSAsError(err error) bool {
+	var rejection *createChildSARejectError
+	return errors.As(err, &rejection) && rejection.NotifyType == ikev2.NO_ADDITIONAL_SAS
 }
 
 func isChildSANotFoundError(err error) bool {
@@ -115,6 +134,14 @@ func (s *Session) runRekeyTimer(timer *time.Timer, spec rekeyTimerSpec) {
 		case <-timer.C:
 			err := spec.action()
 			if err == nil {
+				failures = 0
+				if !s.resetRekeyTimer(timer, rekeyDelay(spec.interval)) {
+					return
+				}
+				continue
+			}
+			if spec.declined != nil && spec.declined(err) {
+				s.Logger.Warn("peer declined "+spec.name+" rekey; keeping current SA", zap.Error(err))
 				failures = 0
 				if !s.resetRekeyTimer(timer, rekeyDelay(spec.interval)) {
 					return

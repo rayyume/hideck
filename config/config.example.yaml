@@ -13,7 +13,31 @@ server:
   tls_key_file: ""
   # 跨 NAT 时显式配置，例如 ["stun:stun.example.com:3478"]。
   ice_servers: []
-  sms_rate_limit_disabled: false
+
+# 所有运营商按 ICCID 独立计数，数据库保留额度，重启不清零。
+# 修改后重启生效；0/省略使用默认值，关闭必须明确设置 disabled: true。
+outbound_limits:
+  calls:
+    disabled: false
+    interval_seconds: 10
+    per_hour: 20
+    per_day: 100
+  sms:
+    disabled: false
+    interval_seconds: 5
+    per_hour: 30
+    per_day: 100
+  # 按卡覆盖：键必须是加引号的 ICCID，未写字段继承全局配置。
+  cards: {}
+  # cards:
+  #   "8986001234567890123":
+  #     sms:
+  #       per_day: 200
+
+# 仅明确选择模组直拨时准备 QDC507GLEFM21；USB 写入后必要时自动重启目标模组一次。
+# 设为 false 可禁止自动授权/修改 USB，已经开启的 ADB 仍可正常使用。
+modem_voice:
+  auto_enable_adb: true
 
 system:
   # 仅 OpenWrt 使用：把已拨号的数据网卡动态映射到 netifd，其他系统必须保持 false。

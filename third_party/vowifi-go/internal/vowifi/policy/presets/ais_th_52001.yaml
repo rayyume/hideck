@@ -2,6 +2,7 @@ mcc: "520"
 mnc: "01"
 id: ais_th_52001
 device_model: rmx3366
+aka_challenge_mode: checkcode
 dpd_interval_seconds: 120
 ike_proposals:
   - aes256-sha256-prfsha256-modp2048

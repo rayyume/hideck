@@ -4,9 +4,9 @@ import (
 	"errors"
 	"time"
 
-	"github.com/yibaiba/hideck/pkg/logger"
 	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4"
+	"github.com/yibaiba/hideck/pkg/logger"
 )
 
 const (
@@ -23,13 +23,32 @@ func (s *MediaSession) forwardBrowserRTP(track *webrtc.TrackRemote) {
 		if err != nil {
 			return
 		}
+		count := s.browserPackets.Add(1)
+		if count == 1 {
+			logger.Info("浏览器首个音频包", "media_id", s.ID, "codec", track.Codec().MimeType, "payload_bytes", len(packet.Payload))
+		}
+		for _, sample := range decodePCMU(packet.Payload) {
+			magnitude := int64(sample)
+			if magnitude < 0 {
+				magnitude = -magnitude
+			}
+			for old := s.browserPeak.Load(); uint64(magnitude) > old; old = s.browserPeak.Load() {
+				if s.browserPeak.CompareAndSwap(old, uint64(magnitude)) {
+					break
+				}
+			}
+		}
 		endpoint, codec, ok := s.endpoint()
 		if !ok {
 			continue
 		}
 		s.recordMixedFrame(mixToIMS, packet.Payload)
+		payloadBytes := len(packet.Payload)
 		packet.Payload, err = browserPayloadForIMS(packet.Payload, endpoint, codec)
 		if err != nil {
+			if s.browserRejected.Add(1) == 1 {
+				logger.Warn("浏览器音频包未转发", "media_id", s.ID, "payload_bytes", payloadBytes, "err", err)
+			}
 			s.lost.Add(1)
 			continue
 		}

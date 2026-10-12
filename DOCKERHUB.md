@@ -90,13 +90,33 @@ Web 入口：`http://YOUR_IP:7575`
 
 首次登录后请立即修改密码。
 
+<a id="module-voice-dependencies"></a>
+
+## 模组直拨依赖
+
+飞牛 fnOS 应用中心的 `.fpk` 打包、权限说明及验证边界见[飞牛应用包](packaging/fnos/README.md)。包内复用本镜像，不另行修改电话或 VoWiFi 协议。
+
+四种镜像构建路径都安装 ADB 和 `alsa-utils`（提供 `arecord`、`aplay`），并在构建时检查程序可执行以及 ADB 的 `-t` / `-L` 能力。已适配固件 `QDC507GLEFM21` 使用的模组端驱动和音频桥接程序内嵌在 HiDeck 二进制中，不需要首次联网下载，也不需要另行挂载 `data/modem-voice/bundles/`。
+
+容器不提供宿主机内核驱动。Linux 宿主机需要内置或已安装 `snd_usb_audio`；可在宿主机检查：
+
+```sh
+test -d /sys/bus/usb/drivers/snd-usb-audio || modinfo snd_usb_audio
+```
+
+如果检查失败，先安装与**当前运行内核**匹配的 USB 音频驱动；OpenWrt 对应 `kmod-usb-audio`。不要强行安装其他内核版本的模块。不插模组时没有 `/dev/snd` 不代表驱动缺失。
+
+保留默认 Compose 的 `privileged: true` 和 `/dev:/dev`：切换 USB 配置或重启模组后，ADB、串口及 PCM 设备节点会变化，不能只绑定某一个旧设备节点。ADB 工具已在镜像内，不要求宿主机另起 ADB 服务。自定义 Compose 需要保留这些设备访问条件。
+
+Linux 二进制部署脚本也会安装上述用户态依赖，并检查宿主机驱动；不支持的 ADB、包安装失败或驱动无法确认会明确报错。OpenWrt 默认不装语音依赖，新版专用 ADB 和可选语音包见 [OpenWrt 安装说明](packaging/openwrt/README.md)。这些依赖检查不修改 USB 配置、不切换通话模式，也不重启模组；模组自动开启 ADB 仍只在用户选择模组直拨时执行。
+
 ## 维护者发布
 
-发版镜像不再在 Docker 里编译或 `apk`。先打好 `dist/hideck_vX.Y.Z_linux_amd64` 和 `linux_arm64`，再拷进运行时底包。
+发版镜像不再在 Docker 里编译应用。先打好 `dist/hideck_vX.Y.Z_linux_amd64` 和 `linux_arm64`；`Dockerfile.release` 使用 Debian，并自行安装运行依赖，再复制二进制。
 
-原来的源码构建还在：根目录 `Dockerfile` + `docker-compose.source.yml`。更新 Alpine/录音库等依赖时走这条，或先重建 `hideck-runtime`，后面的发版镜像才会用到新底包。
+原来的源码构建还在：根目录 `Dockerfile` + `docker-compose.source.yml`，运行层使用 Alpine。`hideck-runtime` 是独立的 Alpine 底包，重建它不会自动更新 Debian 发版镜像；两条路径的依赖需同步维护。
 
-运行时底包（`ca-certificates`、AMR/MP3、`gcompat`、`qmi-proxy`）只在依赖变化时重建：
+独立运行时底包（ADB、ALSA、`ca-certificates`、AMR/MP3、`gcompat`、`qmi-proxy`）在依赖变化时重建：
 
 ```bash
 docker compose -f docker-compose.runtime.yml build --builder hideck-release --push

@@ -122,9 +122,6 @@ type Server struct {
 	authChangeMu           sync.Mutex
 	passwordChangeRequired bool
 
-	smsLimiterMu sync.Mutex
-	smsLimiter   *smsRateLimiter
-
 	shutdownCh       chan struct{}
 	backgroundCancel context.CancelFunc
 }
@@ -169,10 +166,7 @@ func New(cfg *config.Config, pool *device.Pool, fs http.FileSystem, proxyMgr *se
 			},
 		),
 		loginAttempts: make(map[string]loginAttempt),
-		smsLimiter: newSMSRateLimiterWithConfig(
-			time.Now(), time.Now, cfg.Server.SMSRateLimitDisabled,
-		),
-		shutdownCh: make(chan struct{}),
+		shutdownCh:    make(chan struct{}),
 	}
 	s.backendSwitch = newDeviceBackendSwitchService(pool, configPath)
 	s.initializeCommandCenter()
@@ -221,21 +215,6 @@ func (s *Server) SetVoiceRecordingDirectory(directory string) {
 
 func (s *Server) SetPhoneService(service *phone.Service) {
 	s.phone = service
-}
-
-// smsRateLimiter returns the SMS rate limiter, lazily creating it if needed.
-func (s *Server) smsRateLimiter() *smsRateLimiter {
-	if s.smsLimiter != nil {
-		return s.smsLimiter
-	}
-	s.smsLimiterMu.Lock()
-	defer s.smsLimiterMu.Unlock()
-	if s.smsLimiter == nil {
-		s.smsLimiter = newSMSRateLimiterWithConfig(
-			time.Now(), time.Now, s.cfg.SMSRateLimitDisabled,
-		)
-	}
-	return s.smsLimiter
 }
 
 // checkPassword 验证密码，支持 bcrypt 哈希和明文（向后兼容）
@@ -617,6 +596,7 @@ func (s *Server) handleListDevices(c *gin.Context) {
 		VoWiFiRuntime    *voWiFiRuntimeDTO                 `json:"vowifi_runtime,omitempty"`
 		VoWiFiHealth     *device.WiFiCallingHealthSnapshot `json:"vowifi_health,omitempty"`
 		NativeVoLTE      *volte.Status                     `json:"native_volte,omitempty"`
+		ModemVoice       map[string]interface{}            `json:"modem_voice,omitempty"`
 		Traffic          map[string]string                 `json:"traffic,omitempty"`
 		NetworkConnected bool                              `json:"network_connected"`
 	}
@@ -646,6 +626,7 @@ func (s *Server) handleListDevices(c *gin.Context) {
 			VoWiFiActive:     s.pool.IsVoWiFiActive(w.ID), // 逐个设备判断 VoWiFi 状态，支持多设备
 			VoWiFiRuntime:    s.getVoWiFiRuntimeDTO(w.ID),
 			VoWiFiHealth:     s.getWiFiCallingHealth(w.ID),
+			ModemVoice:       s.pool.ModemVoiceStatus(w.ID),
 			NetworkConnected: w.NetworkConnected(),
 		}
 		if device.IsNativeVoLTEMode(cfg.PhoneMode) {
@@ -1169,22 +1150,6 @@ func (s *Server) handleSendSMS(c *gin.Context) {
 	deviceID := worker.ID
 	sendOpts := smscodec.SubmitOptions{Encoding: encoding}
 
-	if rate := s.smsRateLimiter().Allow(); !rate.Allowed {
-		retryAfterSeconds := int64(rate.RetryAfter.Seconds())
-		if retryAfterSeconds < 0 {
-			retryAfterSeconds = 0
-		}
-		c.JSON(http.StatusTooManyRequests, gin.H{
-			"status":              "error",
-			"code":                "sms_rate_limited",
-			"reason":              rate.Code,
-			"message":             rate.Message,
-			"retry_after_seconds": retryAfterSeconds,
-			"request_id":          requestID(c),
-		})
-		return
-	}
-
 	// 获取 IMSI 用于入库
 	imsi := worker.GetIMSI()
 	messageID := ""
@@ -1192,6 +1157,9 @@ func (s *Server) handleSendSMS(c *gin.Context) {
 	deliveryState := "acked"
 
 	routed, err := s.pool.SendRoutedSMS(c.Request.Context(), worker, req.Phone, req.Message, sendOpts)
+	if respondOutboundLimit(c, err) {
+		return
+	}
 	if routed.Outcome.PartsTotal > 0 {
 		partsTotal = routed.Outcome.PartsTotal
 	}
@@ -1208,6 +1176,7 @@ func (s *Server) handleSendSMS(c *gin.Context) {
 				"message":        "VoWiFi 短信发送失败: " + err.Error(),
 				"device":         deviceID,
 				"phone":          req.Phone,
+				"destination":    routed.Destination,
 				"message_id":     messageID,
 				"parts_total":    partsTotal,
 				"delivery_state": deliveryState,
@@ -1220,10 +1189,11 @@ func (s *Server) handleSendSMS(c *gin.Context) {
 			}
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"status":  "error",
-			"message": "发送失败: " + err.Error(),
-			"device":  deviceID,
-			"phone":   req.Phone,
+			"status":      "error",
+			"message":     "发送失败: " + err.Error(),
+			"device":      deviceID,
+			"phone":       req.Phone,
+			"destination": routed.Destination,
 		})
 		return
 	}
@@ -1240,9 +1210,10 @@ func (s *Server) handleSendSMS(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"status":         "ok",
-		"message":        "短信发送成功",
+		"message":        "短信已提交",
 		"device":         deviceID,
 		"phone":          req.Phone,
+		"destination":    routed.Destination,
 		"message_id":     messageID,
 		"parts_total":    partsTotal,
 		"delivery_state": deliveryState,

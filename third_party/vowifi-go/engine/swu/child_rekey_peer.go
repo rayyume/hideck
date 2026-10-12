@@ -170,6 +170,11 @@ func (s *Session) handlePeerInformational(packet *ikev2.IKEPacket) error {
 		return err
 	}
 	var activeChildDelete, ikeDelete bool
+	identityReply, err := s.informationalDeviceIdentityReply(payloads)
+	if err != nil {
+		return err
+	}
+	responsePayloads = append(responsePayloads, identityReply...)
 	var responseSPIs []uint32
 	for _, payload := range payloads {
 		deletion, ok := payload.(*ikev2.EncryptedPayloadDelete)
@@ -232,17 +237,19 @@ func (s *Session) retireDeletedChildSAs(spis []byte) []uint32 {
 	var retired []*ipsec.SecurityAssociation
 	var retiredLocalSPIs []uint32
 	var responseSPIs []uint32
+	// RFC 7296 1.4.1: the peer lists its inbound SPIs (our outbound/remote
+	// ones); we answer with our inbound halves of the same pairs.
 	s.childSAMu.Lock()
 	for len(spis) >= 4 {
-		localSPI := binary.BigEndian.Uint32(spis[:4])
-		if remoteSPI, ok := s.retiredChildSAs[localSPI]; ok {
-			responseSPIs = append(responseSPIs, remoteSPI)
+		remoteSPI := binary.BigEndian.Uint32(spis[:4])
+		if localSPI, ok := s.retiredLocalSPIForRemoteLocked(remoteSPI); ok {
+			responseSPIs = append(responseSPIs, localSPI)
 			retired = append(retired, s.espInboundSAs[localSPI])
 			retiredLocalSPIs = append(retiredLocalSPIs, localSPI)
 			delete(s.espInboundSAs, localSPI)
 			delete(s.retiredChildSAs, localSPI)
-		} else if localSPI == s.espLocalSPI {
-			responseSPIs = append(responseSPIs, s.espRemoteSPI)
+		} else if remoteSPI == s.espRemoteSPI {
+			responseSPIs = append(responseSPIs, s.espLocalSPI)
 		}
 		spis = spis[4:]
 	}
@@ -256,9 +263,18 @@ func (s *Session) retireDeletedChildSAs(spis []byte) []uint32 {
 	return responseSPIs
 }
 
+func (s *Session) retiredLocalSPIForRemoteLocked(remoteSPI uint32) (uint32, bool) {
+	for localSPI, retiredRemoteSPI := range s.retiredChildSAs {
+		if retiredRemoteSPI == remoteSPI {
+			return localSPI, true
+		}
+	}
+	return 0, false
+}
+
 func (s *Session) deleteContainsCurrentChildSA(spis []byte) bool {
 	s.childSAMu.RLock()
-	current := s.espLocalSPI
+	current := s.espRemoteSPI
 	s.childSAMu.RUnlock()
 	for len(spis) >= 4 {
 		if binary.BigEndian.Uint32(spis[:4]) == current {

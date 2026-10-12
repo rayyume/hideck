@@ -128,7 +128,7 @@ func TestPeerChildSARekeyIsValidatedAndAnswered(t *testing.T) {
 		InitiatorSPI: session.spiI, ResponderSPI: session.spiR,
 		Version: 0x20, ExchangeType: ikev2.ExchangeInformational, MessageID: 12,
 		Payloads: []ikev2.Payload{&ikev2.EncryptedPayloadDelete{
-			ProtocolID: ikev2.ProtoESP, SPISize: 4, NumSPIs: 1, SPIs: spiBytes(oldLocalSPI),
+			ProtocolID: ikev2.ProtoESP, SPISize: 4, NumSPIs: 1, SPIs: spiBytes(oldRemoteSPI),
 		}},
 	}
 	raw, err = session.encryptAndWrap(request)
@@ -146,7 +146,7 @@ func TestPeerChildSARekeyIsValidatedAndAnswered(t *testing.T) {
 	if !allZero(oldInbound.EncryptionKey) || !allZero(oldInbound.IntegrityKey) {
 		t.Fatal("peer-deleted CHILD_SA keys were not wiped")
 	}
-	assertChildSADeleteResponse(t, session, transport, oldRemoteSPI)
+	assertChildSADeleteResponse(t, session, transport, oldLocalSPI)
 }
 
 func assertChildSADeleteResponse(
@@ -227,7 +227,8 @@ func respondToChildSARekey(
 	oldLocalSPI := session.espLocalSPI
 	session.childSAMu.RUnlock()
 	oldRemoteSPI := respondToChildSARekeyResponse(t, session, transport, remoteSPI, responderNonce)
-	respondToChildSADelete(t, session, transport, oldRemoteSPI, oldLocalSPI)
+	// Our Delete names our old inbound SPI; the ePDG answers with its own.
+	respondToChildSADelete(t, session, transport, oldLocalSPI, oldRemoteSPI)
 }
 
 func respondToChildSARekeyResponse(

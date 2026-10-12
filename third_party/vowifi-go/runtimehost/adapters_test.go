@@ -81,7 +81,8 @@ func startTestRegistrar(t *testing.T) *net.UDPConn {
 			body := ""
 			extraHeaders := ""
 			if strings.HasPrefix(request, "REGISTER ") {
-				extraHeaders = "P-Associated-URI: <sip:+15551234567@ims.example.com>\r\n"
+				extraHeaders = "P-Associated-URI: <sip:+15551234567@ims.example.com>\r\n" +
+					"Contact: " + testSIPHeader(request, "Contact") + "\r\n"
 			}
 			if strings.HasPrefix(request, "INVITE ") {
 				body = `<?xml version="1.0"?><ussd-data><language>en</language><ussd-string>Balance: 10</ussd-string><UnstructuredSS-Notify/></ussd-data>`
@@ -446,7 +447,8 @@ func startVoiceAdapterRegistrar(
 			}
 			body, extra := "", ""
 			if strings.HasPrefix(request, "REGISTER ") {
-				extra = "P-Associated-URI: <sip:+15551234567@ims.example.com>\r\n"
+				extra = "P-Associated-URI: <sip:+15551234567@ims.example.com>\r\n" +
+					"Contact: " + testSIPHeader(request, "Contact") + "\r\n"
 			}
 			if strings.HasPrefix(request, "INVITE ") {
 				body = fmt.Sprintf("v=0\r\no=- 2 2 IN IP4 127.0.0.1\r\ns=ims\r\nc=IN IP4 127.0.0.1\r\nt=0 0\r\nm=audio %d RTP/AVP 0 101\r\na=rtpmap:101 telephone-event/8000\r\na=fmtp:101 0-16\r\n", mediaPort)
