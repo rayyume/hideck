@@ -366,6 +366,11 @@ func updateRegisterAttemptAuth(result *registerAttemptResult, session *registerS
 func (s *Service) commitRegisterSuccess(resp *sipResponse, session *registerSession) (time.Duration, error) {
 	expires, err := registrationExpires(resp, session.requestContact, s.cfg.Expires)
 	if err != nil {
+		if errors.Is(err, errRegisterContactMissing) {
+			logging.Info("IMS REGISTER response Contact mismatch",
+				"device", s.DeviceID(), "requested", redactContactUser(session.requestContact),
+				"response", redactedResponseContacts(resp), "response_headers", sipHeaderNames(resp))
+		}
 		return 0, err
 	}
 	s.finalizeRegistrationTransportSwitch()

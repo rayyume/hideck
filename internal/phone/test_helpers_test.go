@@ -21,6 +21,7 @@ type fakeVoiceGateway struct {
 	beginStarted    chan struct{}
 	beginRelease    chan struct{}
 	answerSDP       string
+	answerCalls     chan voicehost.AnswerRequest
 	rejectEmits     bool
 	hangupCalls     chan string
 	dtmfCalls       chan string
@@ -38,6 +39,7 @@ func newFakeVoiceGateway() *fakeVoiceGateway {
 		beginSnapshot: voicehost.CallSnapshot{CallID: "outbound-1", DeviceID: "dev-1"},
 		hangupCalls:   make(chan string, 8), dtmfCalls: make(chan string, 8),
 		holdCalls:       make(chan string, 8),
+		answerCalls:     make(chan voicehost.AnswerRequest, 8),
 		rejectCalls:     make(chan voicehost.RejectRequest, 8),
 		activeSnapshots: make(map[string]voicehost.CallSnapshot),
 	}
@@ -93,6 +95,7 @@ func (g *fakeVoiceGateway) ActiveCall(deviceID string) *voicehost.CallSnapshot {
 }
 
 func (g *fakeVoiceGateway) AnswerIncomingCall(_ context.Context, request voicehost.AnswerRequest) (voicehost.AnswerResult, error) {
+	g.answerCalls <- request
 	return voicehost.AnswerResult{CallID: request.CallID, State: "Connected", OfferSDP: g.answerSDP}, nil
 }
 

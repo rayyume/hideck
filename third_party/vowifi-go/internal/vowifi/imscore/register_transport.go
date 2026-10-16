@@ -306,9 +306,11 @@ func (s *Service) handleProtectedServerPushClosed() {
 	s.portSReconnectWaiting.Store(true)
 	s.protectedConnMu.Unlock()
 	if s.canAwaitOnDemandPortS() {
-		logging.Info("IMS protected server push closed cleanly; await peer port-s reconnect",
+		logging.Info("IMS protected server push closed; await peer port-s reconnect",
 			"device", s.DeviceID(), "since_last_read", s.portSSinceLastRead(),
-			"reason", "peer previously reopened port-s without a successful REGISTER")
+			"close_kind", s.capturePortSSession().lastCloseKind,
+			"peer_reconnect_observed", s.portSOnDemandObserved.Load(),
+			"carrier_preset", strings.TrimSpace(s.cfg.CarrierPresetID))
 		return
 	}
 	now := time.Now()
@@ -402,7 +404,7 @@ func (s *Service) portSReconnectWatchFired(generation uint64, registrar string) 
 	}
 	s.protectedConnMu.Lock()
 	remaining := len(s.protectedConns)
-	if remaining > 0 || s.canAwaitOnDemandPortS() || s.portSTimeoutDownlinkProven() {
+	if remaining > 0 || s.awaitPortSAfterRegister() || s.portSTimeoutDownlinkProven() {
 		s.protectedConnMu.Unlock()
 		return
 	}
@@ -427,10 +429,50 @@ func (s *Service) portSReconnectWatchFired(generation uint64, registrar string) 
 
 // A historical peer reconnect is a compatibility hint for clean EOF, not a
 // guarantee that a reset or timed-out downlink can recover without REGISTER.
+// One NZ resets idle port-s flows and reopens them after the next periodic REGISTER.
+// Globe PH closes port-s minutes after REGISTER and reopens it to deliver.
 func (s *Service) canAwaitOnDemandPortS() bool {
-	return s != nil && s.portSOnDemandObserved.Load() &&
-		s.capturePortSSession().lastCloseKind == portSCloseEOF
+	if s == nil {
+		return false
+	}
+	preset := ""
+	if s.cfg != nil {
+		preset = strings.TrimSpace(s.cfg.CarrierPresetID)
+	}
+	observed := s.portSOnDemandObserved.Load()
+	session := s.capturePortSSession()
+	switch session.lastCloseKind {
+	case portSCloseEOF:
+		return observed || preset == globePHCarrierPresetID
+	case portSClosePeerReset:
+		return preset == oneNZCarrierPresetID && portSIdleBeforeClose(session) >= oneNZPortSIdleReset
+	}
+	return false
 }
+
+// A carrier preset only skips the immediate REGISTER. Port-s still missing
+// after a successful REGISTER backs off like any other carrier.
+func (s *Service) awaitPortSAfterRegister() bool {
+	if s.portSRecoveryAwaitingFlow.Load() && !s.portSOnDemandObserved.Load() {
+		return false
+	}
+	return s.canAwaitOnDemandPortS()
+}
+
+func portSIdleBeforeClose(session portSSessionSnapshot) time.Duration {
+	last := session.openedAt
+	if session.lastInboundAt.After(last) {
+		last = session.lastInboundAt
+	}
+	return session.closedAt.Sub(last)
+}
+
+const (
+	oneNZCarrierPresetID   = "one_nz_53001"
+	globePHCarrierPresetID = "globe_ph_51502"
+	// One NZ resets port-s after about 19 minutes without inbound traffic.
+	oneNZPortSIdleReset = 15 * time.Minute
+)
 
 func (s *Service) consumePortSReconnectWatch(generation uint64, registrar string) bool {
 	if s == nil {
@@ -544,6 +586,7 @@ func (s *Service) resetPortSRecoveryKnowledge() {
 	s.mu.Lock()
 	s.downlinkGeneration++
 	s.downlinkRequests = 0
+	s.smsReception = smsReceptionEvidence{}
 	s.udpDownlinkProven.Store(false)
 	s.cancelReplacementDownlinkWatchLocked()
 	s.mu.Unlock()
@@ -663,6 +706,7 @@ func (s *Service) clearClosedRegistrationTCP(conn net.Conn, readErr error) {
 			s.abandonReplacementDownlinkWaitLocked()
 		}
 		s.registrationTCP = nil
+		s.invalidateSMSReceptionLocked()
 		s.registrationTCPProtected = false
 		if !stopped {
 			s.regState = regFailed

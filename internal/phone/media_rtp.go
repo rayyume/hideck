@@ -114,6 +114,10 @@ func (s *MediaSession) writeBrowserRTP(packet *rtp.Packet) {
 	}
 	packet.Payload = payload
 	s.recordMixedFrame(mixFromIMS, payload)
+	if s.track == nil {
+		s.fromIMS.Add(1)
+		return
+	}
 	packet.PayloadType = pcmPayloadType
 	packet.Timestamp = scaleTimestamp(packet.Timestamp, endpoint.ClockRate, browserClockRate)
 	if err := s.track.WriteRTP(packet); err == nil {

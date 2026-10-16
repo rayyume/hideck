@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/yibaiba/hideck/internal/config"
+	"github.com/yibaiba/hideck/internal/phone"
 	"github.com/yibaiba/hideck/pkg/logger"
 )
 
@@ -20,6 +21,11 @@ type captureChannel struct {
 	mu    sync.Mutex
 	msgs  []string
 	calls []NotificationContext
+}
+
+type attachmentCaptureChannel struct {
+	captureChannel
+	attachments []CommandAttachment
 }
 
 type blockingChannel struct {
@@ -111,6 +117,18 @@ func (c *captureChannel) SendWithContext(ctx NotificationContext) error {
 func (c *captureChannel) RegisterCommand(_ string, _ CommandHandler) {}
 func (c *captureChannel) Start() error                               { return nil }
 func (c *captureChannel) Close() error                               { return nil }
+
+func (c *attachmentCaptureChannel) SendNotificationWithAttachments(
+	ctx NotificationContext,
+	attachments []CommandAttachment,
+) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.calls = append(c.calls, ctx)
+	c.msgs = append(c.msgs, ctx.Text)
+	c.attachments = append(c.attachments, attachments...)
+	return nil
+}
 
 func (c *captureChannel) Last() string {
 	c.mu.Lock()
@@ -310,7 +328,13 @@ func TestManagerUpdateConfigFailureKeepsCurrentChannels(t *testing.T) {
 func TestManagerRevokeChannelRetiresOnlyMatchingChannel(t *testing.T) {
 	telegram := &namedLifecycleChannel{name: "telegram", closed: make(chan struct{})}
 	other := &namedLifecycleChannel{name: "other", closed: make(chan struct{})}
-	manager := &Manager{channels: []Channel{telegram, other}}
+	manager := &Manager{
+		channels: []Channel{telegram, other},
+		deviceFilters: map[Channel]map[string]bool{
+			telegram: {"wwan0": true},
+			other:    {"wwan1": true},
+		},
+	}
 
 	if !manager.RevokeChannel("telegram") {
 		t.Fatal("RevokeChannel() = false, want true")
@@ -327,6 +351,12 @@ func TestManagerRevokeChannelRetiresOnlyMatchingChannel(t *testing.T) {
 	}
 	if names := manager.GetChannelNames(); len(names) != 1 || names[0] != "other" {
 		t.Fatalf("GetChannelNames() = %v", names)
+	}
+	if _, exists := manager.deviceFilters[telegram]; exists {
+		t.Fatal("revoked channel retained its device filter")
+	}
+	if _, exists := manager.deviceFilters[other]; !exists {
+		t.Fatal("unrelated channel lost its device filter")
 	}
 	manager.Close()
 }
@@ -497,6 +527,31 @@ func TestManagerNotifyCallResultIsSeparateFromIncomingCall(t *testing.T) {
 	}
 }
 
+func TestManagerNotifyAutoAnswerRecordingUsesAttachmentChannel(t *testing.T) {
+	capture := &attachmentCaptureChannel{}
+	m := &Manager{channels: []Channel{capture}}
+	at := time.Date(2026, 10, 15, 10, 0, 0, 0, time.UTC)
+	m.NotifyAutoAnswerRecording(phone.AutoAnswerRecordingNotification{
+		DeviceID: "wwan0", Peer: "+447700900123", RecordingPath: "/recordings/call.mp3",
+		RecordingName: "call.mp3", At: at,
+	})
+
+	waitUntil(t, time.Second, func() bool {
+		capture.mu.Lock()
+		defer capture.mu.Unlock()
+		return len(capture.attachments) == 1
+	})
+	capture.mu.Lock()
+	defer capture.mu.Unlock()
+	if capture.calls[0].Event != "call_recording" || capture.calls[0].Timestamp != at {
+		t.Fatalf("context = %+v", capture.calls[0])
+	}
+	attachment := capture.attachments[0]
+	if attachment.Path != "/recordings/call.mp3" || attachment.Codec != "MP3" || attachment.Recording != "call.mp3" {
+		t.Fatalf("attachment = %+v", attachment)
+	}
+}
+
 func TestFormatCallResultMessageUsesIncomingCallStyle(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -565,7 +620,7 @@ func TestFormatCallResultMessageUsesIncomingCallStyle(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := formatCallResultMessage(callResultMessage{
-				DeviceID: tt.deviceID, Peer: tt.peer, Direction: tt.direction,
+				Device: tt.deviceID, Peer: tt.peer, Direction: tt.direction,
 				Status: tt.status, Reason: tt.reason,
 			}, "")
 			if got != tt.want {

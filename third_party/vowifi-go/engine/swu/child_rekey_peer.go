@@ -3,6 +3,7 @@ package swu
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 
 	enginecrypto "github.com/iniwex5/vowifi-go/engine/crypto"
 	"github.com/iniwex5/vowifi-go/engine/ikev2"
@@ -155,10 +156,10 @@ func (s *Session) handlePeerInformational(packet *ikev2.IKEPacket) error {
 	header := packetIKEHeader(packet)
 	context, retiredIKE, err := s.ikeContextForHeader(header)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %w", errUnauthenticatedIKE, err)
 	}
 	if err := validateIKEContextRole(context, header); err != nil {
-		return err
+		return fmt.Errorf("%w: %w", errUnauthenticatedIKE, err)
 	}
 	payloads, err := s.decryptAndParseWithKeys(packet, context.keys)
 	if err != nil {

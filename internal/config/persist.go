@@ -64,13 +64,14 @@ func UpdateNotificationInFile(path string, notifications NotificationConfigs) er
 	}
 
 	root["webhook"] = map[string]any{
-		"enabled":       notifications.Webhook.Enabled,
-		"urls":          notifications.Webhook.URLs,
-		"secret":        notifications.Webhook.Secret,
-		"timeout_ms":    notifications.Webhook.TimeoutMs,
-		"retry_max":     notifications.Webhook.RetryMax,
-		"text_template": notifications.Webhook.TextTemplate,
-		"headers":       notifications.Webhook.Headers,
+		"enabled":          notifications.Webhook.Enabled,
+		"urls":             notifications.Webhook.URLs,
+		"secret":           notifications.Webhook.Secret,
+		"timeout_ms":       notifications.Webhook.TimeoutMs,
+		"retry_max":        notifications.Webhook.RetryMax,
+		"text_template":    notifications.Webhook.TextTemplate,
+		"payload_template": notifications.Webhook.PayloadTemplate,
+		"headers":          notifications.Webhook.Headers,
 	}
 
 	root["bark"] = map[string]any{
@@ -102,6 +103,18 @@ func UpdateNotificationInFile(path string, notifications NotificationConfigs) er
 		"enabled":          notifications.WeCom.Enabled,
 		"urls":             notifications.WeCom.URLs,
 		"payload_template": notifications.WeCom.PayloadTemplate,
+	}
+
+	filters := make(map[string]any)
+	for channel, devices := range notifications.DeviceFilters {
+		if len(devices) > 0 {
+			filters[channel] = devices
+		}
+	}
+	if len(filters) == 0 {
+		delete(root, "notification_device_filters")
+	} else {
+		root["notification_device_filters"] = filters
 	}
 
 	out, err := yaml.Marshal(root)

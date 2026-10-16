@@ -17,9 +17,7 @@ func (s *Session) RekeyIKESA() error {
 	if s.ikeRekeyInCooldown() {
 		return nil
 	}
-	if s.hasRetiredIKESA() {
-		return errors.New("swu: previous IKE SA is awaiting Delete")
-	}
+	s.dropStaleRetiredIKESA()
 	if err := s.performIKESARekey(s.ctx); err != nil {
 		return err
 	}

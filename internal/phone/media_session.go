@@ -7,7 +7,9 @@ import (
 	"net"
 	"sync"
 	"sync/atomic"
+	"time"
 
+	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4"
 	"github.com/yibaiba/hideck/pkg/logger"
 )
@@ -75,6 +77,20 @@ func newMediaSession(ctx context.Context, options mediaSessionOptions) (*MediaSe
 	}
 	go session.forwardIMSRTP()
 	return session, answer, nil
+}
+
+func newHeadlessMediaSession(options mediaSessionOptions) (*MediaSession, error) {
+	connection, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+	if err != nil {
+		return nil, fmt.Errorf("phone: listen auto-answer RTP bridge: %w", err)
+	}
+	session := &MediaSession{
+		ID: options.ID, Owner: options.Owner, rtpConn: connection,
+		realtimeCodecs:   append([]string(nil), options.RealtimeCodecs...),
+		newRealtimeCodec: options.NewRealtimeCodec, closed: make(chan struct{}),
+	}
+	go session.forwardIMSRTP()
+	return session, nil
 }
 
 func (s *MediaSession) negotiate(ctx context.Context, offer string) (string, error) {
@@ -205,9 +221,85 @@ func (s *MediaSession) Close() error {
 		if codec != nil {
 			result = errors.Join(result, codec.Close())
 		}
-		result = errors.Join(result, s.peer.Close(), s.rtpConn.Close())
+		if s.peer != nil {
+			result = errors.Join(result, s.peer.Close())
+		}
+		if s.rtpConn != nil {
+			result = errors.Join(result, s.rtpConn.Close())
+		}
 	})
 	return result
+}
+
+func (s *MediaSession) StartPrompt(pcm []int16, sampleRate int, onError func(error)) {
+	copyPCM := append([]int16(nil), pcm...)
+	s.mu.Lock()
+	if s.silentStarted || sessionClosed(s.closed) {
+		s.mu.Unlock()
+		return
+	}
+	s.silentStarted = true
+	s.silentWorker.Add(1)
+	s.mu.Unlock()
+	go func() {
+		defer s.silentWorker.Done()
+		if err := s.forwardPromptThenSilence(copyPCM, sampleRate); err != nil && onError != nil {
+			onError(err)
+		}
+	}()
+}
+
+func (s *MediaSession) forwardPromptThenSilence(pcm []int16, sampleRate int) error {
+	pcm, err := resamplePCM(pcm, sampleRate, browserClockRate)
+	if err != nil {
+		return err
+	}
+	ticker := time.NewTicker(jitterTick)
+	defer ticker.Stop()
+	sequence := uint16(1)
+	// Attach primes sequence 1 at one frame. Continue from that RTP position.
+	timestamp := uint32(browserSamplesPerFrame)
+	for offset := 0; ; offset += browserSamplesPerFrame {
+		select {
+		case <-s.closed:
+			return nil
+		case <-ticker.C:
+		}
+		frame := make([]int16, browserSamplesPerFrame)
+		if offset < len(pcm) {
+			copy(frame, pcm[offset:min(offset+browserSamplesPerFrame, len(pcm))])
+		}
+		sequence++
+		timestamp += browserSamplesPerFrame
+		if err := s.writePromptRTP(sequence, timestamp, encodePCMU(frame)); err != nil {
+			return err
+		}
+	}
+}
+
+func (s *MediaSession) writePromptRTP(sequence uint16, browserTimestamp uint32, payload []byte) error {
+	endpoint, codec, ok := s.endpoint()
+	if !ok {
+		return errors.New("phone: auto-answer media is not attached")
+	}
+	s.recordMixedFrame(mixToIMS, payload)
+	encoded, err := browserPayloadForIMS(payload, endpoint, codec)
+	if err != nil {
+		return err
+	}
+	packet := &rtp.Packet{Header: rtp.Header{
+		Version: 2, PayloadType: endpoint.PayloadType, SequenceNumber: sequence,
+		Timestamp: scaleTimestamp(browserTimestamp, browserClockRate, endpoint.ClockRate), SSRC: 0x48494445,
+	}, Payload: encoded}
+	raw, err := packet.Marshal()
+	if err != nil {
+		return err
+	}
+	_, err = s.rtpConn.WriteToUDP(raw, endpoint.Address)
+	if err == nil {
+		s.toIMS.Add(1)
+	}
+	return err
 }
 
 func (s *MediaSession) startSilentRTP() {

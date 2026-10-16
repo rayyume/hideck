@@ -51,6 +51,7 @@
 ## Spark NZ（530/05）
 
 - 预设在首次 IKE_AUTH 中不主动发送设备身份；如果网侧明确请求，则在网络认证通过后回复可用的 IMEI。已建立的 IKE SA 上也支持 INFORMATIONAL 设备身份请求。
+- 现在所有运营商默认都不主动发送。确实要求主动发送的运营商，在预设或 `config/carrier_overrides.yaml` 里把 `withhold_device_identity` 设为 `false`。
 - 预设在 CHILD_SA rekey 收到 `NO_ADDITIONAL_SAS` 时保留当前 CHILD_SA。这是 Spark 兼容策略，不是所有运营商的默认行为。
 - 两个开关均可通过 `config/carrier_overrides.yaml` 显式关闭；不填写则继承预设。修改后需重启服务并重新建立会话。例如：
 

@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yibaiba/hideck/internal/modem"
-	"github.com/yibaiba/hideck/pkg/logger"
 	"github.com/iniwex5/vowifi-go/runtimehost"
 	"github.com/iniwex5/vowifi-go/runtimehost/identity"
+	"github.com/yibaiba/hideck/internal/modem"
+	"github.com/yibaiba/hideck/pkg/logger"
 )
 
 func (p *Pool) buildVoWiFiStartProfile(worker *Worker, traceID string) (identity.Profile, error) {
@@ -20,20 +20,16 @@ func (p *Pool) buildVoWiFiStartProfile(worker *Worker, traceID string) (identity
 		return identity.Profile{}, fmt.Errorf("backend_not_available")
 	}
 
-	reader, ok := worker.Backend.(liveSIMIdentityReader)
-	if !ok {
-		return identity.Profile{}, fmt.Errorf("live_identity_not_supported")
-	}
-
 	liveCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	imsi, err := reader.GetIMSILive(liveCtx)
+	owner, releaseOwnership, err := p.lockVoWiFiStartOwnership(worker)
 	if err != nil {
-		return identity.Profile{}, fmt.Errorf("实时读取 IMSI 失败: %w", err)
+		return identity.Profile{}, err
 	}
-	imsi = strings.TrimSpace(imsi)
-	if imsi == "" {
-		return identity.Profile{}, fmt.Errorf("实时 IMSI 为空")
+	defer releaseOwnership()
+	iccid, imsi, err := readVoWiFiStartIdentity(liveCtx, worker)
+	if err != nil {
+		return identity.Profile{}, err
 	}
 
 	status := worker.ProjectDeviceStatus()
@@ -43,9 +39,11 @@ func (p *Pool) buildVoWiFiStartProfile(worker *Worker, traceID string) (identity
 	}
 
 	imei := strings.TrimSpace(status.IMEI)
-	iccid := strings.TrimSpace(status.ICCID)
 
 	smsc := p.resolveVoWiFiSMSC(worker, imsi, iccid, traceID)
+	if err := p.validatePolicyOwner(owner, p.policyTransitionFor(worker.ID)); err != nil {
+		return identity.Profile{}, fmt.Errorf("VoWiFi 启动期间设备或 SIM 已更换: %w", err)
+	}
 
 	logger.Info("VoWiFi 启动画像将基于实时 IMSI 构建",
 		"trace_id", traceID,
@@ -60,7 +58,59 @@ func (p *Pool) buildVoWiFiStartProfile(worker *Worker, traceID string) (identity
 		"mnc", mnc,
 		"imei", imei)
 
-	return buildVoWiFiRawProfile(imsi, mcc, mnc, imei, smsc), nil
+	return buildVoWiFiRawProfile(identity.Profile{
+		ICCID: iccid, IMSI: imsi, MCC: mcc, MNC: mnc, IMEI: imei, SMSC: smsc,
+	}), nil
+}
+
+func (p *Pool) lockVoWiFiStartOwnership(worker *Worker) (policyOwner, func(), error) {
+	transition := p.policyTransitionFor(worker.ID)
+	transition.Lock()
+	if p.GetWorker(worker.ID) != worker {
+		transition.Unlock()
+		return policyOwner{}, nil, fmt.Errorf("VoWiFi 启动设备已被移除或替换")
+	}
+	owner := capturePolicyOwner(worker, transition)
+	if err := p.validatePolicyOwner(owner, transition); err != nil {
+		transition.Unlock()
+		return policyOwner{}, nil, fmt.Errorf("VoWiFi 启动设备或 SIM 状态已失效: %w", err)
+	}
+	return owner, transition.Unlock, nil
+}
+
+func readVoWiFiStartIdentity(ctx context.Context, worker *Worker) (string, string, error) {
+	if reader, ok := worker.Backend.(liveSIMIdentitySnapshotReader); ok {
+		snapshot, err := reader.ReadSIMIdentityLive(ctx)
+		if err != nil {
+			return "", "", fmt.Errorf("实时读取 SIM 身份快照失败: %w", err)
+		}
+		return validateVoWiFiStartIdentity(snapshot.ICCID, snapshot.IMSI)
+	}
+	reader, ok := worker.Backend.(liveSIMIdentityReader)
+	if !ok {
+		return "", "", fmt.Errorf("live_identity_not_supported")
+	}
+	imsi, err := reader.GetIMSILive(ctx)
+	if err != nil {
+		return "", "", fmt.Errorf("实时读取 IMSI 失败: %w", err)
+	}
+	iccid, err := reader.GetICCIDLive(ctx)
+	if err != nil {
+		return "", "", fmt.Errorf("实时读取 ICCID 失败: %w", err)
+	}
+	return validateVoWiFiStartIdentity(iccid, imsi)
+}
+
+func validateVoWiFiStartIdentity(iccid, imsi string) (string, string, error) {
+	imsi = strings.TrimSpace(imsi)
+	if imsi == "" {
+		return "", "", fmt.Errorf("实时 IMSI 为空")
+	}
+	iccid = strings.TrimSpace(iccid)
+	if iccid == "" {
+		return "", "", fmt.Errorf("实时 ICCID 为空")
+	}
+	return iccid, imsi, nil
 }
 
 func (p *Pool) resolveVoWiFiSMSC(worker *Worker, imsi, iccid, traceID string) string {
@@ -110,13 +160,16 @@ func (p *Pool) resolveVoWiFiSMSC(worker *Worker, imsi, iccid, traceID string) st
 	return ""
 }
 
-func buildVoWiFiRawProfile(imsi, mcc, mnc, imei, smsc string) identity.Profile {
+func buildVoWiFiRawProfile(profile identity.Profile) identity.Profile {
 	return identity.Profile{
-		IMSI: strings.TrimSpace(imsi),
-		MCC:  strings.TrimSpace(mcc),
-		MNC:  strings.TrimSpace(mnc),
-		IMEI: strings.TrimSpace(imei),
-		SMSC: strings.TrimSpace(smsc),
+		ICCID:     strings.TrimSpace(profile.ICCID),
+		IMSI:      strings.TrimSpace(profile.IMSI),
+		MCC:       strings.TrimSpace(profile.MCC),
+		MNC:       strings.TrimSpace(profile.MNC),
+		IMEI:      strings.TrimSpace(profile.IMEI),
+		UserAgent: strings.TrimSpace(profile.UserAgent),
+		SMSC:      strings.TrimSpace(profile.SMSC),
+		IMSDomain: strings.TrimSpace(profile.IMSDomain),
 	}
 }
 

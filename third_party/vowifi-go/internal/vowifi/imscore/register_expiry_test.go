@@ -78,6 +78,10 @@ func TestRegisterContactURIMatching(t *testing.T) {
 		{"extra extension", own, "<sip:current@ims.example:5060;transport=tcp;extension=1>", true},
 		{"URI headers", own, "<sip:current@ims.example:5060;transport=tcp?subject=test>", false},
 		{"IPv6", "<sip:current@[2001:db8::1]:5060;transport=tcp>", "<sip:current@[2001:DB8::1]:5060;transport=tcp>", true},
+		// RFC 5954 4.1: Globe PH answers with the expanded upper-case form.
+		{"IPv6 expanded", "<sip:current@[2001:db8:1:2:3:0:4:5]:5060;transport=tcp>",
+			"<sip:current@[2001:0DB8:0001:0002:0003:0000:0004:0005]:5060;transport=tcp>", true},
+		{"IPv6 different address", "<sip:current@[2001:db8::1]:5060;transport=tcp>", "<sip:current@[2001:db8::2]:5060;transport=tcp>", false},
 		{"unbracketed", "sip:current@ims.example", "sip:current@ims.example", true},
 	}
 	for _, test := range tests {

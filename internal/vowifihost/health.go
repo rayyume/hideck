@@ -135,8 +135,20 @@ func (s *wifiCallingHealthStore) Observe(deviceID string, state runtimehost.Stat
 	}
 	session.lastObservedAt = at
 	if session.startedAt.IsZero() {
+		if session.currentState == "pending" && healthState(state) == "unavailable" {
+			session.start(at, "unavailable", healthReason(state))
+			return
+		}
+		if state.SMSRXPending && state.IMSReady {
+			session.currentState = "pending"
+			session.currentReason = healthReason(state)
+			return
+		}
 		if !wifiCallingMeasurable(state) {
 			session.currentState = "checking"
+			if healthState(state) == "unavailable" {
+				session.currentState = "unavailable"
+			}
 			session.currentReason = healthReason(state)
 			return
 		}
@@ -388,10 +400,9 @@ func wifiCallingMeasurable(state runtimehost.State) bool {
 }
 
 func wifiCallingHealthy(state runtimehost.State) bool {
-	// IMS registration proves the VoWiFi service path is operational. A missing
-	// SMS receiver only degrades inbound SMS; it must not turn the whole calling
-	// service into a recovery state.
-	return state.IMSReady || state.SMSHealthReady
+	// Keep ordinary SMS receiver degradation from interrupting calling health,
+	// but honor explicit pending reception evidence after a known outage.
+	return state.SMSHealthReady || (state.IMSReady && !state.SMSRXPending)
 }
 
 func healthStartReason(state runtimehost.State) string {

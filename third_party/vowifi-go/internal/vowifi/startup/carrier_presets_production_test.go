@@ -50,7 +50,7 @@ var originalCarrierStartupExpectations = []carrierStartupExpectation{
 	{name: "Spark NZ", mcc: "530", mnc: "05", normalizedMNC: "005", imsi: "530050000000001", presetID: "spark_nz_53005", epdg: "epdg.epc.mnc005.mcc530.pub.3gppnetwork.spark.co.nz", epdgSource: "preset", espFirst: "aes256-sha256", templateID: "spark_nz_53005_ios", akaMode: "minimal", dpdSeconds: 120},
 	{name: "2degrees NZ", mcc: "530", mnc: "24", normalizedMNC: "024", imsi: "530240000000001", presetID: "2degrees_nz_53024", epdg: "epdg.ims.2degrees.net.nz", epdgSource: "preset", espFirst: "aes256-sha512", templateID: "2degrees_nz_53024_ios", akaMode: "minimal", dpdSeconds: 120},
 	{name: "Hotlink MY", mcc: "502", mnc: "12", normalizedMNC: "012", imsi: "502120000000001", presetID: "hotlink_my_50212", epdg: "epdg.epc.mnc012.mcc502.pub.3gppnetwork.org", epdgSource: "standard", espFirst: "aes256-sha256", templateID: "hotlink_my_50212", akaMode: "minimal", dpdSeconds: 120},
-	{name: "Globe PH", mcc: "515", mnc: "02", normalizedMNC: "002", imsi: "515020000000001", presetID: "globe_ph_51502", epdg: "epdg.epc.mnc002.mcc515.pub.3gppnetwork.org", epdgSource: "standard", espFirst: "aes256-sha256", templateID: "globe_ph_51502", akaMode: "minimal", dpdSeconds: 120},
+	{name: "Globe PH", mcc: "515", mnc: "02", normalizedMNC: "002", imsi: "515020000000001", presetID: "globe_ph_51502", epdg: "weconnect.globe.com.ph", epdgSource: "preset", espFirst: "aes256-sha256", templateID: "globe_ph_51502", akaMode: "minimal", dpdSeconds: 120},
 	{name: "Smart PH", mcc: "515", mnc: "03", normalizedMNC: "003", imsi: "515030000000001", presetID: "smart_ph_51503", epdg: "epdg.epc.mnc003.mcc515.pub.3gppnetwork.org", epdgSource: "standard", espFirst: "aes256-sha256", templateID: "smart_ph_51503", akaMode: "minimal", dpdSeconds: 120},
 	{name: "DITO PH", mcc: "515", mnc: "66", normalizedMNC: "066", imsi: "515660000000001", presetID: "dito_51566", epdg: "epdg.epc.mnc066.mcc515.pub.3gppnetwork.org", epdgSource: "standard", espFirst: "aes256-sha256", templateID: "dito_51566", akaMode: "minimal", dpdSeconds: 120},
 	{name: "AIS TH 01", mcc: "520", mnc: "01", normalizedMNC: "001", imsi: "520010000000001", presetID: "ais_th_52001", epdg: "epdg.epc.mnc001.mcc520.pub.3gppnetwork.org", epdgSource: "standard", espFirst: "aes256-sha256", templateID: "ais_th_52001", akaMode: "checkcode", dpdSeconds: 120},
@@ -97,7 +97,7 @@ func assertOriginalCarrierProjection(
 	}
 	if plan.IKE.DPDIntervalSeconds != want.dpdSeconds || plan.IKE.ReauthIntervalSeconds != want.reauthSeconds ||
 		plan.IKE.AKAChallengeMode != want.akaMode || len(plan.IKE.ESPProposals) == 0 ||
-		plan.IKE.ESPProposals[0] != want.espFirst {
+		plan.IKE.ESPProposals[0] != want.espFirst || !plan.Device.Withhold {
 		t.Fatalf("IKE projection = %+v", plan.IKE)
 	}
 	if plan.IMS.RegisterTemplate.ID != want.templateID || plan.E911.Provider != want.e911Provider {

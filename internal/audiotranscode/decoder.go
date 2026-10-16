@@ -10,6 +10,17 @@ import (
 	"strings"
 )
 
+// DecodePCM decodes a supported recording into mono PCM samples.
+func (t *Transcoder) DecodePCM(ctx context.Context, inputPath string) ([]int16, int, error) {
+	if t == nil {
+		return nil, 0, errors.New("audio transcoder is unavailable")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return t.decodeInput(ctx, strings.TrimSpace(inputPath))
+}
+
 func (t *Transcoder) decodeInput(ctx context.Context, inputPath string) ([]int16, int, error) {
 	data, err := os.ReadFile(inputPath)
 	if err != nil {

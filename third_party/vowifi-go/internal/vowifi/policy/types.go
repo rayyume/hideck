@@ -173,7 +173,7 @@ type CarrierPreset struct {
 	IKEIdentityMode, AKAIdentityMode string
 	DeviceIdentityIMEI               string
 	DeviceIdentityEnabled            *bool
-	WithholdDeviceIdentity           bool
+	WithholdDeviceIdentity           *bool
 	NATKeepaliveSeconds              *int
 	DPDIntervalSeconds               *int
 	EnableLegacyCiphers              *bool

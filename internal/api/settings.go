@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/yibaiba/hideck/internal/config"
+	"github.com/yibaiba/hideck/internal/notify"
 	"github.com/yibaiba/hideck/pkg/logger"
 
 	"github.com/gin-gonic/gin"
@@ -37,13 +38,14 @@ type notificationSettingsResponse struct {
 		DirectIDs string `json:"direct_ids"`
 	} `json:"qq"`
 	Webhook struct {
-		Enabled      bool              `json:"enabled"`
-		URLs         []string          `json:"urls"`
-		Secret       string            `json:"secret"`
-		TimeoutMs    int               `json:"timeout_ms"`
-		RetryMax     int               `json:"retry_max"`
-		TextTemplate string            `json:"text_template"`
-		Headers      map[string]string `json:"headers,omitempty"`
+		Enabled         bool              `json:"enabled"`
+		URLs            []string          `json:"urls"`
+		Secret          string            `json:"secret"`
+		TimeoutMs       int               `json:"timeout_ms"`
+		RetryMax        int               `json:"retry_max"`
+		TextTemplate    string            `json:"text_template"`
+		PayloadTemplate string            `json:"payload_template"`
+		Headers         map[string]string `json:"headers,omitempty"`
 	} `json:"webhook"`
 	Weixin weixinNotificationSettings `json:"weixin"`
 	Bark   struct {
@@ -71,6 +73,8 @@ type notificationSettingsResponse struct {
 	} `json:"pushplus"`
 	WeCom    weComNotificationSettings    `json:"wecom"`
 	WeComBot weComBotNotificationSettings `json:"wecom_bot"`
+	// DeviceFilters is optional: when absent the stored filters are kept.
+	DeviceFilters map[string][]string `json:"device_filters"`
 }
 
 type updateNotificationSettingsRequest struct {
@@ -97,13 +101,14 @@ type updateNotificationSettingsRequest struct {
 		DirectIDs string `json:"direct_ids"`
 	} `json:"qq"`
 	Webhook struct {
-		Enabled      bool              `json:"enabled"`
-		URLs         []string          `json:"urls"`
-		Secret       string            `json:"secret"`
-		TimeoutMs    int               `json:"timeout_ms"`
-		RetryMax     int               `json:"retry_max"`
-		TextTemplate string            `json:"text_template"`
-		Headers      map[string]string `json:"headers,omitempty"`
+		Enabled         bool              `json:"enabled"`
+		URLs            []string          `json:"urls"`
+		Secret          string            `json:"secret"`
+		TimeoutMs       int               `json:"timeout_ms"`
+		RetryMax        int               `json:"retry_max"`
+		TextTemplate    string            `json:"text_template"`
+		PayloadTemplate string            `json:"payload_template"`
+		Headers         map[string]string `json:"headers,omitempty"`
 	} `json:"webhook"`
 
 	Bark struct {
@@ -132,6 +137,9 @@ type updateNotificationSettingsRequest struct {
 	WeCom    *weComNotificationSettings    `json:"wecom"`
 	WeComBot *weComBotNotificationSettings `json:"wecom_bot"`
 	Weixin   *weixinNotificationSettings   `json:"weixin"`
+	// DeviceFilters maps a channel name to the devices whose SMS and calls it
+	// receives. A missing or empty entry means every device.
+	DeviceFilters map[string][]string `json:"device_filters"`
 }
 
 func (s *Server) handleGetNotificationSettings(c *gin.Context) {
@@ -167,12 +175,18 @@ func (s *Server) handleGetNotificationSettings(c *gin.Context) {
 	resp.QQ.DirectIDs = s.fullCfg.QQ.DirectIDs
 	resp.Weixin = s.weixinSettingsForResponse()
 
+	resp.DeviceFilters = s.fullCfg.NotificationDeviceFilters
+	if resp.DeviceFilters == nil {
+		resp.DeviceFilters = map[string][]string{}
+	}
+
 	resp.Webhook.Enabled = s.fullCfg.Webhook.Enabled
 	resp.Webhook.URLs = s.fullCfg.Webhook.URLs
 	resp.Webhook.Secret = s.fullCfg.Webhook.Secret
 	resp.Webhook.TimeoutMs = s.fullCfg.Webhook.TimeoutMs
 	resp.Webhook.RetryMax = s.fullCfg.Webhook.RetryMax
 	resp.Webhook.TextTemplate = s.fullCfg.Webhook.TextTemplate
+	resp.Webhook.PayloadTemplate = s.fullCfg.Webhook.PayloadTemplate
 	resp.Webhook.Headers = s.fullCfg.Webhook.Headers
 	resp.Bark.Enabled = s.fullCfg.Bark.Enabled
 	resp.Bark.URLs = s.fullCfg.Bark.URLs
@@ -280,13 +294,18 @@ func (s *Server) handleUpdateNotificationSettings(c *gin.Context) {
 	}
 
 	wh := config.WebhookConfig{
-		Enabled:      req.Webhook.Enabled,
-		URLs:         whURLs,
-		Secret:       strings.TrimSpace(req.Webhook.Secret),
-		TimeoutMs:    req.Webhook.TimeoutMs,
-		RetryMax:     req.Webhook.RetryMax,
-		TextTemplate: req.Webhook.TextTemplate,
-		Headers:      req.Webhook.Headers,
+		Enabled:         req.Webhook.Enabled,
+		URLs:            whURLs,
+		Secret:          strings.TrimSpace(req.Webhook.Secret),
+		TimeoutMs:       req.Webhook.TimeoutMs,
+		RetryMax:        req.Webhook.RetryMax,
+		TextTemplate:    req.Webhook.TextTemplate,
+		PayloadTemplate: req.Webhook.PayloadTemplate,
+		Headers:         req.Webhook.Headers,
+	}
+	if err := notify.ValidateWebhookPayloadTemplate(wh.PayloadTemplate); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": err.Error()})
+		return
 	}
 
 	barkURLs := make([]string, 0, len(req.Bark.URLs))
@@ -394,7 +413,18 @@ func (s *Server) handleUpdateNotificationSettings(c *gin.Context) {
 		return
 	}
 
+	deviceFilters := s.fullCfg.NotificationDeviceFilters
+	if req.DeviceFilters != nil {
+		filters, err := normalizeNotificationDeviceFilters(req.DeviceFilters)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": err.Error()})
+			return
+		}
+		deviceFilters = filters
+	}
+
 	nextConfig := *s.fullCfg
+	nextConfig.NotificationDeviceFilters = deviceFilters
 	nextConfig.Telegram, nextConfig.Feishu, nextConfig.QQ = tg, fs, qq
 	nextConfig.Webhook, nextConfig.Bark = wh, barkCfg
 	nextConfig.Email, nextConfig.Pushplus, nextConfig.WeCom = em, pp, wecomCfg
@@ -429,6 +459,7 @@ func (s *Server) handleUpdateNotificationSettings(c *gin.Context) {
 	s.fullCfg.WeCom = wecomCfg
 	s.fullCfg.WeComBot = wecomBotCfg
 	s.fullCfg.Weixin = weixinCfg
+	s.fullCfg.NotificationDeviceFilters = deviceFilters
 
 	if s.notifyMgr != nil {
 		telegramTransition.revokePreviousChannel()
@@ -451,7 +482,28 @@ func notificationConfigsFrom(cfg *config.Config) config.NotificationConfigs {
 		Telegram: cfg.Telegram, Feishu: cfg.Feishu, QQ: cfg.QQ,
 		Weixin: cfg.Weixin, WeComBot: cfg.WeComBot, Webhook: cfg.Webhook,
 		Bark: cfg.Bark, Email: cfg.Email, Pushplus: cfg.Pushplus, WeCom: cfg.WeCom,
+		DeviceFilters: cfg.NotificationDeviceFilters,
 	}
+}
+
+// normalizeNotificationDeviceFilters trims and de-duplicates device IDs, drops
+// empty entries and rejects unknown channel names.
+func normalizeNotificationDeviceFilters(in map[string][]string) (map[string][]string, error) {
+	out := make(map[string][]string)
+	for channel, devices := range in {
+		channel = strings.TrimSpace(channel)
+		if !notify.IsChannelName(channel) {
+			return nil, fmt.Errorf("未知的通知渠道: %q", channel)
+		}
+		seen := make(map[string]bool)
+		for _, device := range devices {
+			if device = strings.TrimSpace(device); device != "" && !seen[device] {
+				seen[device] = true
+				out[channel] = append(out[channel], device)
+			}
+		}
+	}
+	return out, nil
 }
 
 func resolveMaskedNotificationSecret(incoming, current, field string) (string, error) {
