@@ -65,7 +65,7 @@ test('does not report a percentage before the first IMS registration', () => {
   const checking = health({ state: 'checking', measured: false, availability: 0 })
 
   assert.equal(formatHealthAvailability(checking), '--')
-  assert.equal(wifiCallingHealthDetail(checking), 'IMS 注册成功且接收状态可判定后开始统计可用率')
+  assert.equal(wifiCallingHealthDetail(checking), 'IMS 注册成功后开始统计可用率，短信接收验证单独显示')
 })
 
 test('shows an explicit startup failure before the first IMS registration', () => {

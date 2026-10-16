@@ -135,15 +135,6 @@ func (s *wifiCallingHealthStore) Observe(deviceID string, state runtimehost.Stat
 	}
 	session.lastObservedAt = at
 	if session.startedAt.IsZero() {
-		if session.currentState == "pending" && healthState(state) == "unavailable" {
-			session.start(at, "unavailable", healthReason(state))
-			return
-		}
-		if state.SMSRXPending && state.IMSReady {
-			session.currentState = "pending"
-			session.currentReason = healthReason(state)
-			return
-		}
 		if !wifiCallingMeasurable(state) {
 			session.currentState = "checking"
 			if healthState(state) == "unavailable" {
@@ -400,9 +391,9 @@ func wifiCallingMeasurable(state runtimehost.State) bool {
 }
 
 func wifiCallingHealthy(state runtimehost.State) bool {
-	// Keep ordinary SMS receiver degradation from interrupting calling health,
-	// but honor explicit pending reception evidence after a known outage.
-	return state.SMSHealthReady || (state.IMSReady && !state.SMSRXPending)
+	// Measure calling connectivity independently of downlink SMS evidence.
+	// Reception verification remains available in the runtime SMS status.
+	return state.IMSReady || state.SMSHealthReady
 }
 
 func healthStartReason(state runtimehost.State) string {
