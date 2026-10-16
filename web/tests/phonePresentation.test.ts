@@ -24,6 +24,14 @@ test('dialer remembers explicit device choices and keeps modem help concise', ()
   assert.match(phoneView, /重新准备/)
 })
 
+test('contact form uses themed component-library fields and selection controls', () => {
+  assert.match(contactsDrawer, /<el-input ref="nameInput"/)
+  assert.match(contactsDrawer, /<el-input[\s\S]*?v-model="draftNumber"/)
+  assert.match(contactsDrawer, /<el-checkbox[\s\S]*?:model-value="groupSelected\(group\)"/)
+  assert.match(contactsDrawer, /<el-checkbox[\s\S]*?:model-value="selected\.includes\(item\.number\)"/)
+  assert.doesNotMatch(contactsDrawer, /<input[^>]+type="checkbox"/)
+})
+
 test('RF mode changes confirm first and keep full preparation errors outside device labels', () => {
   assert.match(phoneView, /await confirmPhoneModeChange\(\{/)
   assert.match(phoneView, /enableVoWiFi\(target\.id/)
