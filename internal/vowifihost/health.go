@@ -400,10 +400,9 @@ func wifiCallingMeasurable(state runtimehost.State) bool {
 }
 
 func wifiCallingHealthy(state runtimehost.State) bool {
-	// IMS registration proves the VoWiFi service path is operational. A missing
-	// SMS receiver only degrades inbound SMS; it must not turn the whole calling
-	// service into a recovery state.
-	return state.IMSReady || state.SMSHealthReady
+	// Keep ordinary SMS receiver degradation from interrupting calling health,
+	// but honor explicit pending reception evidence after a known outage.
+	return state.SMSHealthReady || (state.IMSReady && !state.SMSRXPending)
 }
 
 func healthStartReason(state runtimehost.State) string {
