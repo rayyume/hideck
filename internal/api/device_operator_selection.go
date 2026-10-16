@@ -172,11 +172,21 @@ func (s *Server) handleDeviceMgmtGetOperatorSelection(c *gin.Context) {
 
 func (s *Server) handleDeviceMgmtSetOperatorSelection(c *gin.Context) {
 	deviceID := deviceIDParam(c)
+	if deviceID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "必须填写设备 ID"})
+		return
+	}
 	var req backend.SetOperatorSelectionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数无效"})
 		return
 	}
+	if s == nil || s.pool == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "设备未找到或已离线"})
+		return
+	}
+	releaseMutation := s.pool.AcquireManagedDeviceMutation(deviceID)
+	defer releaseMutation()
 
 	w := s.pool.GetWorker(deviceID)
 	if w == nil {
@@ -190,10 +200,17 @@ func (s *Server) handleDeviceMgmtSetOperatorSelection(c *gin.Context) {
 		c.JSON(operatorSelectionErrorStatus(err), gin.H{"error": "设置失败: " + err.Error()})
 		return
 	}
+	if s.pool.GetWorker(deviceID) != w {
+		c.JSON(http.StatusConflict, gin.H{"error": "设置期间设备已被替换，请重试"})
+		return
+	}
 
-	// Persist to file
 	if err := config.UpdateDeviceInFile(s.configPath, deviceID, w.Config); err != nil {
 		logger.Error("写入设备配置失败 (operator selection)", "device", deviceID, "err", err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "运营商已设置，但保存设备配置失败: " + err.Error(),
+		})
+		return
 	}
 
 	c.JSON(http.StatusOK, sel)

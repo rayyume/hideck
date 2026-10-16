@@ -30,6 +30,16 @@ func (s *Server) handleDeviceNetworkPatch(c *gin.Context) {
 	}
 
 	deviceID := deviceIDParam(c)
+	if deviceID == "" || s == nil || s.pool == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "设备参数无效"})
+		return
+	}
+	releaseMutation := s.pool.AcquireManagedDeviceMutation(deviceID)
+	defer releaseMutation()
+	if s.pool.IsESIMSwitching(deviceID) {
+		c.JSON(http.StatusConflict, gin.H{"status": "error", "message": "设备正在切换 SIM，暂不能修改网络"})
+		return
+	}
 
 	if *req.Enabled {
 		class, classifyErr := s.classifyLebaraUKForDevice(c.Request.Context(), deviceID)
@@ -60,7 +70,7 @@ func (s *Server) handleDeviceNetworkPatch(c *gin.Context) {
 			return
 		}
 		s.pool.SetWorkerNetworkPolicy(deviceID, true, effectiveIPVersion, effectiveAPN)
-		s.handleDeviceMgmtStartNetwork(c)
+		s.handleDeviceMgmtStartNetworkLocked(c, deviceID)
 		return
 	}
 
@@ -74,7 +84,7 @@ func (s *Server) handleDeviceNetworkPatch(c *gin.Context) {
 	if err := s.pool.ApplyCurrentCardPolicy(deviceID, "network_disabled"); err != nil {
 		logger.Debug("关闭网络后重投影卡策略失败", "device", deviceID, "err", err)
 	}
-	s.handleDeviceMgmtStopNetwork(c)
+	s.handleDeviceMgmtStopNetworkLocked(c, deviceID)
 }
 
 func (s *Server) handleDeviceVoWiFiPatch(c *gin.Context) {
@@ -85,6 +95,16 @@ func (s *Server) handleDeviceVoWiFiPatch(c *gin.Context) {
 	}
 
 	deviceID := deviceIDParam(c)
+	if deviceID == "" || s == nil || s.pool == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "设备参数无效"})
+		return
+	}
+	releaseMutation := s.pool.AcquireManagedDeviceMutation(deviceID)
+	defer releaseMutation()
+	if s.pool.IsESIMSwitching(deviceID) {
+		c.JSON(http.StatusConflict, gin.H{"status": "error", "message": "设备正在切换 SIM，暂不能修改通话模式"})
+		return
+	}
 
 	if *req.Enabled {
 		// 落库：置 vowifi_enabled=true。若带 mode/data_strategy 则一并落库。
@@ -199,7 +219,7 @@ func (s *Server) handleDeviceVoWiFiPatch(c *gin.Context) {
 			})
 			return
 		}
-		s.handleVoWiFiEnable(c)
+		s.handleVoWiFiEnableLocked(c, deviceID)
 		return
 	}
 
@@ -213,7 +233,7 @@ func (s *Server) handleDeviceVoWiFiPatch(c *gin.Context) {
 		return
 	}
 	s.pool.SetWorkerVoWiFiPolicy(deviceID, false)
-	s.handleVoWiFiDisable(c)
+	s.handleVoWiFiDisableLocked(c, deviceID)
 }
 
 // vowifiEnablePolicyMutation 开 VoWiFi 的落库副作用：只置 vowifi，飞行意图保持不变。

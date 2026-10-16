@@ -1,0 +1,47 @@
+name: Fork validation
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GOTOOLCHAIN: local
+      GOWORK: 'off'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install frontend dependencies
+        run: npm ci --prefix web --no-audit --no-fund
+      - name: Frontend tests
+        working-directory: web
+        run: node_modules/.bin/tsx --test tests/*.test.ts
+      - name: Frontend lint
+        run: npm run lint --prefix web
+      - name: Frontend build and typecheck
+        run: npm run build --prefix web
+      - name: Prepare embedded assets
+        run: |
+          mkdir -p internal/web/dist
+          cp -a web/dist/. internal/web/dist/
+      - name: Full Go tests
+        run: go test -tags 'with_utls nomsgpack' -timeout 180s ./...
+      - name: Archive concurrency tests
+        run: go test -race -timeout 180s ./internal/webdavarchive ./internal/db
+      - name: Deployment contracts
+        run: python3 -m unittest discover -s packaging/tests -v

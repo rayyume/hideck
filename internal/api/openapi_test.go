@@ -44,7 +44,10 @@ func TestOpenAPIHiDeckYAMLValid(t *testing.T) {
 		"/settings/notifications/qq/qr/start", "/settings/notifications/qq/qr/status",
 		"/settings/notifications/qq/qr/cancel", "/settings/notifications/feishu/qr/start",
 		"/settings/notifications/feishu/qr/status", "/settings/notifications/feishu/qr/cancel",
-		"/settings/disclaimer",
+		"/settings/phone", "/settings/phone/auto-answer/devices/{device_id}",
+		"/settings/phone/auto-answer/audio", "/settings/disclaimer",
+		"/settings/archive", "/settings/archive/test", "/archive/actions/run",
+		"/archive/cleanup/preview", "/archive/cleanup",
 	} {
 		if paths[path] == nil {
 			t.Fatalf("openapi.hideck.yaml missing %s", path)
@@ -54,7 +57,7 @@ func TestOpenAPIHiDeckYAMLValid(t *testing.T) {
 		t.Fatal("openapi.hideck.yaml missing MBIM/PCSC device and eSIM transport contract")
 	}
 	for _, field := range []string{
-		"wecom_bot:", "allowed_group_ids:", "manual_setup_available:",
+		"wecom_bot:", "allowed_group_ids:", "manual_setup_available:", "device_filters:",
 		"bound_chat_id:", "BotFather 签发的 Bot Token", "授权管理员首次私聊自动绑定",
 	} {
 		if !strings.Contains(string(data), field) {

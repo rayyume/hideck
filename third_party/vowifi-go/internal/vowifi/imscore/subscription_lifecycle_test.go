@@ -37,8 +37,17 @@ func TestREGISTERRefreshDoesNotRestartRejectedSubscriptions(t *testing.T) {
 }
 
 func newSubscriptionLifecycleTestService(t *testing.T, store *SubscriptionRegistrationStore) *Service {
+	return newSubscriptionLifecycleTestServiceForPreset(t, store, "")
+}
+
+func newSubscriptionLifecycleTestServiceForPreset(
+	t *testing.T,
+	store *SubscriptionRegistrationStore,
+	preset string,
+) *Service {
 	t.Helper()
 	s := newProtectedKeepaliveTestService(t)
+	s.cfg.CarrierPresetID = preset
 	client, peer := net.Pipe()
 	t.Cleanup(func() { _ = peer.Close() })
 	s.activateProtectedRegistrationTCP(client)

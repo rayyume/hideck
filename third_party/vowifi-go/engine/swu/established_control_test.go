@@ -8,6 +8,7 @@ import (
 
 	enginecrypto "github.com/iniwex5/vowifi-go/engine/crypto"
 	"github.com/iniwex5/vowifi-go/engine/ikev2"
+	"go.uber.org/zap"
 )
 
 func TestEstablishedChildSARekeyValidatesResponseAndSwitchesSAs(t *testing.T) {
@@ -182,16 +183,16 @@ func assertRetiredChildSA(t *testing.T, session *Session, remoteSPI, localSPI ui
 	}
 }
 
-func newEstablishedControlSession(t *testing.T) (*Session, *testIKETransport) {
+func newEstablishedControlSession(t *testing.T, loggers ...*zap.Logger) (*Session, *testIKETransport) {
 	t.Helper()
 	return newEstablishedControlSessionWithConfig(t, &Config{Retransmit: &RetransmitConfig{
 		MaxRetries: 0, InitialDelay: 200 * time.Millisecond, Backoff: 1,
-	}})
+	}}, loggers...)
 }
 
-func newEstablishedControlSessionWithConfig(t *testing.T, config *Config) (*Session, *testIKETransport) {
+func newEstablishedControlSessionWithConfig(t *testing.T, config *Config, loggers ...*zap.Logger) (*Session, *testIKETransport) {
 	t.Helper()
-	session := NewSession(config)
+	session := NewSession(config, loggers...)
 	transport := newTestIKETransport()
 	session.socket = transport
 	copy(session.spiI[:], []byte("init-spi"))
@@ -430,6 +431,26 @@ func TestInitiatedIKESARekeyRetainsOldKeysWhenDeleteTimesOut(t *testing.T) {
 	session.mu.RUnlock()
 	if !retained {
 		t.Fatal("timed-out old IKE SA Delete did not retain the old protection context")
+	}
+}
+
+func TestIKESARekeyDropsStaleRetiredSA(t *testing.T) {
+	session, transport := newEstablishedControlSession(t)
+	defer stopControlTestSession(session)
+	staleKeys := cloneIKEKeysForTest(session.ikeKeys)
+	session.retiredIKESA = &ikeSAContext{keys: staleKeys, localInitiator: true}
+	peerDone := make(chan struct{})
+	go func() {
+		defer close(peerDone)
+		respondToIKESARekey(t, session, transport)
+	}()
+	err := session.RekeyIKESA()
+	<-peerDone
+	if err != nil {
+		t.Fatalf("RekeyIKESA with a stale retired SA: %v", err)
+	}
+	if !retiredIKEKeysCleared(session, staleKeys) {
+		t.Fatal("stale retired IKE SA was not dropped and wiped")
 	}
 }
 

@@ -20,6 +20,7 @@ type Service struct {
 	gateway             VoiceGateway
 	store               RecordStore
 	transcoder          AudioTranscoder
+	promptDecoder       AudioPromptDecoder
 	notifier            ResultNotifier
 	media               *MediaManager
 	events              *eventHub
@@ -41,6 +42,7 @@ type Service struct {
 	closeOnce           sync.Once
 	closeErr            error
 	deviceWaiting       map[string]string
+	autoAnswer          autoAnswerRuntime
 }
 
 func NewService(options ServiceOptions) (*Service, error) {
@@ -50,7 +52,8 @@ func NewService(options ServiceOptions) (*Service, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	service := &Service{
 		gateway: options.Gateway, store: options.Store, transcoder: options.Transcoder,
-		notifier: options.Notifier, events: newEventHub(), recordingDir: options.RecordingDir,
+		promptDecoder: options.PromptDecoder,
+		notifier:      options.Notifier, events: newEventHub(), recordingDir: options.RecordingDir,
 		resolveICCID: options.ResolveICCID, recoveryGrace: options.RecoveryGrace,
 		ctx: ctx, cancel: cancel, calls: make(map[string]*activeCall),
 		deviceCalls: make(map[string]string), mediaCalls: make(map[string]string),
@@ -73,6 +76,11 @@ func NewService(options ServiceOptions) (*Service, error) {
 		return nil, err
 	}
 	service.media = media
+	if err := service.configureAutoAnswer(options.AutoAnswer); err != nil {
+		cancel()
+		_ = media.Close()
+		return nil, err
+	}
 	service.unsubscribeIncoming = options.Gateway.SubscribeIncomingCalls(service.handleIncoming)
 	service.unsubscribeEvents = options.Gateway.SubscribeCallEvents(service.handleCallEvent)
 	if service.store != nil {

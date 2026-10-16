@@ -13,16 +13,13 @@ type poolVoWiFiRuntimeDispatcher struct {
 	pool *Pool
 }
 
-func applyVoWiFiSMSMemoryPressure(set func(bool), persistErr error, retained vowifiSMSRecordResult) {
-	if set == nil {
+func reportVoWiFiSMSPersistence(result chan<- error, persistErr error) {
+	if result == nil {
 		return
 	}
-	if persistErr != nil {
-		set(true)
-		return
-	}
-	if retained.Stored || retained.Duplicate || retained.Suppressed {
-		set(false)
+	select {
+	case result <- persistErr:
+	default:
 	}
 }
 
@@ -39,19 +36,29 @@ func (d poolVoWiFiRuntimeDispatcher) Dispatch(ctx context.Context, e eventhost.E
 	}
 	recorder := vowifiSMSHistoryRecorder{pool: d.pool}
 	var recordResult vowifiSMSRecordResult
+	var receivedOn SMSIdentity
 	switch v := e.(type) {
 	case eventhost.SMSReceived:
-		res, err := recorder.RecordReceived(v)
-		applyVoWiFiSMSMemoryPressure(func(full bool) {
-			d.pool.SetVoWiFiSMSMemoryFull(v.DevID, full)
-		}, err, res)
+		// One snapshot of the receiving SIM serves observers and notifiers,
+		// so a profile switch while the message is stored cannot split them.
+		var res vowifiSMSRecordResult
+		var err error
+		if smsnotify.ShouldSuppressReceivedSMS(v.Content) {
+			res = vowifiSMSRecordResult{Suppressed: true}
+		} else {
+			receivedOn, err = recorder.resolveReceivedEventIdentity(v)
+		}
+		if err == nil && !res.Suppressed {
+			res, err = recorder.recordReceived(v, receivedOn)
+		}
+		reportVoWiFiSMSPersistence(v.PersistenceResult, err)
 		if err != nil {
 			logger.Warn("VoWiFi 上层入库入站短信失败", "device", v.DevID, "sender", v.Sender, "err", err)
 		}
 		recordResult = res
 		if res.Stored && !v.Incomplete {
 			d.pool.notifyInboundSMS(InboundSMS{
-				DeviceID: v.DevID, ICCID: recorder.resolveICCID(v.DevID),
+				DeviceID: v.DevID, ICCID: receivedOn.ICCID, IMSI: receivedOn.IMSI,
 				Sender: v.Sender, Content: v.Content, Time: v.Time,
 			})
 		}
@@ -88,11 +95,14 @@ func (d poolVoWiFiRuntimeDispatcher) Dispatch(ctx context.Context, e eventhost.E
 			logger.Info("VoWiFi 短信重复（通过数据库去重兜底），不进行重复通知推送", "device", sms.DevID, "sender", sms.Sender)
 			return
 		}
-		if withSource, ok := notifier.(SMSSourceNotifier); ok {
-			withSource.NotifySMSWithSource(sms.DevID, sms.Sender, sms.Content, "VoWiFi", sms.Time)
-		} else {
-			notifier.NotifySMS(sms.DevID, sms.Sender, sms.Content, sms.Time)
+		if receivedOn.ICCID == "" || receivedOn.IMSI == "" {
+			logger.Warn("VoWiFi 短信身份不完整，不发送可能串卡的通知", "device", sms.DevID, "sender", sms.Sender)
+			return
 		}
+		notifySMS(notifier, InboundSMS{
+			DeviceID: sms.DevID, ICCID: receivedOn.ICCID, IMSI: receivedOn.IMSI,
+			Sender: sms.Sender, Content: sms.Content, Time: sms.Time,
+		}, "VoWiFi")
 	}
 
 	logNotify, ok := e.(eventhost.LogNotify)

@@ -25,6 +25,7 @@ type rpReportRequest struct {
 	ServiceCenter string
 	OmitBinaryCTE bool
 	OmitInReplyTo bool
+	attempt       int
 }
 
 type rpReportRejectError struct {
@@ -106,6 +107,10 @@ func (s *Service) sendRPReport(report rpReportRequest) error {
 	})
 	err = rpReportTransactionError(result.SIPCode, dispatchErr)
 	annotateRPReportReject(err, modeCtx.Registrar)
+	logging.Info("IMS RP report attempt",
+		"device", s.DeviceID(), "trace_id", traceID, "attempt", report.attempt, "rp_mr", audit.rpMR,
+		"transport", audit.transport, "inbound_peer", modeCtx.InboundPeer,
+		"sip_status", result.SIPCode, "error", traceErrorText(err))
 	s.logRPReportProtocolTrace(request, modeCtx, report, result.SIPCode, err)
 	s.logRPReportWireTrace(request, result.Response)
 	if err != nil {
@@ -180,6 +185,7 @@ func rpReportRejectRegistrar(err error) string {
 }
 
 func (s *Service) sendRPReportWithRetry(report rpReportRequest) {
+	checkpoint := s.captureSMSReceptionCheckpoint()
 	attempts, err := s.sendRPReportWithRetryPolicy(
 		report, rpReportInitialDelay, rpReportRetryDelay,
 	)
@@ -189,6 +195,7 @@ func (s *Service) sendRPReportWithRetry(report rpReportRequest) {
 	}
 	if err != nil {
 		s.rememberRejectedMTReport(report.Identity)
+		s.recordRegistrationSMSReportFailure(report.PeerConn, checkpoint)
 		s.triggerMTReportPCSCFRecovery(err)
 		deviceID := ""
 		if s != nil && s.cfg != nil {
@@ -210,6 +217,11 @@ func (s *Service) sendRPReportWithRetryPolicy(
 		return 0, errRPReportAborted
 	}
 	current := specRPAckReport(report)
+	// A protected UDP peer already resolves to the registered flow.
+	peer := rpReportOutboundPeer(report.PeerConn)
+	if peer != nil && s.rpReportRegisteredFlow.Load() {
+		current.PeerConn = nil
+	}
 	delay := retryDelay
 	var lastErr error
 	sent := 0
@@ -220,13 +232,27 @@ func (s *Service) sendRPReportWithRetryPolicy(
 			}
 			return sent, errRPReportAborted
 		}
+		current.attempt = attempt
 		lastErr = s.sendRPReport(current)
 		sent++
 		if lastErr == nil {
+			if peer != nil {
+				s.rpReportRegisteredFlow.Store(current.PeerConn == nil)
+			}
 			return sent, nil
 		}
 		if !rpReportRetryable(lastErr) {
 			return sent, lastErr
+		}
+		// TS 33.203 7.1: UE requests go from port_uc to port_ps. Some P-CSCFs
+		// silently drop a request sent back over the connection they opened to
+		// port_us. When a path gets no answer at all, retry over the other one.
+		if peer != nil && rpReportRejectStatus(lastErr) == 0 {
+			if current.PeerConn != nil {
+				current.PeerConn = nil
+			} else {
+				current.PeerConn = report.PeerConn
+			}
 		}
 		if delay <= 0 {
 			delay = retryDelay

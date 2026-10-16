@@ -80,7 +80,10 @@ func applyCarrierOverride(preset CarrierPreset, override CarrierOverride) Carrie
 		preset.IKERekeyIntervalSeconds = override.IKERekeyIntervalSeconds
 	}
 	applyBoolPtr(&preset.KeepChildSAOnRekeyDecline, override.KeepChildSAOnRekeyDecline)
-	applyBoolPtr(&preset.WithholdDeviceIdentity, override.WithholdDeviceIdentity)
+	if override.WithholdDeviceIdentity != nil {
+		value := *override.WithholdDeviceIdentity
+		preset.WithholdDeviceIdentity = &value
+	}
 	preset.IMSRegisterTemplate = applyIMSRegisterTemplateOverride(preset.IMSRegisterTemplate, override.IMSRegisterTemplate)
 	setStringIfPresent(&preset.SMSRoutingMethod, override.SMSRoutingMethod)
 	setStringIfPresent(&preset.SMSRoutingGW, override.SMSRoutingGW)

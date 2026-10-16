@@ -35,6 +35,7 @@ import (
 	proxytraffic "github.com/yibaiba/hideck/internal/proxy/traffic"
 	"github.com/yibaiba/hideck/internal/updater"
 	"github.com/yibaiba/hideck/internal/volte"
+	"github.com/yibaiba/hideck/internal/webdavarchive"
 	vwebsheet "github.com/yibaiba/hideck/internal/websheet"
 	"github.com/yibaiba/hideck/pkg/smscodec"
 
@@ -87,6 +88,9 @@ type Server struct {
 	proxyRepo               repo.ProxyInstanceRepository
 	proxySyncMu             sync.Mutex
 	notificationConfigMu    sync.Mutex
+	phoneSettingsMu         sync.Mutex
+	systemConfigMu          sync.RWMutex
+	archiveConfigMu         sync.Mutex
 	weixinQRMu              sync.Mutex
 	wecomQRMu               sync.Mutex
 	qqQRMu                  sync.Mutex
@@ -111,6 +115,7 @@ type Server struct {
 	systemTime              systemTimeProvider
 	backendSwitch           deviceBackendSwitcher
 	updateChecker           systemUpdateChecker
+	archive                 archiveManager
 
 	httpSrvMu sync.Mutex
 	httpSrv   *http.Server
@@ -128,6 +133,17 @@ type Server struct {
 
 type realtimeTrafficSubscriber interface {
 	Subscribe(ctx context.Context, deviceID string) (<-chan proxytraffic.RealtimeSnapshot, func())
+}
+
+type archiveManager interface {
+	Config() webdavarchive.RuntimeConfig
+	Status() webdavarchive.Status
+	Configure(webdavarchive.RuntimeConfig) error
+	Probe(context.Context, webdavarchive.RuntimeConfig) error
+	RunNow(context.Context) (webdavarchive.RunSummary, error)
+	PreviewCleanup(context.Context) (webdavarchive.CleanupPreview, error)
+	Cleanup(context.Context, string) (webdavarchive.CleanupPreview, error)
+	Stop(context.Context) error
 }
 
 // New 创建一个新的 API 服务器实例
@@ -211,6 +227,10 @@ func (s *Server) SetRealtimeTraffic(m *proxytraffic.RealtimeManager) {
 // SetVoiceRecordingDirectory injects the directory owned by the voice gateway.
 func (s *Server) SetVoiceRecordingDirectory(directory string) {
 	s.voiceRecordingDirectory = strings.TrimSpace(directory)
+}
+
+func (s *Server) SetArchiveManager(manager archiveManager) {
+	s.archive = manager
 }
 
 func (s *Server) SetPhoneService(service *phone.Service) {
@@ -328,6 +348,7 @@ func (s *Server) newRouter() *gin.Engine {
 
 	// 以下接口需要鉴权
 	api.Use(s.authMiddleware())
+	api.Use(s.mbnMutationMiddleware())
 	{
 		api.POST("/system/uninstall", s.handleUninstall) // 必须登录后才能调用，见 handleUninstall 内的鉴权检查
 		api.GET("/openapi.yaml", s.handleOpenAPIYAML)
@@ -340,12 +361,14 @@ func (s *Server) newRouter() *gin.Engine {
 		api.GET("/traffic/analysis", s.handleTrafficAnalysis)       // 流量分析统计
 		s.registerPhoneRoutes(api)
 		s.registerUtRoutes(api)
+		s.registerMBNRoutes(api)
 
 		// ===== 短信 =====
 		api.POST("/sms/send", s.handleSendSMS)                    // 发送短信（自动选择 AT 或 VoWiFi）
 		api.GET("/sms/delivery/:message_id", s.handleSMSDelivery) // 查询发送投递状态
 		api.GET("/sms/contacts", s.handleGetSMSContacts)          // 获取短信联系人列表
 		api.GET("/sms/notifications", s.handleSMSNotifications)   // 全局未读数量与增量来信提醒
+		api.GET("/sms/events", s.handleSMSEvents)                 // 来信 SSE，Last-Event-ID / after_id 补发未读
 		api.GET("/sms/messages/:id", s.handleSMSMessageTarget)    // 按消息定位会话与历史窗口
 		api.GET("/sms/thread", s.handleGetSMSThread)              // 获取与某联系人的短信会话
 		api.PATCH("/sms/thread", s.handleMarkSMSThreadRead)       // 持久化指定会话已读进度
@@ -357,6 +380,15 @@ func (s *Server) newRouter() *gin.Engine {
 		api.PUT("/settings/notifications", s.handleUpdateNotificationSettings) // 更新通知设置
 		api.GET("/settings/system", s.handleGetSystemSettings)
 		api.PUT("/settings/system", s.handleUpdateSystemSettings)
+		api.GET("/settings/archive", s.handleGetArchiveSettings)
+		api.PUT("/settings/archive", s.handleUpdateArchiveSettings)
+		api.POST("/settings/archive/test", s.handleTestArchiveSettings)
+		api.POST("/archive/actions/run", s.handleRunArchive)
+		api.GET("/archive/cleanup/preview", s.handlePreviewArchiveCleanup)
+		api.POST("/archive/cleanup", s.handleArchiveCleanup)
+		api.GET("/settings/phone", s.handleGetPhoneSettings)
+		api.PUT("/settings/phone/auto-answer/devices/:device_id", s.handleUpdateAutoAnswerDevice)
+		api.POST("/settings/phone/auto-answer/audio", s.handleUploadAutoAnswerAudio)
 		api.GET("/settings/disclaimer", s.handleGetDisclaimerStatus)
 		api.PUT("/settings/disclaimer", s.handleAcceptDisclaimer)
 		api.GET("/settings/password", s.handleGetPasswordStatus)
@@ -495,10 +527,14 @@ func withCommandEventStreamDeadlineDisabled(next http.Handler) http.Handler {
 }
 
 func isCommandEventStreamPath(path string) bool {
-	return path == "/api/command-center/stream" || path == "/api/commands/events/stream" || path == "/api/phone/events"
+	return path == "/api/command-center/stream" || path == "/api/commands/events/stream" || path == "/api/phone/events" || path == "/api/sms/events"
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {
+	var archiveErr error
+	if s.archive != nil {
+		archiveErr = s.archive.Stop(ctx)
+	}
 	var automaticTaskErr error
 	if s.automaticTasks != nil {
 		automaticTaskErr = s.automaticTasks.Stop(ctx)
@@ -521,7 +557,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	httpServer, httpsServer := s.httpSrv, s.httpsSrv
 	s.httpSrvMu.Unlock()
 	if httpServer == nil && httpsServer == nil {
-		return errors.Join(automaticTaskErr, phoneErr)
+		return errors.Join(automaticTaskErr, phoneErr, archiveErr)
 	}
 	shutdownErrors := make(chan error, 2)
 	shutdownCount := 0
@@ -533,7 +569,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		shutdownCount++
 		go func() { shutdownErrors <- httpsServer.Shutdown(ctx) }()
 	}
-	result := errors.Join(automaticTaskErr, phoneErr)
+	result := errors.Join(automaticTaskErr, phoneErr, archiveErr)
 	for range shutdownCount {
 		result = errors.Join(result, <-shutdownErrors)
 	}
@@ -960,6 +996,8 @@ func (s *Server) handleRotate(c *gin.Context) {
 			return
 		}
 	}
+	releaseMutation := s.pool.AcquireManagedDeviceMutation(deviceID)
+	defer releaseMutation()
 
 	worker := s.pool.GetWorker(deviceID)
 	if worker == nil {
@@ -1010,6 +1048,16 @@ func (s *Server) handleRotate(c *gin.Context) {
 
 func (s *Server) handleDeviceMgmtStartNetwork(c *gin.Context) {
 	deviceID := deviceIDParam(c)
+	if deviceID == "" || s == nil || s.pool == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "设备参数无效"})
+		return
+	}
+	releaseMutation := s.pool.AcquireManagedDeviceMutation(deviceID)
+	defer releaseMutation()
+	s.handleDeviceMgmtStartNetworkLocked(c, deviceID)
+}
+
+func (s *Server) handleDeviceMgmtStartNetworkLocked(c *gin.Context, deviceID string) {
 	worker := s.pool.GetWorker(deviceID)
 	if worker == nil {
 		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": "设备未找到"})
@@ -1031,7 +1079,7 @@ func (s *Server) handleDeviceMgmtStartNetwork(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "启动数据网络失败: " + err.Error()})
 		return
 	}
-	go func() { _ = worker.RefreshRuntime(nil, "start_network") }()
+	go s.refreshManagedWorkerRuntime(worker, "start_network")
 	c.JSON(http.StatusOK, gin.H{
 		"status":            "ok",
 		"message":           "数据网络已启动",
@@ -1046,6 +1094,16 @@ func (s *Server) handleDeviceMgmtStartNetwork(c *gin.Context) {
 
 func (s *Server) handleDeviceMgmtStopNetwork(c *gin.Context) {
 	deviceID := deviceIDParam(c)
+	if deviceID == "" || s == nil || s.pool == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "设备参数无效"})
+		return
+	}
+	releaseMutation := s.pool.AcquireManagedDeviceMutation(deviceID)
+	defer releaseMutation()
+	s.handleDeviceMgmtStopNetworkLocked(c, deviceID)
+}
+
+func (s *Server) handleDeviceMgmtStopNetworkLocked(c *gin.Context, deviceID string) {
 	worker := s.pool.GetWorker(deviceID)
 	if worker == nil {
 		c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": "设备未找到"})
@@ -1060,7 +1118,7 @@ func (s *Server) handleDeviceMgmtStopNetwork(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "停止数据网络失败: " + err.Error()})
 		return
 	}
-	go func() { _ = worker.RefreshRuntime(nil, "stop_network") }()
+	go s.refreshManagedWorkerRuntime(worker, "stop_network")
 	c.JSON(http.StatusOK, gin.H{
 		"status":            "ok",
 		"message":           "数据网络已停止",
@@ -1150,8 +1208,6 @@ func (s *Server) handleSendSMS(c *gin.Context) {
 	deviceID := worker.ID
 	sendOpts := smscodec.SubmitOptions{Encoding: encoding}
 
-	// 获取 IMSI 用于入库
-	imsi := worker.GetIMSI()
 	messageID := ""
 	partsTotal := 1
 	deliveryState := "acked"
@@ -1170,7 +1226,13 @@ func (s *Server) handleSendSMS(c *gin.Context) {
 	if err != nil {
 		if routed.Via == device.RoutedSMSViaVoWiFi || routed.FellBackToCS {
 			deliveryState = "failed"
-			_ = device.RecordVoWiFiSMSSendFailure(s.pool, deviceID, req.Phone, req.Message, time.Now())
+			recordErr := device.RecordVoWiFiSMSSendFailure(s.pool, device.VoWiFiSMSSendFailure{
+				DeviceID: deviceID, Target: req.Phone, Content: req.Message,
+				Identity: routed.Identity, IdentityRead: routed.IdentityRead, At: time.Now(),
+			})
+			if recordErr != nil {
+				logger.Warn("VoWiFi 短信发送失败记录入库失败", "device", deviceID, "err", recordErr)
+			}
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"status":         "error",
 				"message":        "VoWiFi 短信发送失败: " + err.Error(),
@@ -1183,10 +1245,11 @@ func (s *Server) handleSendSMS(c *gin.Context) {
 			})
 			return
 		}
-		if imsi != "" {
-			if persistErr := db.SaveSMS(imsi, worker.ID, req.Phone, req.Message, 2, 3, time.Now()); persistErr != nil {
-				logger.Warn("短信发送失败记录入库失败", "device", deviceID, "err", persistErr)
-			}
+		if persistErr := saveRoutedSMSRecord(routedSMSRecord{
+			Identity: routed.Identity, Sender: worker.ID, Recipient: req.Phone,
+			Content: req.Message, Status: 3,
+		}); persistErr != nil {
+			logger.Warn("短信发送失败记录入库失败", "device", deviceID, "err", persistErr)
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"status":      "error",
@@ -1201,10 +1264,11 @@ func (s *Server) handleSendSMS(c *gin.Context) {
 		if routed.FellBackToCS {
 			deliveryState = "acked"
 		}
-		if imsi != "" {
-			if persistErr := db.SaveSMS(imsi, worker.ID, req.Phone, req.Message, 2, 2, time.Now()); persistErr != nil {
-				logger.Warn("短信发送成功但入库失败", "device", deviceID, "err", persistErr)
-			}
+		if persistErr := saveRoutedSMSRecord(routedSMSRecord{
+			Identity: routed.Identity, Sender: worker.ID, Recipient: req.Phone,
+			Content: req.Message, Status: 2,
+		}); persistErr != nil {
+			logger.Warn("短信发送成功但入库失败", "device", deviceID, "err", persistErr)
 		}
 	}
 
@@ -1217,6 +1281,25 @@ func (s *Server) handleSendSMS(c *gin.Context) {
 		"message_id":     messageID,
 		"parts_total":    partsTotal,
 		"delivery_state": deliveryState,
+	})
+}
+
+type routedSMSRecord struct {
+	Identity  device.SMSIdentity
+	Sender    string
+	Recipient string
+	Content   string
+	Status    int
+}
+
+func saveRoutedSMSRecord(record routedSMSRecord) error {
+	if strings.TrimSpace(record.Identity.ICCID) == "" || strings.TrimSpace(record.Identity.IMSI) == "" {
+		return db.ErrSMSIdentityUnknown
+	}
+	return db.SaveSMSForIdentity(db.SMSRecord{
+		Identity: db.SMSIdentity{ICCID: record.Identity.ICCID, IMSI: record.Identity.IMSI},
+		Sender:   record.Sender, Recipient: record.Recipient, Content: record.Content,
+		Type: 2, Status: record.Status, Timestamp: time.Now(),
 	})
 }
 
@@ -1246,8 +1329,7 @@ func (s *Server) handleSMSDelivery(c *gin.Context) {
 }
 
 // handleVoWiFiEnable 为指定设备启用 VoWiFi
-func (s *Server) handleVoWiFiEnable(c *gin.Context) {
-	deviceID := deviceIDParam(c)
+func (s *Server) handleVoWiFiEnableLocked(c *gin.Context, deviceID string) {
 	if deviceID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "请指定设备 ID"})
 		return
@@ -1283,9 +1365,7 @@ func (s *Server) handleVoWiFiEnable(c *gin.Context) {
 }
 
 // handleVoWiFiDisable 禁用 VoWiFi，保留当前射频/网络状态
-func (s *Server) handleVoWiFiDisable(c *gin.Context) {
-	deviceID := deviceIDParam(c)
-
+func (s *Server) handleVoWiFiDisableLocked(c *gin.Context, deviceID string) {
 	if s.pool == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"status": "error", "message": "服务未就绪"})
 		return

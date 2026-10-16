@@ -149,6 +149,8 @@ func (s *Session) runRekeyTimer(timer *time.Timer, spec rekeyTimerSpec) {
 				continue
 			}
 			failures++
+			s.Logger.Warn(spec.name+" rekey attempt failed", zap.Int("attempt", failures),
+				zap.Int("max_attempts", rekeyMaxFailures), zap.Error(err))
 			if failures >= rekeyMaxFailures || spec.immediateFail != nil && spec.immediateFail(err) {
 				s.failEstablishedControl(fmt.Errorf("swu: %s rekey failed: %w", spec.name, err))
 				return

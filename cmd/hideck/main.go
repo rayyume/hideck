@@ -21,6 +21,8 @@ import (
 	"github.com/yibaiba/hideck/internal/config"
 	"github.com/yibaiba/hideck/internal/db"
 	"github.com/yibaiba/hideck/internal/device"
+	"github.com/yibaiba/hideck/internal/mbn"
+	"github.com/yibaiba/hideck/internal/netprobe"
 	"github.com/yibaiba/hideck/internal/notify"
 	"github.com/yibaiba/hideck/internal/openwrt"
 	"github.com/yibaiba/hideck/internal/outbound"
@@ -29,6 +31,7 @@ import (
 	"github.com/yibaiba/hideck/internal/proxy/traffic"
 	"github.com/yibaiba/hideck/internal/upstreamproxy"
 	"github.com/yibaiba/hideck/internal/volte"
+	"github.com/yibaiba/hideck/internal/webdavarchive"
 
 	"github.com/yibaiba/hideck/internal/web"
 	"github.com/yibaiba/hideck/pkg/logger"
@@ -134,6 +137,13 @@ func main() {
 
 	dynamicInterfaceMapper := openwrt.NewMapper(cfg.System.OpenWRTDynamicInterfaces)
 	pool := device.NewPoolWithDynamicInterfaceMapper(cfg, dynamicInterfaceMapper)
+	mbnService := mbn.New(mbn.Options{Context: pool.Context(), Store: mbn.NewDatabaseStore(db.DB), Files: mbn.DiskFiles{Directory: "data/mbn"}, Gateway: device.MBNGateway{Pool: pool, Probe: func(ctx context.Context, iface, target string) error {
+		return netprobe.New(netprobe.Config{Interface: iface, Timeout: 15 * time.Second}).Check(ctx, target)
+	}}})
+	if err := mbnService.Recover(pool.Context()); err != nil {
+		log.Fatalf("恢复 MBN 操作记录失败: %v", err)
+	}
+	pool.SetMBNService(mbnService)
 	outboundLimiter, err := outbound.New(db.NewOutboundUsageStore(db.DB), cfg.OutboundLimits, time.Now)
 	if err != nil {
 		log.Fatalf("初始化外发限流失败: %v", err)
@@ -228,7 +238,8 @@ func main() {
 	}
 	phoneService, err := phone.NewService(phone.ServiceOptions{
 		Gateway: phoneGateway, Store: db.NewVoiceCallStore(db.DB), Transcoder: audioTranscoder,
-		Notifier: callResultNotifier, RecordingDir: voiceRecordingDirectory,
+		PromptDecoder: audioTranscoder,
+		Notifier:      callResultNotifier, RecordingDir: voiceRecordingDirectory,
 		WebRTCUDPAddress: cfg.Server.WebRTCUDPAddress, WebRTCPublicHost: cfg.Server.WebRTCPublicHost,
 		ICEServers:     cfg.Server.ICEServers,
 		RealtimeCodecs: availableRealtimeCodecs(audioTranscoder),
@@ -236,12 +247,25 @@ func main() {
 			return audioTranscoder.NewRealtimeCodec(codec, fmtp)
 		},
 		ResolveICCID: pool.CurrentICCIDForDevice,
+		AutoAnswer: phone.AutoAnswerConfig{
+			AudioPath: cfg.System.AutoAnswer.AudioFile,
+			Devices:   phoneAutoAnswerDevices(cfg.System.AutoAnswer.Devices),
+		},
 	})
 	if err != nil {
 		log.Fatalf("初始化电话媒体服务失败: %v", err)
 	}
 
 	apiServer := api.New(cfg, pool, staticFS, proxyMgr, voiceGW, notifyMgr, configPath)
+	archiveManager, err := webdavarchive.NewManager(webdavarchive.ManagerOptions{
+		Store: webdavarchive.NewDatabaseStore(db.DB), RecordingDir: voiceRecordingDirectory,
+		Config: archiveRuntimeConfig(cfg.Archive),
+	})
+	if err != nil {
+		log.Fatalf("初始化 WebDAV 归档服务失败: %v", err)
+	}
+	archiveManager.Start(context.Background())
+	apiServer.SetArchiveManager(archiveManager)
 	if notifyMgr != nil {
 		notifyMgr.StartCommandReceivers()
 	}
@@ -331,6 +355,26 @@ func main() {
 	}
 
 	logger.Info("再见!")
+}
+
+func archiveRuntimeConfig(value config.ArchiveConfig) webdavarchive.RuntimeConfig {
+	return webdavarchive.RuntimeConfig{
+		Enabled: value.Enabled, Endpoint: value.Endpoint, Username: value.Username,
+		Password: value.Password, BasePath: value.BasePath,
+		Interval: time.Duration(value.IntervalHours) * time.Hour, RetentionDays: value.RetentionDays,
+		AutoCleanup: value.AutoCleanup, IncludeSMS: value.IncludeSMS,
+		IncludeCalls: value.IncludeCalls, IncludeRecordings: value.IncludeRecordings,
+	}
+}
+
+func phoneAutoAnswerDevices(devices map[string]config.AutoAnswerDeviceConfig) map[string]phone.AutoAnswerDeviceConfig {
+	result := make(map[string]phone.AutoAnswerDeviceConfig, len(devices))
+	for deviceID, deviceConfig := range devices {
+		result[deviceID] = phone.AutoAnswerDeviceConfig{
+			Enabled: deviceConfig.Enabled, Delay: time.Duration(deviceConfig.DelaySeconds) * time.Second,
+		}
+	}
+	return result
 }
 
 func availableRealtimeCodecs(transcoder *audiotranscode.Transcoder) []string {

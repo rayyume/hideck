@@ -1,6 +1,10 @@
 package imscore
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/iniwex5/vowifi-go/internal/vowifi/logging"
+)
 
 const (
 	smsReadyReasonReady             = "IMS SMS receiver ready"
@@ -9,6 +13,8 @@ const (
 	smsReadyReasonTransportNotReady = "IMS registered signaling transport is not ready"
 	smsReadyReasonReceiverNotReady  = "IMS SMS receiver is not ready"
 	smsReadyReasonSMSCNotConfigured = "IMS SMSC is not configured"
+	smsReadyReasonAwaitingDownlink  = "IMS registered; SMS reception awaiting downlink verification"
+	smsReadyReasonRegistrationFlow  = "IMS SMS receiver verified on registered TCP flow"
 )
 
 type smsHealthInput struct {
@@ -24,6 +30,7 @@ func (s *Service) SMSReadiness() SMSReadiness {
 		return evaluateSMSReadiness(false, false, false, false, "")
 	}
 	s.mu.RLock()
+	defer s.mu.RUnlock()
 	registered := s.regState == regRegistered
 	profileReady := registered && s.regSession != nil &&
 		strings.TrimSpace(s.regSession.publicID) != "" &&
@@ -32,19 +39,30 @@ func (s *Service) SMSReadiness() SMSReadiness {
 	baseReceiverReady := s.smsReceiverReady
 	receiverReady := baseReceiverReady
 	protectedPushRequired := s.protectedSMSPushRequiredLocked()
+	registrationSMSProven := s.registrationSMSProvenLocked()
+	awaitingEvidence := !s.smsReception.failed && s.smsReception.peer == nil
 	if protectedPushRequired {
-		receiverReady = receiverReady && s.portSPushReady.Load()
+		receiverReady = receiverReady && (s.portSPushReady.Load() || registrationSMSProven)
 	}
 	smsc := ""
 	if s.cfg != nil {
 		smsc = s.cfg.SMSC
 	}
-	s.mu.RUnlock()
 	readiness := evaluateSMSReadiness(registered, profileReady, transportReady, receiverReady, smsc)
+	portS := s.capturePortSSession()
 	readiness.HealthReady = readiness.Ready || smsReceiverHealthReady(smsHealthInput{
 		readiness: readiness, baseReceiverReady: baseReceiverReady,
-		protectedPushRequired: protectedPushRequired, portS: s.capturePortSSession(),
+		protectedPushRequired: protectedPushRequired, portS: portS,
 	})
+	readiness.ReceiverPending = !readiness.Ready && !readiness.HealthReady &&
+		registered && profileReady && transportReady && baseReceiverReady &&
+		protectedPushRequired && awaitingEvidence && portS.generation == 0 && portS.lastCloseKind == ""
+	if readiness.ReceiverPending && readiness.SMSCPresent {
+		readiness.Reason = smsReadyReasonAwaitingDownlink
+	}
+	if readiness.Ready && registrationSMSProven {
+		readiness.Reason = smsReadyReasonRegistrationFlow
+	}
 	return readiness
 }
 
@@ -100,8 +118,13 @@ func (s *Service) setSMSReceiverReady(ready bool) {
 	if ready {
 		s.maybeNotifySMSReady(smsReadyReasonReady)
 	}
-	if changed && callback != nil {
-		callback(s.SMSReadiness())
+	if !changed {
+		return
+	}
+	readiness := s.SMSReadiness()
+	s.logSMSReadinessChange(readiness)
+	if callback != nil {
+		callback(readiness)
 	}
 }
 
@@ -113,9 +136,24 @@ func (s *Service) notifySMSReadiness() {
 	callback := s.onSMSReadiness
 	s.mu.RUnlock()
 	s.maybeNotifySMSReady(smsReadyReasonReady)
+	readiness := s.SMSReadiness()
+	s.logSMSReadinessChange(readiness)
 	if callback != nil {
-		callback(s.SMSReadiness())
+		callback(readiness)
 	}
+}
+
+// logSMSReadinessChange logs each new readiness reason. The UI shows SMS RX
+// state from these snapshots, and the not-ready transitions were otherwise
+// visible only there.
+func (s *Service) logSMSReadinessChange(readiness SMSReadiness) {
+	if previous, _ := s.smsReadinessReason.Swap(readiness.Reason).(string); previous == readiness.Reason {
+		return
+	}
+	logging.Info("IMS SMS readiness changed",
+		"device", s.DeviceID(), "reason", readiness.Reason,
+		"ready", readiness.Ready, "health_ready", readiness.HealthReady,
+		"receiver_pending", readiness.ReceiverPending, "port_s_connected", s.portSPushReady.Load())
 }
 
 func evaluateSMSReadiness(registered, profileReady, transportReady, receiverReady bool, smsc string) SMSReadiness {
