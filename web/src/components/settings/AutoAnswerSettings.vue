@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowUpload24Regular } from '@vicons/fluent'
+import { Add20Regular, ArrowUpload24Regular, Subtract20Regular } from '@vicons/fluent'
 import { devicesService } from '../../services/devices'
 import {
   systemService,
@@ -10,55 +10,69 @@ import {
 } from '../../services/system'
 
 type DeviceRow = AutoAnswerDeviceSettings & { name: string }
-const DEFAULT_AUTO_ANSWER_DELAY_SECONDS = 30
+type SavedDeviceSettings = Pick<AutoAnswerDeviceSettings, 'enabled' | 'delay_seconds'>
+const DEFAULT_AUTO_ANSWER_DELAY_SECONDS = 8
+const DEVICE_SEARCH_THRESHOLD = 5
+const DEVICE_SAVE_BATCH_SIZE = 4
 
 const settings = ref<AutoAnswerSettings>({ audio_ready: false, audio_name: '', devices: [] })
 const rows = ref<DeviceRow[]>([])
 const loading = ref(true)
 const loaded = ref(false)
+const loadError = ref('')
 const savingDevices = ref(new Set<string>())
 const uploading = ref(false)
+const searchQuery = ref('')
+const savedDevices = ref(new Map<string, SavedDeviceSettings>())
 const fileInput = ref<HTMLInputElement | null>(null)
 
-function isSaving(deviceId: string) {
-  return savingDevices.value.has(deviceId)
+const busy = computed(() => loading.value || uploading.value || savingDevices.value.size > 0)
+const enabledCount = computed(() => rows.value.filter(row => row.enabled).length)
+const dirtyRows = computed(() => rows.value.filter(isDirty))
+const filteredRows = computed(() => {
+  const query = searchQuery.value.trim().toLocaleLowerCase()
+  if (!query) return rows.value
+  return rows.value.filter(row => `${row.name} ${row.device_id}`.toLocaleLowerCase().includes(query))
+})
+
+function isDirty(row: DeviceRow) {
+  const saved = savedDevices.value.get(row.device_id)
+  return !saved || saved.enabled !== row.enabled || saved.delay_seconds !== row.delay_seconds
 }
 
-function setSaving(deviceId: string, saving: boolean) {
-  const next = new Set(savingDevices.value)
-  if (saving) next.add(deviceId)
-  else next.delete(deviceId)
-  savingDevices.value = next
+function rememberSaved(rowsToRemember: DeviceRow[]) {
+  savedDevices.value = new Map(rowsToRemember.map(row => [
+    row.device_id,
+    { enabled: row.enabled, delay_seconds: row.delay_seconds }
+  ]))
 }
 
-function applyDeviceSettings(next: AutoAnswerSettings) {
-  settings.value = next
-  const configured = new Map(next.devices.map(item => [item.device_id, item]))
-  rows.value = rows.value.map(row => {
-    const saved = configured.get(row.device_id)
-    return saved ? { ...row, ...saved } : row
-  })
+function adjustDelay(row: DeviceRow, amount: number) {
+  row.delay_seconds = Math.max(1, row.delay_seconds + amount)
 }
 
 async function load() {
   loading.value = true
   loaded.value = false
+  loadError.value = ''
   const [phoneResult, devicesResult] = await Promise.all([
     systemService.getPhoneSettings(),
     devicesService.listManaged()
   ])
   loading.value = false
   if (!phoneResult.ok) {
-    ElMessage.error(phoneResult.error.message || '自动接听设置加载失败')
+    loadError.value = phoneResult.error.message || '自动接听设置加载失败'
+    ElMessage.error(loadError.value)
     return
   }
   if (!devicesResult.ok) {
-    ElMessage.error(devicesResult.error.message || '设备列表加载失败')
+    loadError.value = devicesResult.error.message || '设备列表加载失败'
+    ElMessage.error(loadError.value)
     return
   }
   settings.value = phoneResult.data.auto_answer
   const configured = new Map(settings.value.devices.map(item => [item.device_id, item]))
-  rows.value = devicesResult.data.devices.map(device => {
+  const loadedRows = devicesResult.data.devices.map(device => {
     const saved = configured.get(device.id)
     return {
       device_id: device.id,
@@ -67,32 +81,47 @@ async function load() {
       delay_seconds: saved && saved.delay_seconds > 0 ? saved.delay_seconds : DEFAULT_AUTO_ANSWER_DELAY_SECONDS
     }
   })
+  rows.value = loadedRows
+  rememberSaved(loadedRows)
   loaded.value = true
 }
 
-async function saveDevice(row: DeviceRow, enabled = row.enabled, delayOnly = false) {
-  setSaving(row.device_id, true)
-  const result = await systemService.saveAutoAnswerDevice(row.device_id, {
-    enabled,
-    delay_seconds: row.delay_seconds
-  })
-  setSaving(row.device_id, false)
-  if (!result.ok) {
-    ElMessage.error(result.error.message || '自动接听设置保存失败')
-    await load()
-    return false
+async function saveAll() {
+  const pending = dirtyRows.value.map(row => ({
+    row,
+    payload: { enabled: row.enabled, delay_seconds: row.delay_seconds }
+  }))
+  if (!pending.length) return
+  savingDevices.value = new Set(pending.map(item => item.row.device_id))
+  const results = []
+  for (let start = 0; start < pending.length; start += DEVICE_SAVE_BATCH_SIZE) {
+    const batch = pending.slice(start, start + DEVICE_SAVE_BATCH_SIZE)
+    results.push(...await Promise.all(batch.map(async item => ({
+      ...item,
+      result: await systemService.saveAutoAnswerDevice(item.row.device_id, item.payload)
+    }))))
   }
-  row.enabled = enabled
-  ElMessage.success(delayOnly ? '等待时间已保存' : enabled ? '该设备已启用自动接听' : '该设备已关闭自动接听')
-  return true
+  savingDevices.value = new Set()
+
+  const nextSaved = new Map(savedDevices.value)
+  const failures: Array<{ name: string; message: string }> = []
+  for (const item of results) {
+    if (item.result.ok) nextSaved.set(item.row.device_id, item.payload)
+    else failures.push({ name: item.row.name, message: item.result.error.message || '保存失败' })
+  }
+  savedDevices.value = nextSaved
+  if (failures.length) {
+    const first = failures[0]
+    const prefix = failures.length > 1 ? `${failures.length} 台设备保存失败；第一项` : ''
+    ElMessage.error(`${prefix}${first.name}：${first.message}`)
+    return
+  }
+  ElMessage.success(`已保存 ${results.length} 台设备的自动接听设置`)
 }
 
 async function toggleDevice(row: DeviceRow, value: string | number | boolean) {
   const enabled = value === true
-  if (!enabled) {
-    await saveDevice(row, false)
-    return
-  }
+  if (!enabled) return
   if (!settings.value.audio_ready) {
     row.enabled = false
     ElMessage.warning('请先上传自动接听录音')
@@ -100,15 +129,14 @@ async function toggleDevice(row: DeviceRow, value: string | number | boolean) {
   }
   try {
     await ElMessageBox.confirm(
-      `${row.name} 来电持续 ${row.delay_seconds} 秒无人接听时，HiDeck 将自动接听、播放录音、保存对方语音，并发送到 QQ、飞书、Telegram、微信或企业微信机器人。确认启用？`,
+      `${row.name} 来电持续 ${row.delay_seconds} 秒无人接听时，HiDeck 将自动接听、播放录音、保存对方语音，并发送到 QQ、飞书、Telegram、微信或企业微信机器人。保存修改后生效。`,
       '启用自动接听',
-      { type: 'warning', confirmButtonText: '启用', cancelButtonText: '取消' }
+      { type: 'warning', confirmButtonText: '继续', cancelButtonText: '取消' }
     )
   } catch {
     row.enabled = false
     return
   }
-  await saveDevice(row, true)
 }
 
 async function upload(event: Event) {
@@ -123,7 +151,11 @@ async function upload(event: Event) {
     ElMessage.error(result.error.message || '自动接听录音上传失败')
     return
   }
-  applyDeviceSettings(result.data)
+  settings.value = {
+    ...settings.value,
+    audio_ready: result.data.audio_ready,
+    audio_name: result.data.audio_name
+  }
   ElMessage.success('自动接听录音已更新')
 }
 
@@ -131,7 +163,7 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="auto-answer-settings" :aria-busy="loading || uploading || savingDevices.size > 0">
+  <div class="auto-answer-settings" :aria-busy="busy">
     <div class="auto-answer-heading">
       <div>
         <div class="text-sm font-bold text-[var(--ui-text)]">未接来电自动应答</div>
@@ -149,7 +181,7 @@ onMounted(load)
           {{ settings.audio_ready ? `已就绪：${settings.audio_name}` : '尚未上传录音' }}
         </span>
       </div>
-      <el-button :loading="uploading" :disabled="!loaded || loading || savingDevices.size > 0" @click="fileInput?.click()">
+      <el-button :loading="uploading" :disabled="!loaded || busy" @click="fileInput?.click()">
         <el-icon><ArrowUpload24Regular /></el-icon>
         {{ uploading ? '正在上传' : '选择 WAV' }}
       </el-button>
@@ -158,49 +190,105 @@ onMounted(load)
         class="auto-answer-file"
         type="file"
         accept=".wav,audio/wav,audio/x-wav"
-        :disabled="!loaded || loading || uploading || savingDevices.size > 0"
+        :disabled="!loaded || busy"
         @change="upload"
       >
     </div>
 
-    <div v-if="loaded && rows.length" class="auto-answer-devices">
-      <div v-for="row in rows" :key="row.device_id" class="auto-answer-device">
-        <div class="auto-answer-device-heading">
-          <div class="min-w-0">
-            <strong>{{ row.name }}</strong>
+    <div v-if="loading" class="auto-answer-state" role="status">正在加载设备设置…</div>
+    <div v-else-if="loadError" class="auto-answer-state is-error" role="alert">
+      <span>{{ loadError }}</span>
+      <el-button :disabled="busy" @click="load">重新加载</el-button>
+    </div>
+    <section v-else-if="loaded && rows.length" class="auto-answer-device-panel" aria-labelledby="auto-answer-device-title">
+      <div class="auto-answer-device-toolbar">
+        <div class="auto-answer-device-summary">
+          <strong id="auto-answer-device-title">按设备设置</strong>
+          <span>
+            共 {{ rows.length }} 台，已启用 {{ enabledCount }} 台
+            <template v-if="dirtyRows.length"> · {{ dirtyRows.length }} 项未保存</template>
+          </span>
+        </div>
+        <div class="auto-answer-device-actions">
+          <el-input
+            v-if="rows.length >= DEVICE_SEARCH_THRESHOLD"
+            v-model="searchQuery"
+            clearable
+            aria-label="搜索自动接听设备"
+            placeholder="搜索设备"
+          />
+          <el-button type="primary" :loading="savingDevices.size > 0" :disabled="busy || !dirtyRows.length" @click="saveAll">
+            保存修改
+          </el-button>
+        </div>
+      </div>
+
+      <div class="auto-answer-list-header" aria-hidden="true">
+        <span>设备</span>
+        <span>自动接听</span>
+        <span>无人接听后</span>
+      </div>
+      <div v-if="filteredRows.length" class="auto-answer-device-list" role="list">
+        <div
+          v-for="row in filteredRows"
+          :key="row.device_id"
+          class="auto-answer-device-row"
+          :class="{ 'is-dirty': isDirty(row) }"
+          role="listitem"
+        >
+          <div class="auto-answer-device-identity">
+            <strong :id="`auto-answer-device-${row.device_id}`">{{ row.name }}</strong>
             <span>{{ row.device_id }}</span>
           </div>
-          <el-switch
-            v-model="row.enabled"
-            :loading="isSaving(row.device_id)"
-            :disabled="loading || uploading || isSaving(row.device_id)"
-            :aria-label="`${row.name} 自动接听`"
-            @change="toggleDevice(row, $event)"
-          />
-        </div>
-        <div class="auto-answer-delay">
-          <label :for="`auto-answer-delay-${row.device_id}`">无人接听等待时间</label>
-          <div class="auto-answer-delay-input">
-            <el-input-number
-              :id="`auto-answer-delay-${row.device_id}`"
-              v-model="row.delay_seconds"
-              :min="1"
-              :step="5"
-              :disabled="loading || uploading || isSaving(row.device_id)"
-              controls-position="right"
+          <div class="auto-answer-device-toggle">
+            <span class="auto-answer-field-label">自动接听</span>
+            <el-switch
+              v-model="row.enabled"
+              :disabled="busy"
+              :aria-label="`${row.name} 自动接听`"
+              @change="toggleDevice(row, $event)"
             />
-            <span>秒</span>
-            <el-button
-              :loading="isSaving(row.device_id)"
-              :disabled="loading || uploading || isSaving(row.device_id)"
-              @click="saveDevice(row, row.enabled, true)"
-            >
-              保存
-            </el-button>
+          </div>
+          <div class="auto-answer-delay-field">
+            <span class="auto-answer-field-label">无人接听后</span>
+            <div class="auto-answer-delay-stepper" role="group" :aria-label="`${row.name} 无人接听等待时间`">
+              <el-button
+                text
+                class="auto-answer-stepper-button"
+                :disabled="busy || row.delay_seconds <= 1"
+                :aria-label="`${row.name} 减少等待时间`"
+                @click="adjustDelay(row, -1)"
+              >
+                <el-icon><Subtract20Regular /></el-icon>
+              </el-button>
+              <div class="auto-answer-delay-value">
+                <el-input-number
+                  :id="`auto-answer-delay-${row.device_id}`"
+                  v-model="row.delay_seconds"
+                  class="font-mono"
+                  :min="1"
+                  :step="1"
+                  :disabled="busy"
+                  :controls="false"
+                  :aria-label="`${row.name} 无人接听等待秒数`"
+                />
+                <span class="auto-answer-delay-unit">秒</span>
+              </div>
+              <el-button
+                text
+                class="auto-answer-stepper-button"
+                :disabled="busy"
+                :aria-label="`${row.name} 增加等待时间`"
+                @click="adjustDelay(row, 1)"
+              >
+                <el-icon><Add20Regular /></el-icon>
+              </el-button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+      <div v-else class="auto-answer-list-empty">未找到匹配设备</div>
+    </section>
     <div v-else-if="loaded" class="auto-answer-empty">暂无可配置设备</div>
   </div>
 </template>
@@ -208,28 +296,67 @@ onMounted(load)
 <style scoped>
 .auto-answer-settings { display: grid; gap: 16px; }
 .auto-answer-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-.auto-answer-audio, .auto-answer-device { min-width: 0; padding: 16px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); background: var(--ui-surface-muted); }
-.auto-answer-audio { display: flex; align-items: center; gap: 12px; }
+.auto-answer-audio, .auto-answer-device-panel { min-width: 0; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); background: var(--ui-surface-muted); }
+.auto-answer-audio { display: flex; align-items: center; gap: 12px; padding: 16px; }
 .auto-answer-audio-copy { flex: 1; min-width: 0; }
-.auto-answer-audio strong, .auto-answer-device strong, .auto-answer-delay label { font-size: var(--ui-font-body-sm); font-weight: 650; color: var(--ui-text); }
+.auto-answer-audio strong, .auto-answer-device-panel strong { font-size: var(--ui-font-body-sm); font-weight: 650; color: var(--ui-text); }
 .auto-answer-audio p { margin: 4px 0 0; color: var(--ui-text-muted); font-size: 13px; line-height: 1.5; }
 .auto-answer-audio span { display: block; margin-top: 8px; font-size: 12px; overflow-wrap: anywhere; }
 .auto-answer-audio .is-ready { color: var(--ui-success); }
 .auto-answer-audio .is-missing { color: var(--ui-warning); }
-.auto-answer-devices { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
-.auto-answer-device { display: grid; gap: 14px; }
-.auto-answer-device-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.auto-answer-device-heading span { display: block; margin-top: 3px; color: var(--ui-text-muted); font-size: 12px; overflow-wrap: anywhere; }
-.auto-answer-delay { display: grid; gap: 8px; }
-.auto-answer-delay-input { display: flex; align-items: center; gap: 8px; }
-.auto-answer-delay-input span { color: var(--ui-text-muted); font-size: 13px; }
-.auto-answer-empty { padding: 20px; border: 1px dashed var(--ui-border); border-radius: var(--ui-radius-md); color: var(--ui-text-muted); text-align: center; }
+.auto-answer-device-panel { container-type: inline-size; overflow: hidden; }
+.auto-answer-device-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 16px; border-bottom: 1px solid var(--ui-border); background: var(--ui-surface); }
+.auto-answer-device-summary { min-width: 0; }
+.auto-answer-device-summary span { display: block; margin-top: 3px; color: var(--ui-text-muted); font-size: 12px; }
+.auto-answer-device-actions { display: flex; align-items: center; gap: 8px; }
+.auto-answer-device-actions .el-input { width: 200px; }
+.auto-answer-list-header { display: grid; grid-template-columns: minmax(140px, 1fr) 104px 176px; align-items: center; gap: 16px; padding: 8px 16px; border-bottom: 1px solid var(--ui-border); color: var(--ui-text-muted); font-size: 12px; font-weight: 600; }
+.auto-answer-list-header span:nth-child(2) { text-align: center; }
+.auto-answer-device-list { max-height: min(440px, 55vh); overflow: auto; scrollbar-gutter: stable; }
+.auto-answer-device-row { display: grid; grid-template-columns: minmax(140px, 1fr) 104px 176px; align-items: center; gap: 16px; min-height: 60px; padding: 8px 16px; border-bottom: 1px solid var(--ui-border); }
+.auto-answer-device-row.is-dirty { box-shadow: inset 3px 0 0 var(--ui-primary); }
+.auto-answer-device-row:last-child { border-bottom: 0; }
+.auto-answer-device-identity { min-width: 0; }
+.auto-answer-device-identity strong, .auto-answer-device-identity span { display: block; overflow-wrap: anywhere; }
+.auto-answer-device-identity span { margin-top: 3px; color: var(--ui-text-muted); font-size: 12px; }
+.auto-answer-device-toggle, .auto-answer-delay-field { display: flex; align-items: center; gap: 8px; }
+.auto-answer-device-toggle { justify-content: center; }
+.auto-answer-field-label { display: none; color: var(--ui-text-muted); font-size: 13px; }
+.auto-answer-delay-stepper { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; width: 176px; min-height: 44px; box-sizing: border-box; overflow: hidden; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); background: var(--ui-surface); }
+.auto-answer-delay-stepper:focus-within { border-color: var(--ui-primary); box-shadow: var(--ui-focus); }
+.auto-answer-delay-value { min-width: 0; display: flex; align-items: center; justify-content: center; gap: 4px; padding: 0 8px; }
+.auto-answer-delay-value .el-input-number, .auto-answer-delay-value :deep(.el-input) { width: 5ch; min-width: 0; min-height: 42px; flex: 0 1 5ch; border-radius: 0 !important; box-shadow: none !important; }
+.auto-answer-delay-value :deep(.el-input__wrapper), .auto-answer-delay-value :deep(.el-input__wrapper.is-focus) { min-height: 42px; padding: 0; border-radius: 0 !important; background: transparent; box-shadow: none !important; }
+.auto-answer-delay-stepper :deep(.el-input__inner) { min-width: 0; color: var(--ui-text); font-weight: 650; font-variant-numeric: tabular-nums; text-align: center; }
+.auto-answer-delay-unit { color: var(--ui-text-muted); font-size: 12px; white-space: nowrap; }
+.auto-answer-stepper-button.el-button { width: 44px; min-height: 44px; margin: 0; padding: 0; border: 0; border-radius: 0; color: var(--ui-text-muted); }
+.auto-answer-stepper-button:first-child { border-right: 1px solid var(--ui-border); }
+.auto-answer-stepper-button:last-child { border-left: 1px solid var(--ui-border); }
+.auto-answer-stepper-button:not(.is-disabled):hover, .auto-answer-stepper-button:not(.is-disabled):focus-visible { color: var(--ui-primary); background: var(--ui-surface-muted); }
+.auto-answer-state, .auto-answer-empty, .auto-answer-list-empty { padding: 20px; border: 1px dashed var(--ui-border); border-radius: var(--ui-radius-md); color: var(--ui-text-muted); text-align: center; }
+.auto-answer-state.is-error { display: flex; align-items: center; justify-content: center; gap: 12px; color: var(--ui-danger); }
+.auto-answer-list-empty { border: 0; border-radius: 0; }
 .auto-answer-file { display: none; }
 :deep(.el-button), :deep(.el-input-number) { min-height: 44px; }
+.auto-answer-device-actions :deep(.el-input__wrapper), .auto-answer-delay-field :deep(.el-input__wrapper) { min-height: 36px; }
+.auto-answer-device-toggle :deep(.el-switch) { min-width: 44px; min-height: 44px; }
+@container (max-width: 620px) {
+  .auto-answer-list-header { display: none; }
+  .auto-answer-device-row { grid-template-columns: minmax(0, 1fr) auto; gap: 6px 16px; min-height: 0; padding-block: 12px; }
+  .auto-answer-device-toggle { gap: 10px; }
+  .auto-answer-field-label { display: inline; }
+  .auto-answer-delay-field { grid-column: 1 / -1; justify-content: space-between; padding-top: 6px; border-top: 1px solid var(--ui-border); }
+}
+@container (max-width: 360px) {
+  .auto-answer-delay-field { align-items: stretch; flex-direction: column; }
+  .auto-answer-delay-stepper { grid-template-columns: 44px minmax(0, 1fr) 44px; width: 100%; }
+}
 @media (max-width: 720px) {
   .auto-answer-audio { align-items: stretch; flex-direction: column; }
   .auto-answer-audio .el-button { width: 100%; }
-  .auto-answer-delay-input { align-items: stretch; flex-wrap: wrap; }
-  .auto-answer-delay-input .el-input-number { flex: 1; min-width: 160px; }
+  .auto-answer-device-toolbar, .auto-answer-device-actions { align-items: stretch; flex-direction: column; }
+  .auto-answer-device-actions .el-input, .auto-answer-device-actions .el-button { width: 100%; }
+  .auto-answer-device-list { max-height: none; overflow: visible; }
+  .auto-answer-state.is-error { align-items: stretch; flex-direction: column; }
 }
 </style>

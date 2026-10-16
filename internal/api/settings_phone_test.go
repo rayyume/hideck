@@ -25,6 +25,24 @@ func (settingsPromptDecoder) DecodePCM(_ context.Context, path string) ([]int16,
 	return make([]int16, 160), 8000, nil
 }
 
+func TestPhoneSettingsPayloadUsesEightSecondDefault(t *testing.T) {
+	service, err := phone.NewService(phone.ServiceOptions{
+		Gateway: &phoneRouteGatewayStub{}, WebRTCUDPAddress: "127.0.0.1:0",
+		AutoAnswer: phone.AutoAnswerConfig{Devices: map[string]phone.AutoAnswerDeviceConfig{
+			"dev-1": {Enabled: false},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = service.Close(context.Background()) })
+
+	payload := (&Server{phone: service}).phoneSettingsPayload()
+	if len(payload.AutoAnswer.Devices) != 1 || payload.AutoAnswer.Devices[0].DelaySeconds != 8 {
+		t.Fatalf("auto answer payload = %+v, want 8 second default", payload.AutoAnswer.Devices)
+	}
+}
+
 func TestPhoneSettingsEnableAutoAnswerAndPersist(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	directory := t.TempDir()

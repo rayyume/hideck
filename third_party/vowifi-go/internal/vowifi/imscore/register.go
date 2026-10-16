@@ -107,6 +107,11 @@ func (s *Service) registerLocked(ctx context.Context) error {
 	if err == nil {
 		expires, err = s.runRegisterFlow(ctx)
 	}
+	if err != nil && hadBinding && isProtectedPortConflict(err) {
+		// The reset drops the binding this refresh was meant to keep.
+		hadBinding = false
+		expires, err = s.registerWithFreshProtectedPorts(ctx, err)
+	}
 	if err == nil && s.lastRegisterContactCount.Load() > 1 {
 		// A binding left by an earlier run keeps its own Contact URI, so this
 		// registration adds to it rather than replacing it. Clearing it took a

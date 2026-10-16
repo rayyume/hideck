@@ -20,7 +20,7 @@ import (
 
 const (
 	maxAutoAnswerAudioBytes       = 16 << 20
-	defaultAutoAnswerDelaySeconds = 30
+	defaultAutoAnswerDelaySeconds = 8
 )
 
 type phoneSettingsResponse struct {

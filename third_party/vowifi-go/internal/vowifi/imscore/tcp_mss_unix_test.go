@@ -39,8 +39,10 @@ func TestIPSec3GPPListenerAppliesTCPMSS(t *testing.T) {
 		t.Fatal(err)
 	case conn := <-accepted:
 		defer conn.Close()
-		if got := socketTCPMSS(t, conn); got != ipsec3gppTCPMSS {
-			t.Fatalf("accepted TCP MSS = %d, want %d", got, ipsec3gppTCPMSS)
+		// TCP options and peer negotiation can reduce the effective MSS.
+		// Verify the configured ceiling rather than an exact negotiated value.
+		if got := socketTCPMSS(t, conn); got <= 0 || got > ipsec3gppTCPMSS {
+			t.Fatalf("accepted TCP MSS = %d, want 0 < MSS <= %d", got, ipsec3gppTCPMSS)
 		}
 	}
 }

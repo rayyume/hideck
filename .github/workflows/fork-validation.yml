@@ -41,6 +41,9 @@ jobs:
           cp -a web/dist/. internal/web/dist/
       - name: Full Go tests
         run: go test -tags 'with_utls nomsgpack' -timeout 180s ./...
+      - name: VoWiFi IMS registration and carrier policy tests
+        working-directory: third_party/vowifi-go
+        run: go test -timeout 180s ./internal/vowifi/imscore ./internal/vowifi/policy
       - name: Archive concurrency tests
         run: go test -race -timeout 180s ./internal/webdavarchive ./internal/db
       - name: Deployment contracts
