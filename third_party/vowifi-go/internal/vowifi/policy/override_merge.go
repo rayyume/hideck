@@ -84,6 +84,7 @@ func applyCarrierOverride(preset CarrierPreset, override CarrierOverride) Carrie
 		value := *override.WithholdDeviceIdentity
 		preset.WithholdDeviceIdentity = &value
 	}
+	applyBoolPtr(&preset.DeferPeerChildRekeySwitch, override.DeferPeerChildRekeySwitch)
 	preset.IMSRegisterTemplate = applyIMSRegisterTemplateOverride(preset.IMSRegisterTemplate, override.IMSRegisterTemplate)
 	setStringIfPresent(&preset.SMSRoutingMethod, override.SMSRoutingMethod)
 	setStringIfPresent(&preset.SMSRoutingGW, override.SMSRoutingGW)

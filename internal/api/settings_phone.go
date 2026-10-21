@@ -159,6 +159,12 @@ func (s *Server) phoneSettingsPayload() phoneSettingsResponse {
 	}}
 }
 
+// autoAnswerAudioFormats 是允许上传的自动接听录音格式。除 WAV 外都需要在服务端
+// 解码后统一转成单声道 PCM16 WAV 再落盘，运行时只认这一种格式。
+var autoAnswerAudioFormats = map[string]struct{}{
+	".wav": {}, ".amr": {}, ".amr-wb": {}, ".mp3": {},
+}
+
 func (s *Server) handleUploadAutoAnswerAudio(c *gin.Context) {
 	if !s.requirePhone(c) {
 		return
@@ -166,11 +172,14 @@ func (s *Server) handleUploadAutoAnswerAudio(c *gin.Context) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxAutoAnswerAudioBytes+(1<<20))
 	file, err := c.FormFile("file")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "请选择不超过 16 MiB 的 WAV 文件"})
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "请选择不超过 16 MiB 的音频文件"})
 		return
 	}
-	if !strings.EqualFold(filepath.Ext(file.Filename), ".wav") {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "自动接听录音必须是 WAV 文件"})
+	extension := strings.ToLower(filepath.Ext(file.Filename))
+	if _, ok := autoAnswerAudioFormats[extension]; !ok {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status": "error", "message": "自动接听录音支持 WAV、AMR、AMR-WB 或 MP3 文件",
+		})
 		return
 	}
 	if c.Request.MultipartForm != nil {
@@ -183,7 +192,7 @@ func (s *Server) handleUploadAutoAnswerAudio(c *gin.Context) {
 		s.respondAutoAnswerUploadError(c, err)
 		return
 	}
-	temporary, err := os.CreateTemp(filepath.Dir(target), ".auto-answer-*.wav")
+	temporary, err := os.CreateTemp(filepath.Dir(target), ".auto-answer-*"+extension)
 	if err != nil {
 		s.respondAutoAnswerUploadError(c, err)
 		return
@@ -194,15 +203,26 @@ func (s *Server) handleUploadAutoAnswerAudio(c *gin.Context) {
 		s.respondAutoAnswerUploadError(c, err)
 		return
 	}
-	if err := s.phone.ValidateAutoAnswerAudio(temporaryPath); err != nil {
+	// 所有来源统一转换：混单声道、采样率归一到 8 kHz、超过 30 秒截断。走同一条
+	// 路径也让 44.1 kHz 立体声 WAV 这类"能解码但不符合播放要求"的文件可用。
+	convertedPath := temporaryPath + ".wav"
+	if err := s.phone.ConvertAutoAnswerAudio(temporaryPath, convertedPath); err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{
+			"status": "error", "message": "音频格式转换失败：" + err.Error(),
+		})
+		return
+	}
+	defer os.Remove(convertedPath)
+	installSource := convertedPath
+	if err := s.phone.ValidateAutoAnswerAudio(installSource); err != nil {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"status": "error", "message": err.Error()})
 		return
 	}
-	if err := os.Chmod(temporaryPath, 0o600); err != nil {
+	if err := os.Chmod(installSource, 0o600); err != nil {
 		s.respondAutoAnswerUploadError(c, err)
 		return
 	}
-	if err := s.installAutoAnswerAudio(temporaryPath, target); err != nil {
+	if err := s.installAutoAnswerAudio(installSource, target); err != nil {
 		s.respondAutoAnswerUploadError(c, err)
 		return
 	}
@@ -248,15 +268,20 @@ func (s *Server) reloadAutoAnswerAudio(path string) error {
 }
 
 func (s *Server) autoAnswerAudioPath() string {
+	path := ""
 	if s.fullCfg != nil {
 		s.systemConfigMu.RLock()
-		audioFile := strings.TrimSpace(s.fullCfg.System.AutoAnswer.AudioFile)
+		path = strings.TrimSpace(s.fullCfg.System.AutoAnswer.AudioFile)
 		s.systemConfigMu.RUnlock()
-		if audioFile != "" {
-			return audioFile
-		}
 	}
-	return "data/phone/auto-answer.wav"
+	if path == "" {
+		return "data/phone/auto-answer.wav"
+	}
+	// 落盘内容统一是 WAV；旧配置若指向 .amr 之类后缀会按后缀解码失败，这里同步改掉。
+	if !strings.EqualFold(filepath.Ext(path), ".wav") {
+		path = strings.TrimSuffix(path, filepath.Ext(path)) + ".wav"
+	}
+	return path
 }
 
 func (s *Server) respondAutoAnswerUploadError(c *gin.Context, err error) {

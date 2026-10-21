@@ -38,6 +38,10 @@ type phoneRefreshRequest struct {
 	Takeover bool   `json:"takeover"`
 }
 
+type phoneHistoryDeleteRequest struct {
+	IDs []uint64 `json:"ids"`
+}
+
 func (s *Server) registerPhoneRoutes(api *gin.RouterGroup) {
 	api.GET("/phone/devices", s.handlePhoneDevices)
 	api.POST("/phone/media", s.handlePhoneMedia)
@@ -54,6 +58,7 @@ func (s *Server) registerPhoneRoutes(api *gin.RouterGroup) {
 	api.PUT("/phone/calls/:call_id/media", s.handlePhoneRefreshMedia)
 	api.GET("/phone/events", s.handlePhoneEvents)
 	api.GET("/phone/history", s.handlePhoneHistory)
+	api.POST("/phone/history/delete", s.handlePhoneHistoryDelete)
 	api.GET("/phone/recordings/:recording", s.handleCommandRecording)
 	s.registerPhoneContactRoutes(api)
 }
@@ -129,7 +134,7 @@ func (s *Server) handlePhoneMedia(c *gin.Context) {
 	if !decodePhoneJSON(c, &request) {
 		return
 	}
-	answer, err := s.phone.CreateMedia(c.Request.Context(), s.auth.Username, request.SDP)
+	answer, err := s.phone.CreateMedia(c.Request.Context(), s.auth.Username, request.SDP, c.Request.Host)
 	if err != nil {
 		s.respondPhoneError(c, err)
 		return
@@ -307,6 +312,22 @@ func (s *Server) handlePhoneHistory(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"records": records})
 }
 
+func (s *Server) handlePhoneHistoryDelete(c *gin.Context) {
+	if !s.requirePhone(c) {
+		return
+	}
+	var request phoneHistoryDeleteRequest
+	if !decodePhoneJSON(c, &request) {
+		return
+	}
+	deleted, err := s.phone.DeleteHistory(c.Request.Context(), request.IDs)
+	if err != nil {
+		s.respondPhoneError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"deleted": deleted})
+}
+
 func (s *Server) decodePhoneControl(c *gin.Context) (phone.ControlRequest, bool) {
 	var request phoneControlRequest
 	if !decodePhoneJSON(c, &request) {
@@ -342,6 +363,10 @@ func (s *Server) respondPhoneError(c *gin.Context, err error) {
 	status := http.StatusBadRequest
 	code := "phone_error"
 	switch {
+	case errors.Is(err, phone.ErrActiveCallHistoryDelete):
+		status = http.StatusConflict
+		code = "phone_history_active"
+		message = phone.ErrActiveCallHistoryDelete.Error()
 	case errors.Is(err, phone.ErrHoldUnavailable):
 		status = http.StatusServiceUnavailable
 		code = "phone_hold_unavailable"

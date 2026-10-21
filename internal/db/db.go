@@ -1018,54 +1018,15 @@ func getSIMSubscriptionPhoneNumberByICCID(iccid string) (string, error) {
 	return strings.TrimSpace(sub.PhoneNumber), nil
 }
 
-// GetPhoneNumberByIMSIOrICCID 先按 IMSI 查订阅；IMSI 不可用时按 ICCID 查订阅，最后查暂存记录。
+// GetPhoneNumberByIMSIOrICCID resolves the effective number without allowing a
+// reused IMSI to leak another card's number into an exact ICCID lookup.
 func GetPhoneNumberByIMSIOrICCID(imsi, iccid string) (string, error) {
-	if phone, err := GetSIMCardPhoneNumberByIMSI(imsi); err != nil {
-		return "", err
-	} else if strings.TrimSpace(phone) != "" {
-		return strings.TrimSpace(phone), nil
-	}
-	canonicalICCID := CanonicalICCID(iccid)
-	if phone, err := getSIMSubscriptionPhoneNumberByICCID(canonicalICCID); err != nil {
-		return "", err
-	} else if strings.TrimSpace(phone) != "" {
-		return strings.TrimSpace(phone), nil
-	}
-	if DB == nil || canonicalICCID == "" {
-		return "", nil
-	}
-	var pending PendingPhoneNumber
-	err := DB.Select("phone_number").
-		Where("iccid = ? AND COALESCE(phone_number, '') <> ''", canonicalICCID).
-		Limit(1).First(&pending).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return "", nil
-	}
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(pending.PhoneNumber), nil
+	return GetPhoneNumberForSMSIdentity(SMSIdentity{IMSI: imsi, ICCID: iccid})
 }
 
 func GetSIMPhoneNumbersByIMSI() (map[string]string, error) {
-	out := map[string]string{}
-	if DB == nil {
-		return out, nil
-	}
-	var rows []SIMSubscription
-	if err := DB.Select("imsi", "phone_number").
-		Where("COALESCE(imsi, '') <> '' AND COALESCE(phone_number, '') <> ''").
-		Find(&rows).Error; err != nil {
-		return nil, err
-	}
-	for _, row := range rows {
-		imsi := strings.TrimSpace(row.IMSI)
-		phone := strings.TrimSpace(row.PhoneNumber)
-		if imsi != "" && phone != "" {
-			out[imsi] = phone
-		}
-	}
-	return out, nil
+	index, err := GetSIMPhoneNumberIndex()
+	return index.ByIMSI, err
 }
 
 // GetDevicePublicIP 获取设备当前外网 IP (PublicIP)

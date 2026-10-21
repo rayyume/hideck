@@ -74,7 +74,15 @@ func resolveSMSDeliveryIdentity(input SMSDeliveryCreate) (SMSIdentity, error) {
 
 func mergeDeliveryIdentity(identity SMSIdentity, runtimeIMSI string) (SMSIdentity, error) {
 	if identity.IMSI != "" && runtimeIMSI != "" && identity.IMSI != runtimeIMSI {
-		return SMSIdentity{}, fmt.Errorf("%w: device binding IMSI does not match IMS runtime", ErrSMSIdentityConflict)
+		known, err := IMSIKnownForICCID(identity.ICCID, runtimeIMSI)
+		if err != nil {
+			return SMSIdentity{}, err
+		}
+		if !known {
+			return SMSIdentity{}, fmt.Errorf("%w: device binding IMSI does not match IMS runtime (bound %s, runtime %s)",
+				ErrSMSIdentityConflict, imsiPrefix(identity.IMSI), imsiPrefix(runtimeIMSI))
+		}
+		identity.IMSI = runtimeIMSI
 	}
 	if identity.IMSI == "" {
 		identity.IMSI = runtimeIMSI

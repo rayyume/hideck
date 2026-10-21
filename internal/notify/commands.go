@@ -406,12 +406,16 @@ func (m *Manager) handleCmdSMSInbox(cmdCtx CommandContext, args []string) string
 			return commandFailureBlock("短信列表", deviceID, "设备未找到")
 		}
 
-		imsi := worker.GetIMSI()
-		if imsi == "" {
-			return fmt.Sprintf("❌ 无法获取设备 %s 的 IMSI", deviceID)
+		// By ICCID: a multi-IMSI card stores SMS under each IMSI it used.
+		if iccid := worker.CurrentICCID(); iccid != "" {
+			smsList, err = db.GetSMSByICCID(iccid, limit)
+		} else {
+			imsi := worker.GetIMSI()
+			if imsi == "" {
+				return fmt.Sprintf("❌ 无法获取设备 %s 的 IMSI", deviceID)
+			}
+			smsList, err = db.GetSMSByIMSI(imsi, limit)
 		}
-
-		smsList, err = db.GetSMSByIMSI(imsi, limit)
 	} else {
 		smsList, err = db.GetRecentSMS(limit)
 	}

@@ -508,6 +508,7 @@ func (w *Worker) processSMSWithIdentity(identity SMSIdentity, message inboundSMS
 		logger.Info(fmt.Sprintf("[%s] 短信已过滤（运营商 OTA/不可解码二进制包）", w.ID), "sender", message.Sender)
 		return nil
 	}
+	message.Timestamp = correctSMSCTimestamp(w.ID, identity.IMSI, message.Timestamp, time.Now())
 
 	if err := w.persistReceivedSMS(identity, message); err != nil {
 		return fmt.Errorf("保存短信到数据库失败: %w", err)

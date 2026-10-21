@@ -167,6 +167,11 @@ type Service struct {
 	regSession *registerSession
 	spiPairs   [][2]uint32
 
+	// Set when this REGISTER flow moved an oversized UDP request to TCP, and
+	// when that TCP failed so the flow retries over UDP without moving again.
+	largeRegisterMovedToTCP atomic.Bool
+	largeRegisterTCPFailed  atomic.Bool
+
 	// SIP transport.
 	transport                 *sipTransport
 	registrationIO            net.PacketConn
@@ -195,6 +200,7 @@ type Service struct {
 	portSRecoveryPending      atomic.Bool
 	portSRecoveryAwaitingFlow atomic.Bool
 	portSOnDemandObserved     atomic.Bool
+	portSMissingAfterRegister atomic.Bool
 	portSWatchMu              sync.Mutex
 	portSWatchTimer           *time.Timer
 	portSWatchGeneration      uint64

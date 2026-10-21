@@ -121,6 +121,9 @@ func mergePresetIKE(config *EffectiveCarrierConfig, preset CarrierPreset) {
 	if preset.KeepChildSAOnRekeyDecline {
 		config.KeepChildSAOnRekeyDecline = true
 	}
+	if preset.DeferPeerChildRekeySwitch {
+		config.DeferPeerChildRekeySwitch = true
+	}
 }
 
 func mergePresetIMS(config *EffectiveCarrierConfig, preset CarrierPreset) {

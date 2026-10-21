@@ -2,11 +2,14 @@ package phone
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
 	"github.com/iniwex5/vowifi-go/runtimehost/voicehost"
 )
+
+var ErrActiveCallHistoryDelete = errors.New("正在进行的通话记录不能删除")
 
 const (
 	StatusCalling   = "calling"
@@ -40,6 +43,7 @@ type VoiceGateway interface {
 type RecordStore interface {
 	Upsert(context.Context, CallRecord) error
 	List(context.Context, int) ([]CallRecord, error)
+	Delete(context.Context, []uint64) ([]CallRecord, error)
 	AbandonIncomplete(ctx context.Context, endedAt time.Time, reason string) error
 }
 

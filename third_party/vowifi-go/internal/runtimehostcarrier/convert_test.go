@@ -93,7 +93,7 @@ func populatedCarrierConfig() carrier.EffectiveCarrierConfig {
 		IMSIdentitySource: "isim", IMSLocalPort: 5060, IMSTCPKeepaliveSeconds: 40,
 		IMSOptionsPingIntervalSeconds: 50, DPDKeepaliveIntervalSeconds: 60,
 		ReauthIntervalSeconds: 70, IKERekeyIntervalSeconds: 80,
-		WithholdDeviceIdentity: true, KeepChildSAOnRekeyDecline: true,
+		WithholdDeviceIdentity: true, KeepChildSAOnRekeyDecline: true, DeferPeerChildRekeySwitch: true,
 		IMSRegisterTemplate:     populatedTemplate("flattened"),
 		IMSRegisterPolicySource: "preset", SMSRoutingMethod: "sip", SMSRoutingGW: "gw.example",
 		ForceSMSCAuth: true, IMS: populatedTemplate("compatibility"),

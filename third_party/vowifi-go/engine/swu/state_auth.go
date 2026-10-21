@@ -640,6 +640,8 @@ func (s *Session) applyFinalIKEAuthPayloads(payloads []ikev2.Payload) error {
 		if err := s.applySelectedESPAlgorithms(selection); err != nil {
 			return err
 		}
+		s.Logger.Info("IKE_AUTH CHILD_SA suite selected",
+			zap.String("suite", s.childSuiteDescription()), zap.Int("offered_proposals", len(s.offeredESPProposals)))
 		s.espRemoteSPI = selection.remoteSPI
 		s.childNi, s.childNr = append([]byte(nil), s.Ni...), s.Nr()
 		s.childDHSecret = append([]byte(nil), sharedSecret...)

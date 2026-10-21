@@ -120,6 +120,29 @@ func (s *Service) ValidateAutoAnswerAudio(path string) error {
 	return err
 }
 
+// autoAnswerMaxDuration 是自动应答提示音的最长时长，超出部分在转换时截断。
+const autoAnswerMaxDuration = 30 * time.Second
+
+// audioPromptConverter 是提示音解码器可选实现的能力：把任意受支持的音频格式
+// 转成标准单声道 PCM16 WAV，并按需要截断时长。
+type audioPromptConverter interface {
+	ToPCM16WAVWithin(ctx context.Context, inputPath, outputPath string, maxDuration time.Duration) error
+}
+
+// ConvertAutoAnswerAudio 把上传的音频解码并统一写成 WAV。
+//
+// 自动应答的播放链路只接受单声道 PCM16 WAV（8 kHz 或 16 kHz），这里顺带混单声道、
+// 归一采样率并截断到 30 秒，运行时就不必关心来源格式。
+func (s *Service) ConvertAutoAnswerAudio(sourcePath, targetPath string) error {
+	converter, ok := s.promptDecoder.(audioPromptConverter)
+	if !ok {
+		return errors.New("phone: 当前音频解码器不支持格式转换")
+	}
+	return converter.ToPCM16WAVWithin(
+		s.ctx, strings.TrimSpace(sourcePath), strings.TrimSpace(targetPath), autoAnswerMaxDuration,
+	)
+}
+
 func (s *Service) configureAutoAnswer(config AutoAnswerConfig) error {
 	runtime, err := s.loadAutoAnswer(config)
 	if err != nil {
