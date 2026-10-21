@@ -184,7 +184,7 @@ func (e *automaticTaskExecutor) prepareCellular(task automation.Task) error {
 }
 
 func (e *automaticTaskExecutor) restoreEnvironment(request automaticTaskRestore) error {
-	if err := db.UpsertCardPolicy(request.Snapshot); err != nil {
+	if err := restoreAutomaticTaskCardPolicy(request.Snapshot); err != nil {
 		return err
 	}
 	if _, err := request.Owner.resolve(e.server.pool, request.DeviceID, request.ICCID); err != nil {
@@ -209,6 +209,20 @@ func (e *automaticTaskExecutor) restoreEnvironment(request automaticTaskRestore)
 		return waitForVoWiFiReady(ctx, e.server.pool, request.DeviceID, false)
 	}
 	return nil
+}
+
+func restoreAutomaticTaskCardPolicy(snapshot db.CardPolicy) error {
+	current, err := db.GetCardPolicy(snapshot.ICCID)
+	if err != nil {
+		return fmt.Errorf("read current card policy: %w", err)
+	}
+	// The task temporarily owns network state only. A number edited while the
+	// task runs is user data and must not be rolled back with that state.
+	if current.LocalPhoneOverride != snapshot.LocalPhoneOverride {
+		snapshot.Source = current.Source
+	}
+	snapshot.LocalPhoneOverride = current.LocalPhoneOverride
+	return db.UpsertCardPolicy(snapshot)
 }
 
 func (e *automaticTaskExecutor) executeSMS(

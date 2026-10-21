@@ -180,6 +180,7 @@ func carrierOverrideToInternal(value CarrierOverride) policy.CarrierOverride {
 		IKERekeyIntervalSeconds:   value.IKERekeyIntervalSeconds,
 		WithholdDeviceIdentity:    value.WithholdDeviceIdentity,
 		KeepChildSAOnRekeyDecline: value.KeepChildSAOnRekeyDecline,
+		DeferPeerChildRekeySwitch: value.DeferPeerChildRekeySwitch,
 		IMSTransport:              strings.TrimSpace(value.IMS.Transport),
 		E911: policy.E911PolicyOverride{
 			Provider: value.E911.Provider, EntitlementURL: value.E911.EntitlementURL,

@@ -143,7 +143,8 @@ func TestResolveEmbeddedCarrierPresets(t *testing.T) {
 	}
 	if spark := ResolveEffectiveCarrierConfig("530", "05"); spark.PresetID != "spark_nz_53005" ||
 		!spark.WithholdDeviceIdentity || !CarrierPlanFromEffectiveConfig(spark).Device.Withhold ||
-		!spark.KeepChildSAOnRekeyDecline || !CarrierPlanFromEffectiveConfig(spark).IKE.KeepChildSAOnRekeyDecline {
+		!spark.KeepChildSAOnRekeyDecline || !CarrierPlanFromEffectiveConfig(spark).IKE.KeepChildSAOnRekeyDecline ||
+		!spark.DeferPeerChildRekeySwitch || !CarrierPlanFromEffectiveConfig(spark).IKE.DeferPeerChildRekeySwitch {
 		t.Fatalf("spark nz = %+v", spark)
 	}
 	if one := ResolveEffectiveCarrierConfig("530", "01"); one.PresetID != "one_nz_53001" ||
@@ -159,7 +160,7 @@ func TestResolveEmbeddedCarrierPresets(t *testing.T) {
 	if lebaraUK.PresetID != "lebara_uk_23487" || lebaraUK.DeviceModel != "rmx3366" ||
 		lebaraUK.EPDGAddr != "epdg.epc.mnc087.mcc234.pub.3gppnetwork.org" ||
 		lebaraUK.EPDGAddrSource != "standard" || lebaraUK.IKERekeyIntervalSeconds != 9000 ||
-		!lebaraUK.WithholdDeviceIdentity || lebaraUK.KeepChildSAOnRekeyDecline ||
+		!lebaraUK.WithholdDeviceIdentity || lebaraUK.KeepChildSAOnRekeyDecline || lebaraUK.DeferPeerChildRekeySwitch ||
 		lebaraUK.IMSRegisterTemplate.ID != "lebara_uk_23487" {
 		t.Fatalf("lebara uk = %+v", lebaraUK)
 	}

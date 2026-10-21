@@ -43,6 +43,8 @@ type Service struct {
 	closeErr            error
 	deviceWaiting       map[string]string
 	autoAnswer          autoAnswerRuntime
+	recordMu            sync.Mutex
+	deletedRecords      map[string]struct{}
 }
 
 func NewService(options ServiceOptions) (*Service, error) {
@@ -60,7 +62,7 @@ func NewService(options ServiceOptions) (*Service, error) {
 		mediaReservations: make(map[string]*mediaReservation),
 		pendingMediaDrops: make(map[string]*pendingMediaDrop),
 		pendingEvents:     make(map[string][]voicehost.CallEvent), terminalSeen: make(map[string]struct{}),
-		deviceWaiting: make(map[string]string),
+		deviceWaiting: make(map[string]string), deletedRecords: make(map[string]struct{}),
 	}
 	if service.recoveryGrace <= 0 {
 		service.recoveryGrace = defaultRecoveryGrace
@@ -101,14 +103,14 @@ func buildICEServers(urls []string) []webrtc.ICEServer {
 	return servers
 }
 
-func (s *Service) CreateMedia(ctx context.Context, owner, offer string) (MediaAnswer, error) {
+func (s *Service) CreateMedia(ctx context.Context, owner, offer, accessHost string) (MediaAnswer, error) {
 	if strings.TrimSpace(owner) == "" {
 		return MediaAnswer{}, errors.New("phone: authenticated owner is required")
 	}
 	if strings.TrimSpace(offer) == "" {
 		return MediaAnswer{}, errors.New("phone: WebRTC SDP offer is required")
 	}
-	return s.media.Create(ctx, owner, offer)
+	return s.media.Create(ctx, owner, offer, accessHost)
 }
 
 func (s *Service) CancelMedia(owner, mediaID, lease string) error {
@@ -254,6 +256,11 @@ func sanitizeFilePart(value string) string {
 
 func (s *Service) persist(record CallRecord) {
 	if s.store == nil {
+		return
+	}
+	s.recordMu.Lock()
+	defer s.recordMu.Unlock()
+	if _, deleted := s.deletedRecords[record.CallID]; deleted {
 		return
 	}
 	if err := s.store.Upsert(s.ctx, record); err != nil {

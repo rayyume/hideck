@@ -1468,7 +1468,7 @@ type SMSContactWithDevice struct {
 	db.SMSContact
 	DeviceID   string `json:"device_id"`
 	DeviceName string `json:"device_name"`
-	LocalPhone string `json:"local_phone"` // 本机号码（收件人手机号），来自订阅手机号
+	LocalPhone string `json:"local_phone"` // 当前卡的有效本机号码（手动设置优先）
 }
 
 func (s *Server) handleGetSMSContacts(c *gin.Context) {
@@ -1511,10 +1511,10 @@ func (s *Server) handleGetSMSContacts(c *gin.Context) {
 
 	iccidDevice := s.smsDeviceInfoByICCID()
 
-	// 手机号仍通过 IMSI 从 sim_subscriptions 查询（sim_subscriptions 主键尚为 IMSI）。
-	imsiPhone := make(map[string]string)
-	if phones, err := db.GetSIMPhoneNumbersByIMSI(); err == nil {
-		imsiPhone = phones
+	phoneIndex, err := db.GetSIMPhoneNumberIndex()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "查询本机号码失败: " + err.Error()})
+		return
 	}
 
 	enriched := make([]SMSContactWithDevice, 0, len(contacts))
@@ -1524,11 +1524,18 @@ func (s *Server) handleGetSMSContacts(c *gin.Context) {
 			SMSContact: ct,
 			DeviceID:   info.id,
 			DeviceName: info.name,
-			LocalPhone: imsiPhone[ct.IMSI],
+			LocalPhone: smsContactLocalPhone(ct, phoneIndex),
 		})
 	}
 
 	c.JSON(http.StatusOK, enriched)
+}
+
+func smsContactLocalPhone(contact db.SMSContact, index db.SIMPhoneNumberIndex) string {
+	if iccid := db.CanonicalICCID(contact.ICCID); iccid != "" {
+		return index.ByICCID[iccid]
+	}
+	return index.ByIMSI[strings.TrimSpace(contact.IMSI)]
 }
 
 func (s *Server) handleGetSMSThread(c *gin.Context) {

@@ -94,6 +94,7 @@ onUnmounted(() => { window.clearInterval(statusTimer); statusAbort.abort() })
 
 function isDeviceReady(device: PhoneDevice) {
   if (device.phone_mode === 'volte') {
+    if (device.native_volte?.voice_indications_ready === false) return false
     return device.voice.ready === true || device.native_volte?.ims_registered === true
       || device.native_volte?.phase === 'registered'
   }
@@ -119,6 +120,9 @@ function deviceStatus(device?: PhoneDevice) {
     if (device.voice.last_error) return `${mode} · 准备失败`
     if (device.voice.phase === 'preparing') return `${mode} · 准备音频中`
     return `${mode} · ${device.voice.ready ? '就绪' : '未就绪'}`
+  }
+  if (device.phone_mode === 'volte' && device.native_volte?.voice_indications_ready === false) {
+    return `${mode} · 通话状态未就绪`
   }
   if (isDeviceReady(device) || device.vowifi_active) return `${mode} · 就绪`
   if (device.phone_mode === 'volte' && device.vowifi_enabled) {

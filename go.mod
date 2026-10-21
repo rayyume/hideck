@@ -18,6 +18,7 @@ require (
 	github.com/go-viper/mapstructure/v2 v2.4.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
+	github.com/hajimehoshi/go-mp3 v0.3.4
 	github.com/iniwex5/qqbot v1.0.1
 	github.com/iniwex5/quectel-qmi-go v0.6.0
 	github.com/iniwex5/vowifi-go v1.1.2

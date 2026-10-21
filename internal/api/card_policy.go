@@ -109,6 +109,7 @@ func (s *Server) handlePutCardPolicy(c *gin.Context) {
 		PhoneMode             *string `json:"phone_mode"`
 		DataStrategy          *string `json:"data_strategy"`
 		VowifiUpstreamProxyID *string `json:"vowifi_upstream_proxy_id"`
+		LocalPhoneOverride    *string `json:"local_phone_override"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -179,6 +180,14 @@ func (s *Server) handlePutCardPolicy(c *gin.Context) {
 			return
 		}
 		pol.VowifiUpstreamProxyID = id
+	}
+	if req.LocalPhoneOverride != nil {
+		phone, err := db.NormalizeManualPhoneNumber(*req.LocalPhoneOverride)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		pol.LocalPhoneOverride = phone
 	}
 	pol.Source = "user"
 

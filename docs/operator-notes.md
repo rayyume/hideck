@@ -53,13 +53,16 @@
 - 预设在首次 IKE_AUTH 中不主动发送设备身份；如果网侧明确请求，则在网络认证通过后回复可用的 IMEI。已建立的 IKE SA 上也支持 INFORMATIONAL 设备身份请求。
 - 现在所有运营商默认都不主动发送。确实要求主动发送的运营商，在预设或 `config/carrier_overrides.yaml` 里把 `withhold_device_identity` 设为 `false`。
 - 预设在 CHILD_SA rekey 收到 `NO_ADDITIONAL_SAS` 时保留当前 CHILD_SA。这是 Spark 兼容策略，不是所有运营商的默认行为。
-- 两个开关均可通过 `config/carrier_overrides.yaml` 显式关闭；不填写则继承预设。修改后需重启服务并重新建立会话。例如：
+- ESP 提案先报 `aes256-sha1` 再报 `aes256-sha256`。Spark 在隧道建立 7h12m 后发起 CHILD_SA rekey，报价是 SHA1 不带 PFS、或 SHA256 加 D-H 14；只接受和当前套件一致、不带 PFS 的那个，所以 IKE_AUTH 选中 SHA1 时 rekey 才能成功，否则回绝并保留当前 SA，到 8 小时 Spark 删 IKE SA 后重连。
+- 预设 `defer_peer_child_rekey_switch`：应答对方的 CHILD_SA rekey 后，继续在旧 SA 上发送，直到新 SA 上收到对方的合法包、对方删除旧 SA 或对方换密钥这个新 SA（RFC 7296 2.8）。对方一直不用时留在旧 SA，期间不发起本端 CHILD_SA 换密钥；IKE SA 结束时一并清掉。
+- 三个开关均可通过 `config/carrier_overrides.yaml` 显式关闭；不填写则继承预设。修改后需重启服务并重新建立会话。例如：
 
   ```yaml
   carrier_overrides:
     "53005":
       withhold_device_identity: false
       keep_child_sa_on_rekey_decline: false
+      defer_peer_child_rekey_switch: false
   ```
 
 - 自动化测试覆盖身份请求编码、认证门控、发送失败和配置覆盖；不替代 Spark、VOXI 或其他运营商的真卡验收。

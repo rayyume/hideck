@@ -5,7 +5,6 @@ package ipsec
 import (
 	"errors"
 	"net"
-	"syscall"
 )
 
 // setUDPEncap is not supported outside Linux (UDP_ENCAP is Linux-only).
@@ -33,9 +32,6 @@ type SockExtendedErr struct {
 func ParseSockExtError(b []byte) (*SockExtendedErr, error) {
 	return nil, errors.New("extended socket errors are not supported on this platform")
 }
-
-// soReusePort is SO_REUSEPORT on non-Linux platforms.
-const soReusePort = syscall.SO_REUSEPORT
 
 // setSockBindToDevice is a no-op on non-Linux platforms (SO_BINDTODEVICE is Linux-only).
 func setSockBindToDevice(fd int, device string) error {

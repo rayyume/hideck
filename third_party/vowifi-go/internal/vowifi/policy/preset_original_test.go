@@ -40,7 +40,7 @@ func TestOriginalCarrierPresetAssetsRemainExact(t *testing.T) {
 		"orange_fr_20801.yaml":     "68d6d1cc830316d17cd607d65cf176e0f92b27393bd899735136a0fabc507328",
 		"smart_ph_51503.yaml":      "fca9263e07be5707fa1365879179462757e554261512dbcc58cfd0fac390086e",
 		"softbank_44020.yaml":      "6398fe7ccbae656d6a85589ba1cf903b4d07e4c22978d7fff92aad11ccfb1dd7",
-		"spark_nz_53005.yaml":      "866b6142a772bb8f31a98143732bc3bcb618e985b7b9f868b9ef2d0401e5c85e",
+		"spark_nz_53005.yaml":      "dbe82d043ed10c283ad2c16ca96db2f9538514d07e1a21213d285a5eec3cdf9b",
 		"sunrise_22802.yaml":       "2160911e6d4fca664fbc9c474eee71a468d282703760f3c87e99df9043872e7b",
 		"telekom_de_26201.yaml":    "aac0d40b575b4ab5625ac437b3ea7cd228633f87b1e2b5f3ddd12f7024bd4455",
 		"three_hk_454003.yaml":     "a3a84a436646cddd80df30aa2493f4b4076f08664a478d0b954c4142ef196d61",

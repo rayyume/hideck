@@ -115,22 +115,6 @@ func reuseSocketOptions(_, _ string, raw syscall.RawConn) error {
 	return reuseSocketOptionsWithBind("", "", raw, "")
 }
 
-func reuseSocketOptionsWithBind(_, _ string, raw syscall.RawConn, bindToDevice string) error {
-	var optionErr error
-	err := raw.Control(func(fd uintptr) {
-		optionErr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1)
-		if optionErr == nil {
-			optionErr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, soReusePort, 1)
-		}
-		if optionErr == nil && bindToDevice != "" {
-			optionErr = setSockBindToDevice(int(fd), bindToDevice)
-		}
-	})
-	if err != nil {
-		return err
-	}
-	return optionErr
-}
 
 func (s *SocketManager) IKEPackets() <-chan []byte      { return s.IKEChan }
 func (s *SocketManager) ESPPackets() <-chan []byte      { return s.ESPChan }

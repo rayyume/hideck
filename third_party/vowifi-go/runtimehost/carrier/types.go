@@ -147,6 +147,7 @@ type EffectiveCarrierConfig struct {
 	IKERekeyIntervalSeconds       int
 	WithholdDeviceIdentity        bool
 	KeepChildSAOnRekeyDecline     bool
+	DeferPeerChildRekeySwitch     bool
 	IMSRegisterTemplate           IMSRegisterTemplate
 	IMSRegisterPolicySource       string
 	SMSRoutingMethod              string
@@ -160,6 +161,7 @@ type EffectiveCarrierConfig struct {
 type CarrierOverride struct {
 	WithholdDeviceIdentity    *bool
 	KeepChildSAOnRekeyDecline *bool
+	DeferPeerChildRekeySwitch *bool
 	MCC                       string
 	MNC                       string
 	PresetID                  string

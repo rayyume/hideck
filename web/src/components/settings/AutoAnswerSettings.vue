@@ -176,20 +176,20 @@ onMounted(load)
     <div class="auto-answer-audio">
       <div class="auto-answer-audio-copy">
         <strong>共用播放录音</strong>
-        <p>单声道 PCM16 WAV，8 kHz 或 16 kHz，最大 16 MiB。</p>
+        <p>支持 WAV / AMR / AMR-WB / MP3，最大 16 MiB；上传后自动转换为单声道 PCM16 WAV（8 kHz），最长 30 秒，超出自动截断。</p>
         <span :class="settings.audio_ready ? 'is-ready' : 'is-missing'" aria-live="polite">
           {{ settings.audio_ready ? `已就绪：${settings.audio_name}` : '尚未上传录音' }}
         </span>
       </div>
       <el-button :loading="uploading" :disabled="!loaded || busy" @click="fileInput?.click()">
         <el-icon><ArrowUpload24Regular /></el-icon>
-        {{ uploading ? '正在上传' : '选择 WAV' }}
+        {{ uploading ? '正在上传' : '选择音频' }}
       </el-button>
       <input
         ref="fileInput"
         class="auto-answer-file"
         type="file"
-        accept=".wav,audio/wav,audio/x-wav"
+        accept=".wav,audio/wav,audio/x-wav,.amr,audio/amr,.amr-wb,.mp3,audio/mpeg"
         :disabled="!loaded || busy"
         @change="upload"
       >

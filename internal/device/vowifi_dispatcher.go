@@ -3,6 +3,7 @@ package device
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/iniwex5/vowifi-go/runtimehost/eventhost"
 	"github.com/yibaiba/hideck/internal/smsnotify"
@@ -47,6 +48,11 @@ func (d poolVoWiFiRuntimeDispatcher) Dispatch(ctx context.Context, e eventhost.E
 			res = vowifiSMSRecordResult{Suppressed: true}
 		} else {
 			receivedOn, err = recorder.resolveReceivedEventIdentity(v)
+		}
+		if err == nil && !res.Suppressed {
+			// Storage, observers and the notifier below all read this event.
+			v.Time = correctSMSCTimestamp(v.DevID, receivedOn.IMSI, v.Time, time.Now())
+			e = v
 		}
 		if err == nil && !res.Suppressed {
 			res, err = recorder.recordReceived(v, receivedOn)

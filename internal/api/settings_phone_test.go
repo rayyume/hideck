@@ -25,6 +25,14 @@ func (settingsPromptDecoder) DecodePCM(_ context.Context, path string) ([]int16,
 	return make([]int16, 160), 8000, nil
 }
 
+func (settingsPromptDecoder) ToPCM16WAVWithin(_ context.Context, inputPath, outputPath string, _ time.Duration) error {
+	payload, err := os.ReadFile(inputPath)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(outputPath, payload, 0o600)
+}
+
 func TestPhoneSettingsPayloadUsesEightSecondDefault(t *testing.T) {
 	service, err := phone.NewService(phone.ServiceOptions{
 		Gateway: &phoneRouteGatewayStub{}, WebRTCUDPAddress: "127.0.0.1:0",

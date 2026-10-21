@@ -802,7 +802,7 @@ func TestBuildVoWiFiStartProfileUsesLiveIMSIOnly(t *testing.T) {
 	w.state.Identity.IMEI = "861234567890123"
 	w.cacheMu.Unlock()
 
-	_, err := p.buildVoWiFiStartProfile(w, "trace-live")
+	_, err := p.buildVoWiFiStartProfile(context.Background(), w, "trace-live")
 	if err == nil || !strings.Contains(err.Error(), "实时 IMSI 为空") {
 		t.Fatalf("buildVoWiFiStartProfile() err=%v, want 实时 IMSI 为空", err)
 	}
@@ -855,7 +855,7 @@ func TestBuildVoWiFiStartProfilePrefersAtomicIdentitySnapshot(t *testing.T) {
 	worker := &Worker{ID: "snapshot-device", Backend: backend}
 	registerVoWiFiProfileWorkerForTest(p, worker)
 
-	profile, err := p.buildVoWiFiStartProfile(worker, "snapshot")
+	profile, err := p.buildVoWiFiStartProfile(context.Background(), worker, "snapshot")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -887,7 +887,7 @@ func TestBuildVoWiFiStartProfileRejectsIdentityChangeDuringPairedRead(t *testing
 	}
 	registerVoWiFiProfileWorkerForTest(p, worker)
 
-	_, err := p.buildVoWiFiStartProfile(worker, "identity-change")
+	_, err := p.buildVoWiFiStartProfile(context.Background(), worker, "identity-change")
 	if !errors.Is(err, errPolicyOwnerChanged) {
 		t.Fatalf("buildVoWiFiStartProfile() error=%v want owner changed", err)
 	}
@@ -911,7 +911,7 @@ func TestBuildVoWiFiStartProfileUsesLiveIMSIAndBackendHomeMCCMNC(t *testing.T) {
 	w.state.Identity.IMEI = "861234567890123"
 	w.cacheMu.Unlock()
 
-	profile, err := p.buildVoWiFiStartProfile(w, "trace-live-ok")
+	profile, err := p.buildVoWiFiStartProfile(context.Background(), w, "trace-live-ok")
 	if err != nil {
 		t.Fatalf("buildVoWiFiStartProfile() error=%v", err)
 	}
@@ -937,7 +937,7 @@ func TestBuildVoWiFiStartProfileRequiresLiveICCID(t *testing.T) {
 	w := &Worker{ID: "dev1", Backend: b}
 	registerVoWiFiProfileWorkerForTest(p, w)
 
-	_, err := p.buildVoWiFiStartProfile(w, "trace-live-iccid")
+	_, err := p.buildVoWiFiStartProfile(context.Background(), w, "trace-live-iccid")
 	if err == nil || !strings.Contains(err.Error(), "实时 ICCID 为空") {
 		t.Fatalf("buildVoWiFiStartProfile() err=%v, want 实时 ICCID 为空", err)
 	}
@@ -965,7 +965,7 @@ func TestBuildVoWiFiStartProfileUsesLiveHomeMCCMNCInsteadOfStaleCache(t *testing
 	w.state.Identity.NativeMNC = "030"
 	w.cacheMu.Unlock()
 
-	profile, err := p.buildVoWiFiStartProfile(w, "trace-home-plmn")
+	profile, err := p.buildVoWiFiStartProfile(context.Background(), w, "trace-home-plmn")
 	if err != nil {
 		t.Fatalf("buildVoWiFiStartProfile() error=%v", err)
 	}
@@ -995,7 +995,7 @@ func TestBuildVoWiFiStartProfileRequiresCachedHomeMCCMNC(t *testing.T) {
 	w.state.Identity.IMEI = "861234567890123"
 	w.cacheMu.Unlock()
 
-	if _, err := p.buildVoWiFiStartProfile(w, "trace-missing-home-plmn"); err == nil {
+	if _, err := p.buildVoWiFiStartProfile(context.Background(), w, "trace-missing-home-plmn"); err == nil {
 		t.Fatal("buildVoWiFiStartProfile() err=nil, want missing home MCC/MNC error")
 	}
 }
