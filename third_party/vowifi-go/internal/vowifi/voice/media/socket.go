@@ -2,14 +2,14 @@ package media
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"strconv"
 	"strings"
-	"syscall"
 
 	"github.com/iniwex5/vowifi-go/internal/vowifi/imsendpoint"
+	"golang.org/x/net/ipv4"
+	"golang.org/x/net/ipv6"
 )
 
 const voiceDSCP = 46
@@ -112,23 +112,9 @@ func udpNetwork(ip net.IP) string {
 }
 
 func setDSCP(conn net.PacketConn) error {
-	syscallConn, ok := conn.(interface {
-		SyscallConn() (syscall.RawConn, error)
-	})
-	if !ok {
-		return errors.New("packet connection does not expose syscall.RawConn")
-	}
-	raw, err := syscallConn.SyscallConn()
-	if err != nil {
-		return fmt.Errorf("get raw connection: %w", err)
-	}
-	var ipv4Err, ipv6Err error
-	if err := raw.Control(func(fd uintptr) {
-		ipv4Err = syscall.SetsockoptInt(int(fd), syscall.IPPROTO_IP, syscall.IP_TOS, voiceDSCP<<2)
-		ipv6Err = syscall.SetsockoptInt(int(fd), syscall.IPPROTO_IPV6, syscall.IPV6_TCLASS, voiceDSCP<<2)
-	}); err != nil {
-		return err
-	}
+	// x/net handles platform-specific socket descriptors and option numbers.
+	ipv4Err := ipv4.NewPacketConn(conn).SetTOS(voiceDSCP << 2)
+	ipv6Err := ipv6.NewPacketConn(conn).SetTrafficClass(voiceDSCP << 2)
 	if ipv4Err != nil && ipv6Err != nil {
 		return fmt.Errorf("IPv4 TOS: %v, IPv6 TCLASS: %v", ipv4Err, ipv6Err)
 	}
